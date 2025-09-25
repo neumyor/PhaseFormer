@@ -9,7 +9,6 @@ from einops import rearrange
 
 from datetime import datetime
 from distutils.util import strtobool
-from transformers.modeling_utils import Conv1D
 import pandas as pd
 
 from .metrics import metric
@@ -24,53 +23,6 @@ def zero_module(module):
     for p in module.parameters():
         p.detach().zero_()
     return module
-
-
-def convert_conv1d_to_linear(layer_conv: Conv1D, token_dim, split=False):
-    conv_weights = layer_conv.weight
-    conv_biases = layer_conv.bias
-
-    if split:
-        linear_weights = torch.split(
-            conv_weights, split_size_or_sections=token_dim, dim=1
-        )
-        linear_biases = torch.split(conv_biases, split_size_or_sections=token_dim)
-
-        # replace the self attn
-        layer_linear_list = [
-            nn.Linear(token_dim, token_dim) for _ in range(len(linear_weights))
-        ]
-        for i in range(len(linear_weights)):
-            layer_linear_list[i].weight.data = linear_weights[i].transpose(0, 1)
-            layer_linear_list[i].bias.data = linear_biases[i]
-
-        return layer_linear_list
-    else:
-        layer_linear = nn.Linear(token_dim, token_dim)
-        layer_linear.weight.data = conv_weights.transpose(0, 1)
-        layer_linear.bias.data = conv_biases
-        return layer_linear
-
-
-def convert_linear_list_to_conv1d(layer_linear, token_dim):
-    conv_layer = Conv1D(token_dim * len(layer_linear), token_dim)
-    if isinstance(layer_linear, list):
-        weights = []
-        bias = []
-        for linear_layer in layer_linear:
-            weights.append(linear_layer.weight.data.transpose(0, 1))
-            bias.append(linear_layer.bias.data)
-        weights = torch.concatenate(weights, dim=1)
-        bias = torch.concatenate(bias)
-
-        conv_layer.weight.data = weights
-        conv_layer.bias.data = bias
-
-        return conv_layer
-
-    else:
-        raise NotImplementedError("do it yourself")
-        pass
 
 
 def freeze_module(module, trainable_marks):

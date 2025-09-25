@@ -5,7 +5,6 @@ import bisect
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from ..utils.timefeatures import time_features
-from ..utils.tools import convert_tsf_to_dataframe
 import warnings
 
 warnings.filterwarnings("ignore")
