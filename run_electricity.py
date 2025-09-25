@@ -67,11 +67,10 @@ DEFAULT_NORM_HYPERS = dict(
 def get_best_config_for_horizon(horizon):
     """根据预测长度返回Electricity的最佳配置"""
     if horizon == 96:
-        # 注意：96 horizon 在数据中表现最佳的是PhaseBase4，但这里用PhaseFormer的最佳配置
         return {
             'layers': 2,
             'latent_dim': 8,
-            'phase_encoder_hidden': 64,
+            'phase_encoder_hidden': 32,
             'predictor_hidden': 64,
             'phase_num_routers': 4,
             'learning_rate': 0.001,

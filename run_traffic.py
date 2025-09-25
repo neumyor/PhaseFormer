@@ -69,13 +69,16 @@ def get_best_config_for_horizon(horizon):
     if horizon == 96:
         # 特殊配置，使用原始最佳配置
         return {
-            'layers': 4,  # 根据实验名称推断
-            'latent_dim': 8,
+            'layers': 2,  # 根据实验名称推断
+            'latent_dim': 32,
             'phase_encoder_hidden': 64,
-            'predictor_hidden': 64,
-            'phase_num_routers': 8,
-            'learning_rate': 0.0003,
-            'phase_attn_heads': 8
+            'predictor_hidden': 128,
+            'phase_num_routers': 1,
+            'learning_rate': 0.001,
+            'phase_attn_heads': 8,
+            'phase_attn_window':12,
+            'phase_use_pos_embed': False,
+            'phase_attn_use_relpos': True,
         }
     else:  # horizon in [192, 336, 720]
         return {
