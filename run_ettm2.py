@@ -70,7 +70,7 @@ def get_best_config_for_horizon(horizon):
         return {
             'layers': 2,
             'latent_dim': 8,
-            'phase_encoder_hidden': 64,
+            'phase_encoder_hidden': 32,
             'predictor_hidden': 64,
             'phase_num_routers': 8,
             'learning_rate': 0.001,
@@ -80,7 +80,7 @@ def get_best_config_for_horizon(horizon):
         return {
             'layers': 1,
             'latent_dim': 8,
-            'phase_encoder_hidden': 64,
+            'phase_encoder_hidden': 32,
             'predictor_hidden': 64,
             'phase_num_routers': 8,
             'learning_rate': 0.001,

@@ -70,11 +70,13 @@ def get_best_config_for_horizon(horizon):
         return {
             'layers': 3,
             'latent_dim': 4,
-            'phase_encoder_hidden': 32,
-            'predictor_hidden': 64,
+            'phase_encoder_hidden': 16,
+            'predictor_hidden': 32,
             'phase_num_routers': 8,
             'learning_rate': 0.001,
-            'phase_attn_heads': 1
+            'phase_attn_heads': 1,
+            'phase_attn_dropout': 0.1,
+            'phase_attn_use_relpos': True,
         }
     else:  # horizon == 720
         return {
@@ -84,7 +86,9 @@ def get_best_config_for_horizon(horizon):
             'predictor_hidden': 64,
             'phase_num_routers': 8,
             'learning_rate': 0.0001,
-            'phase_attn_heads': 1
+            'phase_attn_heads': 1,
+            'phase_attn_dropout': 0.1,
+            'phase_attn_use_relpos': True,
         }
 
 
@@ -117,8 +121,8 @@ def main():
     exp_args.dataset_args.data = DATASET_INFO[dataset_name]["data"]
     exp_args.dataset_args.root_path = DATASET_INFO[dataset_name]["root_path"]
     exp_args.dataset_args.data_path = DATASET_INFO[dataset_name]["data_path"]
-    exp_args.training_args.batch_size = 16
-    exp_args.dataset_args.batch_size = 16
+    exp_args.training_args.batch_size = 256
+    exp_args.dataset_args.batch_size = 256
 
     exp_args.dataset_args.var_needed = exp_args.model_args.num_variants = int(
         DATASET_INFO[dataset_name]["num_variants"]
