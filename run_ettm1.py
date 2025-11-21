@@ -66,11 +66,11 @@ DEFAULT_NORM_HYPERS = dict(
 
 def get_best_config_for_horizon(horizon):
     """根据预测长度返回ETTm1的最佳配置"""
-    if horizon in [96, 192]:
+    if horizon in [96, 192, 720]:
         return {
             'layers': 2,
             'latent_dim': 8,
-            'phase_encoder_hidden': 64,
+            'phase_encoder_hidden': 32,
             'predictor_hidden': 64,
             'phase_num_routers': 8,
             'learning_rate': 0.001,
@@ -80,17 +80,7 @@ def get_best_config_for_horizon(horizon):
         return {
             'layers': 1,
             'latent_dim': 8,
-            'phase_encoder_hidden': 64,
-            'predictor_hidden': 64,
-            'phase_num_routers': 8,
-            'learning_rate': 0.001,
-            'phase_attn_heads': 1
-        }
-    else:  # horizon == 720
-        return {
-            'layers': 2,
-            'latent_dim': 8,
-            'phase_encoder_hidden': 64,
+            'phase_encoder_hidden': 32,
             'predictor_hidden': 64,
             'phase_num_routers': 8,
             'learning_rate': 0.001,

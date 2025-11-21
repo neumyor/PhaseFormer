@@ -67,9 +67,8 @@ DEFAULT_NORM_HYPERS = dict(
 def get_best_config_for_horizon(horizon):
     """根据预测长度返回Traffic的最佳配置"""
     if horizon == 96:
-        # 特殊配置，使用原始最佳配置
         return {
-            'layers': 2,  # 根据实验名称推断
+            'layers': 2,
             'latent_dim': 32,
             'phase_encoder_hidden': 64,
             'predictor_hidden': 128,
@@ -84,7 +83,7 @@ def get_best_config_for_horizon(horizon):
         return {
             'layers': 1,
             'latent_dim': 128,
-            'phase_encoder_hidden': 32,
+            'phase_encoder_hidden': 16,
             'predictor_hidden': 32,
             'phase_num_routers': 4,
             'learning_rate': 0.001,

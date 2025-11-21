@@ -72,15 +72,15 @@ def get_best_config_for_horizon(horizon):
             'latent_dim': 8,
             'phase_encoder_hidden': 32,
             'predictor_hidden': 64,
-            'phase_num_routers': 4,
-            'learning_rate': 0.001,
-            'phase_attn_heads': 1
+            'phase_num_routers': 8,
+            'learning_rate': 0.002,
+            'phase_attn_heads': 1,
         }
     elif horizon in [192, 720]:
         return {
             'layers': 1,
             'latent_dim': 128,
-            'phase_encoder_hidden': 32,
+            'phase_encoder_hidden': 16,
             'predictor_hidden': 32,
             'phase_num_routers': 4,
             'learning_rate': 0.001,
@@ -90,7 +90,7 @@ def get_best_config_for_horizon(horizon):
         return {
             'layers': 2,
             'latent_dim': 8,
-            'phase_encoder_hidden': 64,
+            'phase_encoder_hidden': 32,
             'predictor_hidden': 64,
             'phase_num_routers': 8,
             'learning_rate': 0.001,

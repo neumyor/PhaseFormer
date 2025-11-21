@@ -1,3 +1,5 @@
 *.csv
 *.pyc
 /log
+/selected_exps
+
