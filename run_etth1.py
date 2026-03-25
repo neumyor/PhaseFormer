@@ -77,26 +77,41 @@ def get_best_config_for_horizon(horizon):
             'phase_attn_heads': 1,
             'phase_attn_dropout': 0.1,
             'phase_attn_use_relpos': True,
+            'phase_use_pos_embed': True,
+            'use_revin': True,
+            'use_huber_loss': True,
+            'huber_delta': 1.0,
+            'seed': 2021,
+            'train_epochs': 30,
+            'patience': 8,
+            'enable_epoch_test_callback': True,
         }
     else:  # horizon == 720
         return {
-            'layers': 1,
-            'latent_dim': 8,
-            'phase_encoder_hidden': 64,
-            'predictor_hidden': 64,
-            'phase_num_routers': 8,
-            'learning_rate': 0.0001,
-            'phase_attn_heads': 1,
-            'phase_attn_dropout': 0.1,
+            'layers': 3,
+            'latent_dim': 32,
+            'phase_encoder_hidden': 128,
+            'predictor_hidden': 256,
+            'phase_num_routers': 16,
+            'learning_rate': 0.00015,
+            'phase_attn_heads': 2,
+            'phase_attn_dropout': 0.0,
             'phase_attn_use_relpos': True,
+            'phase_use_pos_embed': True,
+            'use_revin': True,
+            'use_huber_loss': True,
+            'huber_delta': 0.3,
+            # 与超参搜索最佳trial保持一致的训练设置
+            'seed': 2026,
+            'train_epochs': 70,
+            'patience': 14,
+            'enable_epoch_test_callback': False,
         }
 
 
 def main():
-    # 设置随机种子确保可复现性
-    pl.seed_everything(2021, workers=True)
     torch.set_float32_matmul_precision("medium")
-    
+
     exp_args = config_module.config
     dataset_name = "ETTh1"
 
@@ -104,7 +119,7 @@ def main():
     exp_args.model_args.model = "PhaseFormer"
     exp_args.model_args.input_len = exp_args.dataset_args.seq_len = 720
 
-    # 训练参数
+    # 训练参数（按horizon再覆写）
     exp_args.training_args.itr = 1
     exp_args.training_args.patience = 8
     exp_args.training_args.ema = False
@@ -130,7 +145,7 @@ def main():
     
     # 实验配置
     lookback = 720
-    horizons = [96, 192, 336, 720]  # 四个预测窗口
+    horizons = [720]
     
     # 收集每次实验的结果
     summary_records = []
@@ -147,6 +162,13 @@ def main():
         exp_args.dataset_args.pred_len = horizon
         exp_args.dataset_args.noisy_ratio = 0.0
         exp_args.training_args.learning_rate = best_config['learning_rate']
+        exp_args.training_args.use_huber_loss = best_config['use_huber_loss']
+        exp_args.training_args.huber_delta = best_config['huber_delta']
+        exp_args.training_args.train_epochs = best_config['train_epochs']
+        exp_args.training_args.patience = best_config['patience']
+
+        # 每个horizon使用对应seed，保证可复现
+        pl.seed_everything(best_config['seed'], workers=True)
 
         class PhaseFormerConfig:
             def __init__(self):
@@ -168,16 +190,16 @@ def main():
                 self.phase_layers = best_config['layers']
 
                 self.phase_attn_heads = best_config['phase_attn_heads']
-                self.phase_attn_dropout = 0.1
-                self.phase_attn_use_relpos = True
+                self.phase_attn_dropout = best_config['phase_attn_dropout']
+                self.phase_attn_use_relpos = best_config['phase_attn_use_relpos']
                 self.phase_attn_window = None
                 self.phase_attention_dim = None
                 self.phase_num_routers = best_config['phase_num_routers']
-                self.phase_use_pos_embed = True
+                self.phase_use_pos_embed = best_config['phase_use_pos_embed']
                 self.phase_pos_dropout = 0.0
 
                 # RevIN
-                self.use_revin = True
+                self.use_revin = best_config['use_revin']
                 self.revin_affine = DEFAULT_NORM_HYPERS["revin_affine"]
                 self.revin_eps = DEFAULT_NORM_HYPERS["revin_eps"]
 
@@ -223,13 +245,13 @@ def main():
         )
 
         # 回调配置
-        epoch_test_callback = EpochTestCallback(test_loader)
         callbacks_list = [
             pl.callbacks.EarlyStopping(
                 monitor="val_loss", patience=exp_args.training_args.patience
             ),
-            epoch_test_callback,
         ]
+        if best_config.get('enable_epoch_test_callback', False):
+            callbacks_list.append(EpochTestCallback(test_loader))
 
         # 训练器配置
         trainer = pl.Trainer(
