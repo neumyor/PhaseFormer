@@ -127,4 +127,20 @@
 - Experiment ID: `weather96_lat32_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant baseline --latent-dim 32 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_lat32_e30_seed2021`
 - Comparability: identical baseline setup except latent dimension.
+- Result path: `research_runs/weather96_lat32_e30_seed2021/`
+- Result: early stopped after 10 completed epochs; test MAE 0.224538, test MSE 0.181637, elapsed 288.1 s.
+- Delta vs baseline: MAE increased by 14.40%; MSE increased by 21.96%.
+- Bad case summary: hard sampled MSE worsened severely, up to 0.602886. Higher latent capacity with default learning rate is unstable or overfits weak-period Weather.
+- Iteration decision: reject H4 in this form. Since small residual signals helped average metrics more reliably than capacity, test a residual-dominant path as a near-NLinear baseline.
+
+## Iteration 8 - Residual-Dominant Forecasting
+
+- Goal: determine whether weak-period Weather is better modeled by direct recent-trajectory extrapolation than phase routing.
+- Candidate hypothesis: H5 Residual-dominant NLinear path.
+- Mechanism: enable `trend_residual` with `weak_period_residual_gate_init=0.999`, making the initial model nearly pure residual extrapolation while keeping a small trainable phase contribution.
+- Theory intuition: if periodic phase alignment is weak, a normalized linear extrapolator over the recent history may outperform phase aggregation by prioritizing trend and persistence.
+- Risk: a residual-dominant model may underuse useful daily structure and degrade long-horizon behavior.
+- Experiment ID: `weather96_residual_gate999_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant trend_residual --gate-init 0.999 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_residual_gate999_e30_seed2021`
+- Comparability: identical baseline setup except residual-dominant initialization.
 - Result: pending.
