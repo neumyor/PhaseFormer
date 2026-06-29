@@ -44,4 +44,8 @@ Weather 720 -> 96 baseline is established at `research_runs/weather96_baseline_e
 
 ## Current Best
 
-Current best is the baseline model at `research_runs/weather96_baseline_e30_seed2021/` until a candidate improves both MAE and MSE.
+Current best is H1 weak-period residual at `research_runs/weather96_trend_residual_e30_seed2021/`.
+
+- Test MAE: 0.195851, 0.22% lower than baseline.
+- Test MSE: 0.148321, 0.41% lower than baseline.
+- It does not meet the 10% success threshold; continue iteration.

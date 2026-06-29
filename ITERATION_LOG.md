@@ -43,4 +43,20 @@
 - Experiment ID: `weather96_trend_residual_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant trend_residual --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_trend_residual_e30_seed2021`
 - Comparability: identical data split, horizon, seed, batch size, max epochs, loss setting, and metric path as the baseline, with only H1 enabled.
+- Result path: `research_runs/weather96_trend_residual_e30_seed2021/`
+- Result: early stopped after 13 completed epochs; test MAE 0.195851, test MSE 0.148321, elapsed 381.4 s.
+- Delta vs baseline: MAE reduced by 0.22%; MSE reduced by 0.41%. This is directionally positive but far below the 10% target.
+- Bad case summary: top sampled bad cases remain concentrated in adjacent windows, now from batches 3 and 4. Worst sampled MSE is 0.393810, similar to baseline's 0.393980, and sampled MAE is slightly worse in the hardest cases.
+- Iteration decision: keep H1 as current best by average metrics, but treat the mechanism as underpowered for the hard regime. Run a gate-init ablation with stronger residual contribution before switching to a new mechanism.
+
+## Iteration 3 - H1 Stronger Residual Gate
+
+- Goal: test whether the H1 residual path failed because its initial fusion weight was too low.
+- Candidate hypothesis: H1-gate, same weak-period residual mechanism with stronger residual prior.
+- Mechanism: set `weak_period_residual_gate_init=0.8` while keeping all other settings unchanged.
+- Expected outcome: if weak-period Weather 720 -> 96 benefits from short-term persistence/drift modeling, a larger residual prior should improve MAE/MSE more clearly and reduce the same adjacent-window bad cases.
+- Risk: a high residual gate can suppress phase routing and overfit recent noise.
+- Experiment ID: `weather96_trend_residual_gate08_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant trend_residual --gate-init 0.8 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_trend_residual_gate08_e30_seed2021`
+- Comparability: identical to Iteration 2 except gate initialization.
 - Result: pending.
