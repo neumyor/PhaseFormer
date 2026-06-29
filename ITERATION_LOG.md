@@ -59,4 +59,24 @@
 - Experiment ID: `weather96_trend_residual_gate08_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant trend_residual --gate-init 0.8 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_trend_residual_gate08_e30_seed2021`
 - Comparability: identical to Iteration 2 except gate initialization.
+- Result path: `research_runs/weather96_trend_residual_gate08_e30_seed2021/`
+- Result: early stopped after 15 completed epochs; test MAE 0.195894, test MSE 0.148831, elapsed 440.3 s.
+- Delta vs baseline: MAE reduced by 0.20%; MSE reduced by 0.06%. Worse than Iteration 2.
+- Bad case summary: sampled worst MSE improved slightly versus baseline, but sampled worst MAE increased to 0.430021. Strong residual prior helps squared-error spikes a little while hurting absolute error.
+- Iteration decision: reject stronger residual gate. The residual path is not enough for the 10% target; switch to an external time-feature correction mechanism.
+
+## Iteration 4 - Time-Mark Adjustment
+
+- Goal: test whether future time covariates can correct weak-period phase instability.
+- Candidate hypothesis: H2 Time-mark adjustment.
+- Mechanism: add a small MLP that maps future `x_mark_dec` features to a normalized-scale additive correction for each predicted variable and timestamp. The final layer starts at zero, so the initial model matches the phase path.
+- Theory intuition: weak-period series may not align cleanly by fixed phase index, but calendar/time covariates such as hour, weekday, day-of-month, and day-of-year still describe recurring regimes. A direct time-conditioned correction can model this without forcing every variable through a rigid `period_len=24` phase token.
+- Risk: time marks alone may learn only average seasonal bias and miss sample-specific level shifts.
+- Smoke test:
+  - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant time_mark --horizon 96 --epochs 1 --percent 5 --batch-size 32 --num-workers 0 --run-id smoke_weather96_time_mark`
+  - Result path: `research_runs/smoke_weather96_time_mark/`
+  - Result: completed on CUDA; test MAE 0.292619, test MSE 0.237624. Not an effect conclusion.
+- Experiment ID: `weather96_time_mark_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant time_mark --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_time_mark_e30_seed2021`
+- Comparability: identical baseline setup, replacing H1 with H2.
 - Result: pending.

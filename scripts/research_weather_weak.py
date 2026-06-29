@@ -48,7 +48,16 @@ def get_weather_config(horizon):
 
 
 class PhaseFormerConfig:
-    def __init__(self, exp_args, best_config, lookback, horizon, variant, gate_init):
+    def __init__(
+        self,
+        exp_args,
+        best_config,
+        lookback,
+        horizon,
+        variant,
+        gate_init,
+        time_mark_dim,
+    ):
         self.seq_len = lookback
         self.pred_len = horizon
         self.enc_in = exp_args.model_args.num_variants
@@ -78,6 +87,9 @@ class PhaseFormerConfig:
 
         self.use_weak_period_residual = variant == "trend_residual"
         self.weak_period_residual_gate_init = gate_init
+        self.use_time_mark_adjustment = variant == "time_mark"
+        self.time_mark_dim = time_mark_dim
+        self.time_mark_hidden = 32
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -171,7 +183,11 @@ def main():
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--percent", type=int, default=100)
     parser.add_argument("--seed", type=int, default=2021)
-    parser.add_argument("--variant", choices=["baseline", "trend_residual"], default="baseline")
+    parser.add_argument(
+        "--variant",
+        choices=["baseline", "trend_residual", "time_mark"],
+        default="baseline",
+    )
     parser.add_argument("--gate-init", type=float, default=0.2)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
@@ -195,15 +211,6 @@ def main():
     exp_args.dataset_args.num_workers = args.num_workers
     exp_args.training_args.num_workers = args.num_workers
 
-    model_config = PhaseFormerConfig(
-        exp_args,
-        best_config,
-        args.lookback,
-        args.horizon,
-        args.variant,
-        args.gate_init,
-    )
-
     run_id = args.run_id or (
         f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.dataset.lower()}_"
         f"{args.lookback}_{args.horizon}_{args.variant}_seed{args.seed}"
@@ -211,6 +218,24 @@ def main():
     run_dir = os.path.join("research_runs", run_id)
     os.makedirs(run_dir, exist_ok=False)
 
+    with open(os.path.join(run_dir, "commands.sh"), "w") as f:
+        f.write(" ".join(["python", "scripts/research_weather_weak.py"] + os.sys.argv[1:]))
+        f.write("\n")
+
+    train_set, train_loader = data_provider(exp_args.dataset_args, "train")
+    val_set, val_loader = data_provider(exp_args.dataset_args, "val")
+    test_set, test_loader = data_provider(exp_args.dataset_args, "test")
+    time_mark_dim = int(train_set.data_stamp.shape[-1])
+
+    model_config = PhaseFormerConfig(
+        exp_args,
+        best_config,
+        args.lookback,
+        args.horizon,
+        args.variant,
+        args.gate_init,
+        time_mark_dim,
+    )
     config_snapshot = {
         "args": vars(args),
         "dataset": {
@@ -227,6 +252,9 @@ def main():
             "phase_attn_heads": model_config.phase_attn_heads,
             "use_weak_period_residual": model_config.use_weak_period_residual,
             "weak_period_residual_gate_init": model_config.weak_period_residual_gate_init,
+            "use_time_mark_adjustment": model_config.use_time_mark_adjustment,
+            "time_mark_dim": model_config.time_mark_dim,
+            "time_mark_hidden": model_config.time_mark_hidden,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,
@@ -238,13 +266,6 @@ def main():
     }
     with open(os.path.join(run_dir, "config.json"), "w") as f:
         json.dump(config_snapshot, f, indent=2)
-    with open(os.path.join(run_dir, "commands.sh"), "w") as f:
-        f.write(" ".join(["python", "scripts/research_weather_weak.py"] + os.sys.argv[1:]))
-        f.write("\n")
-
-    train_set, train_loader = data_provider(exp_args.dataset_args, "train")
-    val_set, val_loader = data_provider(exp_args.dataset_args, "val")
-    test_set, test_loader = data_provider(exp_args.dataset_args, "test")
 
     model = PhaseFormer(model_config)
     logger = CSVLogger(

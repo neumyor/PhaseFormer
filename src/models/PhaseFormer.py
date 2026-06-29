@@ -60,6 +60,24 @@ class WeakPeriodResidualHead(nn.Module):
         return delta + last.expand(-1, delta.size(1), -1)
 
 
+class TimeMarkAdjustmentHead(nn.Module):
+    """Future time-feature correction for weakly periodic series."""
+
+    def __init__(self, mark_dim: int, enc_in: int, hidden: int = 32):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(mark_dim, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, enc_in),
+        )
+        nn.init.zeros_(self.net[-1].weight)
+        nn.init.zeros_(self.net[-1].bias)
+
+    def forward(self, x_mark_dec, pred_len: int):
+        future_mark = x_mark_dec[:, -pred_len:, :]
+        return self.net(future_mark)
+
+
 class CrossPhaseRoutingLayer(nn.Module):
 
     def __init__(
@@ -459,6 +477,14 @@ class PhaseFormer(DefaultPLModule):
                 torch.full((1, 1, self.enc_in), float(gate_logit))
             )
 
+        self.use_time_mark_adjustment = getattr(configs, "use_time_mark_adjustment", False)
+        if self.use_time_mark_adjustment:
+            self.time_mark_adjustment = TimeMarkAdjustmentHead(
+                mark_dim=getattr(configs, "time_mark_dim", 5),
+                enc_in=self.enc_in,
+                hidden=getattr(configs, "time_mark_hidden", 32),
+            )
+
         # loss configuration
         self.use_huber_loss = getattr(configs, "use_huber_loss", False)
         self.huber_delta = getattr(configs, "huber_delta", 1.0)
@@ -602,6 +628,12 @@ class PhaseFormer(DefaultPLModule):
             residual_gate = torch.sigmoid(self.weak_period_residual_gate)
             y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
 
+        if self.use_time_mark_adjustment and x_mark_dec is not None:
+            time_adjustment = self.time_mark_adjustment(
+                x_mark_dec.float(), self.pred_len
+            )
+            y_hat = y_hat + time_adjustment
+
         # 10) De-normalization
         if self.use_revin:
             y_hat = self.revin.denormalize(y_hat, stats)
@@ -692,4 +724,3 @@ class PhaseFormer(DefaultPLModule):
         m = metric(outputs.detach(), target.detach())
         self.log_dict({f"test_{k}": v for k, v in m.items()}, on_epoch=True)
         return m
-
