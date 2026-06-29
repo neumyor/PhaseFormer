@@ -106,7 +106,18 @@ class PhaseFormerConfig:
         return getattr(self, key, default)
 
 
-def build_exp_args(dataset_name, lookback, horizon, epochs, batch_size, percent, lr):
+def build_exp_args(
+    dataset_name,
+    lookback,
+    horizon,
+    epochs,
+    batch_size,
+    percent,
+    lr,
+    loss_func,
+    use_huber_loss,
+    huber_delta,
+):
     exp_args = config_module.config
     exp_args.model_args.model = "PhaseFormer"
     exp_args.model_args.input_len = exp_args.dataset_args.seq_len = lookback
@@ -115,9 +126,9 @@ def build_exp_args(dataset_name, lookback, horizon, epochs, batch_size, percent,
     exp_args.training_args.ema = False
     exp_args.training_args.train_epochs = epochs
     exp_args.training_args.lr_schedule_config.type = "type3"
-    exp_args.training_args.loss_func = "mse"
-    exp_args.training_args.use_huber_loss = True
-    exp_args.training_args.huber_delta = 1.0
+    exp_args.training_args.loss_func = loss_func
+    exp_args.training_args.use_huber_loss = use_huber_loss
+    exp_args.training_args.huber_delta = huber_delta
     exp_args.training_args.learning_rate = lr
     exp_args.training_args.batch_size = batch_size
 
@@ -229,6 +240,9 @@ def main():
     parser.add_argument("--phase-num-routers", type=int, default=None)
     parser.add_argument("--phase-attn-heads", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
+    parser.add_argument("--loss-func", choices=["mse", "mae", "smae"], default="mse")
+    parser.add_argument("--disable-huber", action="store_true")
+    parser.add_argument("--huber-delta", type=float, default=1.0)
     args = parser.parse_args()
 
     pl.seed_everything(args.seed, workers=True)
@@ -243,6 +257,9 @@ def main():
         args.batch_size,
         args.percent,
         best_config["learning_rate"],
+        args.loss_func,
+        not args.disable_huber,
+        args.huber_delta,
     )
     exp_args.dataset_args.num_workers = args.num_workers
     exp_args.training_args.num_workers = args.num_workers

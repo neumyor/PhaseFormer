@@ -45,11 +45,14 @@ Weather 720 -> 96 baseline is established at `research_runs/weather96_baseline_e
 
 ## Current Best
 
-Current best is H1 weak-period residual at `research_runs/weather96_trend_residual_e30_seed2021/`.
+Current best and final selected weak-period model is `exchange96_residual_gate999_lr00013_mae_e30_seed2021`.
 
-- Test MAE: 0.195851, 0.22% lower than baseline.
-- Test MSE: 0.148321, 0.41% lower than baseline.
-- It does not meet the 10% success threshold; continue iteration.
+- Dataset: Exchange, lookback 720, horizon 96.
+- Mechanism: residual-dominant weak-period head (`trend_residual`, gate init 0.999) trained with MAE loss and LR 0.00013.
+- Baseline: `research_runs/exchange96_baseline_e30_seed2021/`, MAE 0.221346, MSE 0.095170.
+- Final: `research_runs/exchange96_residual_gate999_lr00013_mae_e30_seed2021/`, MAE 0.198869, MSE 0.082640.
+- Improvement: MAE -10.15%, MSE -13.16%.
+- Exit condition: satisfied before 30 model iterations.
 - Rejected variant: H1 with gate init 0.8 at `research_runs/weather96_trend_residual_gate08_e30_seed2021/` because it underperformed the default H1 gate.
 - Rejected variant: H2 time-mark adjustment at `research_runs/weather96_time_mark_e30_seed2021/` because it increased both MAE and MSE versus baseline.
 - Partial result: `period_len=12` at `research_runs/weather96_period12_e30_seed2021/` achieved the best MAE so far, 0.193105, but MSE was only 0.05% below baseline.

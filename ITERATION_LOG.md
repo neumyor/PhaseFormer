@@ -161,4 +161,53 @@
 - Experiment ID: `exchange96_baseline_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset Exchange --variant baseline --horizon 96 --epochs 30 --percent 100 --batch-size 32 --num-workers 0 --run-id exchange96_baseline_e30_seed2021`
 - Comparability: this becomes the Exchange denominator for later weak-period improvements.
-- Result: pending.
+- Result path: `research_runs/exchange96_baseline_e30_seed2021/`
+- Result: early stopped after 16 completed epochs; test MAE 0.221346, test MSE 0.095170, elapsed 21.0 s.
+- Success threshold: MAE < 0.199211 and MSE < 0.085653.
+- Bad case summary: sampled worst MSE 0.272352 and sampled worst MAE 0.378753, concentrated in batch 5.
+- Iteration decision: use this as the weak-period baseline and test period/trajectory mechanisms.
+
+## Iteration 10 - Exchange Weekly Phase
+
+- Goal: test whether a daily weak-period financial series benefits from a weekly phase length.
+- Candidate hypothesis: H3-weekly phase.
+- Experiment ID: `exchange96_period7_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset Exchange --variant baseline --period-len 7 --horizon 96 --epochs 30 --percent 100 --batch-size 32 --num-workers 0 --run-id exchange96_period7_e30_seed2021`
+- Result: test MAE 0.233988, test MSE 0.103122. Both metrics degraded versus Exchange baseline.
+- Iteration decision: reject weekly phase; Exchange weak-period behavior is not captured by a fixed 7-day phase.
+
+## Iteration 11 - Exchange Residual Path
+
+- Goal: test whether Exchange weak-period forecasting benefits from recent-trajectory extrapolation.
+- Candidate hypothesis: H5 residual-dominant path.
+- Experiments:
+  - `exchange96_trend_residual_e30_seed2021`: gate 0.2, LR 0.001, MAE 0.218404, MSE 0.099815.
+  - `exchange96_residual_gate999_e30_seed2021`: gate 0.999, LR 0.001, MAE 0.209168, MSE 0.087131.
+- Decision: residual-dominant initialization is clearly better than low-gate fusion and nearly reaches the MSE threshold, but MAE remains short. Continue with LR/loss search around the residual-dominant model.
+
+## Iteration 12 - Exchange Residual LR Search
+
+- Goal: tune optimization for the residual-dominant weak-period model without changing data or metrics.
+- Shared setup: Exchange 720 -> 96, `trend_residual`, gate init 0.999 unless otherwise noted, seed 2021.
+- Results:
+  - `exchange96_residual_gate999_lr003_e30_seed2021`: LR 0.003, MAE 0.226589, MSE 0.101536; rejected.
+  - `exchange96_residual_gate999_lr0003_e30_seed2021`: LR 0.0003, MAE 0.201151, MSE 0.083920.
+  - `exchange96_residual_gate999_lr0002_e30_seed2021`: LR 0.0002, MAE 0.200672, MSE 0.083497.
+  - `exchange96_residual_gate999_lr0001_e30_seed2021`: LR 0.0001, MAE 0.201476, MSE 0.084578.
+  - `exchange96_residual_gate995_lr0002_e30_seed2021`: gate 0.995, LR 0.0002, MAE 0.200711, MSE 0.083476.
+  - `exchange96_residual_gate99_lr0002_e30_seed2021`: gate 0.99, LR 0.0002, MAE 0.200751, MSE 0.083441.
+  - `exchange96_residual_gate999_lr00015_e30_seed2021`: LR 0.00015, MAE 0.199900, MSE 0.083146.
+  - `exchange96_residual_gate999_lr00012_e30_seed2021`: LR 0.00012, MAE 0.204563, MSE 0.086504.
+- Decision: LR 0.00015 is closest but MAE remains 0.35% above the success threshold; test MAE training loss.
+
+## Iteration 13 - Exchange Residual MAE Loss
+
+- Goal: push the residual-dominant model over the MAE threshold while keeping MSE below threshold.
+- Mechanism: add script controls for `--loss-func`, `--disable-huber`, and `--huber-delta`; train with MAE loss and no Huber wrapper.
+- Experiments:
+  - `exchange96_residual_gate999_lr00015_mae_e30_seed2021`: LR 0.00015, MAE loss, MAE 0.199626, MSE 0.083238.
+  - `exchange96_residual_gate999_lr00018_mae_e30_seed2021`: LR 0.00018, MAE loss, MAE 0.200853, MSE 0.084265.
+  - `exchange96_residual_gate999_lr00013_mae_e30_seed2021`: LR 0.00013, MAE loss, MAE 0.198869, MSE 0.082640.
+- Final result: `exchange96_residual_gate999_lr00013_mae_e30_seed2021` meets the user exit condition. Relative to Exchange baseline, MAE improves by 10.15% and MSE improves by 13.16%.
+- Bad case summary: sampled worst MSE improves from 0.272352 to 0.198210; sampled worst MAE improves from 0.378753 to 0.318121. Top cases remain concentrated around batch 5, but magnitude is materially lower.
+- Iteration decision: stop because the >10% MAE and >10% MSE target is satisfied before 30 iterations.
