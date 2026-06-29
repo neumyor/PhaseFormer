@@ -111,4 +111,20 @@
 - Experiment ID: `weather96_period12_trend_residual_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant trend_residual --period-len 12 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_period12_trend_residual_e30_seed2021`
 - Comparability: same data, seed, training and metrics as baseline; combines only previously tested mechanisms.
+- Result path: `research_runs/weather96_period12_trend_residual_e30_seed2021/`
+- Result: early stopped after 15 completed epochs; test MAE 0.194923, test MSE 0.148223, elapsed 439.6 s.
+- Delta vs baseline: MAE reduced by 0.69%; MSE reduced by 0.47%. This is the best MSE so far, but still far from the target.
+- Bad case summary: hard sampled MSE improved versus period_len 12 alone, but remains worse than the original baseline's worst sampled MSE.
+- Iteration decision: the weak-period mechanisms are directionally useful but too small. Test whether the tiny Weather baseline is capacity-limited.
+
+## Iteration 7 - Higher Latent Capacity
+
+- Goal: test whether weak-period Weather performance is bottlenecked by the very small `latent_dim=8` phase representation.
+- Candidate hypothesis: H4 Capacity for weak-period variation.
+- Mechanism: increase `latent_dim` from 8 to 32 while keeping baseline period length and other Weather settings unchanged.
+- Theory intuition: weak-period signals contain drift, noise, and non-aligned regimes that cannot be compressed into the same low-dimensional phase representation as a strongly periodic series. A larger latent space may represent both phase structure and non-period residual variation.
+- Risk: higher capacity may overfit or improve training loss without improving the test split.
+- Experiment ID: `weather96_lat32_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant baseline --latent-dim 32 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_lat32_e30_seed2021`
+- Comparability: identical baseline setup except latent dimension.
 - Result: pending.

@@ -125,6 +125,22 @@ def build_exp_args(dataset_name, lookback, horizon, epochs, batch_size, percent,
     return exp_args
 
 
+def apply_overrides(best_config, args):
+    best_config = dict(best_config)
+    for key, value in {
+        "layers": args.layers,
+        "latent_dim": args.latent_dim,
+        "phase_encoder_hidden": args.phase_encoder_hidden,
+        "predictor_hidden": args.predictor_hidden,
+        "phase_num_routers": args.phase_num_routers,
+        "phase_attn_heads": args.phase_attn_heads,
+        "learning_rate": args.learning_rate,
+    }.items():
+        if value is not None:
+            best_config[key] = value
+    return best_config
+
+
 def collect_bad_cases(model, loader, pred_len, bad_case_limit, max_batches):
     model.eval()
     device = next(model.parameters()).device
@@ -195,12 +211,19 @@ def main():
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--layers", type=int, default=None)
+    parser.add_argument("--latent-dim", type=int, default=None)
+    parser.add_argument("--phase-encoder-hidden", type=int, default=None)
+    parser.add_argument("--predictor-hidden", type=int, default=None)
+    parser.add_argument("--phase-num-routers", type=int, default=None)
+    parser.add_argument("--phase-attn-heads", type=int, default=None)
+    parser.add_argument("--learning-rate", type=float, default=None)
     args = parser.parse_args()
 
     pl.seed_everything(args.seed, workers=True)
     torch.set_float32_matmul_precision("medium")
 
-    best_config = get_weather_config(args.horizon)
+    best_config = apply_overrides(get_weather_config(args.horizon), args)
     exp_args = build_exp_args(
         args.dataset,
         args.lookback,

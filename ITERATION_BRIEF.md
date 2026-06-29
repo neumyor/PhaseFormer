@@ -52,3 +52,4 @@ Current best is H1 weak-period residual at `research_runs/weather96_trend_residu
 - Rejected variant: H1 with gate init 0.8 at `research_runs/weather96_trend_residual_gate08_e30_seed2021/` because it underperformed the default H1 gate.
 - Rejected variant: H2 time-mark adjustment at `research_runs/weather96_time_mark_e30_seed2021/` because it increased both MAE and MSE versus baseline.
 - Partial result: `period_len=12` at `research_runs/weather96_period12_e30_seed2021/` achieved the best MAE so far, 0.193105, but MSE was only 0.05% below baseline.
+- Partial result: `period_len=12` plus H1 at `research_runs/weather96_period12_trend_residual_e30_seed2021/` achieved the best MSE so far, 0.148223, but MAE was worse than period_len 12 alone.
