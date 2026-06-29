@@ -95,4 +95,20 @@
 - Experiment ID: `weather96_period12_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant baseline --period-len 12 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_period12_e30_seed2021`
 - Comparability: identical to baseline except `period_len`.
+- Result path: `research_runs/weather96_period12_e30_seed2021/`
+- Result: ran 29 completed epochs; test MAE 0.193105, test MSE 0.148850, elapsed 829.6 s.
+- Delta vs baseline: MAE reduced by 1.62%; MSE reduced by 0.05%. This is the best MAE so far but does not improve MSE meaningfully.
+- Bad case summary: hard sampled cases worsened, with worst sampled MSE 0.431889. Shorter phases improve ordinary windows but not the localized hard regime.
+- Iteration decision: retain `period_len=12` as a partial MAE improvement and combine it with H1 residual to test complementarity.
+
+## Iteration 6 - Shorter Phase Plus Residual
+
+- Goal: combine the two mechanisms with positive average signals: shorter phase length and weak-period residual path.
+- Candidate hypothesis: H3+H1 complementarity.
+- Mechanism: set `period_len=12` and enable `trend_residual` with gate init 0.2.
+- Expected outcome: period_len 12 improves average MAE, while the residual branch may help MSE/local drift. If complementary, both MAE and MSE should improve beyond either component alone.
+- Risk: both mechanisms may target ordinary-window drift while leaving hard local regimes unresolved.
+- Experiment ID: `weather96_period12_trend_residual_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant trend_residual --period-len 12 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_period12_trend_residual_e30_seed2021`
+- Comparability: same data, seed, training and metrics as baseline; combines only previously tested mechanisms.
 - Result: pending.
