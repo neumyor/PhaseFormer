@@ -34,6 +34,13 @@ DATASET_INFO = {
         "root_path": "./resources/all_datasets/weather",
         "num_variants": 21,
     },
+    "Exchange": {
+        "data": "custom",
+        "data_path": "exchange_rate.csv",
+        "batch_size": 32,
+        "root_path": "./resources/all_datasets",
+        "num_variants": 8,
+    },
     "Electricity": {
         "data": "custom",
         "data_path": "electricity.csv",

@@ -9,6 +9,7 @@
 - Official run scripts: `run_weather.py`, `run_electricity.py`, `run_traffic.py`, and ETT variants.
 - Evidence directory for this task: `research_runs/<experiment_id>/`.
 - Local data available for Weather, Electricity, Traffic, PEMS, ETT, exchange rate, and illness. Weather is selected first as the weak-period target because it has multi-variable meteorological signals with less rigid daily periodicity than traffic/electricity load.
+- After Weather iterations showed limited weak-period gains, Exchange is added as a more direct weak-period benchmark: daily financial series, 8 variables, local path `resources/all_datasets/exchange_rate.csv`.
 - Hardware observed at start: NVIDIA GeForce RTX 4090, 24564 MiB.
 - Python environment selected for experiments: conda env `raft`, because it has PyTorch, PyTorch Lightning, pandas, scikit-learn, and easydict installed.
 
@@ -54,3 +55,5 @@ Current best is H1 weak-period residual at `research_runs/weather96_trend_residu
 - Partial result: `period_len=12` at `research_runs/weather96_period12_e30_seed2021/` achieved the best MAE so far, 0.193105, but MSE was only 0.05% below baseline.
 - Partial result: `period_len=12` plus H1 at `research_runs/weather96_period12_trend_residual_e30_seed2021/` achieved the best MSE so far, 0.148223, but MAE was worse than period_len 12 alone.
 - Rejected variant: latent_dim 32 at `research_runs/weather96_lat32_e30_seed2021/` because both MAE and MSE degraded substantially.
+- Rejected variant: residual-dominant gate 0.999 at `research_runs/weather96_residual_gate999_e30_seed2021/` because average Weather metrics degraded.
+- Current pivot: establish an Exchange baseline before evaluating further weak-period improvements.

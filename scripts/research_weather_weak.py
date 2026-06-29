@@ -25,7 +25,17 @@ from src.models.PhaseFormer import PhaseFormer
 DEFAULT_NORM_HYPERS = dict(revin_affine=False, revin_eps=1e-5)
 
 
-def get_weather_config(horizon):
+def get_best_config(dataset_name, horizon):
+    if dataset_name == "Exchange":
+        return {
+            "layers": 2,
+            "latent_dim": 8,
+            "phase_encoder_hidden": 32,
+            "predictor_hidden": 64,
+            "phase_num_routers": 8,
+            "learning_rate": 0.001,
+            "phase_attn_heads": 1,
+        }
     if horizon == 96:
         return {
             "layers": 3,
@@ -115,6 +125,7 @@ def build_exp_args(dataset_name, lookback, horizon, epochs, batch_size, percent,
     exp_args.dataset_args.data = DATASET_INFO[dataset_name]["data"]
     exp_args.dataset_args.root_path = DATASET_INFO[dataset_name]["root_path"]
     exp_args.dataset_args.data_path = DATASET_INFO[dataset_name]["data_path"]
+    exp_args.dataset_args.freq = "d" if dataset_name == "Exchange" else "t"
     exp_args.dataset_args.batch_size = batch_size
     exp_args.dataset_args.seq_len = lookback
     exp_args.dataset_args.pred_len = horizon
@@ -193,7 +204,7 @@ def write_csv(path, rows, fieldnames):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", default="Weather", choices=["Weather"])
+    parser.add_argument("--dataset", default="Weather", choices=["Weather", "Exchange"])
     parser.add_argument("--horizon", type=int, default=96)
     parser.add_argument("--lookback", type=int, default=720)
     parser.add_argument("--period-len", type=int, default=24)
@@ -223,7 +234,7 @@ def main():
     pl.seed_everything(args.seed, workers=True)
     torch.set_float32_matmul_precision("medium")
 
-    best_config = apply_overrides(get_weather_config(args.horizon), args)
+    best_config = apply_overrides(get_best_config(args.dataset, args.horizon), args)
     exp_args = build_exp_args(
         args.dataset,
         args.lookback,

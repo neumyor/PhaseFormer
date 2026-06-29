@@ -143,4 +143,22 @@
 - Experiment ID: `weather96_residual_gate999_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant trend_residual --gate-init 0.999 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_residual_gate999_e30_seed2021`
 - Comparability: identical baseline setup except residual-dominant initialization.
+- Result path: `research_runs/weather96_residual_gate999_e30_seed2021/`
+- Result: ran 26 completed epochs; test MAE 0.215498, test MSE 0.162478, elapsed 759.9 s.
+- Delta vs baseline: MAE increased by 9.79%; MSE increased by 9.10%.
+- Bad case summary: sampled hard-case MSE improved versus the original baseline, but average metrics degraded substantially. The residual-dominant model fits some local spikes while hurting broad test performance.
+- Iteration decision: reject H5 for Weather. Because Weather behaves more like a noisy meteorological benchmark than the weakest-period data available in this workspace, pivot to Exchange for a more direct weak-period evaluation, starting with a fresh baseline.
+
+## Iteration 9 - Exchange Weak-Period Baseline
+
+- Goal: establish a current-version baseline on a more clearly weak-period dataset.
+- Dataset rationale: `resources/all_datasets/exchange_rate.csv` is daily financial exchange-rate data with 8 variables. It is less calendar-periodic than Weather/Traffic/Electricity and better matches the user's weak-period requirement.
+- Baseline setup: current PhaseFormer with `period_len=24`, lookback 720, horizon 96, seed 2021.
+- Smoke test:
+  - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset Exchange --variant baseline --horizon 96 --epochs 1 --percent 5 --batch-size 32 --num-workers 0 --run-id smoke_exchange96_baseline`
+  - Result path: `research_runs/smoke_exchange96_baseline/`
+  - Result: completed on CUDA; test MAE 0.606591, test MSE 0.649810. Not an effect conclusion.
+- Experiment ID: `exchange96_baseline_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset Exchange --variant baseline --horizon 96 --epochs 30 --percent 100 --batch-size 32 --num-workers 0 --run-id exchange96_baseline_e30_seed2021`
+- Comparability: this becomes the Exchange denominator for later weak-period improvements.
 - Result: pending.
