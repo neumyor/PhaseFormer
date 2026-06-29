@@ -50,3 +50,4 @@ Current best is H1 weak-period residual at `research_runs/weather96_trend_residu
 - Test MSE: 0.148321, 0.41% lower than baseline.
 - It does not meet the 10% success threshold; continue iteration.
 - Rejected variant: H1 with gate init 0.8 at `research_runs/weather96_trend_residual_gate08_e30_seed2021/` because it underperformed the default H1 gate.
+- Rejected variant: H2 time-mark adjustment at `research_runs/weather96_time_mark_e30_seed2021/` because it increased both MAE and MSE versus baseline.

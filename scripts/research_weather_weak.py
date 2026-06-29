@@ -57,11 +57,12 @@ class PhaseFormerConfig:
         variant,
         gate_init,
         time_mark_dim,
+        period_len,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
         self.enc_in = exp_args.model_args.num_variants
-        self.period_len = 24
+        self.period_len = period_len
         self.target_var_index = -1
         self.training_args = exp_args.training_args
         self.dataset_args = exp_args.dataset_args
@@ -179,6 +180,7 @@ def main():
     parser.add_argument("--dataset", default="Weather", choices=["Weather"])
     parser.add_argument("--horizon", type=int, default=96)
     parser.add_argument("--lookback", type=int, default=720)
+    parser.add_argument("--period-len", type=int, default=24)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--percent", type=int, default=100)
@@ -235,6 +237,7 @@ def main():
         args.variant,
         args.gate_init,
         time_mark_dim,
+        args.period_len,
     )
     config_snapshot = {
         "args": vars(args),

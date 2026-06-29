@@ -79,4 +79,20 @@
 - Experiment ID: `weather96_time_mark_e30_seed2021`
 - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant time_mark --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_time_mark_e30_seed2021`
 - Comparability: identical baseline setup, replacing H1 with H2.
+- Result path: `research_runs/weather96_time_mark_e30_seed2021/`
+- Result: early stopped after 20 completed epochs; test MAE 0.211093, test MSE 0.158706, elapsed 590.0 s.
+- Delta vs baseline: MAE increased by 7.55%; MSE increased by 6.57%.
+- Bad case summary: hard sampled windows worsened substantially; worst sampled MSE rose to 0.428298 and all top 10 cases are again adjacent around batch 4/5.
+- Iteration decision: reject H2. Future time marks alone add average seasonal bias but do not solve sample-specific weak-period drift.
+
+## Iteration 5 - Shorter Phase Length
+
+- Goal: test whether the baseline's fixed `period_len=24` is too rigid for weak-period Weather.
+- Candidate hypothesis: H3 Shorter phase length.
+- Mechanism: set `period_len=12`, doubling the number of input phase periods and output phase steps while preserving the same phase-routing architecture.
+- Theory intuition: weak periodicity can appear as phase jitter relative to a 24-step daily cycle. A shorter phase length reduces each token's assumed cycle span, making same-phase aggregation less brittle and allowing the router to combine finer phase slices.
+- Risk: smaller periods increase the number of periods per phase token and can dilute daily structure.
+- Experiment ID: `weather96_period12_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --variant baseline --period-len 12 --horizon 96 --epochs 30 --percent 100 --batch-size 16 --num-workers 0 --run-id weather96_period12_e30_seed2021`
+- Comparability: identical to baseline except `period_len`.
 - Result: pending.
