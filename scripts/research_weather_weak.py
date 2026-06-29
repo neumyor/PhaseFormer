@@ -259,7 +259,7 @@ def main():
         callbacks=[EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience)],
         accelerator="auto",
         devices=1,
-        enable_progress_bar=True,
+        enable_progress_bar=False,
         log_every_n_steps=1,
         deterministic=True,
     )

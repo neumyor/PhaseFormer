@@ -28,7 +28,13 @@ Operational constraints:
 
 ## Baseline Status
 
-Pending. Smoke test passed at `research_runs/smoke_weather96_baseline/`, but it used 5% train data and 1 epoch, so it is not an effect baseline. The first comparable baseline will use Weather 720 -> 96, seed 2021, 30 requested epochs, 100% train data, and the existing Weather configuration from `run_weather.py`.
+Weather 720 -> 96 baseline is established at `research_runs/weather96_baseline_e30_seed2021/`.
+
+- Seed: 2021.
+- Requested epochs: 30; early stopped after 17 completed epochs.
+- Test MAE: 0.196280.
+- Test MSE: 0.148928.
+- Success threshold for the first target experiment: MAE < 0.176652 and MSE < 0.134035.
 
 ## Exit Conditions
 
@@ -38,4 +44,4 @@ Pending. Smoke test passed at `research_runs/smoke_weather96_baseline/`, but it 
 
 ## Current Best
 
-Pending baseline.
+Current best is the baseline model at `research_runs/weather96_baseline_e30_seed2021/` until a candidate improves both MAE and MSE.
