@@ -169,12 +169,23 @@ class PhaseFormerConfig:
         self.use_weak_period_residual = variant in [
             "trend_residual",
             "phase_trend_residual",
+            "adaptive_residual",
+            "adaptive_phase_trend_residual",
         ]
         self.weak_period_residual_gate_init = gate_init
+        self.use_adaptive_weak_period_gate = variant in [
+            "adaptive_residual",
+            "adaptive_phase_trend_residual",
+        ]
+        self.adaptive_weak_period_gate_hidden = 8
         self.use_time_mark_adjustment = variant == "time_mark"
         self.time_mark_dim = time_mark_dim
         self.time_mark_hidden = 32
-        self.use_phase_local_trend = variant in ["phase_trend", "phase_trend_residual"]
+        self.use_phase_local_trend = variant in [
+            "phase_trend",
+            "phase_trend_residual",
+            "adaptive_phase_trend_residual",
+        ]
         self.phase_local_trend_window = phase_trend_window
         self.phase_local_trend_gate_init = phase_trend_gate_init
 
@@ -311,6 +322,8 @@ def main():
             "time_mark",
             "phase_trend",
             "phase_trend_residual",
+            "adaptive_residual",
+            "adaptive_phase_trend_residual",
         ],
         default="baseline",
     )
@@ -396,6 +409,8 @@ def main():
             "phase_attn_heads": model_config.phase_attn_heads,
             "use_weak_period_residual": model_config.use_weak_period_residual,
             "weak_period_residual_gate_init": model_config.weak_period_residual_gate_init,
+            "use_adaptive_weak_period_gate": model_config.use_adaptive_weak_period_gate,
+            "adaptive_weak_period_gate_hidden": model_config.adaptive_weak_period_gate_hidden,
             "use_time_mark_adjustment": model_config.use_time_mark_adjustment,
             "time_mark_dim": model_config.time_mark_dim,
             "time_mark_hidden": model_config.time_mark_hidden,

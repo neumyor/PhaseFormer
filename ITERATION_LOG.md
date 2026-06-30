@@ -272,3 +272,16 @@
   - Result path: `research_runs/smoke_ett_etth2_96_phase_trend/`
   - Result: completed on CUDA; test MAE 0.482176, test MSE 0.485199. Not an effect conclusion.
 - Evidence status: implementation smoke passed; full ETTh2 experiment pending.
+
+## ETT Round - Iteration 12 - Adaptive Weak-Period Residual Gate
+
+- Goal: move from a static phase/residual blend to a sample-wise weak-period adaptation.
+- Candidate hypothesis: ETT-H5 adaptive residual gate.
+- Mechanism: compute per-sample/per-variable phase instability, recent volatility, and same-phase trend magnitude, then use a small shared MLP to gate between the PhaseFormer phase path and the recent-trajectory residual path.
+- Theory intuition: ETTh2 has windows where fixed phase routing works and windows where phase alignment weakens. A static gate must average these regimes, while an adaptive gate can increase residual anchoring only for unstable weak-period windows.
+- Risk: the gate network may learn noisy proxies or collapse to the static gate behavior.
+- Smoke test:
+  - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset ETTh2 --variant adaptive_residual --horizon 96 --epochs 1 --percent 5 --batch-size 256 --num-workers 0 --run-id smoke_ett_etth2_96_adaptive_residual`
+  - Result path: `research_runs/smoke_ett_etth2_96_adaptive_residual/`
+  - Result: completed on CUDA; test MAE 0.433172, test MSE 0.390351. Not an effect conclusion.
+- Evidence status: implementation smoke passed; full ETTh2 experiment pending.

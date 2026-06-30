@@ -60,6 +60,38 @@ class WeakPeriodResidualHead(nn.Module):
         return delta + last.expand(-1, delta.size(1), -1)
 
 
+class AdaptiveWeakPeriodGate(nn.Module):
+    """Sample-wise residual gate driven by phase instability features."""
+
+    def __init__(self, enc_in: int, hidden: int = 8, gate_init: float = 0.2):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(3, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, 1),
+        )
+        nn.init.zeros_(self.net[-1].weight)
+        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
+        nn.init.constant_(self.net[-1].bias, float(torch.logit(torch.tensor(gate_init))))
+        self.channel_bias = nn.Parameter(torch.zeros(1, enc_in, 1))
+
+    def forward(self, x_in, phase_series):  # x_in: (B,L,C), phase_series: (B,C,L,P)
+        phase_diff = phase_series[..., 1:] - phase_series[..., :-1]
+        phase_instability = phase_diff.abs().mean(dim=(2, 3))
+        recent_diff = x_in[:, 1:, :] - x_in[:, :-1, :]
+        recent_volatility = recent_diff.abs().mean(dim=1)
+        if phase_series.size(-1) >= 2:
+            phase_trend = (phase_series[..., -1] - phase_series[..., -2]).abs().mean(dim=2)
+        else:
+            phase_trend = torch.zeros_like(phase_instability)
+        features = torch.stack(
+            [phase_instability, recent_volatility, phase_trend],
+            dim=-1,
+        )
+        logits = self.net(features) + self.channel_bias
+        return torch.sigmoid(logits).permute(0, 2, 1)
+
+
 class TimeMarkAdjustmentHead(nn.Module):
     """Future time-feature correction for weakly periodic series."""
 
@@ -510,14 +542,24 @@ class PhaseFormer(DefaultPLModule):
             self.revin = RevIN(num_features=self.enc_in, eps=self.revin_eps, affine=self.revin_affine)
 
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
+        self.use_adaptive_weak_period_gate = getattr(
+            configs, "use_adaptive_weak_period_gate", False
+        )
         if self.use_weak_period_residual:
             self.weak_period_residual = WeakPeriodResidualHead(self.seq_len, self.pred_len)
             gate_init = float(getattr(configs, "weak_period_residual_gate_init", 0.2))
-            gate_init = min(max(gate_init, 1e-4), 1.0 - 1e-4)
-            gate_logit = torch.logit(torch.tensor(gate_init))
-            self.weak_period_residual_gate = nn.Parameter(
-                torch.full((1, 1, self.enc_in), float(gate_logit))
-            )
+            if self.use_adaptive_weak_period_gate:
+                self.adaptive_weak_period_gate = AdaptiveWeakPeriodGate(
+                    enc_in=self.enc_in,
+                    hidden=getattr(configs, "adaptive_weak_period_gate_hidden", 8),
+                    gate_init=gate_init,
+                )
+            else:
+                gate_init = min(max(gate_init, 1e-4), 1.0 - 1e-4)
+                gate_logit = torch.logit(torch.tensor(gate_init))
+                self.weak_period_residual_gate = nn.Parameter(
+                    torch.full((1, 1, self.enc_in), float(gate_logit))
+                )
 
         self.use_time_mark_adjustment = getattr(configs, "use_time_mark_adjustment", False)
         if self.use_time_mark_adjustment:
@@ -678,7 +720,10 @@ class PhaseFormer(DefaultPLModule):
 
         if self.use_weak_period_residual:
             residual_hat = self.weak_period_residual(x_in)
-            residual_gate = torch.sigmoid(self.weak_period_residual_gate)
+            if self.use_adaptive_weak_period_gate:
+                residual_gate = self.adaptive_weak_period_gate(x_in, phase_series)
+            else:
+                residual_gate = torch.sigmoid(self.weak_period_residual_gate)
             y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
 
         if self.use_time_mark_adjustment and x_mark_dec is not None:
