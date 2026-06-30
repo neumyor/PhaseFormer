@@ -345,3 +345,25 @@
 - Smoke command: `conda run --no-capture-output -n raft python scripts/benchmark_phaseformer_suite.py --datasets ETTh2 --horizons 96 --modes original,latest --epochs 1 --batch-size 256 --num-workers 0 --run-prefix smoke_phaseformer_suite_etth2_96`
 - Smoke result: completed both original and latest modes on CUDA and wrote `research_runs/smoke_phaseformer_suite_etth2_96_summary.csv` plus `research_runs/smoke_phaseformer_suite_etth2_96_comparison.csv`.
 - Comparability note: smoke used only 1 epoch and is not an effect conclusion.
+
+## Formal Benchmark - Full Results
+
+- Goal: run full-data original/latest comparisons across available datasets and horizons, adjusting training throughput settings where needed while preserving paired comparability.
+- Full ETT/Exchange command: `conda run --no-capture-output -n raft python scripts/benchmark_phaseformer_suite.py --datasets ETTh1,ETTh2,ETTm1,ETTm2,Exchange,Electricity,Traffic,Weather --horizons all --modes original,latest --num-workers 0 --run-prefix phaseformer_full_latest_vs_original_20260630 --resume`
+- Execution note: this command completed ETTh1, ETTh2, ETTm1, ETTm2, and Exchange. It was interrupted at Electricity because official batch/default worker settings were too slow for high-dimensional full tests.
+- High-dimensional/Weather command: `conda run --no-capture-output -n raft python scripts/benchmark_phaseformer_suite.py --datasets Electricity,Traffic,Weather --horizons all --modes original,latest --batch-size 64 --num-workers 4 --run-prefix phaseformer_full_latest_vs_original_highdim_b64w4_20260630 --resume`
+- Evidence:
+  - `research_runs/phaseformer_full_latest_vs_original_20260630_summary.csv`
+  - `research_runs/phaseformer_full_latest_vs_original_20260630_comparison.csv`
+  - `research_runs/phaseformer_full_latest_vs_original_highdim_b64w4_20260630_summary.csv`
+  - `research_runs/phaseformer_full_latest_vs_original_highdim_b64w4_20260630_comparison.csv`
+- Positive results:
+  - Exchange 96: MAE 0.221346 -> 0.198869 (-10.15%), MSE 0.095170 -> 0.082640 (-13.17%).
+  - Exchange 192: MAE 0.310414 -> 0.293946 (-5.31%), MSE 0.183390 -> 0.174912 (-4.62%).
+  - Exchange 336: MAE 0.463470 -> 0.407273 (-12.13%), MSE 0.400999 -> 0.328459 (-18.09%).
+  - Exchange 720: MAE 0.787787 -> 0.713884 (-9.38%), MSE 1.096012 -> 0.928974 (-15.24%).
+  - ETTh2 96: MAE 0.343032 -> 0.328264 (-4.31%), MSE 0.280557 -> 0.266525 (-5.00%).
+  - ETTh2 720: MAE 0.448750 -> 0.424987 (-5.30%), MSE 0.415718 -> 0.383477 (-7.76%).
+- Guardrail results: latest mode was intentionally identical to original for ETTh1, ETTm1, ETTm2, Electricity, Traffic, and Weather on all tested horizons; all comparison deltas are 0.0%, confirming no regression under the latest policy.
+- Interpretation: the latest scheme should be treated as a dataset-aware PhaseFormer policy, not a universal unconditional residual branch. It improves weak-period Exchange and selected ETTh2 settings while preserving original behavior on strong-period/high-dimensional datasets where prior residual variants degraded or lacked evidence.
+- Bad case rule: every benchmark run retained `bad_cases.csv` with `--bad-case-limit=10`.

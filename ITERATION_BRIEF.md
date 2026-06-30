@@ -105,3 +105,18 @@ New ETT round final status:
 - Formal benchmark runner: `scripts/benchmark_phaseformer_suite.py`.
 - Evidence output: `research_runs/<run_prefix>_*` with per-run `metrics.csv`, `config.json`, `bad_cases.csv`, `runtime.md`, plus `<run_prefix>_summary.csv` and `<run_prefix>_comparison.csv`.
 - Bad case cap remains 10 per run.
+
+Formal benchmark outcome:
+
+- ETT/Exchange full-data comparison: `research_runs/phaseformer_full_latest_vs_original_20260630_comparison.csv`.
+- High-dimensional/Weather full-data comparison: `research_runs/phaseformer_full_latest_vs_original_highdim_b64w4_20260630_comparison.csv`.
+- High-dimensional datasets used batch size 64 and `num_workers=4` for both original and latest modes after official batch 16 proved impractically slow on Electricity/Traffic; comparison remains paired and fair, but should be read as the batch64 full-data setting.
+- Latest improves Exchange on all four horizons:
+  - 96: MAE -10.15%, MSE -13.17%.
+  - 192: MAE -5.31%, MSE -4.62%.
+  - 336: MAE -12.13%, MSE -18.09%.
+  - 720: MAE -9.38%, MSE -15.24%.
+- Latest improves ETTh2 where enabled:
+  - 96: MAE -4.31%, MSE -5.00%.
+  - 720: MAE -5.30%, MSE -7.76%.
+- Latest guardrail keeps ETTh1, ETTm1, ETTm2, Electricity, Traffic, and Weather identical to original on tested horizons, preventing the regressions observed when weak-period branches were forced onto unsupported settings.
