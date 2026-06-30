@@ -412,3 +412,12 @@
 - Smoke test:
   - Run: `smoke_weakphase2_ettm2_smooth_residual`
   - Result: completed on CUDA; not an effect conclusion.
+
+## ETTh1/ETTm1/ETTm2 Weak-Period Round - Phase Jitter Mechanism
+
+- Goal: address weak periodicity as phase misalignment rather than pure trend drift.
+- Theory: let the ideal phase token be `z_l`, but weak-period samples are observed with a small random phase shift `delta`, so the conditional expectation is `E[z_{l+delta}] = sum_k P(delta=k) z_{l+k}`. For small symmetric jitter with support `{-1,0,1}`, this is approximated by a circular neighbor smoothing kernel. The new `PhaseJitterSmoothing` module learns how much of this local marginalization to apply before phase embedding.
+- Implementation: add default-off `PhaseJitterSmoothing` in `src/models/PhaseFormer.py`; expose `phase_jitter`, `phase_jitter_residual`, and `phase_jitter_smooth_residual` in `scripts/research_weather_weak.py`.
+- Smoke test:
+  - Run: `smoke_weakphase2_etth1_phase_jitter`
+  - Result: completed on CUDA; not an effect conclusion.

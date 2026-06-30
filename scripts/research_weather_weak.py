@@ -138,6 +138,7 @@ class PhaseFormerConfig:
         period_len,
         phase_trend_window,
         phase_trend_gate_init,
+        phase_jitter_gate_init,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
@@ -175,13 +176,16 @@ class PhaseFormerConfig:
             "adaptive_channel_residual",
             "smooth_residual",
             "adaptive_smooth_residual",
+            "phase_jitter_residual",
+            "phase_jitter_smooth_residual",
         ]
         self.weak_period_residual_gate_init = gate_init
         self.weak_period_residual_head_type = (
             "channel"
             if variant in ["channel_residual", "adaptive_channel_residual"]
             else "lowpass"
-            if variant in ["smooth_residual", "adaptive_smooth_residual"]
+            if variant
+            in ["smooth_residual", "adaptive_smooth_residual", "phase_jitter_smooth_residual"]
             else "shared"
         )
         self.weak_period_residual_smooth_window = best_config.get(
@@ -204,6 +208,12 @@ class PhaseFormerConfig:
         ]
         self.phase_local_trend_window = phase_trend_window
         self.phase_local_trend_gate_init = phase_trend_gate_init
+        self.use_phase_jitter_smoothing = variant in [
+            "phase_jitter",
+            "phase_jitter_residual",
+            "phase_jitter_smooth_residual",
+        ]
+        self.phase_jitter_gate_init = phase_jitter_gate_init
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -345,6 +355,9 @@ def main():
             "adaptive_channel_residual",
             "smooth_residual",
             "adaptive_smooth_residual",
+            "phase_jitter",
+            "phase_jitter_residual",
+            "phase_jitter_smooth_residual",
         ],
         default="baseline",
     )
@@ -352,6 +365,7 @@ def main():
     parser.add_argument("--smooth-window", type=int, default=None)
     parser.add_argument("--phase-trend-window", type=int, default=3)
     parser.add_argument("--phase-trend-gate-init", type=float, default=0.1)
+    parser.add_argument("--phase-jitter-gate-init", type=float, default=0.1)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
@@ -414,6 +428,7 @@ def main():
         args.period_len,
         args.phase_trend_window,
         args.phase_trend_gate_init,
+        args.phase_jitter_gate_init,
     )
     config_snapshot = {
         "args": vars(args),
@@ -441,6 +456,8 @@ def main():
             "use_phase_local_trend": model_config.use_phase_local_trend,
             "phase_local_trend_window": model_config.phase_local_trend_window,
             "phase_local_trend_gate_init": model_config.phase_local_trend_gate_init,
+            "use_phase_jitter_smoothing": model_config.use_phase_jitter_smoothing,
+            "phase_jitter_gate_init": model_config.phase_jitter_gate_init,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,

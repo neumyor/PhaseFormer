@@ -201,6 +201,25 @@ class PhaseLocalTrendHead(nn.Module):
         return torch.sigmoid(self.gate) * correction
 
 
+class PhaseJitterSmoothing(nn.Module):
+    """Circular neighbor smoothing over phase slots for weak phase alignment."""
+
+    def __init__(self, enc_in: int, gate_init: float = 0.1):
+        super().__init__()
+        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
+        gate_logit = torch.logit(torch.tensor(gate_init))
+        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
+
+    def forward(self, phase_series):  # (B, C, L, P)
+        neighbor_mean = (
+            torch.roll(phase_series, shifts=1, dims=2)
+            + phase_series
+            + torch.roll(phase_series, shifts=-1, dims=2)
+        ) / 3.0
+        gate = torch.sigmoid(self.gate)
+        return (1.0 - gate) * phase_series + gate * neighbor_mean
+
+
 class CrossPhaseRoutingLayer(nn.Module):
 
     def __init__(
@@ -641,6 +660,15 @@ class PhaseFormer(DefaultPLModule):
                 gate_init=getattr(configs, "phase_local_trend_gate_init", 0.1),
             )
 
+        self.use_phase_jitter_smoothing = getattr(
+            configs, "use_phase_jitter_smoothing", False
+        )
+        if self.use_phase_jitter_smoothing:
+            self.phase_jitter_smoothing = PhaseJitterSmoothing(
+                enc_in=self.enc_in,
+                gate_init=getattr(configs, "phase_jitter_gate_init", 0.1),
+            )
+
         # loss configuration
         self.use_huber_loss = getattr(configs, "use_huber_loss", False)
         self.huber_delta = getattr(configs, "huber_delta", 1.0)
@@ -759,6 +787,8 @@ class PhaseFormer(DefaultPLModule):
 
         # 5) Parallel by phase view (B, C, L, P_in)
         phase_series = self._to_phase_series(x_periods)
+        if self.use_phase_jitter_smoothing:
+            phase_series = self.phase_jitter_smoothing(phase_series)
 
         # 6-8) Embedding -> routing layers -> top predictor
         # Initial latent from embedding
