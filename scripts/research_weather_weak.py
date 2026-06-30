@@ -78,7 +78,7 @@ def get_best_config(dataset_name, horizon):
         }
     if dataset_name == "ETTm1":
         return {
-            "layers": 2 if horizon == 336 else 1,
+            "layers": 1 if horizon == 336 else 2,
             "latent_dim": 8,
             "phase_encoder_hidden": 32,
             "predictor_hidden": 64,

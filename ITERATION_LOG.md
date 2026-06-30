@@ -377,13 +377,13 @@
   - Result: MAE 0.396414, MSE 0.370857 versus baseline MAE 0.388491, MSE 0.364891. Rejected.
 - Iteration 2, ETTm1 96 adaptive residual:
   - Run: `weakphase2_ettm1_96_adaptive_residual_g02_e30_seed2021`
-  - Result: MAE 0.348268, MSE 0.297773 versus baseline MAE 0.347958, MSE 0.299526. MSE improves only 0.59%, MAE worsens.
+  - Result: MAE 0.348268, MSE 0.297773. Later audit found this used the research runner's incorrect ETTm1 layer setting and is not comparable to the formal ETTm1 baseline.
 - Iteration 3, ETTm2 96 adaptive residual:
   - Run: `weakphase2_ettm2_96_adaptive_residual_g02_e30_seed2021`
   - Result: MAE 0.255513, MSE 0.168867 versus baseline MAE 0.258160, MSE 0.170091. Positive but below 5%.
 - Iteration 4, ETTm1 96 period length 96:
   - Run: `weakphase2_ettm1_96_period96_e30_seed2021`
-  - Result: MAE 0.409024, MSE 0.396720. Rejected; full daily phase is too rigid/sparse for weak-period ETTm1.
+  - Result: MAE 0.409024, MSE 0.396720. Rejected as a local signal, but not used for formal comparison because of the ETTm1 layer-setting audit below.
 - Iteration 5, ETTm2 96 period length 96:
   - Run: `weakphase2_ettm2_96_period96_e30_seed2021`
   - Result: MAE 0.283160, MSE 0.190747. Rejected.
@@ -401,13 +401,13 @@
   - Result: MAE 0.245211, MSE 0.160063. This satisfies the 5% threshold for ETTm2 96.
 - Iteration 10, ETTm1 96 residual-dominant + MAE:
   - Run: `weakphase2_ettm1_96_residual_gate999_lr0003_mae_e30_seed2021`
-  - Result: MAE 0.341968, MSE 0.300096. MAE improves but MSE worsens.
+  - Result: MAE 0.341968, MSE 0.300096. Not used for formal comparison because of the ETTm1 layer-setting audit below.
 - Iteration 11, ETTm1 720 baseline:
   - Run: `weakphase2_ettm1_720_baseline_e30_seed2021`
   - Result: MAE 0.409929, MSE 0.412445. Threshold MAE < 0.389433, MSE < 0.391823.
 - Iteration 12, ETTm1 720 residual-dominant + MAE:
   - Run: `weakphase2_ettm1_720_residual_gate999_lr0003_mae_e30_seed2021`
-  - Result: MAE 0.407948, MSE 0.416197. Rejected.
+  - Result: MAE 0.407948, MSE 0.416197. Rejected locally; not used for formal comparison because of the ETTm1 layer-setting audit below.
 - New implementation: `LowPassWeakPeriodResidualHead`, enabled by `smooth_residual` / `adaptive_smooth_residual` in `scripts/research_weather_weak.py`.
 - Smoke test:
   - Run: `smoke_weakphase2_ettm2_smooth_residual`
@@ -421,3 +421,4 @@
 - Smoke test:
   - Run: `smoke_weakphase2_etth1_phase_jitter`
   - Result: completed on CUDA; not an effect conclusion.
+- Comparability audit: `scripts/research_weather_weak.py` had ETTm1 layers reversed from the official `run_ettm1.py`/formal preset. It has been corrected so ETTm1 96/192/720 use layers=2 and ETTm1 336 uses layers=1. ETTm1 experiments before this correction are treated as local signals only, not formal comparisons.
