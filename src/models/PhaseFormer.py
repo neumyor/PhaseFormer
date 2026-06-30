@@ -78,6 +78,48 @@ class TimeMarkAdjustmentHead(nn.Module):
         return self.net(future_mark)
 
 
+class PhaseLocalTrendHead(nn.Module):
+    """Phase-space local trend correction for weakly aligned periods.
+
+    For each phase slot, estimate the recent slope across periods and extrapolate
+    it into future phase steps. This keeps the correction inside the phase
+    representation instead of falling back to a whole-sequence linear head.
+    """
+
+    def __init__(
+        self,
+        num_periods_output: int,
+        enc_in: int,
+        window: int = 3,
+        gate_init: float = 0.1,
+    ):
+        super().__init__()
+        self.num_periods_output = num_periods_output
+        self.window = max(2, int(window))
+        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
+        gate_logit = torch.logit(torch.tensor(gate_init))
+        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
+
+    def forward(self, phase_series):  # (B, C, L, P_in)
+        if phase_series.size(-1) < 2:
+            return torch.zeros(
+                *phase_series.shape[:-1],
+                self.num_periods_output,
+                device=phase_series.device,
+                dtype=phase_series.dtype,
+            )
+        recent = phase_series[..., -min(self.window, phase_series.size(-1)) :]
+        slope = (recent[..., 1:] - recent[..., :-1]).mean(dim=-1)
+        steps = torch.arange(
+            1,
+            self.num_periods_output + 1,
+            device=phase_series.device,
+            dtype=phase_series.dtype,
+        )
+        correction = slope.unsqueeze(-1) * steps.view(1, 1, 1, -1)
+        return torch.sigmoid(self.gate) * correction
+
+
 class CrossPhaseRoutingLayer(nn.Module):
 
     def __init__(
@@ -485,6 +527,15 @@ class PhaseFormer(DefaultPLModule):
                 hidden=getattr(configs, "time_mark_hidden", 32),
             )
 
+        self.use_phase_local_trend = getattr(configs, "use_phase_local_trend", False)
+        if self.use_phase_local_trend:
+            self.phase_local_trend = PhaseLocalTrendHead(
+                num_periods_output=self.num_periods_output,
+                enc_in=self.enc_in,
+                window=getattr(configs, "phase_local_trend_window", 3),
+                gate_init=getattr(configs, "phase_local_trend_gate_init", 0.1),
+            )
+
         # loss configuration
         self.use_huber_loss = getattr(configs, "use_huber_loss", False)
         self.huber_delta = getattr(configs, "huber_delta", 1.0)
@@ -617,6 +668,8 @@ class PhaseFormer(DefaultPLModule):
 
         # final predictor to produce P_out
         y_phase_steps = self.predictor(Z)  # (B, C, L, P_out)
+        if self.use_phase_local_trend:
+            y_phase_steps = y_phase_steps + self.phase_local_trend(phase_series)
 
         # 9) Reassemble to sequence (B, pred_len, C)
         y_periods = self._from_phase_steps_to_periods(y_phase_steps)  # (B, C, P_out, L)

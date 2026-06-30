@@ -46,8 +46,8 @@ New ETT round baseline status:
 
 - Initial target: ETTh2 720 -> 96.
 - Dataset path fix: ETT metadata now points to `resources/all_datasets/ETT/`.
-- Baseline pending: `research_runs/ett_etth2_96_baseline_e30_seed2021/`.
-- Until that baseline completes, no ETT improvement claim is valid.
+- Baseline: `research_runs/ett_etth2_96_baseline_e30_seed2021/`, MAE 0.343032, MSE 0.280557.
+- New ETT success threshold: MAE < 0.308729 and MSE < 0.252501.
 
 ## Exit Conditions
 
@@ -73,3 +73,11 @@ Current best and final selected weak-period model is `exchange96_residual_gate99
 - Rejected variant: latent_dim 32 at `research_runs/weather96_lat32_e30_seed2021/` because both MAE and MSE degraded substantially.
 - Rejected variant: residual-dominant gate 0.999 at `research_runs/weather96_residual_gate999_e30_seed2021/` because average Weather metrics degraded.
 - Current pivot: establish an Exchange baseline before evaluating further weak-period improvements.
+
+New ETT round current best:
+
+- Target: ETTh2 720 -> 96.
+- Baseline: `research_runs/ett_etth2_96_baseline_e30_seed2021/`, MAE 0.343032, MSE 0.280557.
+- Best MAE so far: `research_runs/ett_etth2_96_residual_gate999_lr0003_mae_e30_seed2021/`, MAE 0.329992, MSE 0.272189.
+- Best MSE so far: `research_runs/ett_etth2_96_trend_residual_e30_seed2021/`, MAE 0.333583, MSE 0.267520.
+- Next mechanism under test: phase-local trend correction, a gated same-phase slope extrapolation added before phase reassembly.

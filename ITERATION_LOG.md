@@ -230,3 +230,45 @@
   - ETT-H2 residual-assisted phase path: use `trend_residual` to let recent trajectory extrapolation stabilize phase predictions when periodic evidence is weak.
   - ETT-H3 time-mark phase correction: use future time marks as a lightweight calendar-conditioned phase bias if baseline bad cases show hour-regime bias.
 - Evidence status: smoke test passed; full ETTh2 baseline pending. No effect conclusion yet.
+
+## ETT Round - Iteration 1 - ETTh2 Current Baseline
+
+- Goal: establish the current-version PhaseFormer baseline for ETTh2 720 -> 96.
+- Experiment ID: `ett_etth2_96_baseline_e30_seed2021`
+- Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset ETTh2 --variant baseline --horizon 96 --epochs 30 --percent 100 --batch-size 256 --num-workers 0 --run-id ett_etth2_96_baseline_e30_seed2021`
+- Result path: `research_runs/ett_etth2_96_baseline_e30_seed2021/`
+- Result: ran 30 epochs; test MAE 0.343032, test MSE 0.280557, elapsed 9.3 s.
+- Success threshold: MAE < 0.308729 and MSE < 0.252501.
+- Bad case summary: the exported bad case table contains 10 cases, capped as required. Worst sampled windows are adjacent in test batches 3 and 4, with sampled MSE from 1.016948 to 1.056622 and MAE from 0.676581 to 0.768117. This points to local level/trend drift where fixed 24-hour phase retrieval is not enough.
+- Iteration decision: run phase-length and residual-assisted phase hypotheses before adding new mechanisms.
+
+## ETT Round - Iterations 2 to 10 - Low-Cost Hypothesis Sweep
+
+- Goal: quickly test whether existing phase-length, residual, time-mark, loss, or capacity controls can reach the 10% ETTh2 target.
+- Results:
+  - Iteration 2, `ett_etth2_96_period12_e30_seed2021`: MAE 0.343496, MSE 0.280480. MSE improves only 0.03%, MAE worsens.
+  - Iteration 3, `ett_etth2_96_period48_e30_seed2021`: MAE 0.345207, MSE 0.282775. Rejected.
+  - Iteration 4, `ett_etth2_96_trend_residual_e30_seed2021`: MAE 0.333583, MSE 0.267520. Improves MAE 2.75%, MSE 4.65%; current best MSE.
+  - Iteration 5, `ett_etth2_96_trend_residual_gate08_e30_seed2021`: MAE 0.336780, MSE 0.273490. High residual prior hurts.
+  - Iteration 6, `ett_etth2_96_residual_gate999_e30_seed2021`: MAE 0.332420, MSE 0.271142. Best MAE among MSE-trained runs but weaker MSE.
+  - Iteration 7, `ett_etth2_96_trend_residual_lr0003_e30_seed2021`: MAE 0.333234, MSE 0.267941. LR 0.0003 does not beat default LR.
+  - Iteration 8, `ett_etth2_96_residual_gate999_lr0003_e30_seed2021`: MAE 0.331487, MSE 0.269694. Best MAE under MSE objective.
+  - Iteration 9, `ett_etth2_96_residual_gate999_lr0003_mae_e30_seed2021`: MAE 0.329992, MSE 0.272189. MAE improves but MSE regresses.
+  - Iteration 10, `ett_etth2_96_time_mark_e30_seed2021`: MAE 0.355203, MSE 0.289638. Rejected.
+  - Additional control, `ett_etth2_96_period12_trend_residual_e30_seed2021`: MAE 0.335807, MSE 0.270955. No complementarity.
+  - Additional control, `ett_etth2_96_phase_capacity_l2_d16_e30_seed2021`: MAE 0.358527, MSE 0.306776. Rejected; larger phase capacity is not the bottleneck.
+  - Additional control, `ett_etth2_96_baseline_mae_e30_seed2021`: MAE 0.337440, MSE 0.278760. Loss alone is insufficient.
+- Decision: existing controls improve at most 3.80% MAE or 4.65% MSE. Add a more targeted phase-space weak-period adaptation.
+
+## ETT Round - Iteration 11 - Phase-Local Trend Correction
+
+- Goal: implement a mechanism that adapts the phase framework itself to weak-period drift.
+- Candidate hypothesis: ETT-H4 phase-local trend correction.
+- Mechanism: for each phase slot, estimate recent slope across same-phase periods and add a gated extrapolation to future phase steps before sequence reassembly. This keeps correction inside the PhaseFormer phase representation instead of replacing the model with a whole-sequence residual head.
+- Theory intuition: ETTh2 bad cases suggest same-hour history is useful but not stationary. A local slope within each phase slot can preserve phase alignment while compensating for gradual same-phase drift.
+- Risk: same-phase slopes can amplify noise if the recent periods are unstable.
+- Smoke test:
+  - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset ETTh2 --variant phase_trend --horizon 96 --epochs 1 --percent 5 --batch-size 256 --num-workers 0 --run-id smoke_ett_etth2_96_phase_trend`
+  - Result path: `research_runs/smoke_ett_etth2_96_phase_trend/`
+  - Result: completed on CUDA; test MAE 0.482176, test MSE 0.485199. Not an effect conclusion.
+- Evidence status: implementation smoke passed; full ETTh2 experiment pending.

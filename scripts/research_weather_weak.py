@@ -136,6 +136,8 @@ class PhaseFormerConfig:
         gate_init,
         time_mark_dim,
         period_len,
+        phase_trend_window,
+        phase_trend_gate_init,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
@@ -164,11 +166,17 @@ class PhaseFormerConfig:
         self.use_huber_loss = exp_args.training_args.use_huber_loss
         self.huber_delta = exp_args.training_args.huber_delta
 
-        self.use_weak_period_residual = variant == "trend_residual"
+        self.use_weak_period_residual = variant in [
+            "trend_residual",
+            "phase_trend_residual",
+        ]
         self.weak_period_residual_gate_init = gate_init
         self.use_time_mark_adjustment = variant == "time_mark"
         self.time_mark_dim = time_mark_dim
         self.time_mark_hidden = 32
+        self.use_phase_local_trend = variant in ["phase_trend", "phase_trend_residual"]
+        self.phase_local_trend_window = phase_trend_window
+        self.phase_local_trend_gate_init = phase_trend_gate_init
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -297,10 +305,18 @@ def main():
     parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument(
         "--variant",
-        choices=["baseline", "trend_residual", "time_mark"],
+        choices=[
+            "baseline",
+            "trend_residual",
+            "time_mark",
+            "phase_trend",
+            "phase_trend_residual",
+        ],
         default="baseline",
     )
     parser.add_argument("--gate-init", type=float, default=0.2)
+    parser.add_argument("--phase-trend-window", type=int, default=3)
+    parser.add_argument("--phase-trend-gate-init", type=float, default=0.1)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
@@ -361,6 +377,8 @@ def main():
         args.gate_init,
         time_mark_dim,
         args.period_len,
+        args.phase_trend_window,
+        args.phase_trend_gate_init,
     )
     config_snapshot = {
         "args": vars(args),
@@ -381,6 +399,9 @@ def main():
             "use_time_mark_adjustment": model_config.use_time_mark_adjustment,
             "time_mark_dim": model_config.time_mark_dim,
             "time_mark_hidden": model_config.time_mark_hidden,
+            "use_phase_local_trend": model_config.use_phase_local_trend,
+            "phase_local_trend_window": model_config.phase_local_trend_window,
+            "phase_local_trend_gate_init": model_config.phase_local_trend_gate_init,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,
