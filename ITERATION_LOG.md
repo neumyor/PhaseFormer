@@ -422,3 +422,50 @@
   - Run: `smoke_weakphase2_etth1_phase_jitter`
   - Result: completed on CUDA; not an effect conclusion.
 - Comparability audit: `scripts/research_weather_weak.py` had ETTm1 layers reversed from the official `run_ettm1.py`/formal preset. It has been corrected so ETTm1 96/192/720 use layers=2 and ETTm1 336 uses layers=1. ETTm1 experiments before this correction are treated as local signals only, not formal comparisons.
+
+## ETTh1/ETTm1/ETTm2 Weak-Period Round - Post-Fix Results
+
+- Iteration 13, ETTm2 96 low-pass residual:
+  - Run: `weakphase2_ettm2_96_smooth_residual_gate999_w25_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.249809, MSE 0.164491. Rejected versus the raw residual-dominant result.
+- Iteration 14, ETTm1 96 low-pass residual:
+  - Run: `weakphase2_ettm1_96_smooth_residual_gate999_w25_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.346035, MSE 0.302350. Improves MAE but worsens MSE.
+- Iteration 15, ETTm1 96 low-pass residual with gate 0.2:
+  - Run: `weakphase2_ettm1_96_smooth_residual_g02_w25_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.344209, MSE 0.297261. Both improve but remain below 5%.
+- Iteration 16, ETTm1 720 low-pass residual with gate 0.2:
+  - Run: `weakphase2_ettm1_720_smooth_residual_g02_w25_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.408482, MSE 0.409277 versus baseline MAE 0.409929, MSE 0.412445. Positive but below 5%.
+- Iteration 17, ETTh1 96 low-pass residual:
+  - Run: `weakphase2_etth1_96_smooth_residual_g02_w7_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.401992, MSE 0.371285. Rejected.
+- Iteration 18, ETTh1 96 phase jitter:
+  - Run: `weakphase2_etth1_96_phase_jitter_g01_e30_seed2021`
+  - Result: MAE 0.385709, MSE 0.363149. Small positive signal, below 5%.
+- Iteration 19, ETTh1 96 stronger phase jitter:
+  - Run: `weakphase2_etth1_96_phase_jitter_g05_e30_seed2021`
+  - Result: MAE 0.388801, MSE 0.365513. Rejected.
+- Iteration 20, ETTh1 96 phase jitter + residual:
+  - Run: `weakphase2_etth1_96_phase_jitter_residual_j01_g02_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.389678, MSE 0.359815. MSE improves but MAE worsens.
+- Iteration 21, ETTm1 96 phase jitter:
+  - Run: `weakphase2_ettm1_96_phase_jitter_g01_e30_seed2021`
+  - Result: MAE 0.358953, MSE 0.319443. Rejected.
+- Iteration 22, ETTm1 96 fixed baseline:
+  - Run: `weakphase2_ettm1_96_baseline_fixed_e30_seed2021`
+  - Result: MAE 0.347958, MSE 0.299526. Confirms formal baseline.
+- Iteration 23, ETTm1 96 fixed residual-dominant + MAE:
+  - Run: `weakphase2_ettm1_96_residual_gate999_lr0003_mae_fixed_e30_seed2021`
+  - Result: MAE 0.337078, MSE 0.294519. Improvements are MAE 3.13%, MSE 1.67%, below 5%.
+- Iteration 24, ETTm1 96 fixed residual-dominant + MAE with LR 0.00013:
+  - Run: `weakphase2_ettm1_96_residual_gate999_lr00013_mae_fixed_e30_seed2021`
+  - Result: MAE 0.337630, MSE 0.294997. Worse than LR 0.0003.
+- Iteration 25, ETTm1 96 fixed residual-dominant + MAE with LR 0.001:
+  - Run: `weakphase2_ettm1_96_residual_gate999_lr001_mae_fixed_e30_seed2021`
+  - Result: MAE 0.345032, MSE 0.301169. Rejected.
+- Current best for this round:
+  - ETTm2 96: `weakphase2_ettm2_96_residual_gate999_lr0003_mae_e30_seed2021`, MAE 0.245211, MSE 0.160063; both exceed 5% improvement versus baseline.
+  - ETTm1 96: `weakphase2_ettm1_96_residual_gate999_lr0003_mae_fixed_e30_seed2021`, below 5%.
+  - ETTh1 96: `weakphase2_etth1_96_phase_jitter_g01_e30_seed2021`, below 5%.
+- Blocker: after iteration 25, CUDA became unavailable (`nvidia-smi` reports `Unable to determine the device handle for GPU0`). Further full-data ETTm1/ETTh1 experiments are paused until GPU availability returns; CPU runs would not be time-comparable.

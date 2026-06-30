@@ -131,3 +131,7 @@ Formal benchmark outcome:
 - Active success thresholds:
   - ETTm2 96 baseline: MAE 0.258160, MSE 0.170091; threshold MAE < 0.245252 and MSE < 0.161587.
   - ETTm1 720 baseline: MAE 0.409929, MSE 0.412445; threshold MAE < 0.389433 and MSE < 0.391823.
+- Current result:
+  - ETTm2 96 satisfies the 5% target with `weakphase2_ettm2_96_residual_gate999_lr0003_mae_e30_seed2021`: MAE 0.245211, MSE 0.160063.
+  - ETTm1 and ETTh1 have positive but sub-threshold results so far.
+  - Further GPU experiments are paused because CUDA became unavailable after iteration 25.
