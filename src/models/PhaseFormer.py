@@ -76,6 +76,39 @@ class ChannelWiseWeakPeriodResidualHead(nn.Module):
         return delta.permute(0, 2, 1).contiguous() + last.expand(-1, delta.size(-1), -1)
 
 
+class LowPassWeakPeriodResidualHead(nn.Module):
+    """Low-pass temporal residual path for noisy weak-period drift.
+
+    The branch estimates extrapolation coefficients from a moving-averaged
+    trajectory, but anchors the forecast at the original last value so short-term
+    level information is not smoothed away.
+    """
+
+    def __init__(self, seq_len: int, pred_len: int, window: int = 25):
+        super().__init__()
+        self.window = max(3, int(window))
+        if self.window % 2 == 0:
+            self.window += 1
+        self.linear = nn.Linear(seq_len, pred_len)
+        nn.init.zeros_(self.linear.weight)
+        nn.init.zeros_(self.linear.bias)
+
+    def _smooth(self, x):
+        pad = self.window // 2
+        series = x.permute(0, 2, 1).contiguous()
+        series = F.pad(series, (pad, pad), mode="replicate")
+        smoothed = F.avg_pool1d(series, kernel_size=self.window, stride=1)
+        return smoothed.permute(0, 2, 1).contiguous()
+
+    def forward(self, x):  # x: (B, L, C), normalized scale
+        last = x[:, -1:, :]
+        smooth = self._smooth(x)
+        smooth_last = smooth[:, -1:, :]
+        centered = (smooth - smooth_last).permute(0, 2, 1).contiguous()
+        delta = self.linear(centered).permute(0, 2, 1).contiguous()
+        return delta + last.expand(-1, delta.size(1), -1)
+
+
 class AdaptiveWeakPeriodGate(nn.Module):
     """Sample-wise residual gate driven by phase instability features."""
 
@@ -566,6 +599,12 @@ class PhaseFormer(DefaultPLModule):
             if residual_head_type == "channel":
                 self.weak_period_residual = ChannelWiseWeakPeriodResidualHead(
                     self.seq_len, self.pred_len, self.enc_in
+                )
+            elif residual_head_type == "lowpass":
+                self.weak_period_residual = LowPassWeakPeriodResidualHead(
+                    self.seq_len,
+                    self.pred_len,
+                    window=getattr(configs, "weak_period_residual_smooth_window", 25),
                 )
             else:
                 self.weak_period_residual = WeakPeriodResidualHead(

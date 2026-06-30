@@ -173,17 +173,25 @@ class PhaseFormerConfig:
             "adaptive_phase_trend_residual",
             "channel_residual",
             "adaptive_channel_residual",
+            "smooth_residual",
+            "adaptive_smooth_residual",
         ]
         self.weak_period_residual_gate_init = gate_init
         self.weak_period_residual_head_type = (
             "channel"
             if variant in ["channel_residual", "adaptive_channel_residual"]
+            else "lowpass"
+            if variant in ["smooth_residual", "adaptive_smooth_residual"]
             else "shared"
+        )
+        self.weak_period_residual_smooth_window = best_config.get(
+            "weak_period_residual_smooth_window", 25
         )
         self.use_adaptive_weak_period_gate = variant in [
             "adaptive_residual",
             "adaptive_phase_trend_residual",
             "adaptive_channel_residual",
+            "adaptive_smooth_residual",
         ]
         self.adaptive_weak_period_gate_hidden = 8
         self.use_time_mark_adjustment = variant == "time_mark"
@@ -252,6 +260,7 @@ def apply_overrides(best_config, args):
         "phase_num_routers": args.phase_num_routers,
         "phase_attn_heads": args.phase_attn_heads,
         "learning_rate": args.learning_rate,
+        "weak_period_residual_smooth_window": args.smooth_window,
     }.items():
         if value is not None:
             best_config[key] = value
@@ -334,10 +343,13 @@ def main():
             "adaptive_phase_trend_residual",
             "channel_residual",
             "adaptive_channel_residual",
+            "smooth_residual",
+            "adaptive_smooth_residual",
         ],
         default="baseline",
     )
     parser.add_argument("--gate-init", type=float, default=0.2)
+    parser.add_argument("--smooth-window", type=int, default=None)
     parser.add_argument("--phase-trend-window", type=int, default=3)
     parser.add_argument("--phase-trend-gate-init", type=float, default=0.1)
     parser.add_argument("--run-id", default=None)
@@ -420,6 +432,7 @@ def main():
             "use_weak_period_residual": model_config.use_weak_period_residual,
             "weak_period_residual_gate_init": model_config.weak_period_residual_gate_init,
             "weak_period_residual_head_type": model_config.weak_period_residual_head_type,
+            "weak_period_residual_smooth_window": model_config.weak_period_residual_smooth_window,
             "use_adaptive_weak_period_gate": model_config.use_adaptive_weak_period_gate,
             "adaptive_weak_period_gate_hidden": model_config.adaptive_weak_period_gate_hidden,
             "use_time_mark_adjustment": model_config.use_time_mark_adjustment,

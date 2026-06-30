@@ -367,3 +367,48 @@
 - Guardrail results: latest mode was intentionally identical to original for ETTh1, ETTm1, ETTm2, Electricity, Traffic, and Weather on all tested horizons; all comparison deltas are 0.0%, confirming no regression under the latest policy.
 - Interpretation: the latest scheme should be treated as a dataset-aware PhaseFormer policy, not a universal unconditional residual branch. It improves weak-period Exchange and selected ETTh2 settings while preserving original behavior on strong-period/high-dimensional datasets where prior residual variants degraded or lacked evidence.
 - Bad case rule: every benchmark run retained `bad_cases.csv` with `--bad-case-limit=10`.
+
+## ETTh1/ETTm1/ETTm2 Weak-Period Round - Initialization
+
+- Goal: start a new round focused on ETTh1, ETTm1, and ETTm2, with stop condition MAE and MSE both improving by more than 5% or more than 50 iterations.
+- Theory target: weak periodicity can be written as `x_t = p_{\phi(t)} + d_t + eps_t`, where `p` is phase-conditioned structure, `d_t` is slowly varying drift, and `eps_t` is high-frequency noise. A raw residual branch estimates from `d_t + eps_t`, so its extrapolation error includes noise variance. A low-pass residual branch estimates from `LP(x_t) ~= p_{\phi(t)} + d_t`, reducing the residual estimator variance while retaining the raw last-value anchor for current level.
+- Iteration 1, ETTh1 96 adaptive residual:
+  - Run: `weakphase2_etth1_96_adaptive_residual_g02_e30_seed2021`
+  - Result: MAE 0.396414, MSE 0.370857 versus baseline MAE 0.388491, MSE 0.364891. Rejected.
+- Iteration 2, ETTm1 96 adaptive residual:
+  - Run: `weakphase2_ettm1_96_adaptive_residual_g02_e30_seed2021`
+  - Result: MAE 0.348268, MSE 0.297773 versus baseline MAE 0.347958, MSE 0.299526. MSE improves only 0.59%, MAE worsens.
+- Iteration 3, ETTm2 96 adaptive residual:
+  - Run: `weakphase2_ettm2_96_adaptive_residual_g02_e30_seed2021`
+  - Result: MAE 0.255513, MSE 0.168867 versus baseline MAE 0.258160, MSE 0.170091. Positive but below 5%.
+- Iteration 4, ETTm1 96 period length 96:
+  - Run: `weakphase2_ettm1_96_period96_e30_seed2021`
+  - Result: MAE 0.409024, MSE 0.396720. Rejected; full daily phase is too rigid/sparse for weak-period ETTm1.
+- Iteration 5, ETTm2 96 period length 96:
+  - Run: `weakphase2_ettm2_96_period96_e30_seed2021`
+  - Result: MAE 0.283160, MSE 0.190747. Rejected.
+- Iteration 6, ETTm2 96 period length 12:
+  - Run: `weakphase2_ettm2_96_period12_e30_seed2021`
+  - Result: MAE 0.265914, MSE 0.176100. Rejected.
+- Iteration 7, ETTm2 96 adaptive residual + MAE:
+  - Run: `weakphase2_ettm2_96_adaptive_residual_g02_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.247504, MSE 0.161533. MSE reaches the 5% target; MAE improves 4.13%, just short.
+- Iteration 8, ETTm2 96 adaptive residual + lower gate:
+  - Run: `weakphase2_ettm2_96_adaptive_residual_g01_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.247352, MSE 0.161570. Slight MAE improvement, still short.
+- Iteration 9, ETTm2 96 residual-dominant + MAE:
+  - Run: `weakphase2_ettm2_96_residual_gate999_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.245211, MSE 0.160063. This satisfies the 5% threshold for ETTm2 96.
+- Iteration 10, ETTm1 96 residual-dominant + MAE:
+  - Run: `weakphase2_ettm1_96_residual_gate999_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.341968, MSE 0.300096. MAE improves but MSE worsens.
+- Iteration 11, ETTm1 720 baseline:
+  - Run: `weakphase2_ettm1_720_baseline_e30_seed2021`
+  - Result: MAE 0.409929, MSE 0.412445. Threshold MAE < 0.389433, MSE < 0.391823.
+- Iteration 12, ETTm1 720 residual-dominant + MAE:
+  - Run: `weakphase2_ettm1_720_residual_gate999_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.407948, MSE 0.416197. Rejected.
+- New implementation: `LowPassWeakPeriodResidualHead`, enabled by `smooth_residual` / `adaptive_smooth_residual` in `scripts/research_weather_weak.py`.
+- Smoke test:
+  - Run: `smoke_weakphase2_ettm2_smooth_residual`
+  - Result: completed on CUDA; not an effect conclusion.

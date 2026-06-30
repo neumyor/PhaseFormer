@@ -120,3 +120,13 @@ Formal benchmark outcome:
   - 96: MAE -4.31%, MSE -5.00%.
   - 720: MAE -5.30%, MSE -7.76%.
 - Latest guardrail keeps ETTh1, ETTm1, ETTm2, Electricity, Traffic, and Weather identical to original on tested horizons, preventing the regressions observed when weak-period branches were forced onto unsupported settings.
+
+## New ETTh1/ETTm1/ETTm2 Weak-Period Round
+
+- New user request: treat ETTh1, ETTm1, and ETTm2 as weak-period datasets and continue model-design research until MAE and MSE both improve by more than 5%, or this round exceeds 50 iterations.
+- Required mechanism constraint: improvements must target weak-period properties and include theoretical support.
+- Initial evidence: raw/adaptive residual helps ETTm2 96 but does not solve ETTh1 or ETTm1; full daily `period_len=96` on ETTm data worsens, suggesting rigid calendar phase is too brittle.
+- New candidate mechanism: low-pass weak-period residual branch. The branch estimates residual extrapolation from a moving-averaged trajectory while anchoring the output at the raw last value. It is intended to model low-frequency drift under weak periodicity without extrapolating high-frequency noise.
+- Active success thresholds:
+  - ETTm2 96 baseline: MAE 0.258160, MSE 0.170091; threshold MAE < 0.245252 and MSE < 0.161587.
+  - ETTm1 720 baseline: MAE 0.409929, MSE 0.412445; threshold MAE < 0.389433 and MSE < 0.391823.
