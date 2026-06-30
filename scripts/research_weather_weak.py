@@ -36,6 +36,66 @@ def get_best_config(dataset_name, horizon):
             "learning_rate": 0.001,
             "phase_attn_heads": 1,
         }
+    if dataset_name == "ETTh1":
+        if horizon in [96, 192, 336]:
+            return {
+                "layers": 3,
+                "latent_dim": 4,
+                "phase_encoder_hidden": 16,
+                "predictor_hidden": 32,
+                "phase_num_routers": 8,
+                "learning_rate": 0.001,
+                "phase_attn_heads": 1,
+            }
+        return {
+            "layers": 3,
+            "latent_dim": 32,
+            "phase_encoder_hidden": 128,
+            "predictor_hidden": 256,
+            "phase_num_routers": 16,
+            "learning_rate": 0.00015,
+            "phase_attn_heads": 2,
+        }
+    if dataset_name == "ETTh2":
+        if horizon in [96, 192, 336]:
+            return {
+                "layers": 1,
+                "latent_dim": 8,
+                "phase_encoder_hidden": 32,
+                "predictor_hidden": 64,
+                "phase_num_routers": 8,
+                "learning_rate": 0.001,
+                "phase_attn_heads": 1,
+            }
+        return {
+            "layers": 1,
+            "latent_dim": 4,
+            "phase_encoder_hidden": 8,
+            "predictor_hidden": 8,
+            "phase_num_routers": 4,
+            "learning_rate": 0.001,
+            "phase_attn_heads": 1,
+        }
+    if dataset_name == "ETTm1":
+        return {
+            "layers": 2 if horizon == 336 else 1,
+            "latent_dim": 8,
+            "phase_encoder_hidden": 32,
+            "predictor_hidden": 64,
+            "phase_num_routers": 8,
+            "learning_rate": 0.001,
+            "phase_attn_heads": 1,
+        }
+    if dataset_name == "ETTm2":
+        return {
+            "layers": 2 if horizon == 96 else 1,
+            "latent_dim": 8,
+            "phase_encoder_hidden": 32,
+            "predictor_hidden": 64,
+            "phase_num_routers": 8,
+            "learning_rate": 0.001,
+            "phase_attn_heads": 1,
+        }
     if horizon == 96:
         return {
             "layers": 3,
@@ -55,6 +115,14 @@ def get_best_config(dataset_name, horizon):
         "learning_rate": 0.001,
         "phase_attn_heads": 1,
     }
+
+
+def get_frequency(dataset_name):
+    if dataset_name == "Exchange":
+        return "d"
+    if dataset_name in ["ETTh1", "ETTh2"]:
+        return "h"
+    return "t"
 
 
 class PhaseFormerConfig:
@@ -136,7 +204,7 @@ def build_exp_args(
     exp_args.dataset_args.data = DATASET_INFO[dataset_name]["data"]
     exp_args.dataset_args.root_path = DATASET_INFO[dataset_name]["root_path"]
     exp_args.dataset_args.data_path = DATASET_INFO[dataset_name]["data_path"]
-    exp_args.dataset_args.freq = "d" if dataset_name == "Exchange" else "t"
+    exp_args.dataset_args.freq = get_frequency(dataset_name)
     exp_args.dataset_args.batch_size = batch_size
     exp_args.dataset_args.seq_len = lookback
     exp_args.dataset_args.pred_len = horizon
@@ -215,7 +283,11 @@ def write_csv(path, rows, fieldnames):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", default="Weather", choices=["Weather", "Exchange"])
+    parser.add_argument(
+        "--dataset",
+        default="Weather",
+        choices=["Weather", "Exchange", "ETTh1", "ETTh2", "ETTm1", "ETTm2"],
+    )
     parser.add_argument("--horizon", type=int, default=96)
     parser.add_argument("--lookback", type=int, default=720)
     parser.add_argument("--period-len", type=int, default=24)

@@ -211,3 +211,22 @@
 - Final result: `exchange96_residual_gate999_lr00013_mae_e30_seed2021` meets the user exit condition. Relative to Exchange baseline, MAE improves by 10.15% and MSE improves by 13.16%.
 - Bad case summary: sampled worst MSE improves from 0.272352 to 0.198210; sampled worst MAE improves from 0.378753 to 0.318121. Top cases remain concentrated around batch 5, but magnitude is materially lower.
 - Iteration decision: stop because the >10% MAE and >10% MSE target is satisfied before 30 iterations.
+
+## ETT Round - Iteration 0 - Setup and Baseline Plan
+
+- Goal: start a new autonomous round on ETT-series data, following the same auditable workflow and stopping when both MAE and MSE improve by more than 10% against the matching ETT baseline or after more than 30 iterations.
+- User emphasis: improvements should be framed as adaptation inside the PhaseFormer phase-modeling framework for weak-period data, not only generic hyperparameter tuning.
+- Initial target: ETTh2 720 -> 96. Rationale: hourly ETTh2 has a natural 24-step phase prior, but transformer temperature/oil variables can have weak or regime-shifted periodic alignment, making it a suitable low-cost ETT entry point.
+- Repository finding: ETT metadata pointed to `./resources/all_datasets/ETT-small`, while local files are under `./resources/all_datasets/ETT/`.
+- Tooling change: extend `scripts/research_weather_weak.py` to accept `ETTh1`, `ETTh2`, `ETTm1`, and `ETTm2`; reuse the official ETT script hyperparameters; set hourly ETT frequency to `h` and minute ETT frequency to `t`; keep bad case export capped by `--bad-case-limit` default 10.
+- Baseline command planned: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset ETTh2 --variant baseline --horizon 96 --epochs 30 --percent 100 --batch-size 256 --num-workers 0 --run-id ett_etth2_96_baseline_e30_seed2021`.
+- Smoke test:
+  - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset ETTh2 --variant baseline --horizon 96 --epochs 1 --percent 5 --batch-size 256 --num-workers 0 --run-id smoke_ett_etth2_96_baseline`
+  - Result path: `research_runs/smoke_ett_etth2_96_baseline/`
+  - Result: completed on CUDA; test MAE 0.483794, test MSE 0.488302.
+  - Comparability: not an effect conclusion because it used only 5% train data and 1 epoch.
+- Candidate hypotheses for next iterations:
+  - ETT-H1 shorter/alternate phase length: test `period_len=12` or `period_len=48` to reduce brittleness of a fixed 24-hour phase grid under weak phase alignment.
+  - ETT-H2 residual-assisted phase path: use `trend_residual` to let recent trajectory extrapolation stabilize phase predictions when periodic evidence is weak.
+  - ETT-H3 time-mark phase correction: use future time marks as a lightweight calendar-conditioned phase bias if baseline bad cases show hour-regime bias.
+- Evidence status: smoke test passed; full ETTh2 baseline pending. No effect conclusion yet.
