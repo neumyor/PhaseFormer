@@ -171,11 +171,19 @@ class PhaseFormerConfig:
             "phase_trend_residual",
             "adaptive_residual",
             "adaptive_phase_trend_residual",
+            "channel_residual",
+            "adaptive_channel_residual",
         ]
         self.weak_period_residual_gate_init = gate_init
+        self.weak_period_residual_head_type = (
+            "channel"
+            if variant in ["channel_residual", "adaptive_channel_residual"]
+            else "shared"
+        )
         self.use_adaptive_weak_period_gate = variant in [
             "adaptive_residual",
             "adaptive_phase_trend_residual",
+            "adaptive_channel_residual",
         ]
         self.adaptive_weak_period_gate_hidden = 8
         self.use_time_mark_adjustment = variant == "time_mark"
@@ -324,6 +332,8 @@ def main():
             "phase_trend_residual",
             "adaptive_residual",
             "adaptive_phase_trend_residual",
+            "channel_residual",
+            "adaptive_channel_residual",
         ],
         default="baseline",
     )
@@ -409,6 +419,7 @@ def main():
             "phase_attn_heads": model_config.phase_attn_heads,
             "use_weak_period_residual": model_config.use_weak_period_residual,
             "weak_period_residual_gate_init": model_config.weak_period_residual_gate_init,
+            "weak_period_residual_head_type": model_config.weak_period_residual_head_type,
             "use_adaptive_weak_period_gate": model_config.use_adaptive_weak_period_gate,
             "adaptive_weak_period_gate_hidden": model_config.adaptive_weak_period_gate_hidden,
             "use_time_mark_adjustment": model_config.use_time_mark_adjustment,

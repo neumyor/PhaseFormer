@@ -285,3 +285,16 @@
   - Result path: `research_runs/smoke_ett_etth2_96_adaptive_residual/`
   - Result: completed on CUDA; test MAE 0.433172, test MSE 0.390351. Not an effect conclusion.
 - Evidence status: implementation smoke passed; full ETTh2 experiment pending.
+
+## ETT Round - Iteration 13 - Channel-Wise Weak-Period Residual Head
+
+- Goal: address heterogeneous ETT variables whose weak-period drift may not share one temporal residual kernel.
+- Candidate hypothesis: ETT-H6 channel-wise residual phase adaptation.
+- Mechanism: keep PhaseFormer's phase path, but replace the shared NLinear-style residual head with a per-variable residual extrapolator when explicitly requested. The residual still blends with the phase forecast through the same gate interface.
+- Theory intuition: ETTh2/ETTm2 channels have different physical meanings and drift scales. A shared residual projection can underfit variable-specific weak-period drift, especially at long horizons.
+- Risk: per-channel residual parameters can overfit, especially on shorter horizons.
+- Smoke test:
+  - Command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset ETTh2 --variant channel_residual --horizon 96 --epochs 1 --percent 5 --batch-size 256 --num-workers 0 --run-id smoke_ett_etth2_96_channel_residual`
+  - Result path: `research_runs/smoke_ett_etth2_96_channel_residual/`
+  - Result: completed on CUDA; test MAE 0.440361, test MSE 0.408380. Not an effect conclusion.
+- Evidence status: implementation smoke passed; full ETTh2 720 experiment pending because long horizon showed the strongest residual signal so far.

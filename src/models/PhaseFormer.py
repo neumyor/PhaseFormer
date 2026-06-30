@@ -60,6 +60,22 @@ class WeakPeriodResidualHead(nn.Module):
         return delta + last.expand(-1, delta.size(1), -1)
 
 
+class ChannelWiseWeakPeriodResidualHead(nn.Module):
+    """Channel-independent temporal residual path for heterogeneous variables."""
+
+    def __init__(self, seq_len: int, pred_len: int, enc_in: int):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(enc_in, pred_len, seq_len))
+        self.bias = nn.Parameter(torch.zeros(enc_in, pred_len))
+
+    def forward(self, x):  # x: (B, L, C), normalized scale
+        last = x[:, -1:, :]
+        centered = (x - last).permute(0, 2, 1).contiguous()
+        delta = torch.einsum("bcl,cpl->bcp", centered, self.weight)
+        delta = delta + self.bias.unsqueeze(0)
+        return delta.permute(0, 2, 1).contiguous() + last.expand(-1, delta.size(-1), -1)
+
+
 class AdaptiveWeakPeriodGate(nn.Module):
     """Sample-wise residual gate driven by phase instability features."""
 
@@ -546,7 +562,15 @@ class PhaseFormer(DefaultPLModule):
             configs, "use_adaptive_weak_period_gate", False
         )
         if self.use_weak_period_residual:
-            self.weak_period_residual = WeakPeriodResidualHead(self.seq_len, self.pred_len)
+            residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
+            if residual_head_type == "channel":
+                self.weak_period_residual = ChannelWiseWeakPeriodResidualHead(
+                    self.seq_len, self.pred_len, self.enc_in
+                )
+            else:
+                self.weak_period_residual = WeakPeriodResidualHead(
+                    self.seq_len, self.pred_len
+                )
             gate_init = float(getattr(configs, "weak_period_residual_gate_init", 0.2))
             if self.use_adaptive_weak_period_gate:
                 self.adaptive_weak_period_gate = AdaptiveWeakPeriodGate(
