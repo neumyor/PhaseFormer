@@ -91,3 +91,17 @@ New ETT round final status:
 - Improvement: MAE -5.30%, MSE -7.76%, below the required -10%/-10% exit target.
 - Mechanism retained as the strongest direction: residual-dominant weak-period phase adaptation, where the phase path remains present but long-horizon predictions are anchored by recent-trajectory extrapolation.
 - Mechanisms rejected or not retained: isolated phase length changes, time-mark correction, larger phase capacity, phase-local slope correction, adaptive gate, and channel-wise residual head.
+
+## Latest Formal Benchmark Plan
+
+- New user request: update the project model design and auxiliary experiment design to the latest scheme, then run full tests against the original version across datasets. Training parameter adjustment is allowed.
+- Formal latest policy is centralized in `src/models/phaseformer_presets.py`.
+- `original` mode: original PhaseFormer phase path with dataset/horizon hyperparameters, no weak-period auxiliary branch.
+- `latest` mode: dataset-aware guardrailed policy:
+  - Exchange: residual-dominant weak-period branch, gate 0.999, MAE loss, LR 0.00013.
+  - ETTh2 96: adaptive residual gate, gate init 0.2, MAE loss, LR 0.0003.
+  - ETTh2 720: residual-dominant weak-period branch, gate 0.999.
+  - Other dataset/horizon combinations: original phase path, because prior full experiments showed phase-local trend, channel-wise residual, and unconditional residual variants can degrade strong-period or unsupported settings.
+- Formal benchmark runner: `scripts/benchmark_phaseformer_suite.py`.
+- Evidence output: `research_runs/<run_prefix>_*` with per-run `metrics.csv`, `config.json`, `bad_cases.csv`, `runtime.md`, plus `<run_prefix>_summary.csv` and `<run_prefix>_comparison.csv`.
+- Bad case cap remains 10 per run.

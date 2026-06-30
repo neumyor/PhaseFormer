@@ -331,3 +331,17 @@
   - Best run bad cases are capped at 10 and concentrated in batch 4; sampled worst MSE 0.947432 and sampled worst MAE 0.746384.
   - Interpretation: residual-dominant phase adaptation improves average ETTh2 720 MAE/MSE but does not reduce the hardest local regime. This hard-case shift explains why the run stops below the 10% target.
 - Final decision: stop the ETT round because the model/research iteration count exceeded 30 without a candidate reducing both MAE and MSE by more than 10%.
+
+## Formal Benchmark - Setup
+
+- Goal: promote the latest validated PhaseFormer design and auxiliary experiment design into a formal full-test runner, then compare it with the original PhaseFormer mode.
+- Design decision: centralize dataset/horizon hyperparameters and latest weak-period policies in `src/models/phaseformer_presets.py`.
+- Latest policy:
+  - Exchange uses the previously successful residual-dominant weak-period branch with MAE loss and LR 0.00013.
+  - ETTh2 96 uses adaptive residual gating with MAE loss and LR 0.0003, which was the best ETTh2 96 MAE/MSE balance in the prior round.
+  - ETTh2 720 uses residual-dominant weak-period branch with gate 0.999, which was the best ETT-round result.
+  - Unsupported dataset/horizon combinations keep the original phase path to avoid applying mechanisms that prior evidence showed can degrade performance.
+- Benchmark runner: `scripts/benchmark_phaseformer_suite.py`.
+- Smoke command: `conda run --no-capture-output -n raft python scripts/benchmark_phaseformer_suite.py --datasets ETTh2 --horizons 96 --modes original,latest --epochs 1 --batch-size 256 --num-workers 0 --run-prefix smoke_phaseformer_suite_etth2_96`
+- Smoke result: completed both original and latest modes on CUDA and wrote `research_runs/smoke_phaseformer_suite_etth2_96_summary.csv` plus `research_runs/smoke_phaseformer_suite_etth2_96_comparison.csv`.
+- Comparability note: smoke used only 1 epoch and is not an effect conclusion.
