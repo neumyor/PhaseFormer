@@ -74,10 +74,20 @@ Current best and final selected weak-period model is `exchange96_residual_gate99
 - Rejected variant: residual-dominant gate 0.999 at `research_runs/weather96_residual_gate999_e30_seed2021/` because average Weather metrics degraded.
 - Current pivot: establish an Exchange baseline before evaluating further weak-period improvements.
 
-New ETT round current best:
+New ETT round interim ETTh2 96 result:
 
 - Target: ETTh2 720 -> 96.
 - Baseline: `research_runs/ett_etth2_96_baseline_e30_seed2021/`, MAE 0.343032, MSE 0.280557.
 - Best MAE so far: `research_runs/ett_etth2_96_residual_gate999_lr0003_mae_e30_seed2021/`, MAE 0.329992, MSE 0.272189.
 - Best MSE so far: `research_runs/ett_etth2_96_trend_residual_e30_seed2021/`, MAE 0.333583, MSE 0.267520.
-- Next mechanism under test: phase-local trend correction, a gated same-phase slope extrapolation added before phase reassembly.
+- Conclusion: ETTh2 96 improved, but stayed far below the 10%/10% target, so the round pivoted to ETTh2 720 and other ETT checks.
+
+New ETT round final status:
+
+- Stop condition reached: model/research iteration count exceeded 30 without a candidate reducing both MAE and MSE by more than 10%.
+- Best overall ETT run: `research_runs/ett_etth2_720_residual_gate999_e30_seed2021/`.
+- Matching baseline: `research_runs/ett_etth2_720_baseline_e30_seed2021/`, MAE 0.448750, MSE 0.415718.
+- Best result: MAE 0.424987, MSE 0.383477.
+- Improvement: MAE -5.30%, MSE -7.76%, below the required -10%/-10% exit target.
+- Mechanism retained as the strongest direction: residual-dominant weak-period phase adaptation, where the phase path remains present but long-horizon predictions are anchored by recent-trajectory extrapolation.
+- Mechanisms rejected or not retained: isolated phase length changes, time-mark correction, larger phase capacity, phase-local slope correction, adaptive gate, and channel-wise residual head.

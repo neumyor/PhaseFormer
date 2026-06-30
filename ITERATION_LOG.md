@@ -298,3 +298,36 @@
   - Result path: `research_runs/smoke_ett_etth2_96_channel_residual/`
   - Result: completed on CUDA; test MAE 0.440361, test MSE 0.408380. Not an effect conclusion.
 - Evidence status: implementation smoke passed; full ETTh2 720 experiment pending because long horizon showed the strongest residual signal so far.
+
+## ETT Round - Iterations 14 to 33 - Final Sweep and Stop
+
+- Goal: continue one-hypothesis-at-a-time experiments until either an ETT run exceeds 10% improvement on both MAE and MSE, or the active round exceeds 30 iterations.
+- Phase-local trend results:
+  - Iteration 14, `ett_etth2_96_phase_trend_w3_g01_e30_seed2021`: MAE 0.346507, MSE 0.284833. Rejected; same-phase slope correction amplified noise.
+  - Iteration 15, `ett_etth2_96_phase_trend_residual_w3_g01_e30_seed2021`: MAE 0.334012, MSE 0.267917. Near residual-only but not better.
+  - Iteration 16, `ett_etth2_96_phase_trend_residual_w3_g001_e30_seed2021`: MAE 0.333570, MSE 0.267494. Tiny MSE gain over static residual but far below target.
+- Adaptive residual results:
+  - Iteration 17, `ett_etth2_96_adaptive_residual_g02_e30_seed2021`: MAE 0.332452, MSE 0.265911. Best ETTh2 96 MSE; improvements are MAE 3.08%, MSE 5.22%.
+  - Iteration 18, `ett_etth2_96_adaptive_residual_g05_e30_seed2021`: MAE 0.334271, MSE 0.267016. Rejected.
+  - Iteration 19, `ett_etth2_96_adaptive_residual_g01_e30_seed2021`: MAE 0.332209, MSE 0.266401. Slight MAE gain, MSE worse than gate 0.2.
+  - Iteration 20, `ett_etth2_96_adaptive_residual_g02_lr0003_e30_seed2021`: MAE 0.331876, MSE 0.267296. LR 0.0003 trades MSE for MAE.
+  - Iteration 21, `ett_etth2_96_adaptive_residual_g02_lr0003_mae_e30_seed2021`: MAE 0.328264, MSE 0.266525. Best ETTh2 96 MAE; improvements are MAE 4.31%, MSE 5.00%.
+- ETTh2 720 pivot:
+  - Iteration 22, `ett_etth2_720_baseline_e30_seed2021`: MAE 0.448750, MSE 0.415718. Success threshold MAE < 0.403875, MSE < 0.374146.
+  - Iteration 23, `ett_etth2_720_trend_residual_g02_e30_seed2021`: MAE 0.429569, MSE 0.389052. Improvements are MAE 4.27%, MSE 6.41%.
+  - Iteration 24, `ett_etth2_720_adaptive_residual_g02_e30_seed2021`: MAE 0.430190, MSE 0.389287. Adaptive gate did not beat static residual.
+  - Iteration 25, `ett_etth2_720_residual_gate999_e30_seed2021`: MAE 0.424987, MSE 0.383477. Best overall ETT round result; improvements are MAE 5.30%, MSE 7.76%.
+  - Iteration 26, `ett_etth2_720_residual_gate999_lr0003_e30_seed2021`: MAE 0.425024, MSE 0.385890. Lower LR worsened MSE.
+  - Iteration 27, `ett_etth2_720_residual_gate999_mae_e30_seed2021`: MAE 0.425633, MSE 0.391216. MAE loss worsened both versus iteration 25.
+- Additional ETT-series checks:
+  - Iteration 28, `ett_ettm2_96_baseline_e30_seed2021`: MAE 0.258160, MSE 0.170091. Threshold MAE < 0.232344, MSE < 0.153082.
+  - Iteration 29, `ett_ettm2_96_trend_residual_g02_e30_seed2021`: MAE 0.255485, MSE 0.167130. Improvements are MAE 1.04%, MSE 1.74%; rejected as too weak.
+  - Iteration 30, `ett_etth2_720_channel_residual_gate999_e30_seed2021`: MAE 0.434686, MSE 0.396564. Channel-wise residual overfit.
+  - Iteration 31, `ett_etth2_720_channel_residual_g02_e30_seed2021`: MAE 0.446093, MSE 0.413074. Rejected.
+  - Iteration 32, `ett_etth1_96_baseline_e30_seed2021`: MAE 0.388491, MSE 0.364891. Threshold MAE < 0.349642, MSE < 0.328402.
+  - Iteration 33, `ett_etth1_96_residual_gate999_e30_seed2021`: MAE 0.395013, MSE 0.371524. Rejected.
+- Final bad case comparison for the selected best `ett_etth2_720_residual_gate999_e30_seed2021`:
+  - Baseline ETTh2 720 bad cases are capped at 10 and concentrated in batch 7; sampled worst MSE 0.900864 and sampled worst MAE 0.673353.
+  - Best run bad cases are capped at 10 and concentrated in batch 4; sampled worst MSE 0.947432 and sampled worst MAE 0.746384.
+  - Interpretation: residual-dominant phase adaptation improves average ETTh2 720 MAE/MSE but does not reduce the hardest local regime. This hard-case shift explains why the run stops below the 10% target.
+- Final decision: stop the ETT round because the model/research iteration count exceeded 30 without a candidate reducing both MAE and MSE by more than 10%.
