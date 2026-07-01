@@ -228,9 +228,16 @@ class PhaseReliabilityDamping(nn.Module):
     variance as signal and cross-period same-phase variance as noise.
     """
 
-    def __init__(self, min_reliability: float = 0.35):
+    def __init__(
+        self,
+        min_reliability: float = 0.35,
+        noise_threshold: float = 0.0,
+        noise_temperature: float = 0.2,
+    ):
         super().__init__()
         self.min_reliability = min(max(float(min_reliability), 0.0), 1.0)
+        self.noise_threshold = float(noise_threshold)
+        self.noise_temperature = max(float(noise_temperature), 1e-4)
 
     def forward(self, y_hat, x_in, phase_series):  # y_hat: (B,T,C), phase_series: (B,C,L,P)
         phase_template = phase_series.mean(dim=-1)
@@ -238,6 +245,9 @@ class PhaseReliabilityDamping(nn.Module):
         noise = phase_series.var(dim=-1, unbiased=False).mean(dim=2)
         reliability = signal / (signal + noise + 1e-6)
         reliability = self.min_reliability + (1.0 - self.min_reliability) * reliability
+        if self.noise_threshold > 0.0:
+            trigger = torch.sigmoid((noise - self.noise_threshold) / self.noise_temperature)
+            reliability = trigger * reliability + (1.0 - trigger)
         reliability = reliability.unsqueeze(1)
         last = x_in[:, -1:, :]
         return last + reliability * (y_hat - last)
@@ -697,7 +707,9 @@ class PhaseFormer(DefaultPLModule):
         )
         if self.use_phase_reliability_damping:
             self.phase_reliability_damping = PhaseReliabilityDamping(
-                min_reliability=getattr(configs, "phase_reliability_min", 0.35)
+                min_reliability=getattr(configs, "phase_reliability_min", 0.35),
+                noise_threshold=getattr(configs, "phase_reliability_noise_threshold", 0.0),
+                noise_temperature=getattr(configs, "phase_reliability_noise_temperature", 0.2),
             )
 
         # loss configuration

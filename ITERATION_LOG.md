@@ -538,3 +538,8 @@
   - Run: `weakphase2_ettm1_96_phase_reliability_residual_min60_gate999_lr0003_mae_b256_e30_seed2021`
   - Result: MAE 0.339604, MSE 0.294396.
   - Decision: rejected versus min 0.35. Lighter damping loses the large-error benefit without recovering MAE enough.
+- Iteration 33, ETTm1 96 residual + selective phase reliability damping:
+  - Run: `weakphase2_ettm1_96_phase_reliability_residual_min35_noise10_gate999_lr0003_mae_b256_e30_seed2021`
+  - Bad-case rationale: the min 0.35 review showed MUFL failure windows have phase noise around 2.3-2.4, while the MULL/HULL windows hurt by global damping have noise around 0.4-0.5. This variant only triggers damping strongly when phase noise exceeds 1.0.
+  - Result: MAE 0.340421, MSE 0.294971.
+  - Decision: rejected. Absolute phase-noise thresholding protects too many windows from damping and loses the large-error reduction. The next mechanism should separate two bad-case modes explicitly: high-amplitude hallucination on near-flat futures versus under-response to real trend jumps.

@@ -141,6 +141,8 @@ class PhaseFormerConfig:
         phase_trend_gate_init,
         phase_jitter_gate_init,
         phase_reliability_min,
+        phase_reliability_noise_threshold,
+        phase_reliability_noise_temperature,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
@@ -229,6 +231,8 @@ class PhaseFormerConfig:
             "phase_reliability_smooth_residual",
         ]
         self.phase_reliability_min = phase_reliability_min
+        self.phase_reliability_noise_threshold = phase_reliability_noise_threshold
+        self.phase_reliability_noise_temperature = phase_reliability_noise_temperature
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -541,6 +545,8 @@ def main():
     parser.add_argument("--phase-trend-gate-init", type=float, default=0.1)
     parser.add_argument("--phase-jitter-gate-init", type=float, default=0.1)
     parser.add_argument("--phase-reliability-min", type=float, default=0.35)
+    parser.add_argument("--phase-reliability-noise-threshold", type=float, default=0.0)
+    parser.add_argument("--phase-reliability-noise-temperature", type=float, default=0.2)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
@@ -605,6 +611,8 @@ def main():
         args.phase_trend_gate_init,
         args.phase_jitter_gate_init,
         args.phase_reliability_min,
+        args.phase_reliability_noise_threshold,
+        args.phase_reliability_noise_temperature,
     )
     config_snapshot = {
         "args": vars(args),
@@ -636,6 +644,8 @@ def main():
             "phase_jitter_gate_init": model_config.phase_jitter_gate_init,
             "use_phase_reliability_damping": model_config.use_phase_reliability_damping,
             "phase_reliability_min": model_config.phase_reliability_min,
+            "phase_reliability_noise_threshold": model_config.phase_reliability_noise_threshold,
+            "phase_reliability_noise_temperature": model_config.phase_reliability_noise_temperature,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,
