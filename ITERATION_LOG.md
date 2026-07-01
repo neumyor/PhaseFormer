@@ -601,3 +601,18 @@
   - Result: MAE 0.391959, MSE 0.367231.
   - Bad case review: improves systematic/volatile-input/volatility-mismatch cases, but worsens trend-mismatch and peak-underfit. MSE improves slightly while MAE worsens.
   - Decision: not retained as final. Continue with long-horizon bad-case review rather than overfitting ETTh1 96.
+
+## Long-Horizon Weak-Period Review
+
+- ETTm1 720 review baseline:
+  - Run: `weakphase2_review_ettm1_720_baseline_b256_e30_seed2021`
+  - Result: MAE 0.413261, MSE 0.418219.
+  - Bad case pattern: long-horizon failures show slope direction/amplitude instability, not only short-window phase hallucination.
+- ETTm1 720 smooth residual review:
+  - Run: `weakphase2_review_ettm1_720_smooth_residual_g02_w25_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.409015, MSE 0.413924.
+  - Decision: small average gain, but representative bad cases remain poor.
+- Iteration 43, ETTm1 720 smooth residual + phase-noise high-frequency damping:
+  - Run: `weakphase2_ettm1_720_phase_hifreq_s05_thr10_w7_smooth_residual_g02_w25_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.409044, MSE 0.413627.
+  - Decision: rejected as a target solution. It marginally improves MSE versus smooth residual but not enough to justify more local tuning.
