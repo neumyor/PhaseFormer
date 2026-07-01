@@ -56,6 +56,11 @@ def get_best_config(dataset_name, horizon):
             "phase_num_routers": 16,
             "learning_rate": 0.00015,
             "phase_attn_heads": 2,
+            "train_epochs": 70,
+            "patience": 14,
+            "seed": 2026,
+            "phase_attn_dropout": 0.0,
+            "huber_delta": 0.3,
         }
     if dataset_name == "ETTh2":
         if horizon in [96, 192, 336]:
@@ -163,7 +168,7 @@ class PhaseFormerConfig:
         self.predictor_hidden = best_config["predictor_hidden"]
         self.phase_layers = best_config["layers"]
         self.phase_attn_heads = best_config["phase_attn_heads"]
-        self.phase_attn_dropout = 0.1
+        self.phase_attn_dropout = best_config.get("phase_attn_dropout", 0.1)
         self.phase_attn_use_relpos = True
         self.phase_attn_window = None
         self.phase_attention_dim = None
@@ -282,7 +287,7 @@ def build_exp_args(
     exp_args.model_args.model = "PhaseFormer"
     exp_args.model_args.input_len = exp_args.dataset_args.seq_len = lookback
     exp_args.training_args.itr = 1
-    exp_args.training_args.patience = min(8, max(2, epochs))
+    exp_args.training_args.patience = min(14, max(2, epochs))
     exp_args.training_args.ema = False
     exp_args.training_args.train_epochs = epochs
     exp_args.training_args.lr_schedule_config.type = "type3"
@@ -607,6 +612,11 @@ def main():
     torch.set_float32_matmul_precision("medium")
 
     best_config = apply_overrides(get_best_config(args.dataset, args.horizon), args)
+    huber_delta = (
+        best_config.get("huber_delta", args.huber_delta)
+        if args.huber_delta == 1.0
+        else args.huber_delta
+    )
     exp_args = build_exp_args(
         args.dataset,
         args.lookback,
@@ -617,7 +627,10 @@ def main():
         best_config["learning_rate"],
         args.loss_func,
         not args.disable_huber,
-        args.huber_delta,
+        huber_delta,
+    )
+    exp_args.training_args.patience = best_config.get(
+        "patience", exp_args.training_args.patience
     )
     exp_args.dataset_args.num_workers = args.num_workers
     exp_args.training_args.num_workers = args.num_workers

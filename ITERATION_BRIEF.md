@@ -133,5 +133,9 @@ Formal benchmark outcome:
   - ETTm1 720 baseline: MAE 0.409929, MSE 0.412445; threshold MAE < 0.389433 and MSE < 0.391823.
 - Current result:
   - ETTm2 96 satisfies the 5% target with `weakphase2_ettm2_96_residual_gate999_lr0003_mae_e30_seed2021`: MAE 0.245211, MSE 0.160063.
-  - ETTm1 and ETTh1 have positive but sub-threshold results so far.
-  - Further GPU experiments are paused because CUDA became unavailable after iteration 25.
+  - ETTm1 and ETTh1 did not reach the 5%/5% target before the iteration limit.
+  - Stop condition reached: this round exceeded 50 iterations.
+  - Best ETTm1 96 result after bad-case-driven refinement is `weakphase2_ettm1_96_phase_hifreq_s05_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`: MAE 0.338555, MSE 0.292791 versus fixed baseline MAE 0.347958, MSE 0.299526.
+  - Best ETTm1 192 result is `weakphase2_ettm1_192_adaptive_residual_g02_lr0003_mae_b256_e30_seed2021`: MAE 0.359033, MSE 0.328808 versus paired baseline MAE 0.363096, MSE 0.329395.
+  - ETTh1 bad-case review showed trend under-response rather than high-frequency phase hallucination; residual, phase-local trend, and low-frequency trend variants were positive only for isolated bad-case modes and did not improve both aggregate metrics.
+  - Retained research tooling change: `scripts/research_weather_weak.py` now exports <=8/10 pattern-covered bad cases with timestamps, variable names, and window-level prediction/true CSVs, so future iterations must choose mechanisms from bad-case modes rather than aggregate metrics alone.

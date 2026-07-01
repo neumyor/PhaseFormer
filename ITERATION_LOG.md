@@ -616,3 +616,42 @@
   - Run: `weakphase2_ettm1_720_phase_hifreq_s05_thr10_w7_smooth_residual_g02_w25_lr0003_mae_b256_e30_seed2021`
   - Result: MAE 0.409044, MSE 0.413627.
   - Decision: rejected as a target solution. It marginally improves MSE versus smooth residual but not enough to justify more local tuning.
+- ETTh1 720 review caveat:
+  - Initial review runs `weakphase2_review_etth1_720_baseline_e70_seed2026` and `weakphase2_etth1_720_lowfreq_trend_residual_w25_g005_gate02_lr00015_mae_e70_seed2026` did not reproduce the prior formal benchmark baseline. The research runner was missing ETTh1 720 formal preset details (`patience=14`, `huber_delta=0.3`, and attention dropout 0.0).
+  - The runner was updated to carry these formal preset details, but `weakphase2_review_etth1_720_baseline_formal_e70_seed2026` still produced MAE 0.488253, MSE 0.520365 rather than the earlier formal baseline MAE 0.447249, MSE 0.440721. Therefore ETTh1 720 review runs are treated as qualitative bad-case signals only, not formal success evidence.
+- Iteration 44, ETTm1 96 high-frequency damping, strength 0.5 window 5:
+  - Run: `weakphase2_ettm1_96_phase_hifreq_s05_thr10_w5_residual_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.340634, MSE 0.295405.
+  - Decision: rejected. The window midpoint between 3 and 7 was worse than both useful endpoints.
+- Iteration 45, ETTm1 96 high-frequency damping, strength 0.3 window 7:
+  - Run: `weakphase2_ettm1_96_phase_hifreq_s03_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.340608, MSE 0.295560.
+  - Decision: rejected. The large-error MSE benefit requires stronger damping.
+- Iteration 46, ETTm1 96 high-frequency damping, residual gate 0.95:
+  - Run: `weakphase2_ettm1_96_phase_hifreq_s05_thr10_w7_residual_gate095_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.342460, MSE 0.299308.
+  - Decision: rejected. Lower residual weight loses both MAE and MSE gains.
+- Iteration 47, ETTm1 192 baseline:
+  - Run: `weakphase2_ettm1_192_baseline_b256_e30_seed2021`
+  - Result: MAE 0.363096, MSE 0.329395. Paired 5% threshold: MAE < 0.344941, MSE < 0.312925.
+- Iteration 48, ETTm1 192 residual-dominant + MAE:
+  - Run: `weakphase2_ettm1_192_residual_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.360971, MSE 0.331057.
+  - Decision: rejected; MAE improves only 0.59% and MSE worsens.
+- Iteration 49, ETTm1 192 residual + high-frequency damping:
+  - Run: `weakphase2_ettm1_192_phase_hifreq_s05_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.360031, MSE 0.330137.
+  - Decision: rejected; MAE improves 0.84% and MSE worsens slightly.
+- Iteration 50, ETTm1 192 adaptive residual, gate 0.2:
+  - Run: `weakphase2_ettm1_192_adaptive_residual_g02_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.359033, MSE 0.328808.
+  - Decision: best ETTm1 192 attempt, but still only MAE 1.12% and MSE 0.18% improvement.
+- Iteration 51, ETTm1 192 adaptive residual, gate 0.1:
+  - Run: `weakphase2_ettm1_192_adaptive_residual_g01_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.359045, MSE 0.328793.
+  - Decision: essentially tied with iteration 50 and below the 5% target.
+- Exit condition:
+  - The round exceeded 50 iterations without ETTh1 and ETTm1 reaching the requested 5%/5% improvement.
+  - ETTm2 96 remains the only dataset in this round that satisfied the 5% target: `weakphase2_ettm2_96_residual_gate999_lr0003_mae_e30_seed2021`, MAE 0.245211 and MSE 0.160063 versus baseline MAE 0.258160 and MSE 0.170091.
+  - Best ETTm1 96 result: `weakphase2_ettm1_96_phase_hifreq_s05_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`, MAE 0.338555, MSE 0.292791 versus baseline MAE 0.347958, MSE 0.299526.
+  - Best ETTh1 96 result remains sub-threshold; phase-jitter and trend/residual variants did not produce stable gains under enhanced bad-case review.
