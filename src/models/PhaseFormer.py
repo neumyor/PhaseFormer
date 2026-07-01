@@ -287,6 +287,47 @@ class PhaseNoiseHighFreqDamping(nn.Module):
         return smooth + damping * high_freq
 
 
+class LowFreqTrendCorrection(nn.Module):
+    """Low-frequency recent-trend extrapolation for weak-period drift."""
+
+    def __init__(self, pred_len: int, enc_in: int, window: int = 25, gate_init: float = 0.05):
+        super().__init__()
+        self.pred_len = pred_len
+        self.window = max(3, int(window))
+        if self.window % 2 == 0:
+            self.window += 1
+        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
+        gate_logit = torch.logit(torch.tensor(gate_init))
+        self.gate = nn.Parameter(torch.full((1, 1, enc_in), float(gate_logit)))
+
+    def _smooth(self, x):
+        pad = self.window // 2
+        series = x.permute(0, 2, 1).contiguous()
+        series = F.pad(series, (pad, pad), mode="replicate")
+        smoothed = F.avg_pool1d(series, kernel_size=self.window, stride=1)
+        return smoothed.permute(0, 2, 1).contiguous()
+
+    def forward(self, x_in):
+        smooth = self._smooth(x_in)
+        lag = min(self.window, smooth.size(1) - 1)
+        if lag <= 0:
+            return torch.zeros(
+                x_in.size(0),
+                self.pred_len,
+                x_in.size(2),
+                device=x_in.device,
+                dtype=x_in.dtype,
+            )
+        slope = (smooth[:, -1:, :] - smooth[:, -lag - 1 : -lag, :]) / float(lag)
+        steps = torch.arange(
+            1,
+            self.pred_len + 1,
+            device=x_in.device,
+            dtype=x_in.dtype,
+        ).view(1, -1, 1)
+        return torch.sigmoid(self.gate) * slope * steps
+
+
 class CrossPhaseRoutingLayer(nn.Module):
 
     def __init__(
@@ -757,6 +798,17 @@ class PhaseFormer(DefaultPLModule):
                 window=getattr(configs, "phase_noise_hifreq_window", 7),
             )
 
+        self.use_lowfreq_trend_correction = getattr(
+            configs, "use_lowfreq_trend_correction", False
+        )
+        if self.use_lowfreq_trend_correction:
+            self.lowfreq_trend_correction = LowFreqTrendCorrection(
+                pred_len=self.pred_len,
+                enc_in=self.enc_in,
+                window=getattr(configs, "lowfreq_trend_window", 25),
+                gate_init=getattr(configs, "lowfreq_trend_gate_init", 0.05),
+            )
+
         # loss configuration
         self.use_huber_loss = getattr(configs, "use_huber_loss", False)
         self.huber_delta = getattr(configs, "huber_delta", 1.0)
@@ -912,6 +964,9 @@ class PhaseFormer(DefaultPLModule):
                 x_mark_dec.float(), self.pred_len
             )
             y_hat = y_hat + time_adjustment
+
+        if self.use_lowfreq_trend_correction:
+            y_hat = y_hat + self.lowfreq_trend_correction(x_in)
 
         if self.use_phase_reliability_damping:
             y_hat = self.phase_reliability_damping(y_hat, x_in, phase_series)

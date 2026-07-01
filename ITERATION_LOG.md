@@ -560,3 +560,44 @@
   - Run: `weakphase2_ettm1_96_phase_hifreq_s08_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`
   - Result: MAE 0.338662, MSE 0.293291.
   - Decision: stronger damping is worse than strength 0.5, likely because it suppresses useful local shape. Keep iteration 34 as the best high-frequency damping setting.
+
+## ETTh1 Bad Case Review And Trend Tests
+
+- ETTh1 96 comparable review baseline:
+  - Run: `weakphase2_review_etth1_96_baseline_e30_seed2021`
+  - Result: MAE 0.388609, MSE 0.369751.
+  - Bad case pattern: unlike ETTm1, the key failure is not high-amplitude hallucination. The main pattern is trend under-response, e.g. MUFL `trend_mismatch` index 36 has true slope +22.99 but predicted slope -1.20.
+- ETTh1 96 phase-jitter review:
+  - Run: `weakphase2_review_etth1_96_phase_jitter_g01_e30_seed2021`
+  - Result: MAE 0.388954, MSE 0.372708.
+  - Decision: rejected. Phase-neighbor smoothing is not a stable ETTh1 96 direction under the enhanced bad-case review.
+- Iteration 37, ETTh1 96 residual-dominant + MAE:
+  - Run: `weakphase2_etth1_96_residual_gate999_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.397002, MSE 0.376856.
+  - Bad case review: residual changes local slopes but not reliably; some trend directions become worse.
+  - Decision: rejected.
+- Iteration 38, ETTh1 96 residual + phase-noise high-frequency damping:
+  - Run: `weakphase2_etth1_96_phase_hifreq_s05_thr10_w7_residual_gate999_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.391684, MSE 0.372267.
+  - Decision: rejected. ETTh1 96 does not primarily suffer from high-frequency phase hallucination, so this ETTm1-targeted mechanism does not transfer.
+- Iteration 39, ETTh1 96 phase-local trend correction, window 3 gate 0.1:
+  - Run: `weakphase2_etth1_96_phase_trend_w3_g01_e30_seed2021`
+  - Result: MAE 0.393193, MSE 0.398613.
+  - Decision: rejected. Same-phase local slope extrapolation amplifies noise.
+- Iteration 40, ETTh1 96 phase-local trend correction, window 5 gate 0.2:
+  - Run: `weakphase2_etth1_96_phase_trend_w5_g02_e30_seed2021`
+  - Result: MAE 0.392001, MSE 0.390591.
+  - Bad case review: the `trend_mismatch` sample improves, but highest/systematic/late-drift cases worsen.
+  - Decision: rejected.
+- New mechanism: low-frequency trend correction.
+  - Bad-case driver: ETTh1 96 needs trend response, but phase-local slopes are too noisy. Estimate a whole-sequence low-pass recent slope and add it with a small learned channel gate.
+  - Theory: decompose `x_t = p_phi(t) + d_t + eps_t`; for ETTh1 bad cases, `d_t` changes faster than the phase path adapts. Estimating slope from `LP(x_t)` targets `d_t` while avoiding same-phase noise.
+- Iteration 41, ETTh1 96 low-frequency trend correction:
+  - Run: `weakphase2_etth1_96_lowfreq_trend_w25_g005_e30_seed2021`
+  - Result: MAE 0.389448, MSE 0.372435.
+  - Decision: rejected.
+- Iteration 42, ETTh1 96 low-frequency trend correction + weak residual:
+  - Run: `weakphase2_etth1_96_lowfreq_trend_residual_w25_g005_gate02_lr0003_mae_e30_seed2021`
+  - Result: MAE 0.391959, MSE 0.367231.
+  - Bad case review: improves systematic/volatile-input/volatility-mismatch cases, but worsens trend-mismatch and peak-underfit. MSE improves slightly while MAE worsens.
+  - Decision: not retained as final. Continue with long-horizon bad-case review rather than overfitting ETTh1 96.

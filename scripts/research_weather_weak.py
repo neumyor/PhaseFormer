@@ -147,6 +147,8 @@ class PhaseFormerConfig:
         phase_noise_hifreq_threshold,
         phase_noise_hifreq_temperature,
         phase_noise_hifreq_window,
+        lowfreq_trend_window,
+        lowfreq_trend_gate_init,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
@@ -190,6 +192,8 @@ class PhaseFormerConfig:
             "phase_reliability_smooth_residual",
             "phase_hifreq_residual",
             "phase_hifreq_smooth_residual",
+            "lowfreq_trend_residual",
+            "lowfreq_trend_smooth_residual",
         ]
         self.weak_period_residual_gate_init = gate_init
         self.weak_period_residual_head_type = (
@@ -203,6 +207,7 @@ class PhaseFormerConfig:
                 "phase_jitter_smooth_residual",
                 "phase_reliability_smooth_residual",
                 "phase_hifreq_smooth_residual",
+                "lowfreq_trend_smooth_residual",
             ]
             else "shared"
         )
@@ -249,6 +254,13 @@ class PhaseFormerConfig:
         self.phase_noise_hifreq_threshold = phase_noise_hifreq_threshold
         self.phase_noise_hifreq_temperature = phase_noise_hifreq_temperature
         self.phase_noise_hifreq_window = phase_noise_hifreq_window
+        self.use_lowfreq_trend_correction = variant in [
+            "lowfreq_trend",
+            "lowfreq_trend_residual",
+            "lowfreq_trend_smooth_residual",
+        ]
+        self.lowfreq_trend_window = lowfreq_trend_window
+        self.lowfreq_trend_gate_init = lowfreq_trend_gate_init
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -555,6 +567,9 @@ def main():
             "phase_hifreq",
             "phase_hifreq_residual",
             "phase_hifreq_smooth_residual",
+            "lowfreq_trend",
+            "lowfreq_trend_residual",
+            "lowfreq_trend_smooth_residual",
         ],
         default="baseline",
     )
@@ -570,6 +585,8 @@ def main():
     parser.add_argument("--phase-noise-hifreq-threshold", type=float, default=1.0)
     parser.add_argument("--phase-noise-hifreq-temperature", type=float, default=0.2)
     parser.add_argument("--phase-noise-hifreq-window", type=int, default=7)
+    parser.add_argument("--lowfreq-trend-window", type=int, default=25)
+    parser.add_argument("--lowfreq-trend-gate-init", type=float, default=0.05)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
@@ -640,6 +657,8 @@ def main():
         args.phase_noise_hifreq_threshold,
         args.phase_noise_hifreq_temperature,
         args.phase_noise_hifreq_window,
+        args.lowfreq_trend_window,
+        args.lowfreq_trend_gate_init,
     )
     config_snapshot = {
         "args": vars(args),
@@ -678,6 +697,9 @@ def main():
             "phase_noise_hifreq_threshold": model_config.phase_noise_hifreq_threshold,
             "phase_noise_hifreq_temperature": model_config.phase_noise_hifreq_temperature,
             "phase_noise_hifreq_window": model_config.phase_noise_hifreq_window,
+            "use_lowfreq_trend_correction": model_config.use_lowfreq_trend_correction,
+            "lowfreq_trend_window": model_config.lowfreq_trend_window,
+            "lowfreq_trend_gate_init": model_config.lowfreq_trend_gate_init,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,
