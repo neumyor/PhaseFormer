@@ -543,3 +543,20 @@
   - Bad-case rationale: the min 0.35 review showed MUFL failure windows have phase noise around 2.3-2.4, while the MULL/HULL windows hurt by global damping have noise around 0.4-0.5. This variant only triggers damping strongly when phase noise exceeds 1.0.
   - Result: MAE 0.340421, MSE 0.294971.
   - Decision: rejected. Absolute phase-noise thresholding protects too many windows from damping and loses the large-error reduction. The next mechanism should separate two bad-case modes explicitly: high-amplitude hallucination on near-flat futures versus under-response to real trend jumps.
+- New mechanism: phase-noise high-frequency damping.
+  - Bad-case driver: ETTm1 96 MUFL windows show high-amplitude phase hallucination, e.g. true range near 0-5 but predicted range above 20. Full reliability damping reduces some large errors but also damps low-frequency trend/peaks.
+  - Theory: decompose the normalized forecast as `y = LP(y) + HP(y)`. Under weak periodicity, high phase noise makes high-frequency phase details unreliable, while trend jumps live mostly in the low-pass component. Therefore damp `HP(y)` only when same-phase historical noise is high, preserving `LP(y)`.
+  - Implementation: `PhaseNoiseHighFreqDamping`, enabled by `phase_hifreq`, `phase_hifreq_residual`, and `phase_hifreq_smooth_residual`.
+- Iteration 34, ETTm1 96 residual + phase-noise high-frequency damping, strength 0.5 window 7:
+  - Run: `weakphase2_ettm1_96_phase_hifreq_s05_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.338555, MSE 0.292791 versus baseline MAE 0.347958, MSE 0.299526.
+  - Bad case effect versus residual review: MUFL `volatility_mismatch` MSE improves 3.948 -> 3.567; `late_horizon_drift` improves 3.865 -> 3.418; `valley_overfit` improves 0.657 -> 0.561. Trend mismatch worsens, showing remaining tension between smoothing hallucinations and preserving real jumps.
+  - Decision: current best MSE direction for ETTm1 96, but still below the 5% target.
+- Iteration 35, ETTm1 96 residual + phase-noise high-frequency damping, strength 0.5 window 3:
+  - Run: `weakphase2_ettm1_96_phase_hifreq_s05_thr10_w3_residual_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.337041, MSE 0.294422.
+  - Decision: shorter smoothing protects MAE/trend response but loses most large-error MSE reduction. Rejected versus iteration 34 for target progress.
+- Iteration 36, ETTm1 96 residual + phase-noise high-frequency damping, strength 0.8 window 7:
+  - Run: `weakphase2_ettm1_96_phase_hifreq_s08_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.338662, MSE 0.293291.
+  - Decision: stronger damping is worse than strength 0.5, likely because it suppresses useful local shape. Keep iteration 34 as the best high-frequency damping setting.

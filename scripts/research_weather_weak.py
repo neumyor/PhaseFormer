@@ -143,6 +143,10 @@ class PhaseFormerConfig:
         phase_reliability_min,
         phase_reliability_noise_threshold,
         phase_reliability_noise_temperature,
+        phase_noise_hifreq_strength,
+        phase_noise_hifreq_threshold,
+        phase_noise_hifreq_temperature,
+        phase_noise_hifreq_window,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
@@ -184,6 +188,8 @@ class PhaseFormerConfig:
             "phase_jitter_smooth_residual",
             "phase_reliability_residual",
             "phase_reliability_smooth_residual",
+            "phase_hifreq_residual",
+            "phase_hifreq_smooth_residual",
         ]
         self.weak_period_residual_gate_init = gate_init
         self.weak_period_residual_head_type = (
@@ -196,6 +202,7 @@ class PhaseFormerConfig:
                 "adaptive_smooth_residual",
                 "phase_jitter_smooth_residual",
                 "phase_reliability_smooth_residual",
+                "phase_hifreq_smooth_residual",
             ]
             else "shared"
         )
@@ -233,6 +240,15 @@ class PhaseFormerConfig:
         self.phase_reliability_min = phase_reliability_min
         self.phase_reliability_noise_threshold = phase_reliability_noise_threshold
         self.phase_reliability_noise_temperature = phase_reliability_noise_temperature
+        self.use_phase_noise_hifreq_damping = variant in [
+            "phase_hifreq",
+            "phase_hifreq_residual",
+            "phase_hifreq_smooth_residual",
+        ]
+        self.phase_noise_hifreq_strength = phase_noise_hifreq_strength
+        self.phase_noise_hifreq_threshold = phase_noise_hifreq_threshold
+        self.phase_noise_hifreq_temperature = phase_noise_hifreq_temperature
+        self.phase_noise_hifreq_window = phase_noise_hifreq_window
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -536,6 +552,9 @@ def main():
             "phase_reliability",
             "phase_reliability_residual",
             "phase_reliability_smooth_residual",
+            "phase_hifreq",
+            "phase_hifreq_residual",
+            "phase_hifreq_smooth_residual",
         ],
         default="baseline",
     )
@@ -547,6 +566,10 @@ def main():
     parser.add_argument("--phase-reliability-min", type=float, default=0.35)
     parser.add_argument("--phase-reliability-noise-threshold", type=float, default=0.0)
     parser.add_argument("--phase-reliability-noise-temperature", type=float, default=0.2)
+    parser.add_argument("--phase-noise-hifreq-strength", type=float, default=0.5)
+    parser.add_argument("--phase-noise-hifreq-threshold", type=float, default=1.0)
+    parser.add_argument("--phase-noise-hifreq-temperature", type=float, default=0.2)
+    parser.add_argument("--phase-noise-hifreq-window", type=int, default=7)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
@@ -613,6 +636,10 @@ def main():
         args.phase_reliability_min,
         args.phase_reliability_noise_threshold,
         args.phase_reliability_noise_temperature,
+        args.phase_noise_hifreq_strength,
+        args.phase_noise_hifreq_threshold,
+        args.phase_noise_hifreq_temperature,
+        args.phase_noise_hifreq_window,
     )
     config_snapshot = {
         "args": vars(args),
@@ -646,6 +673,11 @@ def main():
             "phase_reliability_min": model_config.phase_reliability_min,
             "phase_reliability_noise_threshold": model_config.phase_reliability_noise_threshold,
             "phase_reliability_noise_temperature": model_config.phase_reliability_noise_temperature,
+            "use_phase_noise_hifreq_damping": model_config.use_phase_noise_hifreq_damping,
+            "phase_noise_hifreq_strength": model_config.phase_noise_hifreq_strength,
+            "phase_noise_hifreq_threshold": model_config.phase_noise_hifreq_threshold,
+            "phase_noise_hifreq_temperature": model_config.phase_noise_hifreq_temperature,
+            "phase_noise_hifreq_window": model_config.phase_noise_hifreq_window,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,

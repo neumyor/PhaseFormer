@@ -253,6 +253,40 @@ class PhaseReliabilityDamping(nn.Module):
         return last + reliability * (y_hat - last)
 
 
+class PhaseNoiseHighFreqDamping(nn.Module):
+    """Damp high-frequency forecast oscillations when phase history is noisy."""
+
+    def __init__(
+        self,
+        strength: float = 0.5,
+        noise_threshold: float = 1.0,
+        noise_temperature: float = 0.2,
+        window: int = 7,
+    ):
+        super().__init__()
+        self.strength = min(max(float(strength), 0.0), 1.0)
+        self.noise_threshold = float(noise_threshold)
+        self.noise_temperature = max(float(noise_temperature), 1e-4)
+        self.window = max(3, int(window))
+        if self.window % 2 == 0:
+            self.window += 1
+
+    def _smooth(self, y_hat):
+        pad = self.window // 2
+        series = y_hat.permute(0, 2, 1).contiguous()
+        series = F.pad(series, (pad, pad), mode="replicate")
+        smoothed = F.avg_pool1d(series, kernel_size=self.window, stride=1)
+        return smoothed.permute(0, 2, 1).contiguous()
+
+    def forward(self, y_hat, phase_series):  # y_hat: (B,T,C), phase_series: (B,C,L,P)
+        noise = phase_series.var(dim=-1, unbiased=False).mean(dim=2)
+        trigger = torch.sigmoid((noise - self.noise_threshold) / self.noise_temperature)
+        damping = 1.0 - self.strength * trigger.unsqueeze(1)
+        smooth = self._smooth(y_hat)
+        high_freq = y_hat - smooth
+        return smooth + damping * high_freq
+
+
 class CrossPhaseRoutingLayer(nn.Module):
 
     def __init__(
@@ -712,6 +746,17 @@ class PhaseFormer(DefaultPLModule):
                 noise_temperature=getattr(configs, "phase_reliability_noise_temperature", 0.2),
             )
 
+        self.use_phase_noise_hifreq_damping = getattr(
+            configs, "use_phase_noise_hifreq_damping", False
+        )
+        if self.use_phase_noise_hifreq_damping:
+            self.phase_noise_hifreq_damping = PhaseNoiseHighFreqDamping(
+                strength=getattr(configs, "phase_noise_hifreq_strength", 0.5),
+                noise_threshold=getattr(configs, "phase_noise_hifreq_threshold", 1.0),
+                noise_temperature=getattr(configs, "phase_noise_hifreq_temperature", 0.2),
+                window=getattr(configs, "phase_noise_hifreq_window", 7),
+            )
+
         # loss configuration
         self.use_huber_loss = getattr(configs, "use_huber_loss", False)
         self.huber_delta = getattr(configs, "huber_delta", 1.0)
@@ -870,6 +915,9 @@ class PhaseFormer(DefaultPLModule):
 
         if self.use_phase_reliability_damping:
             y_hat = self.phase_reliability_damping(y_hat, x_in, phase_series)
+
+        if self.use_phase_noise_hifreq_damping:
+            y_hat = self.phase_noise_hifreq_damping(y_hat, phase_series)
 
         # 10) De-normalization
         if self.use_revin:
