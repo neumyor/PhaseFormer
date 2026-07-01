@@ -469,3 +469,72 @@
   - ETTm1 96: `weakphase2_ettm1_96_residual_gate999_lr0003_mae_fixed_e30_seed2021`, below 5%.
   - ETTh1 96: `weakphase2_etth1_96_phase_jitter_g01_e30_seed2021`, below 5%.
 - Blocker: after iteration 25, CUDA became unavailable (`nvidia-smi` reports `Unable to determine the device handle for GPU0`). Further full-data ETTm1/ETTh1 experiments are paused until GPU availability returns; CPU runs would not be time-comparable.
+
+## ETTh1/ETTm1/ETTm2 Weak-Period Round - GPU Resumed
+
+- Iteration 26, ETTm1 96 fixed residual gate 0.8 + MAE:
+  - Run: `weakphase2_ettm1_96_residual_gate08_lr0003_mae_fixed_e30_seed2021`
+  - Commit: `0ff4f36`
+  - Goal: test whether a less residual-dominant blend improves MSE while retaining the MAE gain of the raw weak-period residual head.
+  - Result: MAE 0.343295, MSE 0.299322 versus fixed baseline MAE 0.347958, MSE 0.299526.
+  - Bad cases: `research_runs/weakphase2_ettm1_96_residual_gate08_lr0003_mae_fixed_e30_seed2021/bad_cases.csv`, 10 rows.
+  - Decision: rejected as a target solution; smaller residual weight loses most of the useful MAE improvement and does not materially improve MSE.
+- Iteration 27, ETTm1 96 fixed adaptive residual + MAE:
+  - Run: `weakphase2_ettm1_96_adaptive_residual_g02_lr0003_mae_fixed_e30_seed2021`
+  - Commit: `0ff4f36`
+  - Goal: test whether sample/channel-specific gates can identify weak-period windows where residual extrapolation should dominate.
+  - Result: MAE 0.349903, MSE 0.298016. MAE is worse than baseline; MSE improves only 0.50%.
+  - Bad cases: `research_runs/weakphase2_ettm1_96_adaptive_residual_g02_lr0003_mae_fixed_e30_seed2021/bad_cases.csv`, 10 rows.
+  - Decision: rejected. The adaptive gate adds instability without enough MSE gain, so ETTm1 96 is not solved by gate selectivity alone.
+- Iteration 28, ETTm1 96 fixed phase-jitter + residual:
+  - Run: `weakphase2_ettm1_96_phase_jitter_residual_j01_g999_lr0003_mae_fixed_e30_seed2021`
+  - Commit: `0ff4f36`
+  - Goal: combine local phase marginalization with a residual-dominant path, targeting weak periodicity as phase jitter plus drift.
+  - Result: MAE 0.365760, MSE 0.324419, both worse than baseline.
+  - Bad cases: `research_runs/weakphase2_ettm1_96_phase_jitter_residual_j01_g999_lr0003_mae_fixed_e30_seed2021/bad_cases.csv`, 10 rows.
+  - Decision: rejected. On ETTm1, phase-neighbor smoothing conflicts with the minute-level phase tokens rather than regularizing them.
+- Iteration 29, ETTm1 96 fixed residual-dominant + MSE:
+  - Run: `weakphase2_ettm1_96_residual_gate999_lr0003_mse_fixed_rerun_e30_seed2021`
+  - Commit: `0ff4f36`
+  - Goal: isolate whether the previous MSE shortfall came from MAE optimization rather than the residual structure.
+  - Result: MAE 0.366826, MSE 0.324873, both worse than baseline.
+  - Bad cases: `research_runs/weakphase2_ettm1_96_residual_gate999_lr0003_mse_fixed_rerun_e30_seed2021/bad_cases.csv`, 10 rows.
+  - Decision: rejected. The residual branch itself creates large-window errors on ETTm1 96; changing to MSE loss does not fix the weak-period failure mode.
+
+## ETTh1/ETTm1/ETTm2 Weak-Period Round - Bad Case Review Correction
+
+- Process correction:
+  - The previous loop relied too much on aggregate MAE/MSE. This violated the intent of `HOW_TO_DO_RESEARCH.md` section 6 because the retained `bad_cases.csv` only had batch/sample indices and scalar errors.
+  - `scripts/research_weather_weak.py` now exports pattern-covered bad cases, not just largest-error samples. The capped patterns are highest MSE, systematic bias, trend mismatch, peak underfit, valley overfit, volatility mismatch, late-horizon drift, and volatile input. The cap remains <= 10; current review runs use 8.
+  - Each selected case now records dataset, sample index, variable name/index, input/forecast timestamps, pattern metrics, and a window-level CSV under `research_runs/<run_id>/bad_cases/` with input values, forecast true values, predictions, and errors in scaled and original units.
+- Comparable ETTm1 96 review baseline:
+  - Run: `weakphase2_review_b256_ettm1_96_baseline_fixed_e30_seed2021`
+  - Command matches the formal baseline setting: batch size 256, MSE, Huber enabled, seed 2021.
+  - Result: MAE 0.347958, MSE 0.299526, matching `weakphase2_ettm1_96_baseline_fixed_e30_seed2021`.
+  - Bad cases: 8 rows, 8 window CSV files.
+- Comparable ETTm1 96 review residual:
+  - Run: `weakphase2_review_b256_ettm1_96_residual_gate999_lr0003_mae_fixed_e30_seed2021`
+  - Command matches the previous best residual setting: batch size 256, LR 0.0003, MAE, Huber disabled, seed 2021.
+  - Result: MAE 0.337078, MSE 0.294519, matching `weakphase2_ettm1_96_residual_gate999_lr0003_mae_fixed_e30_seed2021`.
+  - Bad cases: 8 rows, 8 window CSV files.
+- Bad case pattern findings:
+  - Severe ETTm1 96 errors are concentrated in MUFL. The dominant failure is not generic average drift; it is phase-amplitude hallucination under weak periodicity.
+  - Baseline examples: `highest_mse` MUFL case index 663 has true forecast range 3.45 in original units but prediction range 23.07; `volatility_mismatch` MUFL case index 671 has true range 0.00 but prediction range 22.82.
+  - Residual best improves some aggregate MAE and selected trend cases, but it does not remove the high-amplitude hallucination: MUFL `volatility_mismatch` case index 671 still has true range 0.00 and prediction range 24.61.
+  - Therefore the next strategy should not be more residual gate tuning. It should make the phase path aware of whether same-phase historical observations are reliable.
+- New mechanism: phase reliability damping.
+  - Theory: write phase observations as `x_{k,l}=p_l+d_k+eps_{k,l}`. For a fixed phase slot `l`, high cross-period variance estimates noise/phase instability; variance of the phase template across `l` estimates useful periodic signal. A shrinkage factor `rho = signal / (signal + noise)` is the empirical-Bayes reliability of the phase template. Forecast deviations from the last value are damped by `rho` with a configurable floor.
+  - Implementation: `PhaseReliabilityDamping` in `src/models/PhaseFormer.py`, enabled by `phase_reliability`, `phase_reliability_residual`, and `phase_reliability_smooth_residual`. The default model path is unchanged.
+- Iteration 30, ETTm1 96 phase reliability only:
+  - Run: `weakphase2_ettm1_96_phase_reliability_min35_b256_e30_seed2021`
+  - Result: MAE 0.349638, MSE 0.305722.
+  - Decision: rejected. Pure global damping hurts normal phase predictions and is not sufficient by itself.
+- Iteration 31, ETTm1 96 residual + phase reliability damping, min 0.35:
+  - Run: `weakphase2_ettm1_96_phase_reliability_residual_min35_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.338811, MSE 0.294314 versus baseline MAE 0.347958, MSE 0.299526. This is a 2.63% MAE gain and 1.74% MSE gain, below the 5% target.
+  - Bad case effect: MUFL `highest_mse` MSE falls from 4.101 to 3.846 versus the residual review; `systematic_bias` from 4.094 to 3.772; `late_horizon_drift` from 3.865 to 3.527. Peak-underfit gets worse, explaining the MAE tradeoff.
+  - Decision: keep as a diagnostic direction for reducing large weak-period phase-amplitude errors, but not as the final solution.
+- Iteration 32, ETTm1 96 residual + phase reliability damping, min 0.60:
+  - Run: `weakphase2_ettm1_96_phase_reliability_residual_min60_gate999_lr0003_mae_b256_e30_seed2021`
+  - Result: MAE 0.339604, MSE 0.294396.
+  - Decision: rejected versus min 0.35. Lighter damping loses the large-error benefit without recovering MAE enough.

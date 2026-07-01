@@ -13,6 +13,7 @@ if REPO_ROOT not in sys.path:
 
 import pytorch_lightning as pl
 import torch
+import pandas as pd
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.loggers import CSVLogger
 
@@ -139,6 +140,7 @@ class PhaseFormerConfig:
         phase_trend_window,
         phase_trend_gate_init,
         phase_jitter_gate_init,
+        phase_reliability_min,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
@@ -178,6 +180,8 @@ class PhaseFormerConfig:
             "adaptive_smooth_residual",
             "phase_jitter_residual",
             "phase_jitter_smooth_residual",
+            "phase_reliability_residual",
+            "phase_reliability_smooth_residual",
         ]
         self.weak_period_residual_gate_init = gate_init
         self.weak_period_residual_head_type = (
@@ -185,7 +189,12 @@ class PhaseFormerConfig:
             if variant in ["channel_residual", "adaptive_channel_residual"]
             else "lowpass"
             if variant
-            in ["smooth_residual", "adaptive_smooth_residual", "phase_jitter_smooth_residual"]
+            in [
+                "smooth_residual",
+                "adaptive_smooth_residual",
+                "phase_jitter_smooth_residual",
+                "phase_reliability_smooth_residual",
+            ]
             else "shared"
         )
         self.weak_period_residual_smooth_window = best_config.get(
@@ -214,6 +223,12 @@ class PhaseFormerConfig:
             "phase_jitter_smooth_residual",
         ]
         self.phase_jitter_gate_init = phase_jitter_gate_init
+        self.use_phase_reliability_damping = variant in [
+            "phase_reliability",
+            "phase_reliability_residual",
+            "phase_reliability_smooth_residual",
+        ]
+        self.phase_reliability_min = phase_reliability_min
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -277,10 +292,71 @@ def apply_overrides(best_config, args):
     return best_config
 
 
-def collect_bad_cases(model, loader, pred_len, bad_case_limit, max_batches):
+def _dataset_variable_names(dataset):
+    raw_path = os.path.join(dataset.root_path, dataset.data_path)
+    columns = list(pd.read_csv(raw_path, nrows=0).columns[1:])
+    if getattr(dataset, "var_needed", None) is not None:
+        columns = columns[: int(dataset.var_needed)]
+    return columns
+
+
+def _dataset_dates(dataset):
+    raw_path = os.path.join(dataset.root_path, dataset.data_path)
+    dates = pd.to_datetime(pd.read_csv(raw_path, usecols=["date"])["date"])
+    seq_len = int(dataset.seq_len)
+    data_len = len(dataset.data_x)
+    data_path = str(dataset.data_path)
+    if data_path.startswith("ETTh"):
+        border1s = [0, 12 * 30 * 24 - seq_len, 12 * 30 * 24 + 4 * 30 * 24 - seq_len]
+    elif data_path.startswith("ETTm"):
+        border1s = [
+            0,
+            12 * 30 * 24 * 4 - seq_len,
+            12 * 30 * 24 * 4 + 4 * 30 * 24 * 4 - seq_len,
+        ]
+    else:
+        num_train = int(len(dates) * 0.7)
+        num_test = int(len(dates) * 0.2)
+        border1s = [0, num_train - seq_len, len(dates) - num_test - seq_len]
+    start = border1s[int(dataset.set_type)]
+    return dates.iloc[start : start + data_len].reset_index(drop=True)
+
+
+def _inverse_one(dataset, values, channel):
+    values = values.detach().cpu()
+    if not getattr(dataset, "scale", False):
+        return values.numpy()
+    channels = dataset.data_x.shape[-1]
+    padded = torch.zeros(values.numel(), channels, dtype=values.dtype)
+    padded[:, channel] = values.reshape(-1)
+    restored = dataset.inverse_transform(padded.numpy())
+    return restored[:, channel].reshape(values.shape)
+
+
+def _case_pattern_metrics(pred, true, inp):
+    err = pred - true
+    pred_slope = pred[-1] - pred[0]
+    true_slope = true[-1] - true[0]
+    return {
+        "mse": torch.square(err).mean(),
+        "mae": torch.abs(err).mean(),
+        "bias_abs": err.mean().abs(),
+        "trend_mismatch": (pred_slope - true_slope).abs(),
+        "peak_under": (true.max() - pred.max()).clamp_min(0.0),
+        "valley_over": (pred.min() - true.min()).clamp_min(0.0),
+        "volatility_mismatch": (pred.std(unbiased=False) - true.std(unbiased=False)).abs(),
+        "late_mse": torch.square(err[-max(1, err.numel() // 4) :]).mean(),
+        "input_volatility": inp.diff().abs().mean() if inp.numel() > 1 else torch.tensor(0.0),
+    }
+
+
+def collect_bad_cases(model, loader, pred_len, bad_case_limit, max_batches, run_dir=None):
     model.eval()
     device = next(model.parameters()).device
-    bad_cases = []
+    dataset = loader.dataset
+    var_names = _dataset_variable_names(dataset)
+    dates = _dataset_dates(dataset)
+    candidates = []
 
     with torch.inference_mode():
         for batch_idx, batch in enumerate(loader):
@@ -297,27 +373,122 @@ def collect_bad_cases(model, loader, pred_len, bad_case_limit, max_batches):
             )
             pred = outputs[:, -pred_len:, :]
             true = batch_y.float()[:, -pred_len:, :]
-            err = pred - true
-
-            sample_mse = torch.square(err).mean(dim=(1, 2)).detach().cpu()
-            topk = min(bad_case_limit, sample_mse.numel())
-            values, indices = torch.topk(sample_mse, k=topk)
-            for value, local_idx in zip(values.tolist(), indices.tolist()):
-                bad_cases.append(
-                    {
+            for local_idx in range(pred.size(0)):
+                global_idx = batch_idx * loader.batch_size + local_idx
+                for channel in range(pred.size(-1)):
+                    metrics = _case_pattern_metrics(
+                        pred[local_idx, :, channel].detach().cpu(),
+                        true[local_idx, :, channel].detach().cpu(),
+                        batch_x[local_idx, :, channel].detach().cpu(),
+                    )
+                    row = {
                         "batch_idx": batch_idx,
                         "sample_in_batch": int(local_idx),
-                        "sample_mse": float(value),
-                        "sample_mae": float(
-                            torch.abs(err[local_idx]).mean().detach().cpu()
+                        "global_sample_index": int(global_idx),
+                        "variable_index": int(channel),
+                        "variable_name": var_names[channel] if channel < len(var_names) else str(channel),
+                        "input_start": str(dates.iloc[global_idx]),
+                        "input_end": str(dates.iloc[global_idx + loader.dataset.seq_len - 1]),
+                        "forecast_start": str(dates.iloc[global_idx + loader.dataset.seq_len]),
+                        "forecast_end": str(
+                            dates.iloc[global_idx + loader.dataset.seq_len + pred_len - 1]
                         ),
                     }
-                )
+                    row.update({key: float(value) for key, value in metrics.items()})
+                    row["_pred"] = pred[local_idx, :, channel].detach().cpu()
+                    row["_true"] = true[local_idx, :, channel].detach().cpu()
+                    row["_input"] = batch_x[local_idx, :, channel].detach().cpu()
+                    candidates.append(row)
 
-    bad_cases = sorted(bad_cases, key=lambda row: row["sample_mse"], reverse=True)[
-        :bad_case_limit
+    pattern_order = [
+        ("highest_mse", "mse"),
+        ("systematic_bias", "bias_abs"),
+        ("trend_mismatch", "trend_mismatch"),
+        ("peak_underfit", "peak_under"),
+        ("valley_overfit", "valley_over"),
+        ("volatility_mismatch", "volatility_mismatch"),
+        ("late_horizon_drift", "late_mse"),
+        ("volatile_input", "input_volatility"),
     ]
-    return bad_cases
+    selected = []
+    seen = set()
+    for pattern, key in pattern_order:
+        for row in sorted(candidates, key=lambda item: item[key], reverse=True):
+            identity = (row["global_sample_index"], row["variable_index"])
+            if identity in seen:
+                continue
+            row = dict(row)
+            row["error_pattern"] = pattern
+            selected.append(row)
+            seen.add(identity)
+            break
+        if len(selected) >= bad_case_limit:
+            break
+
+    if run_dir:
+        windows_dir = os.path.join(run_dir, "bad_cases")
+        os.makedirs(windows_dir, exist_ok=True)
+        for case_id, row in enumerate(selected):
+            global_idx = row["global_sample_index"]
+            channel = row["variable_index"]
+            pred_values = row.pop("_pred")
+            true_values = row.pop("_true")
+            input_values = row.pop("_input")
+            input_original = _inverse_one(dataset, input_values, channel)
+            true_original = _inverse_one(dataset, true_values, channel)
+            pred_original = _inverse_one(dataset, pred_values, channel)
+            window_rows = []
+            for offset, value in enumerate(input_values.tolist()):
+                date = dates.iloc[global_idx + offset]
+                window_rows.append(
+                    {
+                        "segment": "input",
+                        "offset": offset,
+                        "date": str(date),
+                        "value_scaled": value,
+                        "value_original": float(input_original[offset]),
+                        "prediction_scaled": "",
+                        "prediction_original": "",
+                        "error_scaled": "",
+                    }
+                )
+            for offset, (pred_value, true_value) in enumerate(
+                zip(pred_values.tolist(), true_values.tolist())
+            ):
+                date = dates.iloc[global_idx + dataset.seq_len + offset]
+                window_rows.append(
+                    {
+                        "segment": "forecast",
+                        "offset": offset,
+                        "date": str(date),
+                        "value_scaled": true_value,
+                        "value_original": float(true_original[offset]),
+                        "prediction_scaled": pred_value,
+                        "prediction_original": float(pred_original[offset]),
+                        "error_scaled": pred_value - true_value,
+                    }
+                )
+            write_csv(
+                os.path.join(windows_dir, f"case_{case_id:02d}_{row['error_pattern']}.csv"),
+                window_rows,
+                [
+                    "segment",
+                    "offset",
+                    "date",
+                    "value_scaled",
+                    "value_original",
+                    "prediction_scaled",
+                    "prediction_original",
+                    "error_scaled",
+                ],
+            )
+    else:
+        for row in selected:
+            row.pop("_pred", None)
+            row.pop("_true", None)
+            row.pop("_input", None)
+
+    return selected
 
 
 def write_csv(path, rows, fieldnames):
@@ -358,6 +529,9 @@ def main():
             "phase_jitter",
             "phase_jitter_residual",
             "phase_jitter_smooth_residual",
+            "phase_reliability",
+            "phase_reliability_residual",
+            "phase_reliability_smooth_residual",
         ],
         default="baseline",
     )
@@ -366,6 +540,7 @@ def main():
     parser.add_argument("--phase-trend-window", type=int, default=3)
     parser.add_argument("--phase-trend-gate-init", type=float, default=0.1)
     parser.add_argument("--phase-jitter-gate-init", type=float, default=0.1)
+    parser.add_argument("--phase-reliability-min", type=float, default=0.35)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
@@ -429,6 +604,7 @@ def main():
         args.phase_trend_window,
         args.phase_trend_gate_init,
         args.phase_jitter_gate_init,
+        args.phase_reliability_min,
     )
     config_snapshot = {
         "args": vars(args),
@@ -458,6 +634,8 @@ def main():
             "phase_local_trend_gate_init": model_config.phase_local_trend_gate_init,
             "use_phase_jitter_smoothing": model_config.use_phase_jitter_smoothing,
             "phase_jitter_gate_init": model_config.phase_jitter_gate_init,
+            "use_phase_reliability_damping": model_config.use_phase_reliability_damping,
+            "phase_reliability_min": model_config.phase_reliability_min,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,
@@ -499,6 +677,7 @@ def main():
         args.horizon,
         args.bad_case_limit,
         args.bad_case_batches,
+        run_dir,
     )
 
     metrics_row = {
@@ -521,7 +700,27 @@ def main():
     write_csv(
         os.path.join(run_dir, "bad_cases.csv"),
         bad_cases,
-        ["batch_idx", "sample_in_batch", "sample_mse", "sample_mae"],
+        [
+            "batch_idx",
+            "sample_in_batch",
+            "global_sample_index",
+            "variable_index",
+            "variable_name",
+            "input_start",
+            "input_end",
+            "forecast_start",
+            "forecast_end",
+            "error_pattern",
+            "mse",
+            "mae",
+            "bias_abs",
+            "trend_mismatch",
+            "peak_under",
+            "valley_over",
+            "volatility_mismatch",
+            "late_mse",
+            "input_volatility",
+        ],
     )
 
     runtime = {

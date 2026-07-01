@@ -220,6 +220,29 @@ class PhaseJitterSmoothing(nn.Module):
         return (1.0 - gate) * phase_series + gate * neighbor_mean
 
 
+class PhaseReliabilityDamping(nn.Module):
+    """Shrink forecast amplitude when historical phase alignment is unreliable.
+
+    For weak-period series, same-phase observations across periods can have high
+    variance. A simple empirical-Bayes reliability estimate uses phase-template
+    variance as signal and cross-period same-phase variance as noise.
+    """
+
+    def __init__(self, min_reliability: float = 0.35):
+        super().__init__()
+        self.min_reliability = min(max(float(min_reliability), 0.0), 1.0)
+
+    def forward(self, y_hat, x_in, phase_series):  # y_hat: (B,T,C), phase_series: (B,C,L,P)
+        phase_template = phase_series.mean(dim=-1)
+        signal = phase_template.var(dim=2, unbiased=False)
+        noise = phase_series.var(dim=-1, unbiased=False).mean(dim=2)
+        reliability = signal / (signal + noise + 1e-6)
+        reliability = self.min_reliability + (1.0 - self.min_reliability) * reliability
+        reliability = reliability.unsqueeze(1)
+        last = x_in[:, -1:, :]
+        return last + reliability * (y_hat - last)
+
+
 class CrossPhaseRoutingLayer(nn.Module):
 
     def __init__(
@@ -669,6 +692,14 @@ class PhaseFormer(DefaultPLModule):
                 gate_init=getattr(configs, "phase_jitter_gate_init", 0.1),
             )
 
+        self.use_phase_reliability_damping = getattr(
+            configs, "use_phase_reliability_damping", False
+        )
+        if self.use_phase_reliability_damping:
+            self.phase_reliability_damping = PhaseReliabilityDamping(
+                min_reliability=getattr(configs, "phase_reliability_min", 0.35)
+            )
+
         # loss configuration
         self.use_huber_loss = getattr(configs, "use_huber_loss", False)
         self.huber_delta = getattr(configs, "huber_delta", 1.0)
@@ -824,6 +855,9 @@ class PhaseFormer(DefaultPLModule):
                 x_mark_dec.float(), self.pred_len
             )
             y_hat = y_hat + time_adjustment
+
+        if self.use_phase_reliability_damping:
+            y_hat = self.phase_reliability_damping(y_hat, x_in, phase_series)
 
         # 10) De-normalization
         if self.use_revin:
