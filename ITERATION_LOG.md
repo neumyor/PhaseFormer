@@ -655,3 +655,19 @@
   - ETTm2 96 remains the only dataset in this round that satisfied the 5% target: `weakphase2_ettm2_96_residual_gate999_lr0003_mae_e30_seed2021`, MAE 0.245211 and MSE 0.160063 versus baseline MAE 0.258160 and MSE 0.170091.
   - Best ETTm1 96 result: `weakphase2_ettm1_96_phase_hifreq_s05_thr10_w7_residual_gate999_lr0003_mae_b256_e30_seed2021`, MAE 0.338555, MSE 0.292791 versus baseline MAE 0.347958, MSE 0.299526.
   - Best ETTh1 96 result remains sub-threshold; phase-jitter and trend/residual variants did not produce stable gains under enhanced bad-case review.
+
+## ETT Formal Regression - 2026-07-02
+
+- Command: `conda run --no-capture-output -n raft python scripts/benchmark_phaseformer_suite.py --datasets ETTh1,ETTh2,ETTm1,ETTm2 --horizons all --modes original,latest --num-workers 0 --bad-case-limit 10 --bad-case-batches 8 --run-prefix phaseformer_ett_regression_20260702 --resume`
+- Evidence:
+  - `research_runs/phaseformer_ett_regression_20260702_summary.csv`
+  - `research_runs/phaseformer_ett_regression_20260702_comparison.csv`
+  - `research_runs/phaseformer_ett_regression_20260702_report.md`
+- Run status: 32 fresh runs, no resumed runs. PyTorch CUDA was usable on RTX 4090; `nvidia-smi`/NVML reported a driver-library mismatch, so external GPU telemetry was unreliable.
+- Effective latest changes:
+  - ETTh2 96: `latest_etth2_adaptive_residual_mae`, MAE 0.343032 -> 0.328264 (-4.31%), MSE 0.280557 -> 0.266525 (-5.00%).
+  - ETTh2 720: `latest_etth2_residual_long`, MAE 0.448750 -> 0.424987 (-5.30%), MSE 0.415718 -> 0.383477 (-7.76%).
+- Guardrail results:
+  - ETTh1, ETTm1, and ETTm2 latest modes are identical to original on all four horizons; no regression.
+  - ETTh2 192 and 336 are also guardrailed to original; no regression.
+- Conclusion: the best formal version for the ETT regression set is the dataset-aware latest policy. It enables residual/adaptive residual only where evidence supports it, and preserves original behavior elsewhere.
