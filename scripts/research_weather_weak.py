@@ -153,6 +153,7 @@ class PhaseFormerConfig:
         phase_deviation_dropout,
         phase_level_slope_window,
         phase_level_slope_gate_init,
+        phase_level_calib_gate_init,
         phase_noise_hifreq_strength,
         phase_noise_hifreq_threshold,
         phase_noise_hifreq_temperature,
@@ -261,8 +262,14 @@ class PhaseFormerConfig:
             "phase_level_hifreq",
             "phase_level_uncertainty_hifreq",
         ]
+        self.use_phase_period_level_calibration = variant in [
+            "phase_level_calib",
+            "phase_uncertainty_level_calib",
+            "phase_uncertainty_level_calib_hifreq",
+        ]
         self.phase_level_slope_window = phase_level_slope_window
         self.phase_level_slope_gate_init = phase_level_slope_gate_init
+        self.phase_level_calib_gate_init = phase_level_calib_gate_init
         self.use_phase_uncertainty_shrinkage = variant in [
             "phase_uncertainty",
             "phase_uncertainty_residual",
@@ -271,6 +278,8 @@ class PhaseFormerConfig:
             "phase_dropout_uncertainty",
             "phase_level_uncertainty",
             "phase_level_uncertainty_hifreq",
+            "phase_uncertainty_level_calib",
+            "phase_uncertainty_level_calib_hifreq",
         ]
         self.phase_uncertainty_min = phase_uncertainty_min
         self.phase_uncertainty_trend_gate_init = phase_uncertainty_trend_gate_init
@@ -289,6 +298,7 @@ class PhaseFormerConfig:
             "phase_uncertainty_hifreq",
             "phase_level_hifreq",
             "phase_level_uncertainty_hifreq",
+            "phase_uncertainty_level_calib_hifreq",
         ]
         self.phase_noise_hifreq_strength = phase_noise_hifreq_strength
         self.phase_noise_hifreq_threshold = phase_noise_hifreq_threshold
@@ -607,6 +617,9 @@ def main():
             "phase_level_uncertainty",
             "phase_level_hifreq",
             "phase_level_uncertainty_hifreq",
+            "phase_level_calib",
+            "phase_uncertainty_level_calib",
+            "phase_uncertainty_level_calib_hifreq",
             "phase_uncertainty",
             "phase_uncertainty_residual",
             "phase_uncertainty_smooth_residual",
@@ -636,6 +649,7 @@ def main():
     parser.add_argument("--phase-deviation-dropout", type=float, default=0.1)
     parser.add_argument("--phase-level-slope-window", type=int, default=3)
     parser.add_argument("--phase-level-slope-gate-init", type=float, default=0.1)
+    parser.add_argument("--phase-level-calib-gate-init", type=float, default=0.1)
     parser.add_argument("--phase-noise-hifreq-strength", type=float, default=0.5)
     parser.add_argument("--phase-noise-hifreq-threshold", type=float, default=1.0)
     parser.add_argument("--phase-noise-hifreq-temperature", type=float, default=0.2)
@@ -721,6 +735,7 @@ def main():
         args.phase_deviation_dropout,
         args.phase_level_slope_window,
         args.phase_level_slope_gate_init,
+        args.phase_level_calib_gate_init,
         args.phase_noise_hifreq_strength,
         args.phase_noise_hifreq_threshold,
         args.phase_noise_hifreq_temperature,
@@ -759,8 +774,10 @@ def main():
             "use_phase_deviation_dropout": model_config.use_phase_deviation_dropout,
             "phase_deviation_dropout": model_config.phase_deviation_dropout,
             "use_phase_period_level_detrend": model_config.use_phase_period_level_detrend,
+            "use_phase_period_level_calibration": model_config.use_phase_period_level_calibration,
             "phase_level_slope_window": model_config.phase_level_slope_window,
             "phase_level_slope_gate_init": model_config.phase_level_slope_gate_init,
+            "phase_level_calib_gate_init": model_config.phase_level_calib_gate_init,
             "use_phase_uncertainty_shrinkage": model_config.use_phase_uncertainty_shrinkage,
             "phase_uncertainty_min": model_config.phase_uncertainty_min,
             "phase_uncertainty_trend_gate_init": model_config.phase_uncertainty_trend_gate_init,

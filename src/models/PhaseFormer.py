@@ -340,6 +340,52 @@ class PhasePeriodLevelDetrend(nn.Module):
         return centered, future_level
 
 
+class PhasePeriodLevelCalibration(nn.Module):
+    """Calibrate forecast period means without removing phase-shape inputs."""
+
+    def __init__(
+        self,
+        num_periods_output: int,
+        enc_in: int,
+        slope_window: int = 3,
+        level_gate_init: float = 0.1,
+        slope_gate_init: float = 0.05,
+    ):
+        super().__init__()
+        self.num_periods_output = num_periods_output
+        self.slope_window = max(2, int(slope_window))
+        level_gate_init = min(max(float(level_gate_init), 1e-4), 1.0 - 1e-4)
+        slope_gate_init = min(max(float(slope_gate_init), 1e-4), 1.0 - 1e-4)
+        self.level_gate = nn.Parameter(
+            torch.full((1, enc_in, 1, 1), float(torch.logit(torch.tensor(level_gate_init))))
+        )
+        self.slope_gate = nn.Parameter(
+            torch.full((1, enc_in, 1, 1), float(torch.logit(torch.tensor(slope_gate_init))))
+        )
+
+    def _anchor_level(self, phase_series):
+        period_level = phase_series.mean(dim=2, keepdim=True)
+        last_level = period_level[..., -1:]
+        if period_level.size(-1) < 2:
+            return last_level.expand(-1, -1, -1, self.num_periods_output)
+        window = min(self.slope_window, period_level.size(-1))
+        recent = period_level[..., -window:]
+        slope = (recent[..., 1:] - recent[..., :-1]).mean(dim=-1, keepdim=True)
+        steps = torch.arange(
+            1,
+            self.num_periods_output + 1,
+            device=phase_series.device,
+            dtype=phase_series.dtype,
+        ).view(1, 1, 1, -1)
+        return last_level + torch.sigmoid(self.slope_gate) * slope * steps
+
+    def forward(self, y_phase_steps, phase_series):  # (B,C,L,P_out), (B,C,L,P_in)
+        anchor_level = self._anchor_level(phase_series)
+        predicted_level = y_phase_steps.mean(dim=2, keepdim=True)
+        correction = anchor_level - predicted_level
+        return y_phase_steps + torch.sigmoid(self.level_gate) * correction
+
+
 class PhaseReliabilityDamping(nn.Module):
     """Shrink forecast amplitude when historical phase alignment is unreliable.
 
@@ -926,6 +972,18 @@ class PhaseFormer(DefaultPLModule):
                 slope_gate_init=getattr(configs, "phase_level_slope_gate_init", 0.1),
             )
 
+        self.use_phase_period_level_calibration = getattr(
+            configs, "use_phase_period_level_calibration", False
+        )
+        if self.use_phase_period_level_calibration:
+            self.phase_period_level_calibration = PhasePeriodLevelCalibration(
+                num_periods_output=self.num_periods_output,
+                enc_in=self.enc_in,
+                slope_window=getattr(configs, "phase_level_slope_window", 3),
+                level_gate_init=getattr(configs, "phase_level_calib_gate_init", 0.1),
+                slope_gate_init=getattr(configs, "phase_level_slope_gate_init", 0.05),
+            )
+
         self.use_phase_reliability_damping = getattr(
             configs, "use_phase_reliability_damping", False
         )
@@ -1103,6 +1161,8 @@ class PhaseFormer(DefaultPLModule):
             y_phase_steps = y_phase_steps + self.phase_local_trend(phase_series)
         if level_forecast is not None:
             y_phase_steps = y_phase_steps + level_forecast
+        if self.use_phase_period_level_calibration:
+            y_phase_steps = self.phase_period_level_calibration(y_phase_steps, phase_series)
 
         # 9) Reassemble to sequence (B, pred_len, C)
         y_periods = self._from_phase_steps_to_periods(y_phase_steps)  # (B, C, P_out, L)

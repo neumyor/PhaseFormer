@@ -736,3 +736,52 @@
   - Run: `weakphase3_iter10_ettm1_96_baseline_lr0003_mae_e30_seed2021`.
   - Result: MAE 0.340444 (-2.16%), MSE 0.293950 (-1.86%).
   - Decision: most of iteration 8's gain is explained by matched training settings. Continue with a new model mechanism; do not claim phase uncertainty shrinkage as effective yet.
+
+### Iterations 11-31: ETTm2 Signal, Level Calibration, And Exit
+
+- Iteration 11:
+  - Run: `weakphase3_iter11_ettm2_96_phase_uncertainty_hifreq_min35_s08_thr05_w7_lr0003_mae_e30_seed2021`.
+  - Result: ETTm2 96 MAE 0.249029 (-3.54%), MSE 0.161170 (-5.25%).
+  - Bad-case review: MSE reaches target, but MULL highest/systematic bias remains high; MAE misses the 5% threshold.
+- Iteration 12:
+  - Run: `weakphase3_iter12_ettm2_96_baseline_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.257416 (-0.29%), MSE 0.168600 (-0.88%).
+  - Decision: iteration 11's ETTm2 gain is not explained by MAE/LR alone.
+- Iterations 13-18:
+  - Runs:
+    - `weakphase3_iter13_ettm2_96_phase_uncertainty_hifreq_min35_s05_thr05_w7_lr0003_mae_e30_seed2021`: MAE 0.249125, MSE 0.161196.
+    - `weakphase3_iter14_ettm2_96_phase_uncertainty_min35_lr0003_mae_e30_seed2021`: MAE 0.249220, MSE 0.161163.
+    - `weakphase3_iter15_ettm2_96_phase_uncertainty_min60_lr0003_mae_e30_seed2021`: MAE 0.255966, MSE 0.166924.
+    - `weakphase3_iter16_ettm2_96_phase_uncertainty_min20_lr0003_mae_e30_seed2021`: MAE 0.248961, MSE 0.160900.
+    - `weakphase3_iter17_ettm2_96_phase_uncertainty_min20_lr0003_mae_e50_seed2021`: MAE 0.248286, MSE 0.160638.
+    - `weakphase3_iter18_ettm2_96_phase_uncertainty_min10_lr0003_mae_e30_seed2021`: MAE 0.250514, MSE 0.162096.
+  - Decision: min reliability 0.2 is the best shrinkage strength; more epochs help only marginally and still miss MAE target.
+- New mechanism:
+  - `PhasePeriodLevelCalibration` in `src/models/PhaseFormer.py`.
+  - Theory: bad cases after shrinkage still show systematic period-level bias. Instead of removing level before routing, calibrate each forecast period's phase-step mean toward a recent period-level anchor, preserving learned phase shape while correcting `d_k`.
+- Iterations 19-23:
+  - Runs:
+    - `weakphase3_iter19_ettm2_96_phase_uncertainty_levelcalib_min20_g01_lr0003_mae_e30_seed2021`: MAE 0.248644, MSE 0.160522.
+    - `weakphase3_iter20_ettm2_96_phase_uncertainty_levelcalib_min20_g02_lr0003_mae_e30_seed2021`: MAE 0.248588, MSE 0.160452.
+    - `weakphase3_iter21_ettm2_96_phase_uncertainty_levelcalib_min20_g05_lr0003_mae_e30_seed2021`: MAE 0.248822, MSE 0.160336.
+    - `weakphase3_iter22_ettm2_96_phase_uncertainty_levelcalib_min20_g02_lr0001_mae_e30_seed2021`: MAE 0.258707, MSE 0.170461.
+    - `weakphase3_iter23_ettm2_96_phase_uncertainty_levelcalib_min20_g02_lr0005_mae_e30_seed2021`: MAE 0.248568, MSE 0.161062.
+  - Decision: level calibration improves MSE and slightly improves MAE, but cannot close the remaining MAE gap. LR 0.0003 remains best.
+- Iterations 24-25 transfer checks:
+  - `weakphase3_iter24_etth2_96_phase_uncertainty_levelcalib_min20_g02_lr0003_mae_e30_seed2021`: ETTh2 96 MAE 0.342094 (-0.27%), MSE 0.283363 (+1.00%).
+  - `weakphase3_iter25_etth1_96_phase_uncertainty_levelcalib_min20_g02_lr0003_mae_e30_seed2021`: ETTh1 96 MAE 0.393467 (+1.28%), MSE 0.369269 (+1.20%).
+  - Decision: the mechanism is not a unified ETT solution; do not use dataset-aware guardrail to claim global success.
+- Iterations 26-29 training/period checks:
+  - `weakphase3_iter26_ettm2_96_phase_uncertainty_levelcalib_min20_g02_lr0003_mae_b128_e30_seed2021`: MAE 0.248638, MSE 0.160795.
+  - `weakphase3_iter27_ettm2_96_phase_uncertainty_levelcalib_min20_g02_lr0003_smae_e30_seed2021`: MAE 0.254392, MSE 0.162893.
+  - `weakphase3_iter28_ettm2_96_p96_phase_uncertainty_levelcalib_min20_g02_lr0003_mae_e30_seed2021`: MAE 0.280422, MSE 0.186013.
+  - `weakphase3_iter29_ettm2_96_p12_phase_uncertainty_levelcalib_min20_g02_lr0003_mae_e30_seed2021`: MAE 0.251155, MSE 0.163228.
+  - Decision: batch size, SMAE, and alternate period lengths do not solve the MAE bottleneck. Rigid daily phase is especially harmful.
+- Iterations 30-31 final combinations:
+  - `weakphase3_iter30_ettm2_96_phase_uncertainty_levelcalib_hifreq_min20_g02_s05_thr05_lr0003_mae_e30_seed2021`: MAE 0.248354 (-3.80%), MSE 0.160277 (-5.77%).
+  - `weakphase3_iter31_ettm2_96_phase_uncertainty_levelcalib_hifreq_min20_g02_s08_thr05_lr0003_mae_e30_seed2021`: MAE 0.248220 (-3.85%), MSE 0.160189 (-5.82%).
+  - Bad-case review: highest/systematic MULL cases remain dominated by bias around 0.85 even after calibration, explaining the MAE miss.
+- Exit decision:
+  - Stop condition reached because the round exceeded 30 iterations.
+  - Best candidate improves ETTm2 96 MSE by more than 5% but fails the MAE target.
+  - No candidate satisfies the requested MAE and MSE >5% improvement condition.

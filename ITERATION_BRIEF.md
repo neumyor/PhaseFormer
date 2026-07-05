@@ -157,7 +157,9 @@ Formal benchmark outcome:
   - Phase uncertainty shrinkage: estimate same-phase observation reliability and shrink noisy period-specific deviations before cross-phase routing.
   - Phase deviation dropout: training-time regularization that drops deviations from the phase template, intended to reduce memorization of unstable same-phase details.
   - Phase period-level detrending: decompose `x_{l,k}=p_l+d_k+eps_{l,k}` inside phase space, route de-leveled phase shape, and restore low-frequency period level.
-- Current status after iteration 10:
-  - Best ETTm1 96 result is `weakphase3_iter08_ettm1_96_phase_uncertainty_hifreq_min35_s08_thr05_w7_lr0003_mae_e30_seed2021`: MAE 0.339609, MSE 0.293716.
-  - A matched training baseline `weakphase3_iter10_ettm1_96_baseline_lr0003_mae_e30_seed2021` reaches MAE 0.340444, MSE 0.293950, so most of the apparent gain is from MAE/LR rather than the new mechanism.
-  - No valid model-design candidate has reached the 5%/5% exit target yet.
+- Final status after iteration 31:
+  - Stop condition reached because the round exceeded 30 iterations without a candidate reducing both MAE and MSE by more than 5%.
+  - Best model-design result is `weakphase3_iter31_ettm2_96_phase_uncertainty_levelcalib_hifreq_min20_g02_s08_thr05_lr0003_mae_e30_seed2021`: ETTm2 96 MAE 0.248220, MSE 0.160189 versus original MAE 0.258160, MSE 0.170091.
+  - Improvement: MAE -3.85%, MSE -5.82%. MSE satisfies the 5% target, but MAE does not.
+  - Matched training baseline `weakphase3_iter12_ettm2_96_baseline_lr0003_mae_e30_seed2021` reaches only MAE 0.257416, MSE 0.168600, so the ETTm2 MSE gain is attributable to the phase-uncertainty mechanism family rather than MAE/LR alone.
+  - Transfer check failed: the same phase-uncertainty + level-calibration structure worsened ETTh1 96 and ETTh2 96 MSE, so it must not be promoted as a unified ETT solution.

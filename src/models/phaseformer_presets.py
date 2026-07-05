@@ -295,6 +295,21 @@ class PhaseFormerPresetConfig:
         self.phase_uncertainty_trend_gate_init = hyperparams.get(
             "phase_uncertainty_trend_gate_init", 0.05
         )
+        self.use_phase_deviation_dropout = hyperparams.get("use_phase_deviation_dropout", False)
+        self.phase_deviation_dropout = hyperparams.get("phase_deviation_dropout", 0.1)
+        self.use_phase_period_level_detrend = hyperparams.get(
+            "use_phase_period_level_detrend", False
+        )
+        self.use_phase_period_level_calibration = hyperparams.get(
+            "use_phase_period_level_calibration", False
+        )
+        self.phase_level_slope_window = hyperparams.get("phase_level_slope_window", 3)
+        self.phase_level_slope_gate_init = hyperparams.get(
+            "phase_level_slope_gate_init", 0.05
+        )
+        self.phase_level_calib_gate_init = hyperparams.get(
+            "phase_level_calib_gate_init", 0.1
+        )
 
     def get(self, key, default=None):
         return getattr(self, key, default)
