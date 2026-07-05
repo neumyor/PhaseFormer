@@ -148,6 +148,11 @@ class PhaseFormerConfig:
         phase_reliability_min,
         phase_reliability_noise_threshold,
         phase_reliability_noise_temperature,
+        phase_uncertainty_min,
+        phase_uncertainty_trend_gate_init,
+        phase_deviation_dropout,
+        phase_level_slope_window,
+        phase_level_slope_gate_init,
         phase_noise_hifreq_strength,
         phase_noise_hifreq_threshold,
         phase_noise_hifreq_temperature,
@@ -193,6 +198,8 @@ class PhaseFormerConfig:
             "adaptive_smooth_residual",
             "phase_jitter_residual",
             "phase_jitter_smooth_residual",
+            "phase_uncertainty_residual",
+            "phase_uncertainty_smooth_residual",
             "phase_reliability_residual",
             "phase_reliability_smooth_residual",
             "phase_hifreq_residual",
@@ -210,6 +217,7 @@ class PhaseFormerConfig:
                 "smooth_residual",
                 "adaptive_smooth_residual",
                 "phase_jitter_smooth_residual",
+                "phase_uncertainty_smooth_residual",
                 "phase_reliability_smooth_residual",
                 "phase_hifreq_smooth_residual",
                 "lowfreq_trend_smooth_residual",
@@ -242,6 +250,30 @@ class PhaseFormerConfig:
             "phase_jitter_smooth_residual",
         ]
         self.phase_jitter_gate_init = phase_jitter_gate_init
+        self.use_phase_deviation_dropout = variant in [
+            "phase_dropout",
+            "phase_dropout_uncertainty",
+        ]
+        self.phase_deviation_dropout = phase_deviation_dropout
+        self.use_phase_period_level_detrend = variant in [
+            "phase_level_detrend",
+            "phase_level_uncertainty",
+            "phase_level_hifreq",
+            "phase_level_uncertainty_hifreq",
+        ]
+        self.phase_level_slope_window = phase_level_slope_window
+        self.phase_level_slope_gate_init = phase_level_slope_gate_init
+        self.use_phase_uncertainty_shrinkage = variant in [
+            "phase_uncertainty",
+            "phase_uncertainty_residual",
+            "phase_uncertainty_smooth_residual",
+            "phase_uncertainty_hifreq",
+            "phase_dropout_uncertainty",
+            "phase_level_uncertainty",
+            "phase_level_uncertainty_hifreq",
+        ]
+        self.phase_uncertainty_min = phase_uncertainty_min
+        self.phase_uncertainty_trend_gate_init = phase_uncertainty_trend_gate_init
         self.use_phase_reliability_damping = variant in [
             "phase_reliability",
             "phase_reliability_residual",
@@ -254,6 +286,9 @@ class PhaseFormerConfig:
             "phase_hifreq",
             "phase_hifreq_residual",
             "phase_hifreq_smooth_residual",
+            "phase_uncertainty_hifreq",
+            "phase_level_hifreq",
+            "phase_level_uncertainty_hifreq",
         ]
         self.phase_noise_hifreq_strength = phase_noise_hifreq_strength
         self.phase_noise_hifreq_threshold = phase_noise_hifreq_threshold
@@ -566,6 +601,16 @@ def main():
             "phase_jitter",
             "phase_jitter_residual",
             "phase_jitter_smooth_residual",
+            "phase_dropout",
+            "phase_dropout_uncertainty",
+            "phase_level_detrend",
+            "phase_level_uncertainty",
+            "phase_level_hifreq",
+            "phase_level_uncertainty_hifreq",
+            "phase_uncertainty",
+            "phase_uncertainty_residual",
+            "phase_uncertainty_smooth_residual",
+            "phase_uncertainty_hifreq",
             "phase_reliability",
             "phase_reliability_residual",
             "phase_reliability_smooth_residual",
@@ -586,6 +631,11 @@ def main():
     parser.add_argument("--phase-reliability-min", type=float, default=0.35)
     parser.add_argument("--phase-reliability-noise-threshold", type=float, default=0.0)
     parser.add_argument("--phase-reliability-noise-temperature", type=float, default=0.2)
+    parser.add_argument("--phase-uncertainty-min", type=float, default=0.35)
+    parser.add_argument("--phase-uncertainty-trend-gate-init", type=float, default=0.05)
+    parser.add_argument("--phase-deviation-dropout", type=float, default=0.1)
+    parser.add_argument("--phase-level-slope-window", type=int, default=3)
+    parser.add_argument("--phase-level-slope-gate-init", type=float, default=0.1)
     parser.add_argument("--phase-noise-hifreq-strength", type=float, default=0.5)
     parser.add_argument("--phase-noise-hifreq-threshold", type=float, default=1.0)
     parser.add_argument("--phase-noise-hifreq-temperature", type=float, default=0.2)
@@ -666,6 +716,11 @@ def main():
         args.phase_reliability_min,
         args.phase_reliability_noise_threshold,
         args.phase_reliability_noise_temperature,
+        args.phase_uncertainty_min,
+        args.phase_uncertainty_trend_gate_init,
+        args.phase_deviation_dropout,
+        args.phase_level_slope_window,
+        args.phase_level_slope_gate_init,
         args.phase_noise_hifreq_strength,
         args.phase_noise_hifreq_threshold,
         args.phase_noise_hifreq_temperature,
@@ -701,6 +756,14 @@ def main():
             "phase_local_trend_gate_init": model_config.phase_local_trend_gate_init,
             "use_phase_jitter_smoothing": model_config.use_phase_jitter_smoothing,
             "phase_jitter_gate_init": model_config.phase_jitter_gate_init,
+            "use_phase_deviation_dropout": model_config.use_phase_deviation_dropout,
+            "phase_deviation_dropout": model_config.phase_deviation_dropout,
+            "use_phase_period_level_detrend": model_config.use_phase_period_level_detrend,
+            "phase_level_slope_window": model_config.phase_level_slope_window,
+            "phase_level_slope_gate_init": model_config.phase_level_slope_gate_init,
+            "use_phase_uncertainty_shrinkage": model_config.use_phase_uncertainty_shrinkage,
+            "phase_uncertainty_min": model_config.phase_uncertainty_min,
+            "phase_uncertainty_trend_gate_init": model_config.phase_uncertainty_trend_gate_init,
             "use_phase_reliability_damping": model_config.use_phase_reliability_damping,
             "phase_reliability_min": model_config.phase_reliability_min,
             "phase_reliability_noise_threshold": model_config.phase_reliability_noise_threshold,

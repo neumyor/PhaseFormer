@@ -220,6 +220,126 @@ class PhaseJitterSmoothing(nn.Module):
         return (1.0 - gate) * phase_series + gate * neighbor_mean
 
 
+class PhaseUncertaintyShrinkage(nn.Module):
+    """Empirical-Bayes shrinkage of unreliable same-phase observations.
+
+    Weak-period series can be written as x_{l,k}=p_l+d_k+eps_{l,k}, where l is
+    the phase slot and k is the period index. High same-phase variance over k
+    makes the phase history unreliable; useful periodic structure appears as
+    variance of the phase template over l. This layer shrinks noisy period
+    histories toward the phase template before routing, while a small learnable
+    trend term preserves low-frequency drift across periods.
+    """
+
+    def __init__(
+        self,
+        enc_in: int,
+        min_reliability: float = 0.35,
+        trend_gate_init: float = 0.05,
+        noise_floor: float = 1e-6,
+    ):
+        super().__init__()
+        self.min_reliability = min(max(float(min_reliability), 0.0), 1.0)
+        self.noise_floor = max(float(noise_floor), 1e-8)
+        trend_gate_init = min(max(float(trend_gate_init), 1e-4), 1.0 - 1e-4)
+        gate_logit = torch.logit(torch.tensor(trend_gate_init))
+        self.trend_gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
+
+    def forward(self, phase_series):  # (B, C, L, P)
+        template = phase_series.mean(dim=-1, keepdim=True)
+        phase_signal = template.squeeze(-1).var(dim=2, unbiased=False, keepdim=True)
+        phase_noise = phase_series.var(dim=-1, unbiased=False, keepdim=True)
+        reliability = phase_signal.unsqueeze(-1) / (
+            phase_signal.unsqueeze(-1) + phase_noise + self.noise_floor
+        )
+        reliability = self.min_reliability + (1.0 - self.min_reliability) * reliability
+        shrunk = template + reliability * (phase_series - template)
+
+        if phase_series.size(-1) < 2:
+            return shrunk
+
+        period_axis = torch.linspace(
+            0.0,
+            1.0,
+            phase_series.size(-1),
+            device=phase_series.device,
+            dtype=phase_series.dtype,
+        ).view(1, 1, 1, -1)
+        centered_axis = period_axis - period_axis.mean(dim=-1, keepdim=True)
+        denom = torch.square(centered_axis).sum(dim=-1, keepdim=True).clamp_min(
+            self.noise_floor
+        )
+        slope = ((phase_series - template) * centered_axis).sum(dim=-1, keepdim=True) / denom
+        trend = slope * centered_axis
+        return shrunk + torch.sigmoid(self.trend_gate) * trend
+
+
+class PhaseDeviationDropout(nn.Module):
+    """Training-time dropout for period-specific phase deviations.
+
+    Instead of dropping token values directly, this layer drops deviations from
+    the per-slot phase template. For weak-period data this regularizes the
+    router against memorizing noisy same-phase period details while preserving
+    the coarse phase template seen by the original model.
+    """
+
+    def __init__(self, dropout: float = 0.1):
+        super().__init__()
+        self.dropout = min(max(float(dropout), 0.0), 1.0)
+
+    def forward(self, phase_series):  # (B, C, L, P)
+        if not self.training or self.dropout <= 0.0 or phase_series.size(-1) < 2:
+            return phase_series
+        template = phase_series.mean(dim=-1, keepdim=True)
+        keep = torch.rand_like(phase_series) >= self.dropout
+        return template + keep.to(phase_series.dtype) * (phase_series - template)
+
+
+class PhasePeriodLevelDetrend(nn.Module):
+    """Separate period-level drift from phase-slot shape before routing.
+
+    Under weak periodicity, x_{l,k}=p_l+d_k+eps_{l,k}. The original phase router
+    receives p_l and d_k entangled, so a drifted recent period can be mistaken
+    for a phase amplitude pattern. This module removes each period's mean across
+    phase slots before routing and later restores a low-frequency extrapolation
+    of the period level in phase-step space.
+    """
+
+    def __init__(
+        self,
+        num_periods_output: int,
+        enc_in: int,
+        slope_window: int = 3,
+        slope_gate_init: float = 0.1,
+    ):
+        super().__init__()
+        self.num_periods_output = num_periods_output
+        self.slope_window = max(2, int(slope_window))
+        slope_gate_init = min(max(float(slope_gate_init), 1e-4), 1.0 - 1e-4)
+        gate_logit = torch.logit(torch.tensor(slope_gate_init))
+        self.slope_gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
+
+    def forward(self, phase_series):  # (B, C, L, P_in)
+        period_level = phase_series.mean(dim=2, keepdim=True)
+        centered = phase_series - period_level
+        last_level = period_level[..., -1:]
+        if period_level.size(-1) < 2:
+            future_level = last_level.expand(-1, -1, -1, self.num_periods_output)
+            return centered, future_level
+
+        window = min(self.slope_window, period_level.size(-1))
+        recent = period_level[..., -window:]
+        slope = (recent[..., 1:] - recent[..., :-1]).mean(dim=-1, keepdim=True)
+        steps = torch.arange(
+            1,
+            self.num_periods_output + 1,
+            device=phase_series.device,
+            dtype=phase_series.dtype,
+        ).view(1, 1, 1, -1)
+        future_level = last_level + torch.sigmoid(self.slope_gate) * slope * steps
+        return centered, future_level
+
+
 class PhaseReliabilityDamping(nn.Module):
     """Shrink forecast amplitude when historical phase alignment is unreliable.
 
@@ -777,6 +897,35 @@ class PhaseFormer(DefaultPLModule):
                 gate_init=getattr(configs, "phase_jitter_gate_init", 0.1),
             )
 
+        self.use_phase_uncertainty_shrinkage = getattr(
+            configs, "use_phase_uncertainty_shrinkage", False
+        )
+        if self.use_phase_uncertainty_shrinkage:
+            self.phase_uncertainty_shrinkage = PhaseUncertaintyShrinkage(
+                enc_in=self.enc_in,
+                min_reliability=getattr(configs, "phase_uncertainty_min", 0.35),
+                trend_gate_init=getattr(configs, "phase_uncertainty_trend_gate_init", 0.05),
+            )
+
+        self.use_phase_deviation_dropout = getattr(
+            configs, "use_phase_deviation_dropout", False
+        )
+        if self.use_phase_deviation_dropout:
+            self.phase_deviation_dropout = PhaseDeviationDropout(
+                dropout=getattr(configs, "phase_deviation_dropout", 0.1)
+            )
+
+        self.use_phase_period_level_detrend = getattr(
+            configs, "use_phase_period_level_detrend", False
+        )
+        if self.use_phase_period_level_detrend:
+            self.phase_period_level_detrend = PhasePeriodLevelDetrend(
+                num_periods_output=self.num_periods_output,
+                enc_in=self.enc_in,
+                slope_window=getattr(configs, "phase_level_slope_window", 3),
+                slope_gate_init=getattr(configs, "phase_level_slope_gate_init", 0.1),
+            )
+
         self.use_phase_reliability_damping = getattr(
             configs, "use_phase_reliability_damping", False
         )
@@ -929,6 +1078,13 @@ class PhaseFormer(DefaultPLModule):
         phase_series = self._to_phase_series(x_periods)
         if self.use_phase_jitter_smoothing:
             phase_series = self.phase_jitter_smoothing(phase_series)
+        if self.use_phase_deviation_dropout:
+            phase_series = self.phase_deviation_dropout(phase_series)
+        level_forecast = None
+        if self.use_phase_period_level_detrend:
+            phase_series, level_forecast = self.phase_period_level_detrend(phase_series)
+        if self.use_phase_uncertainty_shrinkage:
+            phase_series = self.phase_uncertainty_shrinkage(phase_series)
 
         # 6-8) Embedding -> routing layers -> top predictor
         # Initial latent from embedding
@@ -945,6 +1101,8 @@ class PhaseFormer(DefaultPLModule):
         y_phase_steps = self.predictor(Z)  # (B, C, L, P_out)
         if self.use_phase_local_trend:
             y_phase_steps = y_phase_steps + self.phase_local_trend(phase_series)
+        if level_forecast is not None:
+            y_phase_steps = y_phase_steps + level_forecast
 
         # 9) Reassemble to sequence (B, pred_len, C)
         y_periods = self._from_phase_steps_to_periods(y_phase_steps)  # (B, C, P_out, L)

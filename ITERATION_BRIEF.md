@@ -139,3 +139,25 @@ Formal benchmark outcome:
   - Best ETTm1 192 result is `weakphase2_ettm1_192_adaptive_residual_g02_lr0003_mae_b256_e30_seed2021`: MAE 0.359033, MSE 0.328808 versus paired baseline MAE 0.363096, MSE 0.329395.
   - ETTh1 bad-case review showed trend under-response rather than high-frequency phase hallucination; residual, phase-local trend, and low-frequency trend variants were positive only for isolated bad-case modes and did not improve both aggregate metrics.
   - Retained research tooling change: `scripts/research_weather_weak.py` now exports <=8/10 pattern-covered bad cases with timestamps, variable names, and window-level prediction/true CSVs, so future iterations must choose mechanisms from bad-case modes rather than aggregate metrics alone.
+
+## Weak-Period ETT Innovation Round - 2026-07-05
+
+- User request: start a new autonomous iteration under the updated `HOW_TO_DO_RESEARCH.md`, targeting weak-period ETT-series data. Stop when MAE and MSE both improve by more than 5% versus the original PhaseFormer baseline, or when the round exceeds 30 model/research iterations.
+- Method constraints:
+  - Mechanisms must be framed inside PhaseFormer phase modeling and address weak-period data properties.
+  - Simple residual branches, extreme residual gates, or post-hoc dataset/horizon-aware guardrails are not acceptable as the claimed innovation.
+  - Every key experiment must export and review no more than 10 bad cases; this round uses 8.
+  - Prefer a unified mechanism and shared hyperparameters across ETT datasets; dataset-specific choices require evidence, not opportunistic selection.
+- Baselines from the formal ETT regression:
+  - ETTh1 96: MAE 0.388491, MSE 0.364891; 5% thresholds MAE < 0.369066, MSE < 0.346646.
+  - ETTm1 96: MAE 0.347958, MSE 0.299526; 5% thresholds MAE < 0.330560, MSE < 0.284550.
+  - ETTm2 96: MAE 0.258160, MSE 0.170091; 5% thresholds MAE < 0.245252, MSE < 0.161587.
+  - ETTh2 96: MAE 0.343032, MSE 0.280557; 5% thresholds MAE < 0.325880, MSE < 0.266529.
+- Current hypothesis family:
+  - Phase uncertainty shrinkage: estimate same-phase observation reliability and shrink noisy period-specific deviations before cross-phase routing.
+  - Phase deviation dropout: training-time regularization that drops deviations from the phase template, intended to reduce memorization of unstable same-phase details.
+  - Phase period-level detrending: decompose `x_{l,k}=p_l+d_k+eps_{l,k}` inside phase space, route de-leveled phase shape, and restore low-frequency period level.
+- Current status after iteration 10:
+  - Best ETTm1 96 result is `weakphase3_iter08_ettm1_96_phase_uncertainty_hifreq_min35_s08_thr05_w7_lr0003_mae_e30_seed2021`: MAE 0.339609, MSE 0.293716.
+  - A matched training baseline `weakphase3_iter10_ettm1_96_baseline_lr0003_mae_e30_seed2021` reaches MAE 0.340444, MSE 0.293950, so most of the apparent gain is from MAE/LR rather than the new mechanism.
+  - No valid model-design candidate has reached the 5%/5% exit target yet.

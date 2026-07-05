@@ -671,3 +671,68 @@
   - ETTh1, ETTm1, and ETTm2 latest modes are identical to original on all four horizons; no regression.
   - ETTh2 192 and 336 are also guardrailed to original; no regression.
 - Conclusion: the best formal version for the ETT regression set is the dataset-aware latest policy. It enables residual/adaptive residual only where evidence supports it, and preserves original behavior elsewhere.
+
+## Weak-Period ETT Innovation Round - 2026-07-05 Start
+
+- New user request:
+  - Continue autonomous research under the updated `HOW_TO_DO_RESEARCH.md`.
+  - Target weak-period ETT-series data.
+  - Exit when MAE and MSE both improve by more than 5% versus original PhaseFormer, or when this round exceeds 30 iterations.
+  - Avoid residual-gate tricks and avoid dataset/horizon-aware guardrails as the final scientific claim.
+- Bad-case drivers from prior evidence:
+  - ETTm1 96: MUFL dominates severe failures; common pattern is weak-period phase-amplitude hallucination and systematic bias. Examples in `research_runs/weakphase2_review_b256_ettm1_96_baseline_fixed_e30_seed2021/bad_cases.csv`.
+  - ETTh1 96: trend under-response and late drift dominate more than high-frequency hallucination. Examples in `research_runs/weakphase2_review_etth1_96_baseline_e30_seed2021/bad_cases.csv`.
+- Baselines:
+  - ETTm1 96 baseline MAE 0.347958, MSE 0.299526.
+  - ETTh1 96 baseline MAE 0.388491, MSE 0.364891.
+
+### Iterations 1-10: Phase-Uncertainty And Phase-Decomposition Probes
+
+- New mechanism implemented:
+  - `PhaseUncertaintyShrinkage` in `src/models/PhaseFormer.py`.
+  - Theory: for weak-period observations `x_{l,k}=p_l+d_k+eps_{l,k}`, cross-period same-phase variance estimates unreliable phase history and phase-template variance estimates useful periodic signal. The layer shrinks noisy deviations before cross-phase routing, rather than blending a residual output branch.
+  - Research script variants: `phase_uncertainty`, `phase_uncertainty_hifreq`.
+- Additional probes implemented:
+  - `PhaseDeviationDropout`: training-time dropout of deviations from the phase template; intended to discourage memorizing unstable same-phase details.
+  - `PhasePeriodLevelDetrend`: removes period-level mean before routing and restores a low-frequency period-level forecast; intended to reduce systematic bias from drift entangled with phase shape.
+- Iteration 1:
+  - Runs:
+    - `weakphase3_iter01_ettm1_96_phase_uncertainty_min35_trend005_e30_seed2021_rerun`: ETTm1 96 MAE 0.346773 (-0.34%), MSE 0.297987 (-0.51%).
+    - `weakphase3_iter01_etth1_96_phase_uncertainty_min35_trend005_e30_seed2021`: ETTh1 96 MAE 0.386568 (-0.49%), MSE 0.358135 (-1.85%).
+  - Bad-case review: ETTm1 MUFL highest/systematic/volatility cases remain around MSE 4; ETTh1 average improves but selected severe cases shift to worse windows. Decision: keep as weak positive but insufficient.
+- Iteration 2:
+  - Run: `weakphase3_iter02_ettm1_96_phase_uncertainty_min05_trend0001_e30_seed2021`.
+  - Result: MAE 0.348267 (+0.09%), MSE 0.308687 (+3.06%).
+  - Decision: stronger global shrinkage erases useful phase amplitude; reject.
+- Iteration 3:
+  - Run: `weakphase3_iter03_ettm1_96_phase_uncertainty_min35_trend0001_e30_seed2021`.
+  - Result: MAE 0.346459 (-0.43%), MSE 0.299198 (-0.11%).
+  - Decision: closing the trend term protects MAE slightly but loses most MSE improvement; trend is not the main solution.
+- Iteration 4:
+  - Run: `weakphase3_iter04_ettm1_96_phase_uncertainty_hifreq_min35_s05_w7_e30_seed2021`.
+  - Result: MAE 0.346740 (-0.35%), MSE 0.297970 (-0.52%).
+  - Decision: adding high-frequency damping without training change does not solve the bias-heavy bad cases.
+- Iteration 5:
+  - Run: `weakphase3_iter05_ettm1_96_phase_dropout_p10_e30_seed2021`.
+  - Result: MAE 0.350392 (+0.70%), MSE 0.305080 (+1.85%).
+  - Decision: dropping phase deviations damages useful phase amplitude; reject this regularizer.
+- Iteration 6:
+  - Run: `weakphase3_iter06_ettm1_96_phase_uncertainty_hifreq_min35_s05_w7_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.340149 (-2.24%), MSE 0.294273 (-1.75%).
+  - Bad-case review: average improves under MAE/LR, but MUFL highest/systematic bias remains around MSE 4.3 and bias 1.46-1.48. Decision: positive but far below target.
+- Iteration 7:
+  - Run: `weakphase3_iter07_ettm1_96_phase_uncertainty_hifreq_min35_s08_w7_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.340127 (-2.25%), MSE 0.294240 (-1.76%).
+  - Decision: increasing damping strength gives negligible benefit.
+- Iteration 8:
+  - Run: `weakphase3_iter08_ettm1_96_phase_uncertainty_hifreq_min35_s08_thr05_w7_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.339609 (-2.40%), MSE 0.293716 (-1.94%).
+  - Bad-case review: volatile-input case improves, but top MUFL cases remain dominated by systematic bias and volatility mismatch. Decision: current best raw ETTm1 96 result, but not a valid model-design breakthrough.
+- Iteration 9:
+  - Run: `weakphase3_iter09_ettm1_96_phase_level_detrend_w3_g01_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.417865 (+20.09%), MSE 0.423054 (+41.24%).
+  - Decision: period-level mean removal is too destructive; reject this decomposition form.
+- Iteration 10:
+  - Run: `weakphase3_iter10_ettm1_96_baseline_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.340444 (-2.16%), MSE 0.293950 (-1.86%).
+  - Decision: most of iteration 8's gain is explained by matched training settings. Continue with a new model mechanism; do not claim phase uncertainty shrinkage as effective yet.

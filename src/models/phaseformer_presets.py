@@ -286,6 +286,15 @@ class PhaseFormerPresetConfig:
         self.phase_local_trend_gate_init = hyperparams.get(
             "phase_local_trend_gate_init", 0.1
         )
+        self.use_phase_jitter_smoothing = hyperparams.get("use_phase_jitter_smoothing", False)
+        self.phase_jitter_gate_init = hyperparams.get("phase_jitter_gate_init", 0.1)
+        self.use_phase_uncertainty_shrinkage = hyperparams.get(
+            "use_phase_uncertainty_shrinkage", False
+        )
+        self.phase_uncertainty_min = hyperparams.get("phase_uncertainty_min", 0.35)
+        self.phase_uncertainty_trend_gate_init = hyperparams.get(
+            "phase_uncertainty_trend_gate_init", 0.05
+        )
 
     def get(self, key, default=None):
         return getattr(self, key, default)
