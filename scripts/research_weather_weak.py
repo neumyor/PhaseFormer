@@ -585,7 +585,7 @@ def main():
     parser.add_argument(
         "--dataset",
         default="Weather",
-        choices=["Weather", "Exchange", "ETTh1", "ETTh2", "ETTm1", "ETTm2"],
+        choices=["Weather", "Exchange", "ETTh1", "ETTh2", "ETTm1", "ETTm2", "Electricity"],
     )
     parser.add_argument("--horizon", type=int, default=96)
     parser.add_argument("--lookback", type=int, default=720)

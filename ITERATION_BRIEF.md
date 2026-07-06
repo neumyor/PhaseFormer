@@ -196,3 +196,18 @@ Current best dataset-adaptive ETT phase policy:
   - ETTm1: MAE -1.28%, MSE -1.51%.
   - ETTm2: MAE -1.13%, MSE -1.09%.
 - Important caveat: this is stable improvement versus original across ETT datasets and horizons, not a universal >5% gain on every dataset/horizon. The largest gains remain ETTh2 720 and ETTm2 96; the other settings are modest but paired positive under the formal runner.
+
+## Weather/Electricity Phase Adaptation Round - 2026-07-06
+
+- User request: under the current weak-period phase-adaptation framework, optimize Weather and Electricity. Stop when the target effect improves by more than 3%, or when the round exceeds 50 iterations.
+- Interpretation:
+  - Keep the same framework family: phase uncertainty shrinkage, period-level calibration, high-frequency phase damping, low-frequency trend correction, and residual/adaptive auxiliaries only when bad-case evidence justifies them.
+  - Weather and Electricity currently use `latest_original_guardrail` in formal high-dimensional regression, so the matching starting point equals original PhaseFormer.
+  - Use horizon 96 for low-cost mechanism search, then promote only evidence-backed settings to `phaseformer_presets.py` and run formal comparisons.
+  - Bad case cap remains <= 10; this round uses 8.
+- Starting formal baselines from `research_runs/phaseformer_full_latest_vs_original_highdim_b64w4_20260630_comparison.csv`:
+  - Weather 96: MAE 0.195908, MSE 0.149202; 3% thresholds MAE < 0.190031, MSE < 0.144726.
+  - Electricity 96: MAE 0.220274, MSE 0.128806; 3% thresholds MAE < 0.213666, MSE < 0.124942.
+- First bad-case observation:
+  - Electricity smoke run `smoke_electricity96_research_script` shows systematic bias, peak underfit, trend mismatch, volatility mismatch, and late-horizon drift among the 8 capped bad cases.
+  - This supports testing phase-period level calibration and low-frequency trend correction before any residual-only solution.

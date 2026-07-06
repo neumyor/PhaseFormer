@@ -895,3 +895,24 @@
     - ETTm1: MAE -1.28%, MSE -1.51%.
     - ETTm2: MAE -1.13%, MSE -1.09%.
   - Decision: latest policy now improves both MAE and MSE against original on ETTh1, ETTh2, ETTm1, and ETTm2 for horizons 96, 192, 336, and 720 under the formal runner. Gains are stable but not universally above 5%; the user-requested 50-iteration cap was not reached because the practical stable-improvement objective was met.
+
+## Weather/Electricity Phase Adaptation Round - 2026-07-06 Start
+
+- New user request:
+  - Optimize Weather and Electricity within the current weak-period phase-adaptation framework.
+  - Stop when improvement exceeds 3%, or when the round exceeds 50 iterations.
+- Starting formal baselines:
+  - Weather 96: MAE 0.195908, MSE 0.149202 from `research_runs/phaseformer_full_latest_vs_original_highdim_b64w4_20260630_comparison.csv`.
+  - Electricity 96: MAE 0.220274, MSE 0.128806 from the same comparison file.
+- Candidate hypotheses:
+  - H1 phase uncertainty + level calibration: Weather/Electricity bad cases include systematic level bias and peak underfit; calibrating period-level anchors may reduce bias without discarding phase shape.
+  - H2 low-frequency trend correction: Electricity smoke bad cases show trend mismatch and late-horizon drift; a low-frequency phase-space correction may address drift without an unrestricted residual branch.
+  - H3 phase noise high-frequency damping: Weather has meteorological noise and Electricity has channel-specific volatility; high-frequency phase damping may help if volatile-input bad cases dominate.
+- Tooling:
+  - Extend `scripts/research_weather_weak.py` to accept `Electricity`, so Weather and Electricity can use the same capped pattern-covered bad-case export.
+  - Smoke command: `conda run --no-capture-output -n raft python scripts/research_weather_weak.py --dataset Electricity --variant baseline --horizon 96 --epochs 1 --percent 5 --batch-size 64 --num-workers 0 --bad-case-limit 8 --bad-case-batches 2 --run-id smoke_electricity96_research_script`.
+  - Smoke result: ran successfully and exported 8 pattern-covered bad cases. Because it used 5% data and 1 epoch, it is not a performance conclusion.
+- Initial bad-case review:
+  - Evidence: `research_runs/smoke_electricity96_research_script/bad_cases.csv`.
+  - Patterns include highest MSE, systematic bias, trend mismatch, peak underfit, valley overfit, volatility mismatch, late-horizon drift, and volatile input.
+  - Decision: start with phase-level calibration and low-frequency trend mechanisms rather than residual-only gates.
