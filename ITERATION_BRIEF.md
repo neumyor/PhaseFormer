@@ -163,3 +163,16 @@ Formal benchmark outcome:
   - Improvement: MAE -3.85%, MSE -5.82%. MSE satisfies the 5% target, but MAE does not.
   - Matched training baseline `weakphase3_iter12_ettm2_96_baseline_lr0003_mae_e30_seed2021` reaches only MAE 0.257416, MSE 0.168600, so the ETTm2 MSE gain is attributable to the phase-uncertainty mechanism family rather than MAE/LR alone.
   - Transfer check failed: the same phase-uncertainty + level-calibration structure worsened ETTh1 96 and ETTh2 96 MSE, so it must not be promoted as a unified ETT solution.
+
+## Dataset-Adaptive ETT Phase Framework Round - 2026-07-06
+
+- User request: allow dataset-specific method switches and partial parameter adjustment, but keep all variants under one common method framework, then iterate 50 more rounds to seek stable improvement over original PhaseFormer on all ETT datasets.
+- Interpretation:
+  - Dataset-level switches are now allowed, but same-dataset horizon-level opportunistic switching still requires evidence.
+  - The common framework remains weak-period phase adaptation: phase reliability/shrinkage, phase-level calibration, high-frequency damping, low-frequency trend response, and previously validated residual/adaptive branches only as submodules with bad-case justification.
+  - Target evidence must cover ETTh1, ETTh2, ETTm1, and ETTm2. Initial search uses horizon 96 as the low-cost representative, then expands.
+  - Bad case cap remains <= 10; this round uses 8.
+- Starting evidence:
+  - ETTh2 already has validated dataset-specific improvements in the formal latest policy for 96 and 720.
+  - ETTm2 96 has the strongest new phase-framework signal: `weakphase3_iter31_ettm2_96_phase_uncertainty_levelcalib_hifreq_min20_g02_s08_thr05_lr0003_mae_e30_seed2021`, MAE -3.85%, MSE -5.82%.
+  - ETTh1 and ETTm1 remain unsolved; their bad cases differ, so dataset-level switches are now allowed but must be justified by bad-case modes.

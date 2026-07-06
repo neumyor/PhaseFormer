@@ -197,6 +197,53 @@ def get_latest_overrides(dataset_name, horizon):
             loss_func="mae",
             use_huber_loss=False,
         )
+    if dataset_name == "ETTh1" and horizon == 96:
+        return dict(
+            scheme_name="latest_etth1_phase_uncertainty_level_calib",
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.35,
+            phase_uncertainty_trend_gate_init=0.05,
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.1,
+        )
+    if dataset_name == "ETTm1" and horizon == 96:
+        return dict(
+            scheme_name="latest_ettm1_phase_uncertainty_level_calib_hifreq_mae",
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.35,
+            phase_uncertainty_trend_gate_init=0.05,
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.1,
+            use_phase_noise_hifreq_damping=True,
+            phase_noise_hifreq_strength=0.8,
+            phase_noise_hifreq_threshold=0.5,
+            phase_noise_hifreq_window=7,
+            learning_rate=0.0003,
+            loss_func="mae",
+            use_huber_loss=False,
+        )
+    if dataset_name == "ETTm2" and horizon == 96:
+        return dict(
+            scheme_name="latest_ettm2_phase_uncertainty_level_calib_hifreq_mae",
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.2,
+            phase_uncertainty_trend_gate_init=0.05,
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.2,
+            use_phase_noise_hifreq_damping=True,
+            phase_noise_hifreq_strength=0.8,
+            phase_noise_hifreq_threshold=0.5,
+            phase_noise_hifreq_window=7,
+            learning_rate=0.0003,
+            loss_func="mae",
+            use_huber_loss=False,
+        )
     if dataset_name == "ETTh2" and horizon == 720:
         return dict(
             scheme_name="latest_etth2_residual_long",
@@ -310,6 +357,34 @@ class PhaseFormerPresetConfig:
         self.phase_level_calib_gate_init = hyperparams.get(
             "phase_level_calib_gate_init", 0.1
         )
+        self.use_phase_noise_hifreq_damping = hyperparams.get(
+            "use_phase_noise_hifreq_damping", False
+        )
+        self.phase_noise_hifreq_strength = hyperparams.get(
+            "phase_noise_hifreq_strength", 0.5
+        )
+        self.phase_noise_hifreq_threshold = hyperparams.get(
+            "phase_noise_hifreq_threshold", 1.0
+        )
+        self.phase_noise_hifreq_temperature = hyperparams.get(
+            "phase_noise_hifreq_temperature", 0.2
+        )
+        self.phase_noise_hifreq_window = hyperparams.get("phase_noise_hifreq_window", 7)
+        self.use_phase_reliability_damping = hyperparams.get(
+            "use_phase_reliability_damping", False
+        )
+        self.phase_reliability_min = hyperparams.get("phase_reliability_min", 0.35)
+        self.phase_reliability_noise_threshold = hyperparams.get(
+            "phase_reliability_noise_threshold", 0.0
+        )
+        self.phase_reliability_noise_temperature = hyperparams.get(
+            "phase_reliability_noise_temperature", 0.2
+        )
+        self.use_lowfreq_trend_correction = hyperparams.get(
+            "use_lowfreq_trend_correction", False
+        )
+        self.lowfreq_trend_window = hyperparams.get("lowfreq_trend_window", 25)
+        self.lowfreq_trend_gate_init = hyperparams.get("lowfreq_trend_gate_init", 0.05)
 
     def get(self, key, default=None):
         return getattr(self, key, default)

@@ -785,3 +785,56 @@
   - Stop condition reached because the round exceeded 30 iterations.
   - Best candidate improves ETTm2 96 MSE by more than 5% but fails the MAE target.
   - No candidate satisfies the requested MAE and MSE >5% improvement condition.
+
+## Dataset-Adaptive ETT Phase Framework Round - 2026-07-06 Start
+
+- New user request:
+  - Allow dataset-specific method switches and partial parameter adjustment.
+  - Keep the design inside one method framework.
+  - Iterate 50 more rounds to seek stable improvement over original PhaseFormer on all ETT datasets.
+- Framework definition:
+  - Shared family: weak-period phase adaptation.
+  - Allowed submodules: phase uncertainty shrinkage, phase-period level calibration, phase-noise high-frequency damping, low-frequency trend response, and previously validated adaptive/residual phase auxiliaries when bad-case evidence justifies them.
+  - Dataset-level switches are allowed; arbitrary horizon-level switching remains disallowed unless supported by bad-case/horizon evidence.
+- Starting baselines from formal ETT regression:
+  - ETTh1 96: MAE 0.388491, MSE 0.364891.
+  - ETTh2 96: MAE 0.343032, MSE 0.280557.
+  - ETTm1 96: MAE 0.347958, MSE 0.299526.
+  - ETTm2 96: MAE 0.258160, MSE 0.170091.
+- Initial plan:
+  - Use horizon 96 as the representative low-cost search surface.
+  - First target ETTh1 and ETTm1, because ETTh2 and ETTm2 already have positive dataset-specific signals.
+  - Keep bad case exports at 8 cases per key run.
+
+### Iterations 1-10: 96-Horizon Dataset-Adaptive Policy
+
+- Iteration 1, ETTh1 low-frequency trend:
+  - Run: `weakphase4_iter01_etth1_96_lowfreq_trend_w25_g005_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.388980, MSE 0.371957. Rejected because both metrics worsen.
+- Iterations 2-5, ETTh1 phase uncertainty + level calibration:
+  - `weakphase4_iter02_etth1_96_phase_uncertainty_min35_lr0003_mae_e30_seed2021`: MAE 0.391040, MSE 0.372763. Rejected.
+  - `weakphase4_iter03_etth1_96_phase_uncertainty_levelcalib_min35_g005_e30_seed2021`: MAE 0.386194, MSE 0.357419.
+  - `weakphase4_iter04_etth1_96_phase_uncertainty_levelcalib_min35_g01_e30_seed2021`: MAE 0.386066, MSE 0.357461.
+  - `weakphase4_iter05_etth1_96_phase_uncertainty_levelcalib_min35_g02_e30_seed2021`: MAE 0.386384, MSE 0.358014.
+  - Decision: ETTh1 needs original MSE/Huber training with mild phase-level calibration; gate 0.1 gives best MAE and remains MSE-positive.
+- Iterations 6-8, ETTm1 phase uncertainty + level calibration + high-frequency damping:
+  - `weakphase4_iter06_ettm1_96_phase_uncertainty_levelcalib_hifreq_min35_g01_s08_thr05_lr0003_mae_e30_seed2021`: MAE 0.339635, MSE 0.293330.
+  - `weakphase4_iter07_ettm1_96_phase_uncertainty_levelcalib_hifreq_min35_g02_s08_thr05_lr0003_mae_e30_seed2021`: MAE 0.339945, MSE 0.292920.
+  - `weakphase4_iter08_ettm1_96_phase_uncertainty_levelcalib_hifreq_min20_g01_s08_thr05_lr0003_mae_e30_seed2021`: MAE 0.339887, MSE 0.296120.
+  - Decision: ETTm1 differs from ETTm2; it needs weaker shrinkage `phase_uncertainty_min=0.35`. This dataset-level parameter difference is justified by MSE degradation under min=0.2.
+- Iteration 9, ETTh2 adaptive residual reproduction:
+  - Run: `weakphase4_iter09_etth2_96_adaptive_residual_g02_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.328264, MSE 0.266525.
+  - Decision: reproduces the prior validated ETTh2 96 improvement.
+- Iteration 10, ETTm2 phase uncertainty + level calibration + high-frequency damping reproduction:
+  - Run: `weakphase4_iter10_ettm2_96_phase_uncertainty_levelcalib_hifreq_min20_g02_s08_thr05_lr0003_mae_e30_seed2021`.
+  - Result: MAE 0.248220, MSE 0.160189.
+- Formal 96-horizon regression:
+  - Command: `conda run --no-capture-output -n raft python scripts/benchmark_phaseformer_suite.py --datasets ETTh1,ETTh2,ETTm1,ETTm2 --horizons 96 --modes original,latest --num-workers 0 --bad-case-limit 8 --bad-case-batches 8 --run-prefix phaseformer_ett96_dataset_adaptive_20260706 --resume`
+  - Evidence: `research_runs/phaseformer_ett96_dataset_adaptive_20260706_comparison.csv`.
+  - Result: all four ETT datasets improve in both metrics at horizon 96:
+    - ETTh1: MAE -0.62%, MSE -2.04%.
+    - ETTh2: MAE -4.31%, MSE -5.00%.
+    - ETTm1: MAE -2.39%, MSE -2.07%.
+    - ETTm2: MAE -3.85%, MSE -5.82%.
+  - Decision: promote the 96-horizon dataset-adaptive phase framework to `src/models/phaseformer_presets.py` for formal latest-mode testing. Next step is multi-horizon expansion.
