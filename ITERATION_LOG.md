@@ -974,3 +974,71 @@
   - Run: `weakphase5_iter24_weather96_p8_baseline_lr001_huber_b64_e30_seed2021`.
   - Result: MAE 0.194543, MSE 0.148216. Worse than period_len 12 candidates and below the 3% target.
   - Current status: no Weather/Electricity candidate has met the 3% dual-metric exit condition. Best Weather MAE candidate remains iteration 1; best Weather MSE candidate remains iteration 19/3 around MSE 0.14610. Best Electricity full candidates are still worse than baseline.
+
+### Iterations 25-32: Weather Long-Horizon And Shape-Amplitude Screening
+
+- Iterations 25-26, Weather192 full validation:
+  - `weakphase5_iter25_weather192_p12_uncert_levelcalib_hifreq_min35_g01_s08_thr05_lr0003_mae_b64_e30_seed2021`: MAE 0.233732, MSE 0.193499 versus formal baseline MAE 0.237761, MSE 0.193425. MAE improved, MSE did not.
+  - `weakphase5_iter26_weather192_p12_uncert_levelcalib_min35_g01_lr001_huber_b64_e30_seed2021`: MAE 0.238740, MSE 0.191223. MSE improved, MAE regressed.
+  - Decision: same MAE/MSE target conflict as Weather96; no 3% dual-metric gain.
+- Iterations 27-32, Weather720 percent30 screening:
+  - Baseline `weakphase5_iter27_weather720_baseline_percent30_e10_b64_seed2021`: MAE 0.347295, MSE 0.329238.
+  - Adaptive residual gate 0.5: MAE 0.339083, MSE 0.322458.
+  - Adaptive residual gate 0.8: MAE 0.336521, MSE 0.320746; subset MAE improved over 3%, MSE improved about 2.58%, below target.
+  - Adaptive residual gate 0.95: MAE 0.339751, MSE 0.325223; worse than gate 0.8.
+  - Low-frequency trend: MAE 0.352763, MSE 0.331685; rejected.
+  - Adaptive smooth residual: MAE 0.339333, MSE 0.325140; smoothing removed useful event variation.
+  - Bad-case decision: Weather720 errors still include `raining (s)` sparse peaks and humidity late drift; residual helps subset level drift but does not sufficiently reduce squared peak errors.
+
+### Iterations 33-43: Weather336/Weather96 Mechanism Review
+
+- Iteration 33, Weather336 percent30 baseline:
+  - `weakphase5_iter33_weather336_baseline_percent30_e10_b64_seed2021`: MAE 0.289840, MSE 0.251908.
+  - Bad cases, capped at 8, were dominated by `rh (%)` systematic bias/late drift and `raining (s)` peak underfit/volatility mismatch.
+- Iteration 34, Weather336 adaptive residual:
+  - `weakphase5_iter34_weather336_adaptive_residual_g08_lr001_huber_percent30_e10_b64_seed2021`: MAE 0.290562, MSE 0.254408.
+  - Bad-case review: `rh (%)` late MSE increased, so the residual branch amplified uncertain long-horizon humidity drift. Rejected.
+- Iteration 35, Weather336 phase uncertainty + level calibration + high-frequency damping:
+  - `weakphase5_iter35_weather336_p12_uncert_levelcalib_hifreq_min35_g01_s08_thr05_lr0003_mae_percent30_e10_b64_seed2021`: MAE 0.298482, MSE 0.258386.
+  - Decision: p12 uncertainty calibration does not transfer to Weather336; rejected.
+- Iteration 36, Weather96 lower reliability floor with Huber:
+  - `weakphase5_iter36_weather96_p12_uncert_levelcalib_hifreq_min20_g01_s05_thr07_lr001_huber05_b64_e30_seed2021`: MAE 0.190758, MSE 0.146940.
+  - Versus formal Weather96 baseline MAE 0.195908, MSE 0.149202: MAE -2.63%, MSE -1.52%, below 3%.
+- New mechanism for iterations 37-38:
+  - Added default-off `PhaseSparseEventCalibration`.
+  - Theory: for weak-period sparse events, the phase router can predict a reasonable period mean while flattening rare positive excursions. The module estimates a recent same-phase positive event envelope and reallocates forecast mass toward historically active phase slots while subtracting the mean correction, so it is not an unrestricted residual shortcut.
+  - Code: `src/models/PhaseFormer.py`, `scripts/research_weather_weak.py`, and `src/models/phaseformer_presets.py`.
+- Iteration 37, sparse-event calibration with MAE setup:
+  - `weakphase5_iter37_weather96_p12_uncert_levelcalib_hifreq_sparseevent_g01_boost10_lr0003_mae_b64_e30_seed2021`: MAE 0.188815, MSE 0.147518.
+  - Bad-case review: `raining (s)` peak_under remained around 5.26-5.53 in the top cases, nearly unchanged from iteration 1. Mechanism was too conservative under MAE training.
+- Iteration 38, sparse-event calibration with Huber/MSE setup:
+  - `weakphase5_iter38_weather96_p12_uncert_levelcalib_hifreq_sparseevent_g03_boost20_temp015_lr001_huber_b64_e30_seed2021`: MAE 0.192145, MSE 0.146199.
+  - Decision: improves MSE similarly to iteration 2 but loses MAE; sparse-event calibration in this form does not break the Weather96 MAE/MSE tradeoff.
+- Iterations 39-41, Weather96 phase granularity check:
+  - p6 candidate: MAE 0.210530, MSE 0.166546.
+  - p18 candidate: MAE 0.204908, MSE 0.159187.
+  - p12 percent30 baseline: MAE 0.205154, MSE 0.156691.
+  - Decision: p6 and p18 are worse than p12 baseline; phase length mismatch is not the main cause.
+- Iteration 42, Weather96 period-level detrending:
+  - `weakphase5_iter42_weather96_p12_leveldetrend_uncert_hifreq_min35_slopeg01_s08_thr05_lr0003_mae_percent30_e10_b64_seed2021`: MAE 0.264514, MSE 0.250644.
+  - Decision: removing period means destroys useful Weather phase shape; rejected.
+- Iteration 43, Weather96 phase reliability damping:
+  - `weakphase5_iter43_weather96_p12_phase_reliability_min60_thr05_lr001_huber_percent30_e10_b64_seed2021`: MAE 0.207820, MSE 0.157533 versus p12 percent30 baseline MAE 0.205154, MSE 0.156691.
+  - Decision: last-value damping hurts overall shape and does not solve sparse-event peaks.
+
+### Iterations 44-50: Electricity Mid-Horizon Residual Transfer Test
+
+- Iterations 44-46, Electricity192:
+  - Percent30 baseline `weakphase5_iter44_electricity192_baseline_percent30_e10_b64_seed2021`: MAE 0.259585, MSE 0.167287.
+  - Percent30 adaptive residual `weakphase5_iter45_electricity192_adaptive_residual_g05_lr001_huber_percent30_e10_b64_seed2021`: MAE 0.248693 (-4.20%), MSE 0.153304 (-8.36%).
+  - Full validation `weakphase5_iter46_electricity192_adaptive_residual_g05_lr001_huber_b64_e30_seed2021`: MAE 0.238870, MSE 0.146513 versus formal baseline MAE 0.236785, MSE 0.146055. Full run regressed slightly.
+  - Decision: subset signal does not transfer to full Electricity192.
+- Iterations 47-50, Electricity336:
+  - Percent30 baseline `weakphase5_iter47_electricity336_baseline_percent30_e10_b64_seed2021`: MAE 0.282503, MSE 0.193902.
+  - Percent30 adaptive residual `weakphase5_iter48_electricity336_adaptive_residual_g05_lr001_huber_percent30_e10_b64_seed2021`: MAE 0.268538 (-4.94%), MSE 0.173022 (-10.77%).
+  - Full Huber validation `weakphase5_iter49_electricity336_adaptive_residual_g05_lr001_huber_b64_e30_seed2021`: MAE 0.254882, MSE 0.161445 versus formal baseline MAE 0.258984, MSE 0.166970. MSE improved -3.31%, but MAE only -1.58%.
+  - Full MAE validation `weakphase5_iter50_electricity336_adaptive_residual_g05_lr0003_mae_b64_e30_seed2021`: MAE 0.253051, MSE 0.162895. MAE improved -2.29%, MSE -2.44%; both remain below the 3% dual-metric target.
+  - Bad-case review for full runs, capped at 8 cases each:
+    - Iteration 49 top failures concentrated on channels 115, 128, 106, 113, and 287 with systematic bias, peak underfit, volatility mismatch, and late-horizon drift.
+    - Iteration 50 reduced some bias cases, for example channel 128, but highest-MSE/volatility cases shifted to channel 113 and late drift on channel 287 remained. The MAE objective trades off the MSE gain instead of solving both.
+  - Decision: adaptive residual has useful mid-horizon Electricity signal, but it is not sufficient as a dataset-level weak-period phase adaptation. The Weather/Electricity round stops at the user-specified 50-iteration cap without reaching the 3% dual-metric exit condition.

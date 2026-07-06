@@ -423,6 +423,52 @@ class PhaseShapeAmplitudeCalibration(nn.Module):
         return calibrated.permute(0, 1, 3, 2).contiguous()
 
 
+class PhaseSparseEventCalibration(nn.Module):
+    """Restore sparse positive phase events without adding a sequence residual.
+
+    Weather bad cases often have weakly periodic sparse peaks: the period mean is
+    reasonable, but the forecast flattens rare positive excursions. This module
+    estimates a recent phase-slot event envelope and only reallocates forecast
+    mass toward historically active phase slots when the predicted positive
+    excursion is too small.
+    """
+
+    def __init__(
+        self,
+        enc_in: int,
+        window: int = 3,
+        gate_init: float = 0.05,
+        max_boost: float = 1.0,
+        temperature: float = 0.2,
+    ):
+        super().__init__()
+        self.window = max(1, int(window))
+        self.max_boost = max(float(max_boost), 0.0)
+        self.temperature = max(float(temperature), 1e-4)
+        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
+        gate_logit = torch.logit(torch.tensor(gate_init))
+        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
+
+    def forward(self, y_phase_steps, phase_series):  # (B,C,L,P_out), (B,C,L,P_in)
+        recent_periods = phase_series.permute(0, 1, 3, 2).contiguous()
+        recent = recent_periods[:, :, -min(self.window, recent_periods.size(2)) :, :]
+        recent_centered = recent - recent.mean(dim=-1, keepdim=True)
+        event_template = recent_centered.clamp_min(0.0).mean(dim=2)
+        event_peak = event_template.amax(dim=-1, keepdim=True).unsqueeze(-1)
+
+        y_periods = y_phase_steps.permute(0, 1, 3, 2).contiguous()
+        pred_mean = y_periods.mean(dim=-1, keepdim=True)
+        pred_centered = y_periods - pred_mean
+        pred_peak = pred_centered.clamp_min(0.0).amax(dim=-1, keepdim=True)
+
+        gap = (event_peak - pred_peak).clamp(min=0.0, max=self.max_boost)
+        weights = torch.softmax(event_template / self.temperature, dim=-1).unsqueeze(2)
+        correction = gap * weights
+        correction = correction - correction.mean(dim=-1, keepdim=True)
+        calibrated = y_periods + torch.sigmoid(self.gate) * correction
+        return calibrated.permute(0, 1, 3, 2).contiguous()
+
+
 class PhaseReliabilityDamping(nn.Module):
     """Shrink forecast amplitude when historical phase alignment is unreliable.
 
@@ -1032,6 +1078,18 @@ class PhaseFormer(DefaultPLModule):
                 max_scale=getattr(configs, "phase_shape_amp_max_scale", 1.5),
             )
 
+        self.use_phase_sparse_event_calibration = getattr(
+            configs, "use_phase_sparse_event_calibration", False
+        )
+        if self.use_phase_sparse_event_calibration:
+            self.phase_sparse_event_calibration = PhaseSparseEventCalibration(
+                enc_in=self.enc_in,
+                window=getattr(configs, "phase_sparse_event_window", 3),
+                gate_init=getattr(configs, "phase_sparse_event_gate_init", 0.05),
+                max_boost=getattr(configs, "phase_sparse_event_max_boost", 1.0),
+                temperature=getattr(configs, "phase_sparse_event_temperature", 0.2),
+            )
+
         self.use_phase_reliability_damping = getattr(
             configs, "use_phase_reliability_damping", False
         )
@@ -1213,6 +1271,8 @@ class PhaseFormer(DefaultPLModule):
             y_phase_steps = self.phase_period_level_calibration(y_phase_steps, phase_series)
         if self.use_phase_shape_amplitude_calibration:
             y_phase_steps = self.phase_shape_amplitude_calibration(y_phase_steps, phase_series)
+        if self.use_phase_sparse_event_calibration:
+            y_phase_steps = self.phase_sparse_event_calibration(y_phase_steps, phase_series)
 
         # 9) Reassemble to sequence (B, pred_len, C)
         y_periods = self._from_phase_steps_to_periods(y_phase_steps)  # (B, C, P_out, L)

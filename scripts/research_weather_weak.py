@@ -161,6 +161,10 @@ class PhaseFormerConfig:
         phase_shape_amp_window,
         phase_shape_amp_gate_init,
         phase_shape_amp_max_scale,
+        phase_sparse_event_window,
+        phase_sparse_event_gate_init,
+        phase_sparse_event_max_boost,
+        phase_sparse_event_temperature,
         lowfreq_trend_window,
         lowfreq_trend_gate_init,
     ):
@@ -271,6 +275,8 @@ class PhaseFormerConfig:
             "phase_uncertainty_level_calib_hifreq",
             "phase_uncertainty_level_calib_shape_amp",
             "phase_uncertainty_level_calib_hifreq_shape_amp",
+            "phase_uncertainty_level_calib_sparse_event",
+            "phase_uncertainty_level_calib_hifreq_sparse_event",
         ]
         self.phase_level_slope_window = phase_level_slope_window
         self.phase_level_slope_gate_init = phase_level_slope_gate_init
@@ -288,6 +294,9 @@ class PhaseFormerConfig:
             "phase_uncertainty_shape_amp",
             "phase_uncertainty_level_calib_shape_amp",
             "phase_uncertainty_level_calib_hifreq_shape_amp",
+            "phase_uncertainty_sparse_event",
+            "phase_uncertainty_level_calib_sparse_event",
+            "phase_uncertainty_level_calib_hifreq_sparse_event",
         ]
         self.phase_uncertainty_min = phase_uncertainty_min
         self.phase_uncertainty_trend_gate_init = phase_uncertainty_trend_gate_init
@@ -308,6 +317,7 @@ class PhaseFormerConfig:
             "phase_level_uncertainty_hifreq",
             "phase_uncertainty_level_calib_hifreq",
             "phase_uncertainty_level_calib_hifreq_shape_amp",
+            "phase_uncertainty_level_calib_hifreq_sparse_event",
         ]
         self.phase_noise_hifreq_strength = phase_noise_hifreq_strength
         self.phase_noise_hifreq_threshold = phase_noise_hifreq_threshold
@@ -322,6 +332,16 @@ class PhaseFormerConfig:
         self.phase_shape_amp_window = phase_shape_amp_window
         self.phase_shape_amp_gate_init = phase_shape_amp_gate_init
         self.phase_shape_amp_max_scale = phase_shape_amp_max_scale
+        self.use_phase_sparse_event_calibration = variant in [
+            "phase_sparse_event",
+            "phase_uncertainty_sparse_event",
+            "phase_uncertainty_level_calib_sparse_event",
+            "phase_uncertainty_level_calib_hifreq_sparse_event",
+        ]
+        self.phase_sparse_event_window = phase_sparse_event_window
+        self.phase_sparse_event_gate_init = phase_sparse_event_gate_init
+        self.phase_sparse_event_max_boost = phase_sparse_event_max_boost
+        self.phase_sparse_event_temperature = phase_sparse_event_temperature
         self.use_lowfreq_trend_correction = variant in [
             "lowfreq_trend",
             "lowfreq_trend_residual",
@@ -640,11 +660,14 @@ def main():
             "phase_uncertainty_level_calib_hifreq",
             "phase_uncertainty_level_calib_shape_amp",
             "phase_uncertainty_level_calib_hifreq_shape_amp",
+            "phase_uncertainty_level_calib_sparse_event",
+            "phase_uncertainty_level_calib_hifreq_sparse_event",
             "phase_uncertainty",
             "phase_uncertainty_residual",
             "phase_uncertainty_smooth_residual",
             "phase_uncertainty_hifreq",
             "phase_uncertainty_shape_amp",
+            "phase_uncertainty_sparse_event",
             "phase_reliability",
             "phase_reliability_residual",
             "phase_reliability_smooth_residual",
@@ -652,6 +675,7 @@ def main():
             "phase_hifreq_residual",
             "phase_hifreq_smooth_residual",
             "phase_shape_amp",
+            "phase_sparse_event",
             "lowfreq_trend",
             "lowfreq_trend_residual",
             "lowfreq_trend_smooth_residual",
@@ -679,6 +703,10 @@ def main():
     parser.add_argument("--phase-shape-amp-window", type=int, default=3)
     parser.add_argument("--phase-shape-amp-gate-init", type=float, default=0.05)
     parser.add_argument("--phase-shape-amp-max-scale", type=float, default=1.5)
+    parser.add_argument("--phase-sparse-event-window", type=int, default=3)
+    parser.add_argument("--phase-sparse-event-gate-init", type=float, default=0.05)
+    parser.add_argument("--phase-sparse-event-max-boost", type=float, default=1.0)
+    parser.add_argument("--phase-sparse-event-temperature", type=float, default=0.2)
     parser.add_argument("--lowfreq-trend-window", type=int, default=25)
     parser.add_argument("--lowfreq-trend-gate-init", type=float, default=0.05)
     parser.add_argument("--run-id", default=None)
@@ -768,6 +796,10 @@ def main():
         args.phase_shape_amp_window,
         args.phase_shape_amp_gate_init,
         args.phase_shape_amp_max_scale,
+        args.phase_sparse_event_window,
+        args.phase_sparse_event_gate_init,
+        args.phase_sparse_event_max_boost,
+        args.phase_sparse_event_temperature,
         args.lowfreq_trend_window,
         args.lowfreq_trend_gate_init,
     )
@@ -822,6 +854,11 @@ def main():
             "phase_shape_amp_window": model_config.phase_shape_amp_window,
             "phase_shape_amp_gate_init": model_config.phase_shape_amp_gate_init,
             "phase_shape_amp_max_scale": model_config.phase_shape_amp_max_scale,
+            "use_phase_sparse_event_calibration": model_config.use_phase_sparse_event_calibration,
+            "phase_sparse_event_window": model_config.phase_sparse_event_window,
+            "phase_sparse_event_gate_init": model_config.phase_sparse_event_gate_init,
+            "phase_sparse_event_max_boost": model_config.phase_sparse_event_max_boost,
+            "phase_sparse_event_temperature": model_config.phase_sparse_event_temperature,
             "use_lowfreq_trend_correction": model_config.use_lowfreq_trend_correction,
             "lowfreq_trend_window": model_config.lowfreq_trend_window,
             "lowfreq_trend_gate_init": model_config.lowfreq_trend_gate_init,

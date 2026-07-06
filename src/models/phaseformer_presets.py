@@ -527,6 +527,19 @@ class PhaseFormerPresetConfig:
         self.phase_shape_amp_window = hyperparams.get("phase_shape_amp_window", 3)
         self.phase_shape_amp_gate_init = hyperparams.get("phase_shape_amp_gate_init", 0.05)
         self.phase_shape_amp_max_scale = hyperparams.get("phase_shape_amp_max_scale", 1.5)
+        self.use_phase_sparse_event_calibration = hyperparams.get(
+            "use_phase_sparse_event_calibration", False
+        )
+        self.phase_sparse_event_window = hyperparams.get("phase_sparse_event_window", 3)
+        self.phase_sparse_event_gate_init = hyperparams.get(
+            "phase_sparse_event_gate_init", 0.05
+        )
+        self.phase_sparse_event_max_boost = hyperparams.get(
+            "phase_sparse_event_max_boost", 1.0
+        )
+        self.phase_sparse_event_temperature = hyperparams.get(
+            "phase_sparse_event_temperature", 0.2
+        )
         self.use_phase_reliability_damping = hyperparams.get(
             "use_phase_reliability_damping", False
         )
