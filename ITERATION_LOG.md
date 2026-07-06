@@ -1042,3 +1042,12 @@
     - Iteration 49 top failures concentrated on channels 115, 128, 106, 113, and 287 with systematic bias, peak underfit, volatility mismatch, and late-horizon drift.
     - Iteration 50 reduced some bias cases, for example channel 128, but highest-MSE/volatility cases shifted to channel 113 and late drift on channel 287 remained. The MAE objective trades off the MSE gain instead of solving both.
   - Decision: adaptive residual has useful mid-horizon Electricity signal, but it is not sufficient as a dataset-level weak-period phase adaptation. The Weather/Electricity round stops at the user-specified 50-iteration cap without reaching the 3% dual-metric exit condition.
+
+### Deployment To Dataset Runners
+
+- User accepted the current improvement level and requested writing the corresponding settings into the `run_*.py` scripts.
+- Updated latest preset policy:
+  - Weather 96 uses `latest_weather96_phase_uncert_level_hifreq_sparse_event_mae`: period_len 12, phase uncertainty shrinkage, phase period-level calibration, high-frequency damping, sparse-event phase calibration, MAE loss, LR 0.0003, batch size 64.
+  - Electricity 336 uses `latest_electricity336_adaptive_residual_mae`: adaptive weak-period residual gate initialized at 0.5, MAE loss, LR 0.0003, batch size 64.
+  - Other Weather/Electricity horizons remain `latest_original_guardrail` because full-data evidence did not support promoting their screened candidates.
+- Updated `run_weather.py` and `run_electricity.py` to use the same preset-backed runner as the ETT scripts, so `python run_weather.py` and `python run_electricity.py` default to `--mode latest` and can still run `--mode original` for regression comparison.

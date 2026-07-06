@@ -187,6 +187,42 @@ def get_latest_overrides(dataset_name, horizon):
             loss_func="mae",
             use_huber_loss=False,
         )
+    if dataset_name == "Weather" and horizon == 96:
+        return dict(
+            scheme_name="latest_weather96_phase_uncert_level_hifreq_sparse_event_mae",
+            period_len=12,
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.35,
+            phase_uncertainty_trend_gate_init=0.05,
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.1,
+            use_phase_noise_hifreq_damping=True,
+            phase_noise_hifreq_strength=0.8,
+            phase_noise_hifreq_threshold=0.5,
+            phase_noise_hifreq_window=7,
+            use_phase_sparse_event_calibration=True,
+            phase_sparse_event_window=3,
+            phase_sparse_event_gate_init=0.1,
+            phase_sparse_event_max_boost=1.0,
+            phase_sparse_event_temperature=0.2,
+            learning_rate=0.0003,
+            loss_func="mae",
+            use_huber_loss=False,
+            batch_size=64,
+        )
+    if dataset_name == "Electricity" and horizon == 336:
+        return dict(
+            scheme_name="latest_electricity336_adaptive_residual_mae",
+            use_weak_period_residual=True,
+            use_adaptive_weak_period_gate=True,
+            weak_period_residual_gate_init=0.5,
+            learning_rate=0.0003,
+            loss_func="mae",
+            use_huber_loss=False,
+            batch_size=64,
+        )
     if dataset_name == "ETTh2" and horizon == 96:
         return dict(
             scheme_name="latest_etth2_adaptive_residual_mae",
@@ -419,7 +455,9 @@ def make_exp_args(dataset_name, lookback, horizon, hyperparams, batch_size=None)
     exp_args.training_args.use_huber_loss = hyperparams.get("use_huber_loss", True)
     exp_args.training_args.huber_delta = hyperparams.get("huber_delta", 1.0)
     exp_args.training_args.learning_rate = hyperparams["learning_rate"]
-    exp_args.training_args.batch_size = batch_size or DATASET_INFO[dataset_name]["batch_size"]
+    exp_args.training_args.batch_size = (
+        batch_size or hyperparams.get("batch_size") or DATASET_INFO[dataset_name]["batch_size"]
+    )
 
     exp_args.dataset_args.percent = 100
     exp_args.dataset_args.data = DATASET_INFO[dataset_name]["data"]
