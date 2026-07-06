@@ -386,6 +386,43 @@ class PhasePeriodLevelCalibration(nn.Module):
         return y_phase_steps + torch.sigmoid(self.level_gate) * correction
 
 
+class PhaseShapeAmplitudeCalibration(nn.Module):
+    """Restore underfit within-period phase amplitude from recent periods.
+
+    Weak-period sparse events can make the phase router predict the right level
+    but a flattened phase shape. This module preserves each forecast period's
+    mean and only expands deviations across phase slots when the predicted shape
+    amplitude is below the recent input-period amplitude.
+    """
+
+    def __init__(
+        self,
+        enc_in: int,
+        window: int = 3,
+        gate_init: float = 0.05,
+        max_scale: float = 1.5,
+    ):
+        super().__init__()
+        self.window = max(1, int(window))
+        self.max_extra = max(float(max_scale) - 1.0, 0.0)
+        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
+        gate_logit = torch.logit(torch.tensor(gate_init))
+        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
+
+    def forward(self, y_phase_steps, phase_series):  # (B,C,L,P_out), (B,C,L,P_in)
+        recent_periods = phase_series.permute(0, 1, 3, 2).contiguous()
+        recent = recent_periods[:, :, -min(self.window, recent_periods.size(2)) :, :]
+        recent_amp = recent.std(dim=-1, unbiased=False).mean(dim=2, keepdim=True).unsqueeze(-1)
+
+        y_periods = y_phase_steps.permute(0, 1, 3, 2).contiguous()
+        pred_mean = y_periods.mean(dim=-1, keepdim=True)
+        pred_amp = y_periods.std(dim=-1, unbiased=False, keepdim=True)
+        extra = (recent_amp / (pred_amp + 1e-6) - 1.0).clamp(min=0.0, max=self.max_extra)
+        scale = 1.0 + torch.sigmoid(self.gate) * extra
+        calibrated = pred_mean + scale * (y_periods - pred_mean)
+        return calibrated.permute(0, 1, 3, 2).contiguous()
+
+
 class PhaseReliabilityDamping(nn.Module):
     """Shrink forecast amplitude when historical phase alignment is unreliable.
 
@@ -984,6 +1021,17 @@ class PhaseFormer(DefaultPLModule):
                 slope_gate_init=getattr(configs, "phase_level_slope_gate_init", 0.05),
             )
 
+        self.use_phase_shape_amplitude_calibration = getattr(
+            configs, "use_phase_shape_amplitude_calibration", False
+        )
+        if self.use_phase_shape_amplitude_calibration:
+            self.phase_shape_amplitude_calibration = PhaseShapeAmplitudeCalibration(
+                enc_in=self.enc_in,
+                window=getattr(configs, "phase_shape_amp_window", 3),
+                gate_init=getattr(configs, "phase_shape_amp_gate_init", 0.05),
+                max_scale=getattr(configs, "phase_shape_amp_max_scale", 1.5),
+            )
+
         self.use_phase_reliability_damping = getattr(
             configs, "use_phase_reliability_damping", False
         )
@@ -1163,6 +1211,8 @@ class PhaseFormer(DefaultPLModule):
             y_phase_steps = y_phase_steps + level_forecast
         if self.use_phase_period_level_calibration:
             y_phase_steps = self.phase_period_level_calibration(y_phase_steps, phase_series)
+        if self.use_phase_shape_amplitude_calibration:
+            y_phase_steps = self.phase_shape_amplitude_calibration(y_phase_steps, phase_series)
 
         # 9) Reassemble to sequence (B, pred_len, C)
         y_periods = self._from_phase_steps_to_periods(y_phase_steps)  # (B, C, P_out, L)

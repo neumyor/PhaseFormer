@@ -158,6 +158,9 @@ class PhaseFormerConfig:
         phase_noise_hifreq_threshold,
         phase_noise_hifreq_temperature,
         phase_noise_hifreq_window,
+        phase_shape_amp_window,
+        phase_shape_amp_gate_init,
+        phase_shape_amp_max_scale,
         lowfreq_trend_window,
         lowfreq_trend_gate_init,
     ):
@@ -266,6 +269,8 @@ class PhaseFormerConfig:
             "phase_level_calib",
             "phase_uncertainty_level_calib",
             "phase_uncertainty_level_calib_hifreq",
+            "phase_uncertainty_level_calib_shape_amp",
+            "phase_uncertainty_level_calib_hifreq_shape_amp",
         ]
         self.phase_level_slope_window = phase_level_slope_window
         self.phase_level_slope_gate_init = phase_level_slope_gate_init
@@ -280,6 +285,9 @@ class PhaseFormerConfig:
             "phase_level_uncertainty_hifreq",
             "phase_uncertainty_level_calib",
             "phase_uncertainty_level_calib_hifreq",
+            "phase_uncertainty_shape_amp",
+            "phase_uncertainty_level_calib_shape_amp",
+            "phase_uncertainty_level_calib_hifreq_shape_amp",
         ]
         self.phase_uncertainty_min = phase_uncertainty_min
         self.phase_uncertainty_trend_gate_init = phase_uncertainty_trend_gate_init
@@ -299,11 +307,21 @@ class PhaseFormerConfig:
             "phase_level_hifreq",
             "phase_level_uncertainty_hifreq",
             "phase_uncertainty_level_calib_hifreq",
+            "phase_uncertainty_level_calib_hifreq_shape_amp",
         ]
         self.phase_noise_hifreq_strength = phase_noise_hifreq_strength
         self.phase_noise_hifreq_threshold = phase_noise_hifreq_threshold
         self.phase_noise_hifreq_temperature = phase_noise_hifreq_temperature
         self.phase_noise_hifreq_window = phase_noise_hifreq_window
+        self.use_phase_shape_amplitude_calibration = variant in [
+            "phase_shape_amp",
+            "phase_uncertainty_shape_amp",
+            "phase_uncertainty_level_calib_shape_amp",
+            "phase_uncertainty_level_calib_hifreq_shape_amp",
+        ]
+        self.phase_shape_amp_window = phase_shape_amp_window
+        self.phase_shape_amp_gate_init = phase_shape_amp_gate_init
+        self.phase_shape_amp_max_scale = phase_shape_amp_max_scale
         self.use_lowfreq_trend_correction = variant in [
             "lowfreq_trend",
             "lowfreq_trend_residual",
@@ -620,16 +638,20 @@ def main():
             "phase_level_calib",
             "phase_uncertainty_level_calib",
             "phase_uncertainty_level_calib_hifreq",
+            "phase_uncertainty_level_calib_shape_amp",
+            "phase_uncertainty_level_calib_hifreq_shape_amp",
             "phase_uncertainty",
             "phase_uncertainty_residual",
             "phase_uncertainty_smooth_residual",
             "phase_uncertainty_hifreq",
+            "phase_uncertainty_shape_amp",
             "phase_reliability",
             "phase_reliability_residual",
             "phase_reliability_smooth_residual",
             "phase_hifreq",
             "phase_hifreq_residual",
             "phase_hifreq_smooth_residual",
+            "phase_shape_amp",
             "lowfreq_trend",
             "lowfreq_trend_residual",
             "lowfreq_trend_smooth_residual",
@@ -654,6 +676,9 @@ def main():
     parser.add_argument("--phase-noise-hifreq-threshold", type=float, default=1.0)
     parser.add_argument("--phase-noise-hifreq-temperature", type=float, default=0.2)
     parser.add_argument("--phase-noise-hifreq-window", type=int, default=7)
+    parser.add_argument("--phase-shape-amp-window", type=int, default=3)
+    parser.add_argument("--phase-shape-amp-gate-init", type=float, default=0.05)
+    parser.add_argument("--phase-shape-amp-max-scale", type=float, default=1.5)
     parser.add_argument("--lowfreq-trend-window", type=int, default=25)
     parser.add_argument("--lowfreq-trend-gate-init", type=float, default=0.05)
     parser.add_argument("--run-id", default=None)
@@ -740,6 +765,9 @@ def main():
         args.phase_noise_hifreq_threshold,
         args.phase_noise_hifreq_temperature,
         args.phase_noise_hifreq_window,
+        args.phase_shape_amp_window,
+        args.phase_shape_amp_gate_init,
+        args.phase_shape_amp_max_scale,
         args.lowfreq_trend_window,
         args.lowfreq_trend_gate_init,
     )
@@ -790,6 +818,10 @@ def main():
             "phase_noise_hifreq_threshold": model_config.phase_noise_hifreq_threshold,
             "phase_noise_hifreq_temperature": model_config.phase_noise_hifreq_temperature,
             "phase_noise_hifreq_window": model_config.phase_noise_hifreq_window,
+            "use_phase_shape_amplitude_calibration": model_config.use_phase_shape_amplitude_calibration,
+            "phase_shape_amp_window": model_config.phase_shape_amp_window,
+            "phase_shape_amp_gate_init": model_config.phase_shape_amp_gate_init,
+            "phase_shape_amp_max_scale": model_config.phase_shape_amp_max_scale,
             "use_lowfreq_trend_correction": model_config.use_lowfreq_trend_correction,
             "lowfreq_trend_window": model_config.lowfreq_trend_window,
             "lowfreq_trend_gate_init": model_config.lowfreq_trend_gate_init,

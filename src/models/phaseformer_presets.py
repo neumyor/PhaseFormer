@@ -521,6 +521,12 @@ class PhaseFormerPresetConfig:
             "phase_noise_hifreq_temperature", 0.2
         )
         self.phase_noise_hifreq_window = hyperparams.get("phase_noise_hifreq_window", 7)
+        self.use_phase_shape_amplitude_calibration = hyperparams.get(
+            "use_phase_shape_amplitude_calibration", False
+        )
+        self.phase_shape_amp_window = hyperparams.get("phase_shape_amp_window", 3)
+        self.phase_shape_amp_gate_init = hyperparams.get("phase_shape_amp_gate_init", 0.05)
+        self.phase_shape_amp_max_scale = hyperparams.get("phase_shape_amp_max_scale", 1.5)
         self.use_phase_reliability_damping = hyperparams.get(
             "use_phase_reliability_damping", False
         )

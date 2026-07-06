@@ -916,3 +916,61 @@
   - Evidence: `research_runs/smoke_electricity96_research_script/bad_cases.csv`.
   - Patterns include highest MSE, systematic bias, trend mismatch, peak underfit, valley overfit, volatility mismatch, late-horizon drift, and volatile input.
   - Decision: start with phase-level calibration and low-frequency trend mechanisms rather than residual-only gates.
+
+### Iterations 1-6: Weather Positive Signal, Electricity Full-Cost Rejections
+
+- Iteration 1, Weather phase uncertainty + level calibration + high-frequency damping:
+  - Run: `weakphase5_iter01_weather96_p12_uncert_levelcalib_hifreq_min35_g01_s08_thr05_lr0003_mae_b64_e30_seed2021`.
+  - Result versus formal Weather 96 baseline MAE 0.195908, MSE 0.149202: MAE 0.188897 (-3.58%), MSE 0.147550 (-1.11%).
+  - Bad-case review: MSE-heavy failures concentrate on `raining (s)` peak underfit, volatility mismatch, and late-horizon drift, so the MAE-oriented setup is not enough for squared error.
+  - Decision: keep as best Weather MAE candidate, but continue because MSE misses the 3% target.
+- Iteration 2, Weather same mechanism with MSE/Huber:
+  - Run: `weakphase5_iter02_weather96_p12_uncert_levelcalib_hifreq_min35_g01_s08_thr05_lr001_huber_b64_e30_seed2021`.
+  - Result: MAE 0.192209 (-1.89%), MSE 0.146194 (-2.02%).
+  - Decision: MSE improves but MAE loses the 3% gain.
+- Iteration 3, Weather remove high-frequency damping:
+  - Run: `weakphase5_iter03_weather96_p12_uncert_levelcalib_min35_g01_lr001_huber_b64_e30_seed2021`.
+  - Result: MAE 0.192048 (-1.97%), MSE 0.146115 (-2.07%).
+  - Decision: high-frequency damping is not the main MSE bottleneck; removing it only marginally helps.
+- Iteration 4, Electricity phase uncertainty + level calibration:
+  - Run: `weakphase5_iter04_electricity96_uncert_levelcalib_min35_g01_lr002_huber_b64_e30_seed2021`.
+  - Result versus formal Electricity 96 baseline MAE 0.220274, MSE 0.128806: MAE 0.224373 (+1.86%), MSE 0.129661 (+0.66%).
+  - Bad-case review: top errors still concentrate on variable 113 with systematic underfit and peak underfit, so direct period-level calibration overcorrects high-dimensional Electricity rather than fixing the dominant channels.
+  - Decision: reject full-cost level calibration for Electricity.
+- Iteration 5, Electricity low-frequency trend correction:
+  - Run: `weakphase5_iter05_electricity96_lowfreq_trend_w25_g005_lr002_huber_b64_e30_seed2021`.
+  - Result: MAE 0.222563 (+1.04%), MSE 0.129166 (+0.28%).
+  - Decision: low-frequency trend correction alone is less harmful than level calibration but still not useful; stop full-cost blind trials on Electricity.
+- Iteration 6, Weather Huber/LR compromise:
+  - Run: `weakphase5_iter06_weather96_p12_uncert_levelcalib_min35_g01_lr0007_huber05_b64_e30_seed2021`.
+  - Result: MAE 0.190961 (-2.53%), MSE 0.146976 (-1.49%).
+  - Decision: compromise setting loses the MAE target and does not improve MSE enough. Continue with lower-cost screening, especially for Electricity.
+- Iterations 7-17, Electricity 96 low-cost screening:
+  - Percent30 baseline: `weakphase5_iter07_electricity96_baseline_percent30_e10_b64_seed2021`, MAE 0.235700, MSE 0.142035.
+  - Adaptive residual gate 0.2 with MAE/LR 0.0003: MAE 0.233128 (-1.09%), MSE 0.137649 (-3.09%).
+  - Adaptive channel residual: MAE 0.247848, MSE 0.152049; rejected as high-capacity overfit.
+  - Adaptive smooth residual: MAE 0.242936, MSE 0.148945; rejected.
+  - Phase uncertainty + residual: MAE 0.242685, MSE 0.144881; rejected.
+  - Adaptive residual MSE/Huber LR 0.001: `weakphase5_iter12_electricity96_adaptive_residual_g02_lr001_huber_percent30_e10_b64_seed2021`, MAE 0.233052 (-1.12%), MSE 0.135444 (-4.64%).
+  - Adaptive residual gate 0.5: `weakphase5_iter13_electricity96_adaptive_residual_g05_lr001_huber_percent30_e10_b64_seed2021`, MAE 0.231334 (-1.85%), MSE 0.134771 (-5.11%).
+  - Adaptive residual gate 0.8: MAE 0.231564, MSE 0.135578; worse than gate 0.5.
+  - Training-only diagnostics: baseline MAE/LR 0.0003 strongly worsens; baseline LR 0.001 also worsens. Decision: low-cost MSE signal is from adaptive residual, not just LR, but MAE remains below the 3% target.
+- Iterations 15 and 22-23, Electricity full validation:
+  - `weakphase5_iter15_electricity96_adaptive_residual_g05_lr001_huber_b64_e30_seed2021`: MAE 0.223121, MSE 0.129501 versus formal baseline MAE 0.220274, MSE 0.128806; rejected.
+  - Electricity 720 percent30 baseline: `weakphase5_iter20_electricity720_baseline_percent30_e10_b64_seed2021`, MAE 0.328742, MSE 0.243691.
+  - Electricity 720 percent30 adaptive residual: `weakphase5_iter21_electricity720_adaptive_residual_g05_lr001_huber_percent30_e10_b64_seed2021`, MAE 0.310413 (-5.58%), MSE 0.224724 (-7.78%).
+  - Full validation `weakphase5_iter22_electricity720_adaptive_residual_g05_lr001_huber_b64_e30_seed2021`: MAE 0.288686, MSE 0.200408 versus formal baseline MAE 0.286129, MSE 0.199135; rejected.
+  - Full validation with 12 epochs `weakphase5_iter23_electricity720_adaptive_residual_g05_lr001_huber_b64_e12_seed2021`: MAE 0.291634, MSE 0.202851; rejected.
+  - Decision: Electricity low-cost gains do not transfer to full-data training. Do not promote adaptive residual for Electricity.
+- New mechanism after Weather bad-case review:
+  - `PhaseShapeAmplitudeCalibration` in `src/models/PhaseFormer.py`.
+  - Theory: sparse-event weak-period failures can have correct period level but flattened within-period phase shape. The module preserves forecast period mean and only expands deviations across phase slots when predicted within-period amplitude is lower than recent input-period amplitude.
+  - Tooling: `scripts/research_weather_weak.py` variants `phase_shape_amp`, `phase_uncertainty_shape_amp`, `phase_uncertainty_level_calib_shape_amp`, and `phase_uncertainty_level_calib_hifreq_shape_amp`.
+- Iterations 18-19, Weather shape-amplitude calibration:
+  - `weakphase5_iter18_weather96_p12_uncert_levelcalib_shapeamp_min35_g01_amp005_max15_lr001_huber_b64_e30_seed2021`: MAE 0.192039, MSE 0.146114.
+  - `weakphase5_iter19_weather96_p12_uncert_levelcalib_shapeamp_min35_g01_amp02_max20_lr001_huber_b64_e30_seed2021`: MAE 0.192014, MSE 0.146102.
+  - Decision: amplitude calibration barely changes aggregate metrics and does not solve `raining (s)` peak MSE. Keep default-off as a research module, but do not promote.
+- Iteration 24, Weather phase granularity:
+  - Run: `weakphase5_iter24_weather96_p8_baseline_lr001_huber_b64_e30_seed2021`.
+  - Result: MAE 0.194543, MSE 0.148216. Worse than period_len 12 candidates and below the 3% target.
+  - Current status: no Weather/Electricity candidate has met the 3% dual-metric exit condition. Best Weather MAE candidate remains iteration 1; best Weather MSE candidate remains iteration 19/3 around MSE 0.14610. Best Electricity full candidates are still worse than baseline.
