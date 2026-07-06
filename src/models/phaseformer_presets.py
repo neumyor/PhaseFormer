@@ -207,6 +207,17 @@ def get_latest_overrides(dataset_name, horizon):
             loss_func="mae",
             use_huber_loss=False,
         )
+    if dataset_name == "ETTh2" and horizon == 336:
+        return dict(
+            scheme_name="latest_etth2_adaptive_residual_mae",
+            use_weak_period_residual=True,
+            use_adaptive_weak_period_gate=True,
+            weak_period_residual_gate_init=0.2,
+            learning_rate=0.0003,
+            loss_func="mae",
+            use_huber_loss=False,
+            patience=14,
+        )
     if dataset_name == "ETTh1" and horizon == 96:
         return dict(
             scheme_name="latest_etth1_phase_uncertainty_level_calib",
@@ -219,6 +230,13 @@ def get_latest_overrides(dataset_name, horizon):
             phase_level_calib_gate_init=0.1,
         )
     if dataset_name == "ETTh1" and horizon == 192:
+        return dict(
+            scheme_name="latest_etth1_phase_uncertainty_light",
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.6,
+            phase_uncertainty_trend_gate_init=0.05,
+        )
+    if dataset_name == "ETTh1" and horizon == 336:
         return dict(
             scheme_name="latest_etth1_phase_uncertainty_light",
             use_phase_uncertainty_shrinkage=True,
@@ -261,6 +279,24 @@ def get_latest_overrides(dataset_name, horizon):
             loss_func="mae",
             use_huber_loss=False,
         )
+    if dataset_name == "ETTm1" and horizon == 336:
+        return dict(
+            scheme_name="latest_ettm1_phase_uncertainty_level_calib_hifreq_mae",
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.35,
+            phase_uncertainty_trend_gate_init=0.05,
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.1,
+            use_phase_noise_hifreq_damping=True,
+            phase_noise_hifreq_strength=0.8,
+            phase_noise_hifreq_threshold=0.5,
+            phase_noise_hifreq_window=7,
+            learning_rate=0.0003,
+            loss_func="mae",
+            use_huber_loss=False,
+        )
     if dataset_name == "ETTm2" and horizon == 96:
         return dict(
             scheme_name="latest_ettm2_phase_uncertainty_level_calib_hifreq_mae",
@@ -280,6 +316,24 @@ def get_latest_overrides(dataset_name, horizon):
             use_huber_loss=False,
         )
     if dataset_name == "ETTm2" and horizon == 192:
+        return dict(
+            scheme_name="latest_ettm2_phase_uncertainty_level_calib_hifreq_mae",
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.2,
+            phase_uncertainty_trend_gate_init=0.05,
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.2,
+            use_phase_noise_hifreq_damping=True,
+            phase_noise_hifreq_strength=0.8,
+            phase_noise_hifreq_threshold=0.5,
+            phase_noise_hifreq_window=7,
+            learning_rate=0.0003,
+            loss_func="mae",
+            use_huber_loss=False,
+        )
+    if dataset_name == "ETTm2" and horizon == 336:
         return dict(
             scheme_name="latest_ettm2_phase_uncertainty_level_calib_hifreq_mae",
             use_phase_uncertainty_shrinkage=True,
