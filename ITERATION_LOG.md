@@ -838,3 +838,60 @@
     - ETTm1: MAE -2.39%, MSE -2.07%.
     - ETTm2: MAE -3.85%, MSE -5.82%.
   - Decision: promote the 96-horizon dataset-adaptive phase framework to `src/models/phaseformer_presets.py` for formal latest-mode testing. Next step is multi-horizon expansion.
+
+### Iterations 11-28: Multi-Horizon Expansion
+
+- Iterations 11-23, horizon 192:
+  - ETTh1 probes showed that the 96-horizon level-calibration setting overcorrects longer forecasts. Bad cases shifted from peak/trend under-response to late-horizon level drift, so the retained 192 policy uses only conservative phase uncertainty shrinkage (`phase_uncertainty_min=0.6`).
+  - ETTm1/ETTm2 retained the minute-level phase uncertainty + level calibration + high-frequency damping policy because bad cases remained dominated by noisy same-phase deviations and tail volatility.
+  - ETTh2 retained the validated adaptive residual weak-period branch.
+  - Formal evidence: `research_runs/phaseformer_ett192_dataset_adaptive_20260706_comparison.csv`.
+  - Result:
+    - ETTh1: MAE -0.18%, MSE -4.03%.
+    - ETTh2: MAE -2.06%, MSE -1.83%.
+    - ETTm1: MAE -1.23%, MSE -0.90%.
+    - ETTm2: MAE -3.80%, MSE -3.37%.
+- Iterations 24-28, horizon 336:
+  - ETTm2/ETTm1 transferred the same minute-level policy with positive but smaller gains.
+  - ETTh1 again favored conservative phase uncertainty shrinkage without level calibration.
+  - ETTh2 needed the same adaptive residual mechanism but a longer patience setting; otherwise early stopping selected a regressed checkpoint.
+  - Formal evidence: `research_runs/phaseformer_ett336_dataset_adaptive_20260706b_comparison.csv`.
+  - Result:
+    - ETTh1: MAE -1.00%, MSE -1.01%.
+    - ETTh2: MAE -1.47%, MSE -0.50%.
+    - ETTm1: MAE -0.71%, MSE -0.60%.
+    - ETTm2: MAE -1.72%, MSE -1.43%.
+
+### Iterations 29-40: Horizon 720 And ETTh1 Late-Drift Fix
+
+- Iterations 29-35, first 720 search:
+  - ETTm1 720: `weakphase4_iter30_ettm1_720_phase_uncertainty_levelcalib_hifreq_min35_g01_s08_thr05_lr0003_mae_e30_seed2021` improved MAE 0.407951 vs 0.413261 and MSE 0.411918 vs 0.418219.
+  - ETTm2 720: high-frequency damping worsened MSE in `weakphase4_iter29`; removing the high-frequency damper and using stronger conservative shrinkage in `weakphase4_iter35_ettm2_720_phase_uncertainty_levelcalib_min60_g01_lr0003_mae_e30_seed2021` improved MAE 0.374787 vs 0.379086 and MSE 0.350420 vs 0.354294.
+  - ETTh1 720: `weakphase4_iter32_etth1_720_phase_uncertainty_levelcalib_min80_g005_lr00015_huber03_e70_seed2026` reduced MSE 0.438149 vs 0.440721 but slightly worsened MAE 0.447570 vs 0.447249. Bad-case review (8 cases) showed several top MSE cases improved, but new late-horizon drift cases appeared, so the policy was not accepted.
+- Formal 720b check:
+  - Evidence: `research_runs/phaseformer_ett720_dataset_adaptive_20260706b_comparison.csv`.
+  - Result: ETTh2, ETTm1, and ETTm2 improved in both metrics; ETTh1 had MAE +0.07% and MSE -0.58%.
+  - Decision: continue ETTh1-720; do not claim stable all-ETT improvement.
+- Iterations 36-37:
+  - `weakphase4_iter36_etth1_720_phase_uncertainty_levelcalib_min80_g002_lr00015_huber03_e70_seed2026` and `weakphase4_iter37_etth1_720_phase_uncertainty_min80_lr00015_huber03_e70_seed2026` used the research script's default batch size 16 by mistake.
+  - Both were rejected as non-comparable configuration-error runs, not as model evidence.
+- Iteration 38:
+  - Run: `weakphase4_iter38_etth1_720_phase_uncertainty_min80_lr00015_huber03_b256_e70_seed2026`.
+  - Result: MAE 0.452508, MSE 0.447181. Pure uncertainty shrinkage at min 0.8 is insufficient; reject.
+- Iteration 39:
+  - Run: `weakphase4_iter39_etth1_720_phase_uncertainty_levelcalib_min80_g005_lr00015_mae_b256_e70_seed2026`.
+  - Result: MAE 0.449894, MSE 0.443830. MAE training reduces neither late drift nor MSE enough; reject.
+- Iteration 40:
+  - Run: `weakphase4_iter40_etth1_720_phase_uncertainty_levelcalib_min80_g005_lr0001_huber03_b256_e70_seed2026`.
+  - Hypothesis: ETTh1-720 late-horizon drift is caused by training overshoot in the calibration/shrinkage interaction, not by the mechanism itself; lower LR should stabilize phase-level anchors while retaining MSE gain.
+  - Result: MAE 0.441219 vs original 0.447249 (-1.35%), MSE 0.427029 vs original 0.440721 (-3.11%).
+  - Bad-case decision: accepted. It keeps the same phase uncertainty + level calibration mechanism and fixes the MAE regression seen in 720b.
+- Formal 720c regression:
+  - Command: `conda run --no-capture-output -n raft python scripts/benchmark_phaseformer_suite.py --datasets ETTh1,ETTh2,ETTm1,ETTm2 --horizons 720 --modes original,latest --num-workers 0 --bad-case-limit 8 --bad-case-batches 8 --run-prefix phaseformer_ett720_dataset_adaptive_20260706c --resume`
+  - Evidence: `research_runs/phaseformer_ett720_dataset_adaptive_20260706c_comparison.csv`.
+  - Result:
+    - ETTh1: MAE -1.35%, MSE -3.11%.
+    - ETTh2: MAE -5.30%, MSE -7.76%.
+    - ETTm1: MAE -1.28%, MSE -1.51%.
+    - ETTm2: MAE -1.13%, MSE -1.09%.
+  - Decision: latest policy now improves both MAE and MSE against original on ETTh1, ETTh2, ETTm1, and ETTm2 for horizons 96, 192, 336, and 720 under the formal runner. Gains are stable but not universally above 5%; the user-requested 50-iteration cap was not reached because the practical stable-improvement objective was met.

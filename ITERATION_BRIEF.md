@@ -176,3 +176,23 @@ Formal benchmark outcome:
   - ETTh2 already has validated dataset-specific improvements in the formal latest policy for 96 and 720.
   - ETTm2 96 has the strongest new phase-framework signal: `weakphase3_iter31_ettm2_96_phase_uncertainty_levelcalib_hifreq_min20_g02_s08_thr05_lr0003_mae_e30_seed2021`, MAE -3.85%, MSE -5.82%.
   - ETTh1 and ETTm1 remain unsolved; their bad cases differ, so dataset-level switches are now allowed but must be justified by bad-case modes.
+
+Current best dataset-adaptive ETT phase policy:
+
+- Implementation: `src/models/phaseformer_presets.py`, `latest` mode.
+- Common framework: weak-period phase adaptation.
+  - Phase uncertainty shrinkage reduces unreliable same-phase deviations before phase routing.
+  - Phase-period level calibration corrects systematic period-level bias without removing phase shape.
+  - Phase-noise high-frequency damping is enabled for ETTm1 and short/mid ETTm2 horizons where bad cases show noisy minute-level phase deviations.
+  - ETTh2 keeps the previously validated weak-period residual/adaptive residual branch because its bad cases are dominated by long-horizon drift that the pure phase path under-responds to.
+- Dataset-level policy evidence:
+  - Horizon 96: `research_runs/phaseformer_ett96_dataset_adaptive_20260706_comparison.csv`; all ETTh1, ETTh2, ETTm1, ETTm2 improve in both MAE and MSE.
+  - Horizon 192: `research_runs/phaseformer_ett192_dataset_adaptive_20260706_comparison.csv`; all four improve in both metrics.
+  - Horizon 336: `research_runs/phaseformer_ett336_dataset_adaptive_20260706b_comparison.csv`; all four improve in both metrics.
+  - Horizon 720: `research_runs/phaseformer_ett720_dataset_adaptive_20260706c_comparison.csv`; all four improve in both metrics after the ETTh1 learning-rate stabilization.
+- Horizon 720 final deltas:
+  - ETTh1: MAE -1.35%, MSE -3.11%.
+  - ETTh2: MAE -5.30%, MSE -7.76%.
+  - ETTm1: MAE -1.28%, MSE -1.51%.
+  - ETTm2: MAE -1.13%, MSE -1.09%.
+- Important caveat: this is stable improvement versus original across ETT datasets and horizons, not a universal >5% gain on every dataset/horizon. The largest gains remain ETTh2 720 and ETTm2 96; the other settings are modest but paired positive under the formal runner.
