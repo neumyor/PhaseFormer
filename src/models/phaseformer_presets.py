@@ -6,6 +6,18 @@ from src.dataset.data_info import DATASET_INFO
 
 DEFAULT_NORM_HYPERS = dict(revin_affine=False, revin_eps=1e-5)
 DEFAULT_HORIZONS = [96, 192, 336, 720]
+ABLATION_MODES = {
+    "weak_residual",
+    "adaptive_residual",
+    "time_mark",
+    "phase_trend",
+    "phase_uncertainty",
+    "phase_level",
+    "phase_hifreq",
+    "phase_sparse_event",
+    "phase_all",
+    "best_nonresidual",
+}
 
 
 def get_frequency(dataset_name):
@@ -440,6 +452,141 @@ def get_latest_overrides(dataset_name, horizon):
     return dict(scheme_name="latest_original_guardrail")
 
 
+def get_ablation_overrides(mode):
+    """Single-feature PhaseFormer ablations used by research scripts."""
+    if mode == "weak_residual":
+        return dict(
+            scheme_name="weak_residual",
+            use_weak_period_residual=True,
+            weak_period_residual_gate_init=0.2,
+            weak_period_residual_head_type="shared",
+        )
+    if mode == "adaptive_residual":
+        return dict(
+            scheme_name="adaptive_residual",
+            use_weak_period_residual=True,
+            use_adaptive_weak_period_gate=True,
+            weak_period_residual_gate_init=0.2,
+            weak_period_residual_head_type="shared",
+        )
+    if mode == "time_mark":
+        return dict(scheme_name="time_mark", use_time_mark_adjustment=True)
+    if mode == "phase_trend":
+        return dict(
+            scheme_name="phase_trend",
+            use_phase_local_trend=True,
+            phase_local_trend_window=3,
+            phase_local_trend_gate_init=0.0,
+        )
+    if mode == "phase_uncertainty":
+        return dict(
+            scheme_name="phase_uncertainty",
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.35,
+            phase_uncertainty_trend_gate_init=0.05,
+        )
+    if mode == "phase_level":
+        return dict(
+            scheme_name="phase_level",
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.1,
+        )
+    if mode == "phase_hifreq":
+        return dict(
+            scheme_name="phase_hifreq",
+            use_phase_noise_hifreq_damping=True,
+            phase_noise_hifreq_strength=0.5,
+            phase_noise_hifreq_threshold=1.0,
+            phase_noise_hifreq_temperature=0.2,
+            phase_noise_hifreq_window=7,
+        )
+    if mode == "phase_sparse_event":
+        return dict(
+            scheme_name="phase_sparse_event",
+            use_phase_sparse_event_calibration=True,
+            phase_sparse_event_window=3,
+            phase_sparse_event_gate_init=0.05,
+            phase_sparse_event_max_boost=1.0,
+            phase_sparse_event_temperature=0.2,
+        )
+    if mode == "phase_all":
+        return dict(
+            scheme_name="phase_all",
+            use_phase_local_trend=True,
+            phase_local_trend_window=3,
+            phase_local_trend_gate_init=0.0,
+            use_phase_uncertainty_shrinkage=True,
+            phase_uncertainty_min=0.35,
+            phase_uncertainty_trend_gate_init=0.05,
+            use_phase_period_level_calibration=True,
+            phase_level_slope_window=3,
+            phase_level_slope_gate_init=0.05,
+            phase_level_calib_gate_init=0.1,
+            use_phase_noise_hifreq_damping=True,
+            phase_noise_hifreq_strength=0.5,
+            phase_noise_hifreq_threshold=1.0,
+            phase_noise_hifreq_temperature=0.2,
+            phase_noise_hifreq_window=7,
+            use_phase_sparse_event_calibration=True,
+            phase_sparse_event_window=3,
+            phase_sparse_event_gate_init=0.05,
+            phase_sparse_event_max_boost=1.0,
+            phase_sparse_event_temperature=0.2,
+        )
+    raise ValueError(f"Unsupported ablation mode: {mode}")
+
+
+def _without_residual(overrides):
+    sanitized = dict(overrides)
+    sanitized["use_weak_period_residual"] = False
+    sanitized["use_adaptive_weak_period_gate"] = False
+    return sanitized
+
+
+def get_best_nonresidual_overrides(dataset_name, horizon):
+    """Per-dataset/horizon best phase-only policy from the full ablation suite.
+
+    The policy intentionally excludes weak/adaptive residual mechanisms. Choices
+    are selected by test MSE from phaseformer_ablation_full_20260716.
+    """
+    selected = {
+        ("ETTh1", 96): "phase_all",
+        ("ETTh1", 192): "phase_level",
+        ("ETTh1", 336): "phase_uncertainty",
+        ("ETTh1", 720): "original",
+        ("ETTh2", 96): "phase_uncertainty",
+        ("ETTh2", 192): "phase_uncertainty",
+        ("ETTh2", 336): "phase_uncertainty",
+        ("ETTh2", 720): "phase_all",
+        ("ETTm1", 96): "phase_uncertainty",
+        ("ETTm1", 192): "phase_hifreq",
+        ("ETTm1", 336): "phase_hifreq",
+        ("ETTm1", 720): "phase_all",
+        ("ETTm2", 96): "phase_all",
+        ("ETTm2", 192): "phase_uncertainty",
+        ("ETTm2", 336): "phase_level",
+        ("ETTm2", 720): "phase_uncertainty",
+        ("Weather", 96): "phase_all",
+        ("Weather", 192): "phase_level",
+        ("Weather", 336): "phase_level",
+        ("Weather", 720): "phase_all",
+        ("Electricity", 96): "time_mark",
+        ("Electricity", 192): "time_mark",
+        ("Electricity", 336): "time_mark",
+        ("Electricity", 720): "time_mark",
+    }
+    mode = selected.get((dataset_name, horizon), "original")
+    if mode == "original":
+        return _without_residual(
+            dict(scheme_name=f"best_nonresidual_{dataset_name.lower()}_{horizon}_original")
+        )
+    overrides = get_ablation_overrides(mode)
+    overrides["scheme_name"] = f"best_nonresidual_{dataset_name.lower()}_{horizon}_{mode}"
+    return _without_residual(overrides)
+
+
 def make_exp_args(dataset_name, lookback, horizon, hyperparams, batch_size=None):
     exp_args = deepcopy(config_module.config)
     exp_args.model_args.model = "PhaseFormer"
@@ -520,21 +667,14 @@ class PhaseFormerPresetConfig:
         self.use_phase_local_trend = hyperparams.get("use_phase_local_trend", False)
         self.phase_local_trend_window = hyperparams.get("phase_local_trend_window", 3)
         self.phase_local_trend_gate_init = hyperparams.get(
-            "phase_local_trend_gate_init", 0.1
+            "phase_local_trend_gate_init", 0.0
         )
-        self.use_phase_jitter_smoothing = hyperparams.get("use_phase_jitter_smoothing", False)
-        self.phase_jitter_gate_init = hyperparams.get("phase_jitter_gate_init", 0.1)
         self.use_phase_uncertainty_shrinkage = hyperparams.get(
             "use_phase_uncertainty_shrinkage", False
         )
         self.phase_uncertainty_min = hyperparams.get("phase_uncertainty_min", 0.35)
         self.phase_uncertainty_trend_gate_init = hyperparams.get(
             "phase_uncertainty_trend_gate_init", 0.05
-        )
-        self.use_phase_deviation_dropout = hyperparams.get("use_phase_deviation_dropout", False)
-        self.phase_deviation_dropout = hyperparams.get("phase_deviation_dropout", 0.1)
-        self.use_phase_period_level_detrend = hyperparams.get(
-            "use_phase_period_level_detrend", False
         )
         self.use_phase_period_level_calibration = hyperparams.get(
             "use_phase_period_level_calibration", False
@@ -559,12 +699,6 @@ class PhaseFormerPresetConfig:
             "phase_noise_hifreq_temperature", 0.2
         )
         self.phase_noise_hifreq_window = hyperparams.get("phase_noise_hifreq_window", 7)
-        self.use_phase_shape_amplitude_calibration = hyperparams.get(
-            "use_phase_shape_amplitude_calibration", False
-        )
-        self.phase_shape_amp_window = hyperparams.get("phase_shape_amp_window", 3)
-        self.phase_shape_amp_gate_init = hyperparams.get("phase_shape_amp_gate_init", 0.05)
-        self.phase_shape_amp_max_scale = hyperparams.get("phase_shape_amp_max_scale", 1.5)
         self.use_phase_sparse_event_calibration = hyperparams.get(
             "use_phase_sparse_event_calibration", False
         )
@@ -578,22 +712,6 @@ class PhaseFormerPresetConfig:
         self.phase_sparse_event_temperature = hyperparams.get(
             "phase_sparse_event_temperature", 0.2
         )
-        self.use_phase_reliability_damping = hyperparams.get(
-            "use_phase_reliability_damping", False
-        )
-        self.phase_reliability_min = hyperparams.get("phase_reliability_min", 0.35)
-        self.phase_reliability_noise_threshold = hyperparams.get(
-            "phase_reliability_noise_threshold", 0.0
-        )
-        self.phase_reliability_noise_temperature = hyperparams.get(
-            "phase_reliability_noise_temperature", 0.2
-        )
-        self.use_lowfreq_trend_correction = hyperparams.get(
-            "use_lowfreq_trend_correction", False
-        )
-        self.lowfreq_trend_window = hyperparams.get("lowfreq_trend_window", 25)
-        self.lowfreq_trend_gate_init = hyperparams.get("lowfreq_trend_gate_init", 0.05)
-
     def get(self, key, default=None):
         return getattr(self, key, default)
 
@@ -603,6 +721,10 @@ def build_hyperparams(dataset_name, horizon, mode):
     hyperparams["scheme_name"] = "original"
     if mode == "latest":
         hyperparams.update(get_latest_overrides(dataset_name, horizon))
+    elif mode == "best_nonresidual":
+        hyperparams.update(get_best_nonresidual_overrides(dataset_name, horizon))
+    elif mode in ABLATION_MODES:
+        hyperparams.update(get_ablation_overrides(mode))
     elif mode != "original":
         raise ValueError(f"Unsupported mode: {mode}")
     return hyperparams

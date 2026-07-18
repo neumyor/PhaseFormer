@@ -268,28 +268,30 @@ def summarize(rows, output_dir, run_prefix):
     for row in rows:
         keyed[(row["dataset"], str(row["horizon"]), row["mode"])] = row
     compare_rows = []
+    comparable_modes = {"latest", "best_nonresidual"}
     for dataset, horizon, mode in sorted(keyed):
-        if mode != "latest":
+        if mode not in comparable_modes:
             continue
         original = keyed.get((dataset, horizon, "original"))
-        latest = keyed[(dataset, horizon, "latest")]
+        candidate = keyed[(dataset, horizon, mode)]
         if not original:
             continue
         orig_mae = float(original["test_mae"])
         orig_mse = float(original["test_mse"])
-        latest_mae = float(latest["test_mae"])
-        latest_mse = float(latest["test_mse"])
+        candidate_mae = float(candidate["test_mae"])
+        candidate_mse = float(candidate["test_mse"])
         compare_rows.append(
             {
                 "dataset": dataset,
                 "horizon": horizon,
+                "mode": mode,
                 "original_mae": orig_mae,
-                "latest_mae": latest_mae,
-                "mae_delta_pct": (latest_mae - orig_mae) / orig_mae * 100.0,
+                "candidate_mae": candidate_mae,
+                "mae_delta_pct": (candidate_mae - orig_mae) / orig_mae * 100.0,
                 "original_mse": orig_mse,
-                "latest_mse": latest_mse,
-                "mse_delta_pct": (latest_mse - orig_mse) / orig_mse * 100.0,
-                "latest_scheme": latest["scheme"],
+                "candidate_mse": candidate_mse,
+                "mse_delta_pct": (candidate_mse - orig_mse) / orig_mse * 100.0,
+                "candidate_scheme": candidate["scheme"],
             }
         )
     compare_path = os.path.join(output_dir, f"{run_prefix}_comparison.csv")

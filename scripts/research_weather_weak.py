@@ -25,6 +25,28 @@ from src.models.PhaseFormer import PhaseFormer
 
 DEFAULT_NORM_HYPERS = dict(revin_affine=False, revin_eps=1e-5)
 
+VARIANT_CHOICES = [
+    "baseline",
+    "weak_residual",
+    "adaptive_residual",
+    "time_mark",
+    "phase_trend",
+    "phase_uncertainty",
+    "phase_level",
+    "phase_hifreq",
+    "phase_sparse_event",
+    "phase_all",
+]
+
+WEAK_PERIOD_RESIDUAL_VARIANTS = {"weak_residual", "adaptive_residual"}
+ADAPTIVE_RESIDUAL_GATE_VARIANTS = {"adaptive_residual"}
+TIME_MARK_VARIANTS = {"time_mark"}
+PHASE_LOCAL_TREND_VARIANTS = {"phase_trend", "phase_all"}
+PHASE_LEVEL_CALIBRATION_VARIANTS = {"phase_level", "phase_all"}
+PHASE_UNCERTAINTY_SHRINKAGE_VARIANTS = {"phase_uncertainty", "phase_all"}
+PHASE_HIFREQ_DAMPING_VARIANTS = {"phase_hifreq", "phase_all"}
+PHASE_SPARSE_EVENT_VARIANTS = {"phase_sparse_event", "phase_all"}
+
 
 def get_best_config(dataset_name, horizon):
     if dataset_name == "Exchange":
@@ -144,13 +166,8 @@ class PhaseFormerConfig:
         period_len,
         phase_trend_window,
         phase_trend_gate_init,
-        phase_jitter_gate_init,
-        phase_reliability_min,
-        phase_reliability_noise_threshold,
-        phase_reliability_noise_temperature,
         phase_uncertainty_min,
         phase_uncertainty_trend_gate_init,
-        phase_deviation_dropout,
         phase_level_slope_window,
         phase_level_slope_gate_init,
         phase_level_calib_gate_init,
@@ -158,15 +175,11 @@ class PhaseFormerConfig:
         phase_noise_hifreq_threshold,
         phase_noise_hifreq_temperature,
         phase_noise_hifreq_window,
-        phase_shape_amp_window,
-        phase_shape_amp_gate_init,
-        phase_shape_amp_max_scale,
         phase_sparse_event_window,
         phase_sparse_event_gate_init,
         phase_sparse_event_max_boost,
         phase_sparse_event_temperature,
-        lowfreq_trend_window,
-        lowfreq_trend_gate_init,
+        residual_head_type,
     ):
         self.seq_len = lookback
         self.pred_len = horizon
@@ -195,160 +208,41 @@ class PhaseFormerConfig:
         self.use_huber_loss = exp_args.training_args.use_huber_loss
         self.huber_delta = exp_args.training_args.huber_delta
 
-        self.use_weak_period_residual = variant in [
-            "trend_residual",
-            "phase_trend_residual",
-            "adaptive_residual",
-            "adaptive_phase_trend_residual",
-            "channel_residual",
-            "adaptive_channel_residual",
-            "smooth_residual",
-            "adaptive_smooth_residual",
-            "phase_jitter_residual",
-            "phase_jitter_smooth_residual",
-            "phase_uncertainty_residual",
-            "phase_uncertainty_smooth_residual",
-            "phase_reliability_residual",
-            "phase_reliability_smooth_residual",
-            "phase_hifreq_residual",
-            "phase_hifreq_smooth_residual",
-            "lowfreq_trend_residual",
-            "lowfreq_trend_smooth_residual",
-        ]
+        self.use_weak_period_residual = variant in WEAK_PERIOD_RESIDUAL_VARIANTS
         self.weak_period_residual_gate_init = gate_init
-        self.weak_period_residual_head_type = (
-            "channel"
-            if variant in ["channel_residual", "adaptive_channel_residual"]
-            else "lowpass"
-            if variant
-            in [
-                "smooth_residual",
-                "adaptive_smooth_residual",
-                "phase_jitter_smooth_residual",
-                "phase_uncertainty_smooth_residual",
-                "phase_reliability_smooth_residual",
-                "phase_hifreq_smooth_residual",
-                "lowfreq_trend_smooth_residual",
-            ]
-            else "shared"
-        )
+        self.weak_period_residual_head_type = residual_head_type
         self.weak_period_residual_smooth_window = best_config.get(
             "weak_period_residual_smooth_window", 25
         )
-        self.use_adaptive_weak_period_gate = variant in [
-            "adaptive_residual",
-            "adaptive_phase_trend_residual",
-            "adaptive_channel_residual",
-            "adaptive_smooth_residual",
-        ]
+        self.use_adaptive_weak_period_gate = variant in ADAPTIVE_RESIDUAL_GATE_VARIANTS
         self.adaptive_weak_period_gate_hidden = 8
-        self.use_time_mark_adjustment = variant == "time_mark"
+        self.use_time_mark_adjustment = variant in TIME_MARK_VARIANTS
         self.time_mark_dim = time_mark_dim
         self.time_mark_hidden = 32
-        self.use_phase_local_trend = variant in [
-            "phase_trend",
-            "phase_trend_residual",
-            "adaptive_phase_trend_residual",
-        ]
+        self.use_phase_local_trend = variant in PHASE_LOCAL_TREND_VARIANTS
         self.phase_local_trend_window = phase_trend_window
         self.phase_local_trend_gate_init = phase_trend_gate_init
-        self.use_phase_jitter_smoothing = variant in [
-            "phase_jitter",
-            "phase_jitter_residual",
-            "phase_jitter_smooth_residual",
-        ]
-        self.phase_jitter_gate_init = phase_jitter_gate_init
-        self.use_phase_deviation_dropout = variant in [
-            "phase_dropout",
-            "phase_dropout_uncertainty",
-        ]
-        self.phase_deviation_dropout = phase_deviation_dropout
-        self.use_phase_period_level_detrend = variant in [
-            "phase_level_detrend",
-            "phase_level_uncertainty",
-            "phase_level_hifreq",
-            "phase_level_uncertainty_hifreq",
-        ]
-        self.use_phase_period_level_calibration = variant in [
-            "phase_level_calib",
-            "phase_uncertainty_level_calib",
-            "phase_uncertainty_level_calib_hifreq",
-            "phase_uncertainty_level_calib_shape_amp",
-            "phase_uncertainty_level_calib_hifreq_shape_amp",
-            "phase_uncertainty_level_calib_sparse_event",
-            "phase_uncertainty_level_calib_hifreq_sparse_event",
-        ]
+        self.use_phase_period_level_calibration = (
+            variant in PHASE_LEVEL_CALIBRATION_VARIANTS
+        )
         self.phase_level_slope_window = phase_level_slope_window
         self.phase_level_slope_gate_init = phase_level_slope_gate_init
         self.phase_level_calib_gate_init = phase_level_calib_gate_init
-        self.use_phase_uncertainty_shrinkage = variant in [
-            "phase_uncertainty",
-            "phase_uncertainty_residual",
-            "phase_uncertainty_smooth_residual",
-            "phase_uncertainty_hifreq",
-            "phase_dropout_uncertainty",
-            "phase_level_uncertainty",
-            "phase_level_uncertainty_hifreq",
-            "phase_uncertainty_level_calib",
-            "phase_uncertainty_level_calib_hifreq",
-            "phase_uncertainty_shape_amp",
-            "phase_uncertainty_level_calib_shape_amp",
-            "phase_uncertainty_level_calib_hifreq_shape_amp",
-            "phase_uncertainty_sparse_event",
-            "phase_uncertainty_level_calib_sparse_event",
-            "phase_uncertainty_level_calib_hifreq_sparse_event",
-        ]
+        self.use_phase_uncertainty_shrinkage = (
+            variant in PHASE_UNCERTAINTY_SHRINKAGE_VARIANTS
+        )
         self.phase_uncertainty_min = phase_uncertainty_min
         self.phase_uncertainty_trend_gate_init = phase_uncertainty_trend_gate_init
-        self.use_phase_reliability_damping = variant in [
-            "phase_reliability",
-            "phase_reliability_residual",
-            "phase_reliability_smooth_residual",
-        ]
-        self.phase_reliability_min = phase_reliability_min
-        self.phase_reliability_noise_threshold = phase_reliability_noise_threshold
-        self.phase_reliability_noise_temperature = phase_reliability_noise_temperature
-        self.use_phase_noise_hifreq_damping = variant in [
-            "phase_hifreq",
-            "phase_hifreq_residual",
-            "phase_hifreq_smooth_residual",
-            "phase_uncertainty_hifreq",
-            "phase_level_hifreq",
-            "phase_level_uncertainty_hifreq",
-            "phase_uncertainty_level_calib_hifreq",
-            "phase_uncertainty_level_calib_hifreq_shape_amp",
-            "phase_uncertainty_level_calib_hifreq_sparse_event",
-        ]
+        self.use_phase_noise_hifreq_damping = variant in PHASE_HIFREQ_DAMPING_VARIANTS
         self.phase_noise_hifreq_strength = phase_noise_hifreq_strength
         self.phase_noise_hifreq_threshold = phase_noise_hifreq_threshold
         self.phase_noise_hifreq_temperature = phase_noise_hifreq_temperature
         self.phase_noise_hifreq_window = phase_noise_hifreq_window
-        self.use_phase_shape_amplitude_calibration = variant in [
-            "phase_shape_amp",
-            "phase_uncertainty_shape_amp",
-            "phase_uncertainty_level_calib_shape_amp",
-            "phase_uncertainty_level_calib_hifreq_shape_amp",
-        ]
-        self.phase_shape_amp_window = phase_shape_amp_window
-        self.phase_shape_amp_gate_init = phase_shape_amp_gate_init
-        self.phase_shape_amp_max_scale = phase_shape_amp_max_scale
-        self.use_phase_sparse_event_calibration = variant in [
-            "phase_sparse_event",
-            "phase_uncertainty_sparse_event",
-            "phase_uncertainty_level_calib_sparse_event",
-            "phase_uncertainty_level_calib_hifreq_sparse_event",
-        ]
+        self.use_phase_sparse_event_calibration = variant in PHASE_SPARSE_EVENT_VARIANTS
         self.phase_sparse_event_window = phase_sparse_event_window
         self.phase_sparse_event_gate_init = phase_sparse_event_gate_init
         self.phase_sparse_event_max_boost = phase_sparse_event_max_boost
         self.phase_sparse_event_temperature = phase_sparse_event_temperature
-        self.use_lowfreq_trend_correction = variant in [
-            "lowfreq_trend",
-            "lowfreq_trend_residual",
-            "lowfreq_trend_smooth_residual",
-        ]
-        self.lowfreq_trend_window = lowfreq_trend_window
-        self.lowfreq_trend_gate_init = lowfreq_trend_gate_init
 
     def get(self, key, default=None):
         return getattr(self, key, default)
@@ -634,65 +528,20 @@ def main():
     parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument(
         "--variant",
-        choices=[
-            "baseline",
-            "trend_residual",
-            "time_mark",
-            "phase_trend",
-            "phase_trend_residual",
-            "adaptive_residual",
-            "adaptive_phase_trend_residual",
-            "channel_residual",
-            "adaptive_channel_residual",
-            "smooth_residual",
-            "adaptive_smooth_residual",
-            "phase_jitter",
-            "phase_jitter_residual",
-            "phase_jitter_smooth_residual",
-            "phase_dropout",
-            "phase_dropout_uncertainty",
-            "phase_level_detrend",
-            "phase_level_uncertainty",
-            "phase_level_hifreq",
-            "phase_level_uncertainty_hifreq",
-            "phase_level_calib",
-            "phase_uncertainty_level_calib",
-            "phase_uncertainty_level_calib_hifreq",
-            "phase_uncertainty_level_calib_shape_amp",
-            "phase_uncertainty_level_calib_hifreq_shape_amp",
-            "phase_uncertainty_level_calib_sparse_event",
-            "phase_uncertainty_level_calib_hifreq_sparse_event",
-            "phase_uncertainty",
-            "phase_uncertainty_residual",
-            "phase_uncertainty_smooth_residual",
-            "phase_uncertainty_hifreq",
-            "phase_uncertainty_shape_amp",
-            "phase_uncertainty_sparse_event",
-            "phase_reliability",
-            "phase_reliability_residual",
-            "phase_reliability_smooth_residual",
-            "phase_hifreq",
-            "phase_hifreq_residual",
-            "phase_hifreq_smooth_residual",
-            "phase_shape_amp",
-            "phase_sparse_event",
-            "lowfreq_trend",
-            "lowfreq_trend_residual",
-            "lowfreq_trend_smooth_residual",
-        ],
+        choices=VARIANT_CHOICES,
         default="baseline",
     )
     parser.add_argument("--gate-init", type=float, default=0.2)
+    parser.add_argument(
+        "--residual-head-type",
+        choices=["shared", "channel", "lowpass"],
+        default="shared",
+    )
     parser.add_argument("--smooth-window", type=int, default=None)
     parser.add_argument("--phase-trend-window", type=int, default=3)
-    parser.add_argument("--phase-trend-gate-init", type=float, default=0.1)
-    parser.add_argument("--phase-jitter-gate-init", type=float, default=0.1)
-    parser.add_argument("--phase-reliability-min", type=float, default=0.35)
-    parser.add_argument("--phase-reliability-noise-threshold", type=float, default=0.0)
-    parser.add_argument("--phase-reliability-noise-temperature", type=float, default=0.2)
+    parser.add_argument("--phase-trend-gate-init", type=float, default=0.0)
     parser.add_argument("--phase-uncertainty-min", type=float, default=0.35)
     parser.add_argument("--phase-uncertainty-trend-gate-init", type=float, default=0.05)
-    parser.add_argument("--phase-deviation-dropout", type=float, default=0.1)
     parser.add_argument("--phase-level-slope-window", type=int, default=3)
     parser.add_argument("--phase-level-slope-gate-init", type=float, default=0.1)
     parser.add_argument("--phase-level-calib-gate-init", type=float, default=0.1)
@@ -700,15 +549,10 @@ def main():
     parser.add_argument("--phase-noise-hifreq-threshold", type=float, default=1.0)
     parser.add_argument("--phase-noise-hifreq-temperature", type=float, default=0.2)
     parser.add_argument("--phase-noise-hifreq-window", type=int, default=7)
-    parser.add_argument("--phase-shape-amp-window", type=int, default=3)
-    parser.add_argument("--phase-shape-amp-gate-init", type=float, default=0.05)
-    parser.add_argument("--phase-shape-amp-max-scale", type=float, default=1.5)
     parser.add_argument("--phase-sparse-event-window", type=int, default=3)
     parser.add_argument("--phase-sparse-event-gate-init", type=float, default=0.05)
     parser.add_argument("--phase-sparse-event-max-boost", type=float, default=1.0)
     parser.add_argument("--phase-sparse-event-temperature", type=float, default=0.2)
-    parser.add_argument("--lowfreq-trend-window", type=int, default=25)
-    parser.add_argument("--lowfreq-trend-gate-init", type=float, default=0.05)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--bad-case-limit", type=int, default=10)
     parser.add_argument("--bad-case-batches", type=int, default=8)
@@ -779,13 +623,8 @@ def main():
         args.period_len,
         args.phase_trend_window,
         args.phase_trend_gate_init,
-        args.phase_jitter_gate_init,
-        args.phase_reliability_min,
-        args.phase_reliability_noise_threshold,
-        args.phase_reliability_noise_temperature,
         args.phase_uncertainty_min,
         args.phase_uncertainty_trend_gate_init,
-        args.phase_deviation_dropout,
         args.phase_level_slope_window,
         args.phase_level_slope_gate_init,
         args.phase_level_calib_gate_init,
@@ -793,15 +632,11 @@ def main():
         args.phase_noise_hifreq_threshold,
         args.phase_noise_hifreq_temperature,
         args.phase_noise_hifreq_window,
-        args.phase_shape_amp_window,
-        args.phase_shape_amp_gate_init,
-        args.phase_shape_amp_max_scale,
         args.phase_sparse_event_window,
         args.phase_sparse_event_gate_init,
         args.phase_sparse_event_max_boost,
         args.phase_sparse_event_temperature,
-        args.lowfreq_trend_window,
-        args.lowfreq_trend_gate_init,
+        args.residual_head_type,
     )
     config_snapshot = {
         "args": vars(args),
@@ -829,11 +664,6 @@ def main():
             "use_phase_local_trend": model_config.use_phase_local_trend,
             "phase_local_trend_window": model_config.phase_local_trend_window,
             "phase_local_trend_gate_init": model_config.phase_local_trend_gate_init,
-            "use_phase_jitter_smoothing": model_config.use_phase_jitter_smoothing,
-            "phase_jitter_gate_init": model_config.phase_jitter_gate_init,
-            "use_phase_deviation_dropout": model_config.use_phase_deviation_dropout,
-            "phase_deviation_dropout": model_config.phase_deviation_dropout,
-            "use_phase_period_level_detrend": model_config.use_phase_period_level_detrend,
             "use_phase_period_level_calibration": model_config.use_phase_period_level_calibration,
             "phase_level_slope_window": model_config.phase_level_slope_window,
             "phase_level_slope_gate_init": model_config.phase_level_slope_gate_init,
@@ -841,27 +671,16 @@ def main():
             "use_phase_uncertainty_shrinkage": model_config.use_phase_uncertainty_shrinkage,
             "phase_uncertainty_min": model_config.phase_uncertainty_min,
             "phase_uncertainty_trend_gate_init": model_config.phase_uncertainty_trend_gate_init,
-            "use_phase_reliability_damping": model_config.use_phase_reliability_damping,
-            "phase_reliability_min": model_config.phase_reliability_min,
-            "phase_reliability_noise_threshold": model_config.phase_reliability_noise_threshold,
-            "phase_reliability_noise_temperature": model_config.phase_reliability_noise_temperature,
             "use_phase_noise_hifreq_damping": model_config.use_phase_noise_hifreq_damping,
             "phase_noise_hifreq_strength": model_config.phase_noise_hifreq_strength,
             "phase_noise_hifreq_threshold": model_config.phase_noise_hifreq_threshold,
             "phase_noise_hifreq_temperature": model_config.phase_noise_hifreq_temperature,
             "phase_noise_hifreq_window": model_config.phase_noise_hifreq_window,
-            "use_phase_shape_amplitude_calibration": model_config.use_phase_shape_amplitude_calibration,
-            "phase_shape_amp_window": model_config.phase_shape_amp_window,
-            "phase_shape_amp_gate_init": model_config.phase_shape_amp_gate_init,
-            "phase_shape_amp_max_scale": model_config.phase_shape_amp_max_scale,
             "use_phase_sparse_event_calibration": model_config.use_phase_sparse_event_calibration,
             "phase_sparse_event_window": model_config.phase_sparse_event_window,
             "phase_sparse_event_gate_init": model_config.phase_sparse_event_gate_init,
             "phase_sparse_event_max_boost": model_config.phase_sparse_event_max_boost,
             "phase_sparse_event_temperature": model_config.phase_sparse_event_temperature,
-            "use_lowfreq_trend_correction": model_config.use_lowfreq_trend_correction,
-            "lowfreq_trend_window": model_config.lowfreq_trend_window,
-            "lowfreq_trend_gate_init": model_config.lowfreq_trend_gate_init,
         },
         "training": {
             "learning_rate": exp_args.training_args.learning_rate,

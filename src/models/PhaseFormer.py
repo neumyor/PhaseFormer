@@ -160,11 +160,11 @@ class TimeMarkAdjustmentHead(nn.Module):
 
 
 class PhaseLocalTrendHead(nn.Module):
-    """Phase-space local trend correction for weakly aligned periods.
+    """Reliability-gated phase-shape drift correction.
 
-    For each phase slot, estimate the recent slope across periods and extrapolate
-    it into future phase steps. This keeps the correction inside the phase
-    representation instead of falling back to a whole-sequence linear head.
+    The correction only extrapolates within-period shape drift. Period-level
+    drift is removed from the slope estimate, and a sample-wise reliability
+    score suppresses the adapter when same-phase histories are noisy.
     """
 
     def __init__(
@@ -172,14 +172,60 @@ class PhaseLocalTrendHead(nn.Module):
         num_periods_output: int,
         enc_in: int,
         window: int = 3,
-        gate_init: float = 0.1,
+        gate_init: float = 0.0,
     ):
         super().__init__()
         self.num_periods_output = num_periods_output
         self.window = max(2, int(window))
-        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
-        gate_logit = torch.logit(torch.tensor(gate_init))
-        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
+        self.max_gate = 0.005
+        gate_init = min(max(float(gate_init), -self.max_gate + 1e-4), self.max_gate - 1e-4)
+        gate_raw = torch.atanh(torch.tensor(gate_init / self.max_gate))
+        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_raw)))
+
+    def _diagnostics(self, phase_series):  # (B, C, L, P_in)
+        template = phase_series.mean(dim=-1, keepdim=True)
+        phase_signal = template.squeeze(-1).var(dim=2, unbiased=False, keepdim=True)
+        phase_noise = phase_series.var(dim=-1, unbiased=False, keepdim=True)
+        phase_noise = phase_noise.mean(dim=2, keepdim=True)
+        reliability = phase_signal.unsqueeze(-1) / (
+            phase_signal.unsqueeze(-1) + phase_noise + 1e-6
+        )
+
+        recent = phase_series[..., -min(self.window, phase_series.size(-1)) :]
+        diffs = recent[..., 1:] - recent[..., :-1]
+        mean_diff = diffs.mean(dim=-1)
+        slope_consistency = mean_diff.abs() / (diffs.abs().mean(dim=-1) + 1e-6)
+        raw_slope = mean_diff * slope_consistency
+        shape_slope = raw_slope - raw_slope.mean(dim=2, keepdim=True)
+
+        steps = torch.arange(
+            1,
+            self.num_periods_output + 1,
+            device=phase_series.device,
+            dtype=phase_series.dtype,
+        )
+        tau = max(float(self.num_periods_output) / 2.0, 1.0)
+        saturated_steps = 1.0 - torch.exp(-steps / tau)
+        correction = shape_slope.unsqueeze(-1) * saturated_steps.view(1, 1, 1, -1)
+        horizon_scale = float(self.num_periods_output) ** -0.5
+        base_gate = self.max_gate * horizon_scale * torch.tanh(self.gate)
+        effective_gate = base_gate * reliability
+        return {
+            "template": template,
+            "phase_signal": phase_signal,
+            "phase_noise": phase_noise,
+            "reliability": reliability,
+            "slope_consistency": slope_consistency,
+            "raw_slope": raw_slope,
+            "shape_slope": shape_slope,
+            "steps": saturated_steps,
+            "base_gate": base_gate,
+            "effective_gate": effective_gate,
+            "correction": correction,
+        }
+
+    def diagnostics(self, phase_series):
+        return self._diagnostics(phase_series)
 
     def forward(self, phase_series):  # (B, C, L, P_in)
         if phase_series.size(-1) < 2:
@@ -189,35 +235,8 @@ class PhaseLocalTrendHead(nn.Module):
                 device=phase_series.device,
                 dtype=phase_series.dtype,
             )
-        recent = phase_series[..., -min(self.window, phase_series.size(-1)) :]
-        slope = (recent[..., 1:] - recent[..., :-1]).mean(dim=-1)
-        steps = torch.arange(
-            1,
-            self.num_periods_output + 1,
-            device=phase_series.device,
-            dtype=phase_series.dtype,
-        )
-        correction = slope.unsqueeze(-1) * steps.view(1, 1, 1, -1)
-        return torch.sigmoid(self.gate) * correction
-
-
-class PhaseJitterSmoothing(nn.Module):
-    """Circular neighbor smoothing over phase slots for weak phase alignment."""
-
-    def __init__(self, enc_in: int, gate_init: float = 0.1):
-        super().__init__()
-        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
-        gate_logit = torch.logit(torch.tensor(gate_init))
-        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
-
-    def forward(self, phase_series):  # (B, C, L, P)
-        neighbor_mean = (
-            torch.roll(phase_series, shifts=1, dims=2)
-            + phase_series
-            + torch.roll(phase_series, shifts=-1, dims=2)
-        ) / 3.0
-        gate = torch.sigmoid(self.gate)
-        return (1.0 - gate) * phase_series + gate * neighbor_mean
+        info = self._diagnostics(phase_series)
+        return info["effective_gate"] * info["correction"]
 
 
 class PhaseUncertaintyShrinkage(nn.Module):
@@ -274,72 +293,6 @@ class PhaseUncertaintyShrinkage(nn.Module):
         return shrunk + torch.sigmoid(self.trend_gate) * trend
 
 
-class PhaseDeviationDropout(nn.Module):
-    """Training-time dropout for period-specific phase deviations.
-
-    Instead of dropping token values directly, this layer drops deviations from
-    the per-slot phase template. For weak-period data this regularizes the
-    router against memorizing noisy same-phase period details while preserving
-    the coarse phase template seen by the original model.
-    """
-
-    def __init__(self, dropout: float = 0.1):
-        super().__init__()
-        self.dropout = min(max(float(dropout), 0.0), 1.0)
-
-    def forward(self, phase_series):  # (B, C, L, P)
-        if not self.training or self.dropout <= 0.0 or phase_series.size(-1) < 2:
-            return phase_series
-        template = phase_series.mean(dim=-1, keepdim=True)
-        keep = torch.rand_like(phase_series) >= self.dropout
-        return template + keep.to(phase_series.dtype) * (phase_series - template)
-
-
-class PhasePeriodLevelDetrend(nn.Module):
-    """Separate period-level drift from phase-slot shape before routing.
-
-    Under weak periodicity, x_{l,k}=p_l+d_k+eps_{l,k}. The original phase router
-    receives p_l and d_k entangled, so a drifted recent period can be mistaken
-    for a phase amplitude pattern. This module removes each period's mean across
-    phase slots before routing and later restores a low-frequency extrapolation
-    of the period level in phase-step space.
-    """
-
-    def __init__(
-        self,
-        num_periods_output: int,
-        enc_in: int,
-        slope_window: int = 3,
-        slope_gate_init: float = 0.1,
-    ):
-        super().__init__()
-        self.num_periods_output = num_periods_output
-        self.slope_window = max(2, int(slope_window))
-        slope_gate_init = min(max(float(slope_gate_init), 1e-4), 1.0 - 1e-4)
-        gate_logit = torch.logit(torch.tensor(slope_gate_init))
-        self.slope_gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
-
-    def forward(self, phase_series):  # (B, C, L, P_in)
-        period_level = phase_series.mean(dim=2, keepdim=True)
-        centered = phase_series - period_level
-        last_level = period_level[..., -1:]
-        if period_level.size(-1) < 2:
-            future_level = last_level.expand(-1, -1, -1, self.num_periods_output)
-            return centered, future_level
-
-        window = min(self.slope_window, period_level.size(-1))
-        recent = period_level[..., -window:]
-        slope = (recent[..., 1:] - recent[..., :-1]).mean(dim=-1, keepdim=True)
-        steps = torch.arange(
-            1,
-            self.num_periods_output + 1,
-            device=phase_series.device,
-            dtype=phase_series.dtype,
-        ).view(1, 1, 1, -1)
-        future_level = last_level + torch.sigmoid(self.slope_gate) * slope * steps
-        return centered, future_level
-
-
 class PhasePeriodLevelCalibration(nn.Module):
     """Calibrate forecast period means without removing phase-shape inputs."""
 
@@ -384,43 +337,6 @@ class PhasePeriodLevelCalibration(nn.Module):
         predicted_level = y_phase_steps.mean(dim=2, keepdim=True)
         correction = anchor_level - predicted_level
         return y_phase_steps + torch.sigmoid(self.level_gate) * correction
-
-
-class PhaseShapeAmplitudeCalibration(nn.Module):
-    """Restore underfit within-period phase amplitude from recent periods.
-
-    Weak-period sparse events can make the phase router predict the right level
-    but a flattened phase shape. This module preserves each forecast period's
-    mean and only expands deviations across phase slots when the predicted shape
-    amplitude is below the recent input-period amplitude.
-    """
-
-    def __init__(
-        self,
-        enc_in: int,
-        window: int = 3,
-        gate_init: float = 0.05,
-        max_scale: float = 1.5,
-    ):
-        super().__init__()
-        self.window = max(1, int(window))
-        self.max_extra = max(float(max_scale) - 1.0, 0.0)
-        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
-        gate_logit = torch.logit(torch.tensor(gate_init))
-        self.gate = nn.Parameter(torch.full((1, enc_in, 1, 1), float(gate_logit)))
-
-    def forward(self, y_phase_steps, phase_series):  # (B,C,L,P_out), (B,C,L,P_in)
-        recent_periods = phase_series.permute(0, 1, 3, 2).contiguous()
-        recent = recent_periods[:, :, -min(self.window, recent_periods.size(2)) :, :]
-        recent_amp = recent.std(dim=-1, unbiased=False).mean(dim=2, keepdim=True).unsqueeze(-1)
-
-        y_periods = y_phase_steps.permute(0, 1, 3, 2).contiguous()
-        pred_mean = y_periods.mean(dim=-1, keepdim=True)
-        pred_amp = y_periods.std(dim=-1, unbiased=False, keepdim=True)
-        extra = (recent_amp / (pred_amp + 1e-6) - 1.0).clamp(min=0.0, max=self.max_extra)
-        scale = 1.0 + torch.sigmoid(self.gate) * extra
-        calibrated = pred_mean + scale * (y_periods - pred_mean)
-        return calibrated.permute(0, 1, 3, 2).contiguous()
 
 
 class PhaseSparseEventCalibration(nn.Module):
@@ -469,39 +385,6 @@ class PhaseSparseEventCalibration(nn.Module):
         return calibrated.permute(0, 1, 3, 2).contiguous()
 
 
-class PhaseReliabilityDamping(nn.Module):
-    """Shrink forecast amplitude when historical phase alignment is unreliable.
-
-    For weak-period series, same-phase observations across periods can have high
-    variance. A simple empirical-Bayes reliability estimate uses phase-template
-    variance as signal and cross-period same-phase variance as noise.
-    """
-
-    def __init__(
-        self,
-        min_reliability: float = 0.35,
-        noise_threshold: float = 0.0,
-        noise_temperature: float = 0.2,
-    ):
-        super().__init__()
-        self.min_reliability = min(max(float(min_reliability), 0.0), 1.0)
-        self.noise_threshold = float(noise_threshold)
-        self.noise_temperature = max(float(noise_temperature), 1e-4)
-
-    def forward(self, y_hat, x_in, phase_series):  # y_hat: (B,T,C), phase_series: (B,C,L,P)
-        phase_template = phase_series.mean(dim=-1)
-        signal = phase_template.var(dim=2, unbiased=False)
-        noise = phase_series.var(dim=-1, unbiased=False).mean(dim=2)
-        reliability = signal / (signal + noise + 1e-6)
-        reliability = self.min_reliability + (1.0 - self.min_reliability) * reliability
-        if self.noise_threshold > 0.0:
-            trigger = torch.sigmoid((noise - self.noise_threshold) / self.noise_temperature)
-            reliability = trigger * reliability + (1.0 - trigger)
-        reliability = reliability.unsqueeze(1)
-        last = x_in[:, -1:, :]
-        return last + reliability * (y_hat - last)
-
-
 class PhaseNoiseHighFreqDamping(nn.Module):
     """Damp high-frequency forecast oscillations when phase history is noisy."""
 
@@ -534,47 +417,6 @@ class PhaseNoiseHighFreqDamping(nn.Module):
         smooth = self._smooth(y_hat)
         high_freq = y_hat - smooth
         return smooth + damping * high_freq
-
-
-class LowFreqTrendCorrection(nn.Module):
-    """Low-frequency recent-trend extrapolation for weak-period drift."""
-
-    def __init__(self, pred_len: int, enc_in: int, window: int = 25, gate_init: float = 0.05):
-        super().__init__()
-        self.pred_len = pred_len
-        self.window = max(3, int(window))
-        if self.window % 2 == 0:
-            self.window += 1
-        gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
-        gate_logit = torch.logit(torch.tensor(gate_init))
-        self.gate = nn.Parameter(torch.full((1, 1, enc_in), float(gate_logit)))
-
-    def _smooth(self, x):
-        pad = self.window // 2
-        series = x.permute(0, 2, 1).contiguous()
-        series = F.pad(series, (pad, pad), mode="replicate")
-        smoothed = F.avg_pool1d(series, kernel_size=self.window, stride=1)
-        return smoothed.permute(0, 2, 1).contiguous()
-
-    def forward(self, x_in):
-        smooth = self._smooth(x_in)
-        lag = min(self.window, smooth.size(1) - 1)
-        if lag <= 0:
-            return torch.zeros(
-                x_in.size(0),
-                self.pred_len,
-                x_in.size(2),
-                device=x_in.device,
-                dtype=x_in.dtype,
-            )
-        slope = (smooth[:, -1:, :] - smooth[:, -lag - 1 : -lag, :]) / float(lag)
-        steps = torch.arange(
-            1,
-            self.pred_len + 1,
-            device=x_in.device,
-            dtype=x_in.dtype,
-        ).view(1, -1, 1)
-        return torch.sigmoid(self.gate) * slope * steps
 
 
 class CrossPhaseRoutingLayer(nn.Module):
@@ -1014,16 +856,7 @@ class PhaseFormer(DefaultPLModule):
                 num_periods_output=self.num_periods_output,
                 enc_in=self.enc_in,
                 window=getattr(configs, "phase_local_trend_window", 3),
-                gate_init=getattr(configs, "phase_local_trend_gate_init", 0.1),
-            )
-
-        self.use_phase_jitter_smoothing = getattr(
-            configs, "use_phase_jitter_smoothing", False
-        )
-        if self.use_phase_jitter_smoothing:
-            self.phase_jitter_smoothing = PhaseJitterSmoothing(
-                enc_in=self.enc_in,
-                gate_init=getattr(configs, "phase_jitter_gate_init", 0.1),
+                gate_init=getattr(configs, "phase_local_trend_gate_init", 0.0),
             )
 
         self.use_phase_uncertainty_shrinkage = getattr(
@@ -1034,25 +867,6 @@ class PhaseFormer(DefaultPLModule):
                 enc_in=self.enc_in,
                 min_reliability=getattr(configs, "phase_uncertainty_min", 0.35),
                 trend_gate_init=getattr(configs, "phase_uncertainty_trend_gate_init", 0.05),
-            )
-
-        self.use_phase_deviation_dropout = getattr(
-            configs, "use_phase_deviation_dropout", False
-        )
-        if self.use_phase_deviation_dropout:
-            self.phase_deviation_dropout = PhaseDeviationDropout(
-                dropout=getattr(configs, "phase_deviation_dropout", 0.1)
-            )
-
-        self.use_phase_period_level_detrend = getattr(
-            configs, "use_phase_period_level_detrend", False
-        )
-        if self.use_phase_period_level_detrend:
-            self.phase_period_level_detrend = PhasePeriodLevelDetrend(
-                num_periods_output=self.num_periods_output,
-                enc_in=self.enc_in,
-                slope_window=getattr(configs, "phase_level_slope_window", 3),
-                slope_gate_init=getattr(configs, "phase_level_slope_gate_init", 0.1),
             )
 
         self.use_phase_period_level_calibration = getattr(
@@ -1067,17 +881,6 @@ class PhaseFormer(DefaultPLModule):
                 slope_gate_init=getattr(configs, "phase_level_slope_gate_init", 0.05),
             )
 
-        self.use_phase_shape_amplitude_calibration = getattr(
-            configs, "use_phase_shape_amplitude_calibration", False
-        )
-        if self.use_phase_shape_amplitude_calibration:
-            self.phase_shape_amplitude_calibration = PhaseShapeAmplitudeCalibration(
-                enc_in=self.enc_in,
-                window=getattr(configs, "phase_shape_amp_window", 3),
-                gate_init=getattr(configs, "phase_shape_amp_gate_init", 0.05),
-                max_scale=getattr(configs, "phase_shape_amp_max_scale", 1.5),
-            )
-
         self.use_phase_sparse_event_calibration = getattr(
             configs, "use_phase_sparse_event_calibration", False
         )
@@ -1090,16 +893,6 @@ class PhaseFormer(DefaultPLModule):
                 temperature=getattr(configs, "phase_sparse_event_temperature", 0.2),
             )
 
-        self.use_phase_reliability_damping = getattr(
-            configs, "use_phase_reliability_damping", False
-        )
-        if self.use_phase_reliability_damping:
-            self.phase_reliability_damping = PhaseReliabilityDamping(
-                min_reliability=getattr(configs, "phase_reliability_min", 0.35),
-                noise_threshold=getattr(configs, "phase_reliability_noise_threshold", 0.0),
-                noise_temperature=getattr(configs, "phase_reliability_noise_temperature", 0.2),
-            )
-
         self.use_phase_noise_hifreq_damping = getattr(
             configs, "use_phase_noise_hifreq_damping", False
         )
@@ -1109,17 +902,6 @@ class PhaseFormer(DefaultPLModule):
                 noise_threshold=getattr(configs, "phase_noise_hifreq_threshold", 1.0),
                 noise_temperature=getattr(configs, "phase_noise_hifreq_temperature", 0.2),
                 window=getattr(configs, "phase_noise_hifreq_window", 7),
-            )
-
-        self.use_lowfreq_trend_correction = getattr(
-            configs, "use_lowfreq_trend_correction", False
-        )
-        if self.use_lowfreq_trend_correction:
-            self.lowfreq_trend_correction = LowFreqTrendCorrection(
-                pred_len=self.pred_len,
-                enc_in=self.enc_in,
-                window=getattr(configs, "lowfreq_trend_window", 25),
-                gate_init=getattr(configs, "lowfreq_trend_gate_init", 0.05),
             )
 
         # loss configuration
@@ -1240,13 +1022,6 @@ class PhaseFormer(DefaultPLModule):
 
         # 5) Parallel by phase view (B, C, L, P_in)
         phase_series = self._to_phase_series(x_periods)
-        if self.use_phase_jitter_smoothing:
-            phase_series = self.phase_jitter_smoothing(phase_series)
-        if self.use_phase_deviation_dropout:
-            phase_series = self.phase_deviation_dropout(phase_series)
-        level_forecast = None
-        if self.use_phase_period_level_detrend:
-            phase_series, level_forecast = self.phase_period_level_detrend(phase_series)
         if self.use_phase_uncertainty_shrinkage:
             phase_series = self.phase_uncertainty_shrinkage(phase_series)
 
@@ -1264,13 +1039,13 @@ class PhaseFormer(DefaultPLModule):
         # final predictor to produce P_out
         y_phase_steps = self.predictor(Z)  # (B, C, L, P_out)
         if self.use_phase_local_trend:
-            y_phase_steps = y_phase_steps + self.phase_local_trend(phase_series)
-        if level_forecast is not None:
-            y_phase_steps = y_phase_steps + level_forecast
+            phase_trend = self.phase_local_trend(phase_series)
+            if self.training:
+                y_phase_steps = y_phase_steps + phase_trend - phase_trend.detach()
+            else:
+                y_phase_steps = y_phase_steps + phase_trend
         if self.use_phase_period_level_calibration:
             y_phase_steps = self.phase_period_level_calibration(y_phase_steps, phase_series)
-        if self.use_phase_shape_amplitude_calibration:
-            y_phase_steps = self.phase_shape_amplitude_calibration(y_phase_steps, phase_series)
         if self.use_phase_sparse_event_calibration:
             y_phase_steps = self.phase_sparse_event_calibration(y_phase_steps, phase_series)
 
@@ -1292,12 +1067,6 @@ class PhaseFormer(DefaultPLModule):
                 x_mark_dec.float(), self.pred_len
             )
             y_hat = y_hat + time_adjustment
-
-        if self.use_lowfreq_trend_correction:
-            y_hat = y_hat + self.lowfreq_trend_correction(x_in)
-
-        if self.use_phase_reliability_damping:
-            y_hat = self.phase_reliability_damping(y_hat, x_in, phase_series)
 
         if self.use_phase_noise_hifreq_damping:
             y_hat = self.phase_noise_hifreq_damping(y_hat, phase_series)
