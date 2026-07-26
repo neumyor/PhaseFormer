@@ -24,3 +24,13 @@
 - Protocol compatibility: historical benchmark files used last-epoch weights.
   New best-checkpoint results require matched original/latest reruns and must
   not be compared directly with those historical metrics.
+- Completed matched best-checkpoint regressions:
+  - ETTm2 96: MAE -3.85%, MSE -5.82%.
+  - ETTh2 720: MAE -4.75%, MSE -4.33%.
+  - Exchange 96: MAE -13.27%, MSE -16.93%.
+  - Weather 96: MAE -4.45%, MSE -1.85%.
+  - Electricity 336: MAE -2.28%, MSE -2.31%.
+- Traffic 96 batch64 was blocked by another process occupying 18.9 GiB GPU
+  memory. The official batch8 setting entered training successfully but was
+  stopped because completing both 30-epoch runs under contention was
+  impractically slow. No Traffic metric is claimed from these incomplete runs.

@@ -1070,3 +1070,21 @@
   - This smoke result is not a formal effect conclusion.
 - Historical comparisons above used last-epoch weights. Formal results under
   the repaired protocol require matched original/latest reruns.
+- Matched full-data regression evidence:
+  - `protocol_bestckpt_ettm2_96_20260726_comparison.csv`: MAE -3.85%,
+    MSE -5.82%.
+  - `protocol_bestckpt_etth2_720_20260726_comparison.csv`: MAE -4.75%,
+    MSE -4.33%.
+  - `protocol_bestckpt_exchange_96_20260726_comparison.csv`: MAE -13.27%,
+    MSE -16.93%.
+  - `protocol_bestckpt_weather_96_20260726_comparison.csv`: MAE -4.45%,
+    MSE -1.85%.
+  - `protocol_bestckpt_electricity_336_20260726_comparison.csv`: MAE -2.28%,
+    MSE -2.31%.
+- Traffic regression:
+  - Batch64 failed before completing an epoch because another process occupied
+    18.9 GiB of the 24 GiB GPU.
+  - The official batch8 configuration entered training without OOM, verifying
+    the unified runner and preset path, but was stopped because the contended
+    throughput made two full 30-epoch runs impractical.
+  - No formal Traffic metric is reported from either incomplete run.
