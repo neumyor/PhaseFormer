@@ -197,7 +197,11 @@ def run_one(args, mode, dataset, horizon):
     start = time.time()
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     test_result = trainer.test(
-        model, dataloaders=test_loader, ckpt_path="best", verbose=False
+        model,
+        dataloaders=test_loader,
+        ckpt_path="best",
+        verbose=False,
+        weights_only=False,
     )
     elapsed = time.time() - start
     test_metrics = test_result[0] if test_result else {}

@@ -1051,3 +1051,22 @@
   - Electricity 336 uses `latest_electricity336_adaptive_residual_mae`: adaptive weak-period residual gate initialized at 0.5, MAE loss, LR 0.0003, batch size 64.
   - Other Weather/Electricity horizons remain `latest_original_guardrail` because full-data evidence did not support promoting their screened candidates.
 - Updated `run_weather.py` and `run_electricity.py` to use the same preset-backed runner as the ETT scripts, so `python run_weather.py` and `python run_electricity.py` default to `--mode latest` and can still run `--mode original` for regression comparison.
+## Training Protocol Repair - 2026-07-26
+
+- Scope: repository correctness and reproducibility repair; this is maintenance,
+  not a new model iteration.
+- Fixed `ett_all` split selection, truthful effective-loss reporting, Traffic
+  runner divergence/test leakage, and last-epoch evaluation.
+- New protocol: select the lowest `val_loss` checkpoint and load it for test
+  metrics and subsequent bad-case export.
+- Compatibility note: PyTorch 2.7 defaults checkpoint loading to
+  `weights_only=True`; locally generated Lightning checkpoints contain the
+  model config, so trusted runner restores explicitly use `weights_only=False`.
+- GPU smoke evidence:
+  `research_runs/smoke_best_checkpoint_protocol_20260726b/`.
+  - ETTm2 720 -> 96, 5% train data, 2 epochs, seed 2021.
+  - Best checkpoint restored successfully.
+  - Test MAE 0.381733, MSE 0.343928.
+  - This smoke result is not a formal effect conclusion.
+- Historical comparisons above used last-epoch weights. Formal results under
+  the repaired protocol require matched original/latest reruns.

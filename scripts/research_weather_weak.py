@@ -564,8 +564,17 @@ def main():
     parser.add_argument("--phase-num-routers", type=int, default=None)
     parser.add_argument("--phase-attn-heads", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
-    parser.add_argument("--loss-func", choices=["mse", "mae", "smae"], default="mse")
-    parser.add_argument("--disable-huber", action="store_true")
+    parser.add_argument(
+        "--loss-func",
+        choices=["mse", "mae", "huber", "smae"],
+        default="mse",
+        help="Requested loss; legacy Huber remains active unless --disable-huber is set.",
+    )
+    parser.add_argument(
+        "--disable-huber",
+        action="store_true",
+        help="Legacy compatibility switch that allows --loss-func to take effect.",
+    )
     parser.add_argument("--huber-delta", type=float, default=1.0)
     args = parser.parse_args()
 
@@ -578,6 +587,7 @@ def main():
         if args.huber_delta == 1.0
         else args.huber_delta
     )
+    effective_loss = "huber" if not args.disable_huber else args.loss_func
     exp_args = build_exp_args(
         args.dataset,
         args.lookback,
@@ -586,8 +596,8 @@ def main():
         args.batch_size,
         args.percent,
         best_config["learning_rate"],
-        args.loss_func,
-        not args.disable_huber,
+        effective_loss,
+        effective_loss == "huber",
         huber_delta,
     )
     exp_args.training_args.patience = best_config.get(
@@ -724,7 +734,11 @@ def main():
     start = time.time()
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     test_result = trainer.test(
-        model, dataloaders=test_loader, ckpt_path="best", verbose=False
+        model,
+        dataloaders=test_loader,
+        ckpt_path="best",
+        verbose=False,
+        weights_only=False,
     )
     elapsed = time.time() - start
     test_metrics = test_result[0] if test_result else {}

@@ -128,7 +128,11 @@ def run_dataset(
         )
         trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
         test_result = trainer.test(
-            model, dataloaders=test_loader, ckpt_path="best", verbose=True
+            model,
+            dataloaders=test_loader,
+            ckpt_path="best",
+            verbose=True,
+            weights_only=False,
         )
         metrics = test_result[0] if test_result else {}
 
