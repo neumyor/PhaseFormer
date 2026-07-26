@@ -1,5 +1,6 @@
 *.csv
 *.pyc
+/.venv
 /log
 /selected_exps
 /research_runs
