@@ -2,7 +2,15 @@ import unittest
 
 import torch
 
-from src.models.PhaseFormer import PhaseFormer
+from src.models.PhaseFormer import (
+    PhaseFormer,
+    PhaseUncertaintyShrinkage,
+    WeakPeriodResidualHead,
+)
+from src.models.phase_adapters import (
+    PhaseUncertaintyShrinkage as SplitPhaseUncertaintyShrinkage,
+)
+from src.models.phase_adapters import WeakPeriodResidualHead as SplitWeakPeriodResidualHead
 from src.models.phaseformer_presets import (
     PhaseFormerPresetConfig,
     build_hyperparams,
@@ -42,6 +50,17 @@ class PresetAndLossTests(unittest.TestCase):
             prediction, target, delta=config.huber_delta
         )
         torch.testing.assert_close(actual, expected)
+
+    def test_split_adapters_keep_legacy_imports_and_state_keys(self):
+        self.assertIs(WeakPeriodResidualHead, SplitWeakPeriodResidualHead)
+        self.assertIs(PhaseUncertaintyShrinkage, SplitPhaseUncertaintyShrinkage)
+        hyperparams = build_hyperparams("ETTm2", 96, "original")
+        args = make_exp_args("ETTm2", 720, 96, hyperparams)
+        config = PhaseFormerPresetConfig(args, 720, 96, hyperparams)
+        source = PhaseFormer(config)
+        restored = PhaseFormer(config)
+        restored.load_state_dict(source.state_dict(), strict=True)
+        self.assertEqual(tuple(source.state_dict()), tuple(restored.state_dict()))
 
 
 if __name__ == "__main__":
