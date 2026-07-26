@@ -14,7 +14,9 @@ dataset_config = EasyDict(
     max_len=-1,
     freq="t",
     num_workers=6,
-    label_len=0,  # TODO will not use for cal loss actually, then why it's here?
+    # Compatibility field required by the shared forecasting dataset interface.
+    # PhaseFormer does not consume decoder history, so it intentionally stays 0.
+    label_len=0,
 )
 
 

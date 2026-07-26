@@ -598,8 +598,13 @@ def make_exp_args(dataset_name, lookback, horizon, hyperparams, batch_size=None)
     exp_args.training_args.ema = False
     exp_args.training_args.train_epochs = hyperparams.get("train_epochs", 30)
     exp_args.training_args.lr_schedule_config.type = "type3"
-    exp_args.training_args.loss_func = hyperparams.get("loss_func", "mse")
-    exp_args.training_args.use_huber_loss = hyperparams.get("use_huber_loss", True)
+    loss_func = str(hyperparams.get("loss_func", "mse")).lower()
+    legacy_use_huber = hyperparams.get("use_huber_loss", True)
+    if legacy_use_huber:
+        loss_func = "huber"
+    exp_args.training_args.loss_func = loss_func
+    # Retained as a compatibility mirror for old configs and result schemas.
+    exp_args.training_args.use_huber_loss = loss_func == "huber"
     exp_args.training_args.huber_delta = hyperparams.get("huber_delta", 1.0)
     exp_args.training_args.learning_rate = hyperparams["learning_rate"]
     exp_args.training_args.batch_size = (

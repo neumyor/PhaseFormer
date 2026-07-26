@@ -46,7 +46,7 @@ def data_provider(args, flag, drop_last_test=False, train_all=False):
         freq = args.freq
 
     if args.data == "ett_all":
-        if flag == "val" or "test":
+        if flag in ("val", "test"):
             data_infos = args.multiple_dataset_info["test"]
         else:
             data_infos = args.multiple_dataset_info["train"]

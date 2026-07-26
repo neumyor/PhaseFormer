@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 
 from src.dataset.data_factory import data_provider
@@ -111,11 +111,15 @@ def run_dataset(
         )
         print(f"{'=' * 72}")
 
+        checkpoint = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1)
         trainer = pl.Trainer(
             max_epochs=exp_args.training_args.train_epochs,
             logger=logger,
             enable_checkpointing=True,
-            callbacks=[EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience)],
+            callbacks=[
+                EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience),
+                checkpoint,
+            ],
             accelerator="auto",
             devices=1,
             enable_progress_bar=progress,
@@ -123,7 +127,9 @@ def run_dataset(
             deterministic=True,
         )
         trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-        test_result = trainer.test(model, dataloaders=test_loader, verbose=True)
+        test_result = trainer.test(
+            model, dataloaders=test_loader, ckpt_path="best", verbose=True
+        )
         metrics = test_result[0] if test_result else {}
 
         summary_rows.append(

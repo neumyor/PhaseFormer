@@ -14,7 +14,7 @@ if REPO_ROOT not in sys.path:
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 
 from src.dataset.data_factory import data_provider
@@ -115,11 +115,21 @@ def train_or_load_model(dataset, horizon, variant, enable_phase_trend, run_dir, 
         name="PhaseFormer",
         version=variant,
     )
+    checkpoint = ModelCheckpoint(
+        dirpath=os.path.join(run_dir, "checkpoints", variant),
+        filename="best",
+        monitor="val_loss",
+        mode="min",
+        save_top_k=1,
+    )
     trainer = pl.Trainer(
         max_epochs=exp_args.training_args.train_epochs,
         logger=logger,
-        enable_checkpointing=False,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience)],
+        enable_checkpointing=True,
+        callbacks=[
+            EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience),
+            checkpoint,
+        ],
         accelerator="auto",
         devices=1,
         enable_progress_bar=args.progress,
@@ -129,7 +139,9 @@ def train_or_load_model(dataset, horizon, variant, enable_phase_trend, run_dir, 
 
     start = time.time()
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    test_result = trainer.test(model, dataloaders=test_loader, verbose=False)
+    test_result = trainer.test(
+        model, dataloaders=test_loader, ckpt_path="best", verbose=False
+    )
     elapsed = time.time() - start
     test_metrics = test_result[0] if test_result else {}
     metrics = {

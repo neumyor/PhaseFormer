@@ -41,6 +41,9 @@ class DefaultPLModule(pl.LightningModule):
             criterion = nn.L1Loss()
         elif loss_type == "smae":
             criterion = nn.SmoothL1Loss()
+        elif loss_type == "huber":
+            delta = float(getattr(self.args.training_args, "huber_delta", 1.0))
+            criterion = nn.HuberLoss(delta=delta)
         elif loss_type == "smape":
 
             class SMAPE(nn.Module):

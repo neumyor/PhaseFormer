@@ -1080,18 +1080,12 @@ class PhaseFormer(DefaultPLModule):
     # Lightning training steps
     def _compute_loss(self, outputs, target):
         """Loss computation with Huber support."""
-        use_huber = self.use_huber_loss or str(getattr(self.args.training_args, "loss_func", "")).lower() == "huber"
-        if use_huber:
-            diff = outputs - target
-            abs_diff = torch.abs(diff)
-            delta = torch.as_tensor(self.huber_delta, device=outputs.device, dtype=outputs.dtype)
-            quadratic = torch.minimum(abs_diff, delta)
-            linear = abs_diff - quadratic
-            loss = 0.5 * (quadratic ** 2) / delta + linear
-            return loss.mean()
-        else:
-            criterion = self._get_criterion(self.args.training_args.loss_func)
-            return criterion(outputs, target)
+        loss_func = str(getattr(self.args.training_args, "loss_func", "mse")).lower()
+        # Old direct model configs may only expose use_huber_loss.
+        if self.use_huber_loss:
+            loss_func = "huber"
+        criterion = self._get_criterion(loss_func)
+        return criterion(outputs, target)
 
     def training_step(self, batch, batch_idx):
         batch_x, batch_y, batch_x_mark, batch_y_mark = batch

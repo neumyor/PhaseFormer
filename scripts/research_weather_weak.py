@@ -14,7 +14,7 @@ if REPO_ROOT not in sys.path:
 import pytorch_lightning as pl
 import torch
 import pandas as pd
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 
 import config.base_config as config_module
@@ -699,11 +699,21 @@ def main():
         name="PhaseFormer",
         version=args.variant,
     )
+    checkpoint = ModelCheckpoint(
+        dirpath=os.path.join(run_dir, "checkpoints"),
+        filename="best",
+        monitor="val_loss",
+        mode="min",
+        save_top_k=1,
+    )
     trainer = pl.Trainer(
         max_epochs=args.epochs,
         logger=logger,
-        enable_checkpointing=False,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience)],
+        enable_checkpointing=True,
+        callbacks=[
+            EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience),
+            checkpoint,
+        ],
         accelerator="auto",
         devices=1,
         enable_progress_bar=False,
@@ -713,7 +723,9 @@ def main():
 
     start = time.time()
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    test_result = trainer.test(model, dataloaders=test_loader, verbose=False)
+    test_result = trainer.test(
+        model, dataloaders=test_loader, ckpt_path="best", verbose=False
+    )
     elapsed = time.time() - start
     test_metrics = test_result[0] if test_result else {}
     bad_cases = collect_bad_cases(
