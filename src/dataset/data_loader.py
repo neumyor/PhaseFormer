@@ -147,6 +147,8 @@ class Dataset_ETT_hour_Multi(Dataset):
 
         df_stamp = df_raw[["date"]][border1:border2]
         df_stamp["date"] = pd.to_datetime(df_stamp.date)
+        # Preserve raw timestamps for reproducible validation bad-case reports.
+        self.timestamps = df_stamp["date"].to_numpy(copy=True)
         if self.timeenc == 0:
             df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
@@ -266,6 +268,8 @@ class Dataset_ETT_minute_Multi(Dataset):
 
         df_stamp = df_raw[["date"]][border1:border2]
         df_stamp["date"] = pd.to_datetime(df_stamp.date)
+        # Preserve raw timestamps for reproducible validation bad-case reports.
+        self.timestamps = df_stamp["date"].to_numpy(copy=True)
         if self.timeenc == 0:
             df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
@@ -391,6 +395,8 @@ class Dataset_Custom_Multi(Dataset):
 
         df_stamp = df_raw[["date"]][border1:border2]
         df_stamp["date"] = pd.to_datetime(df_stamp.date)
+        # Preserve raw timestamps for reproducible validation bad-case reports.
+        self.timestamps = df_stamp["date"].to_numpy(copy=True)
         if self.timeenc == 0:
             df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
@@ -506,6 +512,8 @@ class Dataset_ETT_hour(Dataset):
 
         df_stamp = df_raw[["date"]][border1:border2]
         df_stamp["date"] = pd.to_datetime(df_stamp.date)
+        # Preserve raw timestamps for reproducible validation bad-case reports.
+        self.timestamps = df_stamp["date"].to_numpy(copy=True)
         if self.timeenc == 0:
             df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
@@ -622,6 +630,8 @@ class Dataset_ETT_minute(Dataset):
 
         df_stamp = df_raw[["date"]][border1:border2]
         df_stamp["date"] = pd.to_datetime(df_stamp.date)
+        # Preserve raw timestamps for reproducible validation bad-case reports.
+        self.timestamps = df_stamp["date"].to_numpy(copy=True)
         if self.timeenc == 0:
             df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
@@ -746,6 +756,8 @@ class Dataset_Custom(Dataset):
 
         df_stamp = df_raw[["date"]][border1:border2]
         df_stamp["date"] = pd.to_datetime(df_stamp.date)
+        # Preserve raw timestamps for reproducible validation bad-case reports.
+        self.timestamps = df_stamp["date"].to_numpy(copy=True)
         if self.timeenc == 0:
             df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)

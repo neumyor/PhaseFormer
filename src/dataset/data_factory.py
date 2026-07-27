@@ -35,7 +35,8 @@ def data_provider(args, flag, drop_last_test=False, train_all=False):
         noisy_ratio = 0.0
 
     elif flag == "val":
-        shuffle_flag = True
+        # Validation order must be stable for auditable sample indices and bad cases.
+        shuffle_flag = False
         drop_last = drop_last_test
         batch_size = args.batch_size
         freq = args.freq
