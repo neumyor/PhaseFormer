@@ -15,10 +15,12 @@
 ---
 
 ## 1. 核心工件
+> 现状说明：`docs/archive/ITERATION_BRIEF.md` 与 `docs/archive/ITERATION_LOG.md` 记录了历史科研轮次，作为可追溯档案保留。当前分支的现行迭代计划与记录分别使用 `EXPERIMENT_SEARCH_PLAN.md`（任务网格/搜索/成本）与 `docs/agent-log.md`（追加式维护日志）；新的科研过程建议把关键结论写入 `docs/agent-log.md` 并在需要时引用归档日志。
+
 
 迭代过程中只维护两个核心文档工件，避免文档膨胀；实验配置、日志、预测结果、bad case 等证据产物按统一目录组织，并在核心文档中引用。
 
-### 1.1 `ITERATION_BRIEF.md`
+### 1.1 `docs/archive/ITERATION_BRIEF.md`
 
 记录本次迭代任务的稳定信息。除非项目结构、用户要求、退出条件或当前最佳方案变化，否则不要频繁修改。
 
@@ -31,7 +33,7 @@
 * 退出条件：用户显式退出条件优先；若用户未给出，则写入默认退出条件。
 * 当前最佳方案：模型版本、实验编号、关键改动、主要指标、证据产物路径、仍存在的问题。
 
-### 1.2 `ITERATION_LOG.md`
+### 1.2 `docs/archive/ITERATION_LOG.md`
 
 追加式记录每轮迭代，不覆盖历史。
 
@@ -66,7 +68,7 @@ research_runs/<experiment_id>/
   notes.md                 # 可选：补充观察
 ```
 
-不是每次实验都必须生成全部文件；但任何被用于关键结论、当前最佳方案或 bad case 归因的证据，都必须能从 `ITERATION_LOG.md` 追溯到对应产物。
+不是每次实验都必须生成全部文件；但任何被用于关键结论、当前最佳方案或 bad case 归因的证据，都必须能从 `docs/archive/ITERATION_LOG.md` 追溯到对应产物。
 
 ---
 
@@ -112,11 +114,11 @@ research_runs/<experiment_id>/
 4. **重点基线**：只在用户目标相关的数据集、horizon 或场景上扩大实验。
 5. **全量基线**：仅当需要正式比较、资源允许、且快速基线已证明链路稳定时运行。
 
-如果使用小训练轮数、数据子集、已有 checkpoint 或非完整评估，必须在 `ITERATION_LOG.md` 中标注“不可作为最终效果结论”。
+如果使用小训练轮数、数据子集、已有 checkpoint 或非完整评估，必须在 `docs/archive/ITERATION_LOG.md` 中标注“不可作为最终效果结论”。
 
 ### 2.3 固化用户要求
 
-进入迭代前，把用户要求写入 `ITERATION_BRIEF.md`。用户要求不仅要记录原文，还要转化为 Agent 后续可执行的约束。
+进入迭代前，把用户要求写入 `docs/archive/ITERATION_BRIEF.md`。用户要求不仅要记录原文，还要转化为 Agent 后续可执行的约束。
 
 例如：
 
@@ -191,8 +193,8 @@ Agent 应默认采用最低成本路径验证假设，只有在证据支持继�
 4. 记录结果和证据产物路径；
 5. 分析 bad case；
 6. 判断假设应保留、修改、合并或淘汰；
-7. 更新 `ITERATION_LOG.md`；
-8. 如当前最佳方案变化，更新 `ITERATION_BRIEF.md`。
+7. 更新 `docs/archive/ITERATION_LOG.md`；
+8. 如当前最佳方案变化，更新 `docs/archive/ITERATION_BRIEF.md`。
 
 每轮必须回答：
 
@@ -286,7 +288,7 @@ Agent 在迭代过程中应遵守：
 * 不为了提升指标破坏数据划分或评估协议；
 * 不覆盖已有基线结果和实验产物；
 * 不一次性引入过多无法归因的改动；
-* 不忽略 `ITERATION_BRIEF.md` 中的用户要求和退出条件；
+* 不忽略 `docs/archive/ITERATION_BRIEF.md` 中的用户要求和退出条件；
 * 不只根据平均指标判断模型优劣，应结合 bad case 和资源开销；
 * 不把单纯调参包装成机制创新。
 

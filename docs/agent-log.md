@@ -34,3 +34,34 @@
   memory. The official batch8 setting entered training successfully but was
   stopped because completing both 30-epoch runs under contention was
   impractically slow. No Traffic metric is claimed from these incomplete runs.
+
+## 2026-08-10 — Weak-residual branch refactor and cleanup
+
+- Branch renamed `phaseformer-weather-electricity-presets` → `weak-residual-phaseformer`
+  (confirmed independent from `main`, which removed the weak/adaptive residual line).
+- Extracted the shared training protocol into `src/training/runner.py`
+  (`build_logger`, `build_trainer`, `restore_best_checkpoint`); refactored the
+  four previously duplicated Trainer assemblies (`run_ett_latest.py`,
+  `scripts/benchmark_phaseformer_suite.py`, `scripts/research_weather_weak.py`,
+  `scripts/search_phaseformer.py`) to use it. Best-checkpoint restore now has a
+  single implementation.
+- Converted the 37-branch `get_latest_overrides` if-ladder into a declarative
+  `_LATEST_POLICY` table keyed by `(dataset, horizon)` with a per-dataset
+  full-horizon fallback and the original guardrail default. Verified
+  behaviorally identical for all 32 dataset×horizon tasks; added
+  `LatestPolicyTableTests` in `tests/test_presets_and_loss.py`.
+- Unified dataset entry: `run_ett_latest.py --datasets` runs multiple datasets;
+  thin `run_*.py` wrappers unchanged. `run_all_experiments.py` marked
+  deprecated (superseded by `scripts/run/*.sh` + benchmark suite).
+- Archived 18 unused `src/models/layers/*` legacy modules to
+  `archive/layers_legacy/` (the active model only imports
+  `SelfAttention_Family.py`), with an explaining README.
+- Archived `ITERATION_BRIEF.md` / `ITERATION_LOG.md` to `docs/archive/` and
+  repointed references in `AGENT.md` / `HOW_TO_DO_RESEARCH.md` to the archived
+  paths, clarifying the current active plan/log are `EXPERIMENT_SEARCH_PLAN.md`
+  and `docs/agent-log.md`.
+- Removed tracked `.DS_Store` files and added `.DS_Store` to `.gitignore`.
+- Environment note: sandbox lacks the repo's locked deps (torch/lightning), so
+  verification was static (AST parse + behavioral-equivalence simulation for the
+  presets table). Full `uv run pytest` and a GPU smoke run should be executed in
+  the real `raft`/`py310` environment to confirm runtime equivalence.
