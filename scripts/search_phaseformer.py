@@ -25,8 +25,7 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger
+from src.training.runner import build_logger, build_trainer, restore_best_checkpoint
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -232,9 +231,6 @@ def run_id(spec):
     )
 
 
-def restore_best(model, path):
-    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
-    model.load_state_dict(checkpoint["state_dict"], strict=True)
 
 
 def classify_case(pred, true):
@@ -391,16 +387,14 @@ def execute(args):
     attempt_index = max([int(x.name) for x in attempts_root.iterdir() if x.is_dir() and x.name.isdigit()] or [0]) + 1
     attempt_dir = attempts_root / f"{attempt_index:03d}"
     attempt_dir.mkdir()
-    logger = CSVLogger(str(attempt_dir / "lightning"), name="PhaseFormer", version="train")
-    checkpoint = ModelCheckpoint(
-        dirpath=str(attempt_dir / "checkpoints"), filename="best", monitor="val_loss",
-        mode="min", save_top_k=1,
-    )
-    trainer = pl.Trainer(
-        max_epochs=spec["max_epochs"], logger=logger, enable_checkpointing=True,
-        callbacks=[EarlyStopping(monitor="val_loss", patience=int(hp.get("patience", 8))), checkpoint],
-        accelerator="gpu", devices=1, enable_progress_bar=args.progress,
-        log_every_n_steps=1, deterministic=True,
+    logger = build_logger(str(attempt_dir / "lightning"), name="PhaseFormer", version="train")
+    trainer, checkpoint = build_trainer(
+        max_epochs=spec["max_epochs"],
+        logger=logger,
+        patience=int(hp.get("patience", 8)),
+        checkpoint_dir=str(attempt_dir / "checkpoints"),
+        accelerator="gpu",
+        progress=args.progress,
     )
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -409,7 +403,7 @@ def execute(args):
     elapsed = time.monotonic() - start
     if not checkpoint.best_model_path:
         raise RuntimeError("training completed without a best checkpoint")
-    restore_best(model, checkpoint.best_model_path)
+    restore_best_checkpoint(model, checkpoint)
     model.to(trainer.strategy.root_device)
     val_metrics = evaluate(
         model, val_loader, val_set, "val", spec["horizon"], run_dir,
