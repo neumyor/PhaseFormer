@@ -14,7 +14,7 @@ if REPO_ROOT not in sys.path:
 import pytorch_lightning as pl
 import torch
 import pandas as pd
-from src.training.runner import build_logger, build_trainer
+from src.training.runner import build_logger, build_trainer, restore_best_checkpoint
 
 import config.base_config as config_module
 from src.dataset.data_factory import data_provider
@@ -718,12 +718,15 @@ def main():
 
     start = time.time()
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    # Restore the lowest-val-loss checkpoint manually: Lightning 2.1's test()
+    # loads checkpoints via torch.load with the torch>=2.6 default
+    # weights_only=True, which rejects the bundled model config. The shared
+    # restore helper passes weights_only=False explicitly.
+    restore_best_checkpoint(model, checkpoint)
     test_result = trainer.test(
         model,
         dataloaders=test_loader,
-        ckpt_path="best",
         verbose=False,
-        weights_only=False,
     )
     elapsed = time.time() - start
     test_metrics = test_result[0] if test_result else {}

@@ -6,8 +6,11 @@ best-checkpoint protocol is defined in exactly one place:
 
 - Lowest validation-loss checkpoint is saved as ``best.ckpt``.
 - Callers restore that checkpoint before test evaluation / bad-case export via
-  :func:`restore_best_checkpoint`, or pass ``ckpt_path="best"`` to the Trainer
-  test method.
+  :func:`restore_best_checkpoint`. Passing ``ckpt_path="best"`` to the Trainer
+  test method is avoided: Lightning 2.1 loads that checkpoint through
+  ``torch.load`` with the torch>=2.6 default ``weights_only=True``, which
+  rejects the bundled model config. ``restore_best_checkpoint`` passes
+  ``weights_only=False`` explicitly.
 """
 
 import torch

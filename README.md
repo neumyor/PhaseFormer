@@ -41,7 +41,7 @@ uv sync --group gift-eval
 
 Place datasets under `resources/all_datasets/` in the following subdirectories (empty folders are already included for guidance):
 
-- `ETT/`: `ETTh1.csv`, `ETTh2.csv`, `ETTm1.csv`, `ETTm2.csv`
+- `ETT-small/`: `ETTh1.csv`, `ETTh2.csv`, `ETTm1.csv`, `ETTm2.csv`
 - `electricity/`: `electricity.csv`
 - `traffic/`: `traffic.csv`
 - `weather/`: `weather.csv`
@@ -53,7 +53,7 @@ Dataset paths are centrally managed in `src/dataset/data_info.py`. For example:
     "data": "ett_h",
     "data_path": "ETTh1.csv",
     "batch_size": 256,
-    "root_path": "./resources/all_datasets/ETT",
+    "root_path": "./resources/all_datasets/ETT-small",
     "num_variants": 7,
 }
 ```

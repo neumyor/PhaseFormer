@@ -19,6 +19,7 @@ from pytorch_lightning.loggers import CSVLogger
 
 from src.dataset.data_factory import data_provider
 from src.models.PhaseFormer import PhaseFormer
+from src.training.runner import restore_best_checkpoint
 from src.models.phaseformer_presets import (
     PhaseFormerPresetConfig,
     build_hyperparams,
@@ -139,12 +140,15 @@ def train_or_load_model(dataset, horizon, variant, enable_phase_trend, run_dir, 
 
     start = time.time()
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    # Restore the lowest-val-loss checkpoint manually: Lightning 2.1's test()
+    # loads checkpoints via torch.load with the torch>=2.6 default
+    # weights_only=True, which rejects the bundled model config. The shared
+    # restore helper passes weights_only=False explicitly.
+    restore_best_checkpoint(model, checkpoint)
     test_result = trainer.test(
         model,
         dataloaders=test_loader,
-        ckpt_path="best",
         verbose=False,
-        weights_only=False,
     )
     elapsed = time.time() - start
     test_metrics = test_result[0] if test_result else {}
