@@ -25,20 +25,28 @@
   - 使用 `git diff --stat` 确认改动范围没有异常扩散。
 - 不提交大体积数据集、模型权重、临时日志、缓存目录或本地环境文件，除非仓库明确要求。
 
-## uv 环境管理
+## 运行环境管理
 
-- 如果没有指定运行环境，你应该利用uv来初始化一个所需的环境
-- 优先使用 `uv` 管理 Python 环境和依赖，保持环境定义集中、可复现。
-- 如果仓库已有 `pyproject.toml` 或 `uv.lock`：
-  - 安装依赖使用 `uv sync`。
-  - 运行脚本使用 `uv run python <script>.py` 或 `uv run <command>`。
-  - 新增依赖使用 `uv add <package>`，并提交同步更新后的锁文件。
-- 如果仓库尚未启用 `uv`：
+- **优先使用可用的 conda 环境**，而不是 `uv`。本机已就绪的 conda 环境（含 torch 2.8.0 + PyTorch Lightning 2.1.0 及本仓库全部依赖）：
+  - `py310`（`/home/niuyiming/.conda/envs/py310`）——首选，与仓库锁定的 Lightning 2.1.x 匹配，验证测试与本次修复均使用此环境。
+  - `gift`、`basicts`——依赖齐全，可作为备用。
+  - 运行命令使用完整解释器路径，避免依赖 `conda run` 或激活 shell：
+    ```bash
+    /home/niuyiming/.conda/envs/py310/bin/python <script.py>
+    /home/niuyiming/.conda/envs/py310/bin/python -m pytest tests/ -q
+    ```
+- 只有在 conda 环境不可用或缺少依赖时，才 **fallback 到 `uv`**：
+  - 如果仓库已有 `pyproject.toml` 或 `uv.lock`：
+    - 安装依赖使用 `uv sync`。
+    - 运行脚本使用 `uv run python <script>.py` 或 `uv run <command>`。
+    - 新增依赖使用 `uv add <package>`，并提交同步更新后的锁文件。
+  - 注意：仓库 `.venv` 默认是空的，`uv run` 首次会从零安装、耗时很长；只有当 conda 环境无法满足需求时才走这条路。
+- 如果仓库尚未启用 `uv`，且 conda 不可用：
   - 不为临时任务随意引入新的项目结构。
   - 只有在用户同意或任务需要可复现依赖管理时，才初始化 `pyproject.toml`/`uv.lock`。
   - 初始化后需要更新 `README.md` 或相关文档中的安装方式。
 - 不把虚拟环境目录提交到仓库。常见目录如 `.venv/` 应保持未跟踪或写入 `.gitignore`。
-- GPU、CUDA、PyTorch 版本等环境差异会影响结果；运行训练或评估时必须记录关键环境信息。
+- GPU、CUDA、PyTorch 版本等环境差异会影响结果；运行训练或评估时必须记录所使用环境（conda 环境名或 uv）及关键版本信息。
 
 ## 代码修改规范
 
@@ -76,9 +84,9 @@
 ## 验证要求
 
 - 能运行轻量验证时，不只停留在静态检查。
-- 优先级建议：
-  - 语法或导入检查：`uv run python -m py_compile <file>`。
-  - 单元测试或最小测试集：按仓库已有测试方式运行。
+- 优先级建议（环境优先用 conda，见「运行环境管理」）：
+  - 语法或导入检查：`/home/niuyiming/.conda/envs/py310/bin/python -m py_compile <file>`。
+  - 单元测试或最小测试集：`/home/niuyiming/.conda/envs/py310/bin/python -m pytest tests/ -q`。
   - 训练脚本冒烟测试：在可接受时间内使用小配置验证主流程。
   - 完整训练：仅在用户要求、资源允许且数据齐备时执行。
 - 如果无法验证，必须说明原因，例如缺少数据集、缺少 GPU、依赖未安装或运行时间过长。
