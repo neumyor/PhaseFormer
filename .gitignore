@@ -4,3 +4,6 @@
 /log
 /selected_exps
 /research_runs
+
+# macOS noise
+.DS_Store
