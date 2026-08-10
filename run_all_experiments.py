@@ -1,3 +1,13 @@
+"""
+DEPRECATED: This legacy aggregator scans per-run summary CSVs and merges them.
+
+It overlaps with the modern experiment scheduling under ``scripts/run/*.sh``
+(which drives the validation-isolated search runner) and with
+``scripts/benchmark_phaseformer_suite.py`` for paired comparisons. Prefer those
+entry points for new work; this module is kept only for reading historical
+aggregated summaries and will be removed once confirmed unused.
+"""
+
 import os
 import sys
 import csv

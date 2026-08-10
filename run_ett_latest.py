@@ -5,8 +5,7 @@ from datetime import datetime
 
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger
+from src.training.runner import build_logger, build_trainer
 
 from src.dataset.data_factory import data_provider
 from src.models.PhaseFormer import PhaseFormer
@@ -97,8 +96,8 @@ def run_dataset(
             f"{dataset_name}-{lookback}-{horizon}-PhaseFormer-{mode}-{scheme}"
             f"-seed{seed}"
         )
-        logger = CSVLogger(
-            save_dir="./log/training_results",
+        logger = build_logger(
+            "./log/training_results",
             name="PhaseFormer",
             version=logger_version,
         )
@@ -111,20 +110,11 @@ def run_dataset(
         )
         print(f"{'=' * 72}")
 
-        checkpoint = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1)
-        trainer = pl.Trainer(
+        trainer, checkpoint = build_trainer(
             max_epochs=exp_args.training_args.train_epochs,
             logger=logger,
-            enable_checkpointing=True,
-            callbacks=[
-                EarlyStopping(monitor="val_loss", patience=exp_args.training_args.patience),
-                checkpoint,
-            ],
-            accelerator="auto",
-            devices=1,
-            enable_progress_bar=progress,
-            log_every_n_steps=1,
-            deterministic=True,
+            patience=exp_args.training_args.patience,
+            progress=progress,
         )
         trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
         test_result = trainer.test(
@@ -170,8 +160,14 @@ def run_dataset(
     return summary_rows
 
 
-def main(dataset_name):
+def main(dataset_name=None):
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--datasets",
+        default=None,
+        help="comma-separated datasets (defaults to the single dataset selected "
+        "by the calling run_*.py wrapper, or all 8 datasets when none is given)",
+    )
     parser.add_argument("--horizons", default="all", help="all or comma-separated horizons")
     parser.add_argument("--mode", choices=["latest", "original"], default="latest")
     parser.add_argument("--lookback", type=int, default=720)
@@ -180,12 +176,21 @@ def main(dataset_name):
     parser.add_argument("--no-progress", action="store_true")
     args = parser.parse_args()
 
-    run_dataset(
-        dataset_name,
-        horizons=parse_horizons(args.horizons),
-        mode=args.mode,
-        lookback=args.lookback,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        progress=not args.no_progress,
-    )
+    if args.datasets:
+        names = [d.strip() for d in args.datasets.split(",") if d.strip()]
+    elif dataset_name:
+        names = [dataset_name]
+    else:
+        names = ["ETTh1", "ETTh2", "ETTm1", "ETTm2", "Exchange", "Electricity", "Traffic", "Weather"]
+
+    for name in names:
+        print(f"\n===== Dataset: {name} =====")
+        run_dataset(
+            name,
+            horizons=parse_horizons(args.horizons),
+            mode=args.mode,
+            lookback=args.lookback,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            progress=not args.no_progress,
+        )
