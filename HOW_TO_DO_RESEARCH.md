@@ -106,6 +106,11 @@ research_runs/<experiment_id>/
 
 基线必须分层建立，避免一开始就跑全量实验。
 
+正式提升验证的固定参照是 `docs/PHASEFORMER_GOLD_STANDARD.md`。重新训练的
+original baseline 属于 matched rerun，用于确认代码、环境和评估协议的偏差，不能
+替换金标准。只有实验设置与金标准一致时，才能直接声明相对金标准的提升；否则应
+明确标记为实验内配对结果。
+
 推荐顺序：
 
 1. **静态检查**：确认依赖、入口脚本、数据路径、GPU/CPU 可用性。

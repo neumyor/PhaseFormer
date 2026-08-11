@@ -4,6 +4,7 @@
 
 - 覆盖 8 个数据集：ETTh1、ETTh2、ETTm1、ETTm2、Exchange、Weather、Electricity、Traffic。
 - 每个数据集覆盖 horizon 96、192、336、720，共 32 个任务，lookback 固定为 720。
+- ETTh1、ETTh2、ETTm1、ETTm2、Weather、Electricity、Traffic 的最终提升声明统一以 `docs/PHASEFORMER_GOLD_STANDARD.md` 为固定参照；截图未包含 Exchange，因此 Exchange 在获得权威金标准前只能报告 matched rerun 配对结果。
 - 同一数据集的四个 horizon 共用一个机制族和 period 设置；各 horizon 仅允许调整学习率、loss、容量、训练时长等训练/规模参数。
 - 搜索阶段只使用验证集；候选排序、早停、bad case 均不得读取测试集。冻结最终方案后才运行测试。
 - 每个任务先保留验证集 Pareto 前沿，再计算：
@@ -18,7 +19,7 @@
 - 新增配置驱动的搜索 runner，输入 dataset、horizon、机制、参数、seed、预算阶段，自动生成唯一实验 ID，并支持断点续跑。
 - 增加独立验证评估器，加载最低 `val_loss` checkpoint 后计算 `val_mae`、`val_mse`；搜索候选不调用 `trainer.test()`。
 - bad case 改从验证集导出，限制 8 个，包含样本索引、变量、时间戳、预测/真实值路径、错误模式和下一步动作。
-- 用当前修复后的真实 Huber 和 best-checkpoint 协议，为 32 个任务重新训练 original baseline；历史 last-epoch 结果不作为本轮基线。
+- 用当前修复后的真实 Huber 和 best-checkpoint 协议重新训练 original baseline，作为协议诊断和候选搜索所需的 matched rerun；它不得替换 `docs/PHASEFORMER_GOLD_STANDARD.md`。最终报告同时给出相对金标准的结果，以及在协议不完全一致时的 matched rerun 配对结果。
 - 每个实验保存配置、命令、环境、checkpoint、验证指标、耗时、显存峰值和 bad case；集中生成 leaderboard 与 Pareto 表。
 
 ### 2. 每数据集选择共享机制

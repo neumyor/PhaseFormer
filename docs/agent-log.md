@@ -1,5 +1,22 @@
 # Agent Maintenance Log
 
+## 2026-08-11 — Original PhaseFormer gold standard
+
+- Transcribed the user-provided paper Table 5 screenshot into
+  `docs/PHASEFORMER_GOLD_STANDARD.md`.
+- Recorded 28 original PhaseFormer results covering ETTh1, ETTh2, ETTm1,
+  ETTm2, Weather, Electricity, and Traffic at horizons 96, 192, 336, and 720,
+  with input length 720 and explicit MSE/MAE column ordering.
+- Defined the fixed comparison formula, dual-metric claim rule, matched-rerun
+  distinction, and update authority. Exchange remains intentionally unset
+  because it is absent from the supplied source image.
+- Updated `AGENT.md`, `HOW_TO_DO_RESEARCH.md`, and
+  `EXPERIMENT_SEARCH_PLAN.md` so future improvement claims use this fixed gold
+  standard instead of silently replacing it with a retrained baseline.
+- Validation: manually cross-checked all 28 rows against the source image and
+  verified the Markdown table contains 7 datasets × 4 horizons with both
+  metrics. No training or model behavior changed.
+
 ## 2026-07-26 — Training protocol and maintainability repair
 
 - Fixed the `ett_all` train/validation/test dataset selection condition.
