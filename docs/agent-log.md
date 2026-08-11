@@ -1,5 +1,38 @@
 # Agent Maintenance Log
 
+## 2026-08-11 — Adaptive Phase Alignment exploration
+
+New mechanism (b2d06ba, d1d2be1, 626b0f2): replace the fixed `time % period_len`
+phase assignment with a learned continuous phase per time point. A small MLP
+(`src/models/phase_align.py`, `PhaseAlignment`) maps `[RevIN value, time-mark]`
+to a residual delta from the position-in-cycle; input evidence is soft-scattered
+onto the two neighbouring phase slots via linear interpolation (k=2). Output
+grid stays fixed, so reconstruction is unchanged. Flag-gated
+(`use_phase_align`), module constructed last in `__init__` so toggling the flag
+does not shift shared-module initialization; flag-off path byte-identical.
+`x_mark_enc` (previously unused) now feeds the estimator; must `.float()` because
+training passes it as float64.
+
+- Tests: `tests/test_phase_align.py` (forward shape, zero-delta identity,
+  flag-on@init ≈ flag-off, plumbing, mark-dim fallback). 20/20 pass.
+- Stage A (30% data / 8 ep, paired same-budget original, val-only): 6/10 tasks
+  slightly positive (+0.02..+0.43), 4/10 negative; 3 eliminated (ETTm1 96
+  −0.81, ETTm2 96 −0.41, Weather 96 −2.43).
+- Stage B (full budget, seed 2021, test eval, `research_runs/phase_align_full/`):
+  no task beats the gold standard on both MSE and MAE (matched original reruns
+  themselves sit 0.5-5% above gold). vs matched original: ETTm1 192 is the only
+  clear dual-metric gain (MSE −1.26%, MAE −0.77%); ETTh2 96 (−1.13/−0.84) and
+  ETTm2 96 (−1.34/−0.72) clearly regress; the rest are neutral or mixed. No
+  cross-task stable direction; horizon split leans positive at 192, negative at 96.
+- Estimator activity diagnostic (mean |delta| on test, of 24 slots): ETTm1 192
+  0.108, ETTm2 96 0.140, Weather 96 0.038 — active but tiny (<1% of the cycle);
+  the model finds little benefit in deviating from the fixed phase grid.
+- Bad cases: worst-sample MSE roughly unchanged; ETTm1 192 and Weather 96 top
+  cases improve slightly.
+- Conclusion: no significant stable gain (advantage < single-seed spread, per
+  `EXPERIMENT_SEARCH_PLAN.md`). Mechanism stays flag-gated and out of
+  `_LATEST_POLICY`; treated as an exploration without a clear positive signal.
+
 ## 2026-08-11 — Cross-agent experiment analysis skill
 
 - Added the project-level `experiment-and-error-analysis` Skill under
