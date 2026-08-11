@@ -63,13 +63,33 @@ class PresetAndLossTests(unittest.TestCase):
         restored.load_state_dict(source.state_dict(), strict=True)
         self.assertEqual(tuple(source.state_dict()), tuple(restored.state_dict()))
 
-    def test_lptd_ablation_reaches_model_config(self):
-        hyperparams = build_hyperparams("Weather", 192, "lptd")
+    def test_phase_anchor_ablation_reaches_model_config(self):
+        hyperparams = build_hyperparams("Weather", 192, "phase_anchor")
         args = make_exp_args("Weather", 720, 192, hyperparams)
         config = PhaseFormerPresetConfig(args, 720, 192, hyperparams)
-        self.assertTrue(config.use_lptd)
-        self.assertEqual(config.lptd_max_shift, 1)
-        self.assertEqual(config.lptd_prior_logit, 5.0)
+        self.assertTrue(config.use_phase_anchor)
+
+    def test_phase_anchor_does_not_change_model_parameter_initialization(self):
+        original_hyperparams = build_hyperparams("ETTh1", 96, "original")
+        original_args = make_exp_args("ETTh1", 720, 96, original_hyperparams)
+        original_config = PhaseFormerPresetConfig(
+            original_args, 720, 96, original_hyperparams
+        )
+
+        anchor_hyperparams = build_hyperparams("ETTh1", 96, "phase_anchor")
+        anchor_args = make_exp_args("ETTh1", 720, 96, anchor_hyperparams)
+        anchor_config = PhaseFormerPresetConfig(
+            anchor_args, 720, 96, anchor_hyperparams
+        )
+
+        torch.manual_seed(7)
+        original = PhaseFormer(original_config)
+        torch.manual_seed(7)
+        anchored = PhaseFormer(anchor_config)
+
+        self.assertEqual(tuple(original.state_dict()), tuple(anchored.state_dict()))
+        for name, value in original.state_dict().items():
+            torch.testing.assert_close(value, anchored.state_dict()[name])
 
 
 class LatestPolicyTableTests(unittest.TestCase):

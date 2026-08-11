@@ -134,12 +134,8 @@ MECHANISMS = {
         "phase_local_trend_window": 3,
         "phase_local_trend_gate_init": 0.0,
     },
-    "lptd": {
-        "use_lptd": True,
-        "lptd_hidden": 8,
-        "lptd_max_shift": 1,
-        "lptd_temperature": 1.0,
-        "lptd_prior_logit": 5.0,
+    "phase_anchor": {
+        "use_phase_anchor": True,
     },
 }
 

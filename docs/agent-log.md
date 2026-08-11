@@ -1,5 +1,25 @@
 # Agent Maintenance Log
 
+## 2026-08-11 — Replace LPTD with Phase-Anchored Forecasting
+
+- Rejected and removed active LPTD code after ten matched tasks showed an
+  average -0.13% MSE / -0.09% MAE change versus original and consistent
+  regression versus latest and gold. Archived the full result and minimal
+  diagnostic evidence in `docs/archive/LPTD_FAILURE_ANALYSIS.md`.
+- Added the parameter-free `PhaseAnchorTransform`. It gathers the most recent
+  real observation for every phase slot, centers phase trajectories around
+  those anchors, and restores the anchors after the unchanged PhaseFormer
+  predictor generates future displacements.
+- For incomplete final periods, missing slots are filled from their matching
+  real phase anchors instead of circular padding; the mechanism requires at
+  least one complete input period.
+- Replaced the LPTD preset, search mechanism, and tests with `phase_anchor` and
+  documented its single-path formulation and phase-translation equivariance.
+- Runtime validation was not executed because this workstation has no usable
+  project environment. Static review and test definitions cover complete and
+  incomplete periods, coordinate reconstruction, and equivariance. Accuracy
+  remains unverified until a matched experiment is run.
+
 ## 2026-08-11 — Replace failed CPTD with LPTD
 
 - Rejected and removed the active output-space CPTD implementation after the

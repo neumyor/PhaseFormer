@@ -15,7 +15,7 @@ ABLATION_MODES = {
     "phase_level",
     "phase_hifreq",
     "phase_sparse_event",
-    "lptd",
+    "phase_anchor",
     "phase_all",
     "best_nonresidual",
 }
@@ -468,14 +468,10 @@ def get_ablation_overrides(mode):
             phase_sparse_event_max_boost=1.0,
             phase_sparse_event_temperature=0.2,
         )
-    if mode == "lptd":
+    if mode == "phase_anchor":
         return dict(
-            scheme_name="lptd",
-            use_lptd=True,
-            lptd_hidden=8,
-            lptd_max_shift=1,
-            lptd_temperature=1.0,
-            lptd_prior_logit=5.0,
+            scheme_name="phase_anchor",
+            use_phase_anchor=True,
         )
     if mode == "phase_all":
         return dict(
@@ -619,11 +615,7 @@ class PhaseFormerPresetConfig:
         self.use_huber_loss = exp_args.training_args.use_huber_loss
         self.huber_delta = exp_args.training_args.huber_delta
 
-        self.use_lptd = hyperparams.get("use_lptd", False)
-        self.lptd_hidden = hyperparams.get("lptd_hidden", 8)
-        self.lptd_max_shift = hyperparams.get("lptd_max_shift", 1)
-        self.lptd_temperature = hyperparams.get("lptd_temperature", 1.0)
-        self.lptd_prior_logit = hyperparams.get("lptd_prior_logit", 5.0)
+        self.use_phase_anchor = hyperparams.get("use_phase_anchor", False)
 
         self.use_weak_period_residual = hyperparams.get("use_weak_period_residual", False)
         self.weak_period_residual_gate_init = hyperparams.get(

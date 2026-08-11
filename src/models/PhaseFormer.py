@@ -19,7 +19,7 @@ from src.models.phase_adapters import (
     PhaseSparseEventCalibration,
     PhaseNoiseHighFreqDamping,
 )
-from src.models.latent_phase_transport import LatentPhaseTransportDecoder
+from src.models.phase_anchor import PhaseAnchorTransform
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -411,20 +411,18 @@ class PhaseFormer(DefaultPLModule):
             self.revin = RevIN(num_features=self.enc_in, eps=self.revin_eps, affine=self.revin_affine)
 
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
-        self.use_lptd = getattr(configs, "use_lptd", False)
-        if self.use_lptd and self.use_weak_period_residual:
+        self.use_phase_anchor = getattr(configs, "use_phase_anchor", False)
+        if self.use_phase_anchor and self.use_weak_period_residual:
             raise ValueError(
-                "Latent phase transport replaces the predictor and cannot be "
-                "combined with a weak-period time-domain residual"
+                "Phase anchoring is a single-path coordinate transform and cannot "
+                "be combined with a weak-period time-domain residual"
             )
-        if self.use_lptd and (
-            getattr(configs, "predictor_use_mlp", False)
-            or getattr(configs, "predictor_dropout", 0.0) != 0.0
-        ):
-            raise ValueError(
-                "Latent phase transport currently supports only the default "
-                "linear predictor without dropout"
-            )
+        if self.use_phase_anchor:
+            if self.seq_len < self.period_len:
+                raise ValueError(
+                    "Phase anchoring requires at least one complete input period"
+                )
+            self.phase_anchor = PhaseAnchorTransform(self.period_len)
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
         )
@@ -591,25 +589,13 @@ class PhaseFormer(DefaultPLModule):
                 )
         self.routing_layers = nn.ModuleList(routing_units)
 
-        # LPTD preserves local routed phase tokens and reduces to the original
-        # linear predictor when its circular transport is the identity.
-        if self.use_lptd:
-            self.predictor = LatentPhaseTransportDecoder(
-                p_out=self.num_periods_output,
-                latent_dim=self.latent_dim,
-                hidden=getattr(configs, "lptd_hidden", 8),
-                max_shift=getattr(configs, "lptd_max_shift", 1),
-                temperature=getattr(configs, "lptd_temperature", 1.0),
-                prior_logit=getattr(configs, "lptd_prior_logit", 5.0),
-            )
-        else:
-            self.predictor = PhasePredictor(
-                p_out=self.num_periods_output,
-                latent_dim=self.latent_dim,
-                hidden=self.predictor_hidden,
-                use_mlp=getattr(configs, "predictor_use_mlp", False),
-                dropout=getattr(configs, "predictor_dropout", 0.0),
-            )
+        self.predictor = PhasePredictor(
+            p_out=self.num_periods_output,
+            latent_dim=self.latent_dim,
+            hidden=self.predictor_hidden,
+            use_mlp=getattr(configs, "predictor_use_mlp", False),
+            dropout=getattr(configs, "predictor_dropout", 0.0),
+        )
 
     # phase rearrangement helpers
     @staticmethod
@@ -638,24 +624,29 @@ class PhaseFormer(DefaultPLModule):
         # 2) Use original input (no cross-channel fusion)
         x_fused = x_in  # (B, L, C)
 
-        # 3) Ring padding to full periods
+        # 3-5) Build the phase view in the selected coordinate system.
         x = x_fused.permute(0, 2, 1)  # (B, C, L_total)
-        B, C, L = x.shape
-        if self.pad_seq_len > 0:
-            x = F.pad(x, (0, self.pad_seq_len), mode="circular")  # (B, C, total_len_in)
+        B, C, _ = x.shape
+        phase_anchor = None
+        if self.use_phase_anchor:
+            phase_series, phase_anchor = self.phase_anchor(x)
+        else:
+            if self.pad_seq_len > 0:
+                x = F.pad(x, (0, self.pad_seq_len), mode="circular")
+            x_periods = x.view(B, C, self.num_periods_input, self.period_len)
+            phase_series = self._to_phase_series(x_periods)
 
-        # 4) Split to periods (B, C, P_in, L)
-        x_periods = x.view(B, C, self.num_periods_input, self.period_len)
-
-        # 5) Parallel by phase view (B, C, L, P_in)
-        phase_series = self._to_phase_series(x_periods)
+        # Optional phase processing, then phase-coordinate selection.
         if self.use_phase_uncertainty_shrinkage:
             phase_series = self.phase_uncertainty_shrinkage(phase_series)
+        model_phase_series = phase_series
+        if self.use_phase_anchor:
+            model_phase_series = self.phase_anchor.center(phase_series, phase_anchor)
 
         # 6-8) Embedding -> routing layers -> top predictor
         # Initial latent from embedding
-        Z = self.embedding(phase_series)  # (B, C, L, D)
-        phase_series_cur = phase_series
+        Z = self.embedding(model_phase_series)  # (B, C, L, D)
+        phase_series_cur = model_phase_series
 
         for layer_index, unit in enumerate(self.routing_layers):
             Z, y_phase_steps_p_in = unit(phase_series_cur, Z)
@@ -664,6 +655,8 @@ class PhaseFormer(DefaultPLModule):
                 phase_series_cur = y_phase_steps_p_in
 
         y_phase_steps = self.predictor(Z)
+        if self.use_phase_anchor:
+            y_phase_steps = self.phase_anchor.restore(y_phase_steps, phase_anchor)
         if self.use_phase_local_trend:
             phase_trend = self.phase_local_trend(phase_series)
             if self.training:
