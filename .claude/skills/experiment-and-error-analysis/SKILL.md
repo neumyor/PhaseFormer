@@ -19,7 +19,7 @@ description: >
 - 关键数字、样本和图必须能从落盘文件重新验证。
 - 遵守仓库的 `MANAGE_RULES.md`、`HOW_TO_DO_RESEARCH.md` 和当前实验计划；发生冲突时，以用户当前明确要求和仓库规则为准，并记录采用的协议。
 
-每次完整运行至少保留下列规范审计集合：
+每个 `experiment_id` 只保留下列六个审计文件和一个图表目录：
 
 ```text
 research_runs/<experiment_id>/
@@ -28,10 +28,14 @@ research_runs/<experiment_id>/
 ├── sample_errors.csv
 ├── selected_cases.npz
 ├── objective_error_analysis.md
-└── objective_error_analysis.pdf
+├── objective_error_analysis.pdf
+└── figures/
+    └── <setting>__<figure_name>.png
 ```
 
-这些是最低产物，不是删除清单。继续保留仓库规则或实验计划要求的 checkpoint、命令、环境、日志、全量预测或其他可复现证据；不要删除既有用户产物。
+这是严格白名单，不是最低集合。`experiment_id` 根目录不得出现其他文件或子目录；`figures/` 只保存被 Markdown/PDF 实际引用的分析图，不保存独立数据。不要在该目录保留 checkpoint、命令脚本、环境快照、stdout、TensorBoard、全量预测、每个 setting 的独立结果文件或临时文件。运行所需的临时产物放在仓库忽略的临时位置，报告完成后清理本次运行生成的临时产物；不得删除运行前已经存在且来源不明的用户文件。
+
+一次运行可以包含多个 setting。将 setting 定义为一组评估条件，为其分配稳定且唯一的字符串 `setting`，例如 `ETTh1_h96_seed2021`；baseline、candidate 和不同 config 是同一 setting 下的比较行，不要写进 setting 名。所有 setting 共用上述六个文件和 `figures/`，禁止创建 setting 子目录或 `results_<setting>.csv` 等拆分文件。
 
 ## 1. 确认并记录实验
 
@@ -58,22 +62,34 @@ mechanism:
 experiment:
   baseline:
   candidate:
-  datasets:
-  horizons:
-  seeds:
+  settings:
+    - setting:
+      dataset:
+      split:
+      lookback:
+      horizon:
+      seed:
   training:
   metrics:
+execution:
+  environment:
+  settings:
+    - setting:
+      commands:
+      runtime:
 selection:
   source: test | validation | fixed
-  selected_config:
-  search_notes:
+  selected_configs:
+    - setting:
+      config_id:
+      search_notes:
 analysis:
   ranking_metric:
   top_k:
   dedup_rule:
 ```
 
-若最终参数依据 test 结果选择，将 `selection.source` 标为 `test`，并在 `search_notes` 记录测试反馈如何影响后续配置。
+若任一最终参数依据 test 结果选择，将 `selection.source` 标为 `test`，并在对应 setting 的 `search_notes` 记录测试反馈如何影响后续配置。`experiment.settings`、`execution.settings` 与 `selection.selected_configs` 必须覆盖相同的 setting 集合；不要为不同 setting 创建多个 YAML 文件。
 
 ## 2. 实现并检查 Candidate
 
@@ -97,23 +113,25 @@ analysis:
 
 允许依据 test 结果修改参数并重新实验，但必须保留真正参与选择的全部配置，不能只留下最终最好结果。
 
-写入 `results.csv`：
+将所有 setting 追加到同一个 `results.csv`，并以 `setting` 列区分：
 
 ```text
-config_id,dataset,horizon,seed,model,key_params,mse,mae,delta_mse,delta_mae,selected
+setting,config_id,dataset,horizon,seed,model,key_params,mse,mae,delta_mse,delta_mae,selected
 ```
+
+禁止按 dataset、horizon、seed、baseline/candidate 或其他 setting 维度拆分 CSV。
 
 ## 4. 计算样本级误差
 
 使用最终比较的 baseline 和 candidate 在 evaluation 数据上的输出，按 `sample × channel` 或任务适用的最细粒度计算 MSE、MAE、candidate-minus-baseline delta，以及必要的时间范围和 channel 信息。
 
-写入 `sample_errors.csv`：
+将所有 setting 的样本误差写入同一个 `sample_errors.csv`，并以 `setting` 列区分：
 
 ```text
-sample_id,channel,time_range,baseline_mse,candidate_mse,delta_mse,baseline_mae,candidate_mae,delta_mae
+setting,baseline_config_id,candidate_config_id,sample_id,channel,time_range,baseline_mse,candidate_mse,delta_mse,baseline_mae,candidate_mae,delta_mae
 ```
 
-该文件必须足以重新执行 high-error ranking。如果仓库规则需要保留全量预测，则同时保留，不因生成该表而删除。
+每个 setting 只写最终选定 baseline/candidate 对的样本级误差；该文件必须足以按 setting 重新执行 high-error ranking。禁止为各 setting 生成独立误差文件，也不保留全量预测。
 
 ## 5. 筛选案例
 
@@ -132,9 +150,11 @@ analysis:
   ranking_metric: mae
   top_k: 10
   dedup_rule:
-  baseline_high_error: []
-  candidate_regression: []
-  candidate_improvement: []
+  selections:
+    - setting:
+      baseline_high_error: []
+      candidate_regression: []
+      candidate_improvement: []
 ```
 
 ## 6. 保存并分析选中案例
@@ -147,7 +167,9 @@ analysis:
 
 计算适合任务的描述性量，例如 MSE/MAE、mean/std/min/max、range、linear slope、peak/trough position、horizon segment error，必要时再计算 lag、频谱或 autocorrelation。生成 history/truth/baseline/candidate 对比图。
 
-将足以重算案例指标和重绘图的数据写入 `selected_cases.npz`。
+将所有 setting 的案例写入同一个 `selected_cases.npz`（即 sample cases 的唯一容器）。文件内必须包含与每条案例记录对齐的 `setting` 字符串数组，并用统一数组或以 setting 为前缀的键保存案例数据；禁止生成每个 setting 独立的 NPZ。该文件必须足以按 setting 重算案例指标和重绘图。
+
+将全部图表写入唯一的 `figures/`，文件名以对应 `setting` 开头，例如 `ETTh1_h96_seed2021_candidate__regression_01.png`。Markdown 和 PDF 只引用该目录中的图；删除未被任一报告引用的冗余图。
 
 只把下面这样的内容写成客观观察：
 
@@ -173,7 +195,7 @@ Candidate std = 0.82，truth std = 0.54。
 
 ## 8. 生成报告
 
-从 `run.yaml`、`results.csv`、`sample_errors.csv` 和 `selected_cases.npz` 生成内容一致的：
+从跨 setting 汇总的 `run.yaml`、`results.csv`、`sample_errors.csv` 和 `selected_cases.npz` 生成一组内容一致的报告：
 
 ```text
 objective_error_analysis.md
@@ -196,7 +218,7 @@ Markdown 是 canonical report，至少包含：
 ## 10. Experiment Scope
 ```
 
-可视化直接嵌入 Markdown；PDF 使用相同数据生成。若使用 test 调参，在报告显著位置写明：
+报告必须按 `setting` 分组展示或明确标识每个结果与案例。可视化保存到 `figures/` 后嵌入 Markdown；PDF 使用相同数据和图生成。不得按 setting 生成多份 Markdown 或 PDF。若使用 test 调参，在报告显著位置写明：
 
 > Final configuration was selected using test-set results.
 
@@ -208,28 +230,30 @@ Markdown 是 canonical report，至少包含：
 
 ### Results
 
-- 确认 `run.yaml` 的 selected config 存在于 `results.csv`；
+- 确认 `run.yaml` 中每个 setting 的 selected config 都存在于 `results.csv` 对应 setting；
 - 重算报告中的 MSE、MAE 和 delta；
 - 确认所有参与选择的配置均已保留；
+- 确认 `run.yaml` 中每个 setting 都存在于 `results.csv`，且没有额外或缺失 setting；
 - 确认 test-set selection 已正确披露。
 
 ### Ranking
 
-依据 `run.yaml` 的 metric、Top-K 和 dedup rule，从 `sample_errors.csv` 重新筛选，确认 sample ID 与 `run.yaml`、`selected_cases.npz` 和报告一致。
+逐个 setting 依据 `run.yaml` 的 metric、Top-K 和 dedup rule，从同一个 `sample_errors.csv` 重新筛选，确认 `(setting, sample_id)` 与 `run.yaml`、`selected_cases.npz` 和报告一致。
 
 ### Cases
 
-从 `selected_cases.npz` 重新计算报告中的关键案例指标，确认数值一致。
+从单一 `selected_cases.npz` 逐 setting 重新计算报告中的关键案例指标，确认数值一致。
 
 ### Reports
 
 - 确认 Markdown 表格和图来自实际落盘数据；
 - 确认 PDF 与 Markdown 的核心数字和结论一致；
+- 确认 Markdown/PDF 引用的图均位于 `figures/`，且 `figures/` 没有未引用图；
 - 渲染并检查 PDF，确保无缺图、乱码、截断或严重分页问题。
 
 ### Files
 
-确认六个最低审计文件存在且非空，并确认仓库额外要求的证据产物也已保留。完成后写入：
+确认根目录恰好包含六个非空审计文件和 `figures/`，不存在其他文件或子目录；确认不存在按 setting 拆分的 CSV、YAML、NPZ、Markdown 或 PDF；确认四个数据文件都能覆盖 `run.yaml` 声明的全部 setting。完成后写入：
 
 ```yaml
 validation:
@@ -238,6 +262,8 @@ validation:
   case_metrics_checked: true
   markdown_checked: true
   pdf_render_checked: true
+  settings_coverage_checked: true
+  directory_whitelist_checked: true
   status: passed
 ```
 
@@ -261,4 +287,4 @@ User Idea
 → validation: passed
 ```
 
-用尽量少的规范产物保存完整证据链，使实验结果、高误差样本和报告都能反向复核，同时保留项目规则要求的必要中间证据。
+严格使用六个审计文件和一个 `figures/` 目录保存完整证据链；无论包含多少 setting，都只生成这一组汇总产物，并通过显式 `setting` 字段保持可追踪性。

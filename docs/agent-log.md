@@ -1,5 +1,20 @@
 # Agent Maintenance Log
 
+## 2026-08-12 — Strict multi-setting experiment artifact layout
+
+- Tightened `experiment-and-error-analysis` so every experiment directory has
+  exactly six audit files plus one `figures/` directory.
+- Prohibited retained checkpoints, command files, environment snapshots, logs,
+  full predictions, temporary files, and per-setting output files inside an
+  experiment directory.
+- Required all settings from one run to share `run.yaml`, `results.csv`,
+  `sample_errors.csv`, `selected_cases.npz`, and one Markdown/PDF report pair,
+  with an explicit `setting` identifier in every applicable artifact.
+- Updated the repository research guide and active search plan to use the same
+  strict whitelist.
+- Validation: checked Skill metadata, setting coverage requirements, directory
+  whitelist language, repository references, whitespace, and the staged diff.
+
 ## 2026-08-11 — Cross-agent experiment analysis skill
 
 - Added the project-level `experiment-and-error-analysis` Skill under
