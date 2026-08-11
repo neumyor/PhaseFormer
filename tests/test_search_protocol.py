@@ -23,7 +23,7 @@ class SearchProtocolTests(unittest.TestCase):
 
     def test_plan_defines_exactly_thirteen_mechanisms(self):
         self.assertEqual(len(MECHANISMS), 13)
-        self.assertIn("phase_transport", MECHANISMS)
+        self.assertIn("lptd", MECHANISMS)
 
     def test_compact_latent_remains_head_divisible(self):
         hp = {"latent_dim": 10, "phase_attn_heads": 2, "phase_encoder_hidden": 3, "predictor_hidden": 5}

@@ -63,14 +63,13 @@ class PresetAndLossTests(unittest.TestCase):
         restored.load_state_dict(source.state_dict(), strict=True)
         self.assertEqual(tuple(source.state_dict()), tuple(restored.state_dict()))
 
-    def test_phase_transport_ablation_reaches_model_config(self):
-        hyperparams = build_hyperparams("Weather", 192, "phase_transport")
+    def test_lptd_ablation_reaches_model_config(self):
+        hyperparams = build_hyperparams("Weather", 192, "lptd")
         args = make_exp_args("Weather", 720, 192, hyperparams)
         config = PhaseFormerPresetConfig(args, 720, 192, hyperparams)
-        self.assertTrue(config.use_phase_transport_decoder)
-        self.assertEqual(config.phase_transport_memory, 3)
-        self.assertEqual(config.phase_transport_max_shift, 1)
-        self.assertFalse(config.phase_use_pos_embed)
+        self.assertTrue(config.use_lptd)
+        self.assertEqual(config.lptd_max_shift, 1)
+        self.assertEqual(config.lptd_prior_logit, 5.0)
 
 
 class LatestPolicyTableTests(unittest.TestCase):

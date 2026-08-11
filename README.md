@@ -8,12 +8,12 @@ Compared with traditional patch/segment-based paradigms, PhaseFormer models in t
 - Interacts in the phase space through a **cross-phase routing** mechanism.
 - Stacks **phase blocks** layer by layer to predict future phases and reconstruct them back into time series.
 
-The research branch also includes an optional **Circular Phase Transport
-Decoder (CPTD)**. Instead of adding a time-domain residual branch, CPTD replaces
-the value predictor and generates future periods by selecting, circularly
-transporting, rescaling, and re-leveling recent phase profiles. The mechanism is
-default-off and remains an experimental candidate until it is validated against
-the fixed gold standard in `docs/PHASEFORMER_GOLD_STANDARD.md`.
+The research branch also includes an optional **Latent Phase Transport Decoder
+(LPTD)**. It learns a horizon-conditioned circular transport kernel over routed
+phase tokens and then applies the original horizon-specific value-decoding form.
+It adds no time-domain residual path and reduces to the original linear predictor
+under identity transport. The mechanism is default-off and remains experimental
+until validated against `docs/PHASEFORMER_GOLD_STANDARD.md`.
 
 ---
 

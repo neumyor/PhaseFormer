@@ -134,16 +134,12 @@ MECHANISMS = {
         "phase_local_trend_window": 3,
         "phase_local_trend_gate_init": 0.0,
     },
-    "phase_transport": {
-        "use_phase_transport_decoder": True,
-        "phase_transport_hidden": 8,
-        "phase_transport_memory": 3,
-        "phase_transport_max_shift": 1,
-        "phase_transport_max_log_amplitude": 0.5,
-        "phase_transport_max_level_step": 1.0,
-        "phase_transport_temperature": 1.0,
-        "phase_transport_prior_logit": 3.0,
-        "phase_use_pos_embed": False,
+    "lptd": {
+        "use_lptd": True,
+        "lptd_hidden": 8,
+        "lptd_max_shift": 1,
+        "lptd_temperature": 1.0,
+        "lptd_prior_logit": 5.0,
     },
 }
 

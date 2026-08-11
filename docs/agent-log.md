@@ -1,5 +1,24 @@
 # Agent Maintenance Log
 
+## 2026-08-11 — Replace failed CPTD with LPTD
+
+- Rejected and removed the active output-space CPTD implementation after the
+  user-provided evaluation regressed on all eight ETT tasks. Average regression
+  versus the fixed gold standard was about 15.7% MAE / 37.0% MSE; ETTm1-192
+  reached 46.1% MAE / 124.8% MSE regression.
+- Archived the result table and root-cause analysis in
+  `docs/archive/CPTD_FAILURE_ANALYSIS.md` instead of erasing negative evidence.
+- Added the default-off `LatentPhaseTransportDecoder`. LPTD keeps phase-local
+  routed tokens, predicts horizon- and phase-specific circular transport kernels,
+  and decodes with the original horizon-specific linear form. It does not copy
+  observed period profiles, pool away phase details, accumulate level state, or
+  create a time-domain residual forecast.
+- Replaced CPTD configuration, search, and test definitions with `lptd`; added
+  identity-containment, shape, equivariance, and diagnostic test definitions.
+- Updated the README, active search plan, and detailed design documentation.
+- Runtime validation remains pending because this machine has no usable project
+  environment. No LPTD accuracy improvement is claimed.
+
 ## 2026-08-11 — Circular Phase Transport Decoder implementation
 
 - Added the default-off `CircularPhaseTransportDecoder` in
