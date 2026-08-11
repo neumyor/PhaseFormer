@@ -19,6 +19,7 @@ from src.models.phase_adapters import (
     PhaseSparseEventCalibration,
     PhaseNoiseHighFreqDamping,
 )
+from src.models.phase_align import PhaseAlignment
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -585,6 +586,25 @@ class PhaseFormer(DefaultPLModule):
             dropout=getattr(configs, "predictor_dropout", 0.0),
         )
 
+        # Adaptive phase alignment. Constructed LAST so that toggling the flag
+        # does not shift the RNG draws consumed by the shared modules above;
+        # with the same seed, flag-on and flag-off share identical parameter
+        # initialization for everything except phase_alignment itself.
+        self.use_phase_align = getattr(configs, "use_phase_align", False)
+        if self.use_phase_align:
+            mark_dim = getattr(configs, "phase_align_mark_dim", None)
+            if mark_dim is None:
+                mark_dim = getattr(configs, "time_mark_dim", 4)
+            self.phase_align_mark_dim = mark_dim
+            self.phase_alignment = PhaseAlignment(
+                mark_dim=mark_dim,
+                hidden=getattr(configs, "phase_align_hidden", 8),
+                use_position_encoding=getattr(
+                    configs, "phase_align_position_encoding", False
+                ),
+                chunk_t=getattr(configs, "phase_align_chunk", 240),
+            )
+
     # phase rearrangement helpers
     @staticmethod
     def _to_phase_series(x_periods):
@@ -622,7 +642,19 @@ class PhaseFormer(DefaultPLModule):
         x_periods = x.view(B, C, self.num_periods_input, self.period_len)
 
         # 5) Parallel by phase view (B, C, L, P_in)
-        phase_series = self._to_phase_series(x_periods)
+        if self.use_phase_align:
+            if x_mark_enc is not None:
+                mark = x_mark_enc.float()  # training passes float64; cast to float32
+            else:
+                mark = torch.zeros(
+                    B, self.seq_len, self.phase_align_mark_dim,
+                    dtype=x.dtype, device=x.device,
+                )
+            if self.pad_seq_len > 0:
+                mark = F.pad(mark, (0, 0, 0, self.pad_seq_len), mode="circular")
+            phase_series = self.phase_alignment(x_periods, mark)
+        else:
+            phase_series = self._to_phase_series(x_periods)
         if self.use_phase_uncertainty_shrinkage:
             phase_series = self.phase_uncertainty_shrinkage(phase_series)
 
