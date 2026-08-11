@@ -15,7 +15,6 @@ ABLATION_MODES = {
     "phase_level",
     "phase_hifreq",
     "phase_sparse_event",
-    "phase_anchor",
     "phase_all",
     "best_nonresidual",
 }
@@ -468,11 +467,6 @@ def get_ablation_overrides(mode):
             phase_sparse_event_max_boost=1.0,
             phase_sparse_event_temperature=0.2,
         )
-    if mode == "phase_anchor":
-        return dict(
-            scheme_name="phase_anchor",
-            use_phase_anchor=True,
-        )
     if mode == "phase_all":
         return dict(
             scheme_name="phase_all",
@@ -614,8 +608,6 @@ class PhaseFormerPresetConfig:
         self.revin_eps = hyperparams.get("revin_eps", DEFAULT_NORM_HYPERS["revin_eps"])
         self.use_huber_loss = exp_args.training_args.use_huber_loss
         self.huber_delta = exp_args.training_args.huber_delta
-
-        self.use_phase_anchor = hyperparams.get("use_phase_anchor", False)
 
         self.use_weak_period_residual = hyperparams.get("use_weak_period_residual", False)
         self.weak_period_residual_gate_init = hyperparams.get(

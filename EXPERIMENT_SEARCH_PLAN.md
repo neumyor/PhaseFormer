@@ -46,7 +46,6 @@
 10. phase uncertainty + level calibration + high-frequency damping + sparse-event calibration。
 11. low-pass residual，沿用已有 window 25。
 12. phase-local trend，作为历史机制复核。
-13. phase-anchored forecasting：以每个 phase slot 最近一次真实观测为坐标原点，PhaseFormer 预测相位位移后一次性恢复原点；无新增参数、分支或累计积分，不启用时域 residual。
 
 筛选顺序：
 

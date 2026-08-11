@@ -8,13 +8,6 @@ Compared with traditional patch/segment-based paradigms, PhaseFormer models in t
 - Interacts in the phase space through a **cross-phase routing** mechanism.
 - Stacks **phase blocks** layer by layer to predict future phases and reconstruct them back into time series.
 
-The research branch also includes optional **Phase-Anchored Forecasting (PAF)**.
-For every phase slot, PAF uses its latest real observation as a coordinate origin,
-runs the unchanged PhaseFormer on centered phase trajectories, and restores the
-origin once after prediction. It adds no parameters, forecast branch, gate, or
-cumulative integration. The mechanism is default-off and remains experimental
-until validated against `docs/PHASEFORMER_GOLD_STANDARD.md`.
-
 ---
 
 ## 🛠 Installation & Environment

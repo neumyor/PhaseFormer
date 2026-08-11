@@ -134,9 +134,6 @@ MECHANISMS = {
         "phase_local_trend_window": 3,
         "phase_local_trend_gate_init": 0.0,
     },
-    "phase_anchor": {
-        "use_phase_anchor": True,
-    },
 }
 
 
