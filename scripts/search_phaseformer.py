@@ -25,11 +25,12 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from src.training.runner import build_logger, build_trainer, restore_best_checkpoint
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+from src.training.runner import build_logger, build_trainer, restore_best_checkpoint
 
 from src.dataset.data_factory import data_provider
 from src.models.PhaseFormer import PhaseFormer
