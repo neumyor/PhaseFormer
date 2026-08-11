@@ -16,6 +16,7 @@ ABLATION_MODES = {
     "phase_hifreq",
     "phase_sparse_event",
     "phase_all",
+    "phase_align",
     "best_nonresidual",
 }
 
@@ -491,6 +492,13 @@ def get_ablation_overrides(mode):
             phase_sparse_event_max_boost=1.0,
             phase_sparse_event_temperature=0.2,
         )
+    if mode == "phase_align":
+        return dict(
+            scheme_name="phase_align",
+            use_phase_align=True,
+            phase_align_hidden=8,
+            phase_align_position_encoding=False,
+        )
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -660,6 +668,13 @@ class PhaseFormerPresetConfig:
             "phase_noise_hifreq_temperature", 0.2
         )
         self.phase_noise_hifreq_window = hyperparams.get("phase_noise_hifreq_window", 7)
+        self.use_phase_align = hyperparams.get("use_phase_align", False)
+        self.phase_align_hidden = hyperparams.get("phase_align_hidden", 8)
+        self.phase_align_mark_dim = hyperparams.get("phase_align_mark_dim", None)
+        self.phase_align_position_encoding = hyperparams.get(
+            "phase_align_position_encoding", False
+        )
+        self.phase_align_chunk = hyperparams.get("phase_align_chunk", 240)
         self.use_phase_sparse_event_calibration = hyperparams.get(
             "use_phase_sparse_event_calibration", False
         )

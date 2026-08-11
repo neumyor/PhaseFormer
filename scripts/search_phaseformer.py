@@ -134,6 +134,11 @@ MECHANISMS = {
         "phase_local_trend_window": 3,
         "phase_local_trend_gate_init": 0.0,
     },
+    "phase_align": {
+        "use_phase_align": True,
+        "phase_align_hidden": 8,
+        "phase_align_position_encoding": False,
+    },
 }
 
 
