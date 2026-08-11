@@ -19,6 +19,7 @@ from src.models.phase_adapters import (
     PhaseSparseEventCalibration,
     PhaseNoiseHighFreqDamping,
 )
+from src.models.phase_transport import CircularPhaseTransportDecoder
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -410,6 +411,18 @@ class PhaseFormer(DefaultPLModule):
             self.revin = RevIN(num_features=self.enc_in, eps=self.revin_eps, affine=self.revin_affine)
 
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
+        self.use_phase_transport_decoder = getattr(
+            configs, "use_phase_transport_decoder", False
+        )
+        if self.use_phase_transport_decoder and self.use_weak_period_residual:
+            raise ValueError(
+                "Circular phase transport replaces the predictor and cannot be "
+                "combined with a weak-period time-domain residual"
+            )
+        if self.use_phase_transport_decoder and self.seq_len < self.period_len:
+            raise ValueError(
+                "Circular phase transport requires at least one complete input period"
+            )
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
         )
@@ -576,14 +589,32 @@ class PhaseFormer(DefaultPLModule):
                 )
         self.routing_layers = nn.ModuleList(routing_units)
 
-        # Top-level predictor to P_out: maps (B, C, L, D) -> (B, C, L, P_out)
-        self.predictor = PhasePredictor(
-            p_out=self.num_periods_output,
-            latent_dim=self.latent_dim,
-            hidden=self.predictor_hidden,
-            use_mlp=getattr(configs, "predictor_use_mlp", False),
-            dropout=getattr(configs, "predictor_dropout", 0.0),
-        )
+        # Top-level decoder to P_out. Circular transport is a phase-native
+        # replacement for direct value regression, not an auxiliary branch.
+        if self.use_phase_transport_decoder:
+            self.predictor = CircularPhaseTransportDecoder(
+                p_out=self.num_periods_output,
+                latent_dim=self.latent_dim,
+                hidden=getattr(configs, "phase_transport_hidden", 8),
+                memory_size=getattr(configs, "phase_transport_memory", 3),
+                max_shift=getattr(configs, "phase_transport_max_shift", 1),
+                max_log_amplitude=getattr(
+                    configs, "phase_transport_max_log_amplitude", 0.5
+                ),
+                max_level_step=getattr(
+                    configs, "phase_transport_max_level_step", 1.0
+                ),
+                temperature=getattr(configs, "phase_transport_temperature", 1.0),
+                prior_logit=getattr(configs, "phase_transport_prior_logit", 3.0),
+            )
+        else:
+            self.predictor = PhasePredictor(
+                p_out=self.num_periods_output,
+                latent_dim=self.latent_dim,
+                hidden=self.predictor_hidden,
+                use_mlp=getattr(configs, "predictor_use_mlp", False),
+                dropout=getattr(configs, "predictor_dropout", 0.0),
+            )
 
     # phase rearrangement helpers
     @staticmethod
@@ -615,6 +646,17 @@ class PhaseFormer(DefaultPLModule):
         # 3) Ring padding to full periods
         x = x_fused.permute(0, 2, 1)  # (B, C, L_total)
         B, C, L = x.shape
+        transport_phase_series = None
+        if self.use_phase_transport_decoder:
+            # Use complete periods ending at the last real observation. This
+            # avoids treating circular right-padding as an observed phase state
+            # when seq_len is not divisible by period_len.
+            complete_periods = self.seq_len // self.period_len
+            complete_length = complete_periods * self.period_len
+            transport_periods = x[..., -complete_length:].view(
+                B, C, complete_periods, self.period_len
+            )
+            transport_phase_series = self._to_phase_series(transport_periods)
         if self.pad_seq_len > 0:
             x = F.pad(x, (0, self.pad_seq_len), mode="circular")  # (B, C, total_len_in)
 
@@ -622,7 +664,8 @@ class PhaseFormer(DefaultPLModule):
         x_periods = x.view(B, C, self.num_periods_input, self.period_len)
 
         # 5) Parallel by phase view (B, C, L, P_in)
-        phase_series = self._to_phase_series(x_periods)
+        observed_phase_series = self._to_phase_series(x_periods)
+        phase_series = observed_phase_series
         if self.use_phase_uncertainty_shrinkage:
             phase_series = self.phase_uncertainty_shrinkage(phase_series)
 
@@ -637,8 +680,12 @@ class PhaseFormer(DefaultPLModule):
                 # intermediate layers must produce P_in for the next layer
                 phase_series_cur = y_phase_steps_p_in
 
-        # final predictor to produce P_out
-        y_phase_steps = self.predictor(Z)  # (B, C, L, P_out)
+        # Final phase decoder. Transport uses unshrunk observed profiles as its
+        # physical memory while routed latents may use uncertainty shrinkage.
+        if self.use_phase_transport_decoder:
+            y_phase_steps = self.predictor(Z, transport_phase_series)
+        else:
+            y_phase_steps = self.predictor(Z)
         if self.use_phase_local_trend:
             phase_trend = self.phase_local_trend(phase_series)
             if self.training:

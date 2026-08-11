@@ -1,5 +1,29 @@
 # Agent Maintenance Log
 
+## 2026-08-11 — Circular Phase Transport Decoder implementation
+
+- Added the default-off `CircularPhaseTransportDecoder` in
+  `src/models/phase_transport.py` as a phase-native replacement for the direct
+  value predictor. It uses convex recent-period memory, bounded circular phase
+  shifts, bounded amplitude evolution, and cumulative period-level evolution;
+  it does not create or blend a time-domain forecast.
+- Integrated CPTD into `PhaseFormer` with an explicit incompatibility guard for
+  weak-period residual branches. For non-divisible lookbacks, transport memory
+  uses complete periods ending at the last real observation rather than the
+  model's circular right-padding.
+- Added the `phase_transport` preset and validation-isolated search mechanism,
+  configuration propagation, interpretable diagnostics, and focused unit-test
+  definitions for shape, initialization, equivariance, and normalized weights.
+- Documented motivation, formulation, defaults, invariants, novelty boundary,
+  and the required first-round evaluation in
+  `docs/PHASE_TRANSPORT_DECODER.md`; updated the README and active experiment
+  search plan.
+- Per user instruction, no unit, integration, or training tests were run because
+  this machine has no usable project environment. Verification was limited to
+  code review, AST parsing, Markdown/config consistency, and whitespace checks.
+- Accuracy status: unvalidated. No improvement over the fixed PhaseFormer gold
+  standard is claimed by this implementation commit.
+
 ## 2026-08-11 — Original PhaseFormer gold standard
 
 - Transcribed the user-provided paper Table 5 screenshot into

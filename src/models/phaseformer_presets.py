@@ -15,6 +15,7 @@ ABLATION_MODES = {
     "phase_level",
     "phase_hifreq",
     "phase_sparse_event",
+    "phase_transport",
     "phase_all",
     "best_nonresidual",
 }
@@ -467,6 +468,21 @@ def get_ablation_overrides(mode):
             phase_sparse_event_max_boost=1.0,
             phase_sparse_event_temperature=0.2,
         )
+    if mode == "phase_transport":
+        return dict(
+            scheme_name="phase_transport",
+            use_phase_transport_decoder=True,
+            phase_transport_hidden=8,
+            phase_transport_memory=3,
+            phase_transport_max_shift=1,
+            phase_transport_max_log_amplitude=0.5,
+            phase_transport_max_level_step=1.0,
+            phase_transport_temperature=1.0,
+            phase_transport_prior_logit=3.0,
+            # Keep the transport dynamics invariant to circular relabeling of
+            # phase slots; the observed phase profiles retain their ordering.
+            phase_use_pos_embed=False,
+        )
     if mode == "phase_all":
         return dict(
             scheme_name="phase_all",
@@ -608,6 +624,27 @@ class PhaseFormerPresetConfig:
         self.revin_eps = hyperparams.get("revin_eps", DEFAULT_NORM_HYPERS["revin_eps"])
         self.use_huber_loss = exp_args.training_args.use_huber_loss
         self.huber_delta = exp_args.training_args.huber_delta
+
+        self.use_phase_transport_decoder = hyperparams.get(
+            "use_phase_transport_decoder", False
+        )
+        self.phase_transport_hidden = hyperparams.get("phase_transport_hidden", 8)
+        self.phase_transport_memory = hyperparams.get("phase_transport_memory", 3)
+        self.phase_transport_max_shift = hyperparams.get(
+            "phase_transport_max_shift", 1
+        )
+        self.phase_transport_max_log_amplitude = hyperparams.get(
+            "phase_transport_max_log_amplitude", 0.5
+        )
+        self.phase_transport_max_level_step = hyperparams.get(
+            "phase_transport_max_level_step", 1.0
+        )
+        self.phase_transport_temperature = hyperparams.get(
+            "phase_transport_temperature", 1.0
+        )
+        self.phase_transport_prior_logit = hyperparams.get(
+            "phase_transport_prior_logit", 3.0
+        )
 
         self.use_weak_period_residual = hyperparams.get("use_weak_period_residual", False)
         self.weak_period_residual_gate_init = hyperparams.get(

@@ -46,6 +46,7 @@
 10. phase uncertainty + level calibration + high-frequency damping + sparse-event calibration。
 11. low-pass residual，沿用已有 window 25。
 12. phase-local trend，作为历史机制复核。
+13. circular phase transport decoder：最近 3 个周期、相位移动范围 ±1，直接以受约束的相位输运替换数值预测头，不启用时域 residual。
 
 筛选顺序：
 
