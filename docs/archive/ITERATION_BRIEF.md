@@ -16,13 +16,13 @@
 
 ## User Requirement
 
-Original request: "请你根据AGENT.md, 进行自主性科研，优化PhaseFormer模型在弱周期数据上的表现，使得其比当前版本上的预测误差MAE和MSE降低均超过10%，或者模型迭代超过30轮就结束。"
+Original request: "请你根据MANAGE_RULES.md, 进行自主性科研，优化PhaseFormer模型在弱周期数据上的表现，使得其比当前版本上的预测误差MAE和MSE降低均超过10%，或者模型迭代超过30轮就结束。"
 
 New ETT round request: "请开始新的一轮自主迭代，在ETT系列数据上，MAE和MSE改进超过10%或者迭代超过30轮，要求突出在相位建模的框架下对弱周期数据的适应和改进。"
 
 Operational constraints:
 
-- Follow `AGENT.md` and `HOW_TO_DO_RESEARCH.md`.
+- Follow `MANAGE_RULES.md` and `HOW_TO_DO_RESEARCH.md`.
 - Improve PhaseFormer on weak-period data.
 - Stop when both MAE and MSE are reduced by more than 10% against the current-version baseline, or when model iteration exceeds 30 rounds.
 - Keep experiments reproducible and auditable.

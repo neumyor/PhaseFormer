@@ -1,0 +1,4 @@
+interface:
+  display_name: "Experiment and Error Analysis"
+  short_description: "Run experiments and audit high-error samples"
+  default_prompt: "Use $experiment-and-error-analysis to implement the proposed model idea, run the agreed experiments, analyze high-error samples, and produce auditable reports."

@@ -11,6 +11,20 @@
 * 每次失败都要转化为下一轮可执行方向；
 * 模型改进必须体现明确的创新性和先进性，不能把简单堆叠已有分支或调一个极端超参数包装成新方法；
 * 用户要求和显式退出条件在整个迭代过程中持续优先。
+* 允许按用户要求使用测试集调参，但必须保存完整选择轨迹、明确披露 test-set selection，且不得将相关结果描述为盲测或无偏泛化估计。
+
+---
+
+## 0. 实验与高误差分析 Skill
+
+当用户给出明确模型设想，并要求实现该设想、运行实验以及分析高误差或显著退化样本时，必须调用项目级 `experiment-and-error-analysis` Skill：
+
+- Codex：`$experiment-and-error-analysis`，入口为 `.agents/skills/experiment-and-error-analysis/`；
+- Claude Code：`/experiment-and-error-analysis`，入口为 `.claude/skills/experiment-and-error-analysis/`。
+
+该 Skill 负责实现候选机制、记录 baseline/candidate 搜索、计算样本级误差、程序化筛选案例并生成可审计的 Markdown/PDF 报告。仅讨论设想、仅分析用户已经提供的汇总结果、只做 smoke test，或用户明确要求不运行实验时，不触发该 Skill。
+
+Skill 定义六类最低审计产物；本文件、`MANAGE_RULES.md` 或具体实验计划要求的 checkpoint、环境、命令、运行日志等补充证据仍须保留，不得为了缩减为六个文件而删除。
 
 ---
 
@@ -264,6 +278,8 @@ bad case 分析至少关注：趋势、周期、突变、峰值、低谷、长�
 * 结论和失败原因。
 
 失败实验也要记录，例如代码错误、显存不足、训练不收敛、指标异常、数据读取问题或结果不可比。失败实验可以提供下一轮有价值的信息，不应直接丢弃。
+
+允许依据测试集结果继续选择或修改配置。发生这种情况时，必须记录所有参与选择的配置、测试指标、修改顺序和最终选择依据，并在 `run.yaml`、迭代日志及最终报告中明确写明最终配置经过 test-set selection。测试集调参结果可以用于当前工程决策，但不能被表述为独立盲测证据。
 
 ---
 

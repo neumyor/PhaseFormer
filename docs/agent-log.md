@@ -1,5 +1,20 @@
 # Agent Maintenance Log
 
+## 2026-08-11 — Cross-agent experiment analysis skill
+
+- Added the project-level `experiment-and-error-analysis` Skill under
+  `.claude/skills/`, with a Codex-compatible entry under `.agents/skills/`.
+- Added native repository entry rules for both Codex (`AGENTS.md`) and Claude
+  Code (`CLAUDE.md`) with identical trigger boundaries.
+- Renamed the shared maintenance policy to `MANAGE_RULES.md` and updated all
+  repository references.
+- Integrated the Skill into `HOW_TO_DO_RESEARCH.md` and explicitly allowed
+  test-set-driven model/configuration selection when the complete search trail
+  is retained and the resulting reports disclose test-set selection.
+- Validation: checked Skill metadata and structure, link resolution, all
+  repository references, whitespace, and the staged diff. No model code or
+  experiment results changed.
+
 ## 2026-08-11 — Original PhaseFormer gold standard
 
 - Transcribed the user-provided paper Table 5 screenshot into
@@ -10,7 +25,7 @@
 - Defined the fixed comparison formula, dual-metric claim rule, matched-rerun
   distinction, and update authority. Exchange remains intentionally unset
   because it is absent from the supplied source image.
-- Updated `AGENT.md`, `HOW_TO_DO_RESEARCH.md`, and
+- Updated `MANAGE_RULES.md`, `HOW_TO_DO_RESEARCH.md`, and
   `EXPERIMENT_SEARCH_PLAN.md` so future improvement claims use this fixed gold
   standard instead of silently replacing it with a retrained baseline.
 - Validation: manually cross-checked all 28 rows against the source image and
@@ -74,7 +89,7 @@
   `archive/layers_legacy/` (the active model only imports
   `SelfAttention_Family.py`), with an explaining README.
 - Archived `ITERATION_BRIEF.md` / `ITERATION_LOG.md` to `docs/archive/` and
-  repointed references in `AGENT.md` / `HOW_TO_DO_RESEARCH.md` to the archived
+  repointed references in `MANAGE_RULES.md` / `HOW_TO_DO_RESEARCH.md` to the archived
   paths, clarifying the current active plan/log are `EXPERIMENT_SEARCH_PLAN.md`
   and `docs/agent-log.md`.
 - Removed tracked `.DS_Store` files and added `.DS_Store` to `.gitignore`.

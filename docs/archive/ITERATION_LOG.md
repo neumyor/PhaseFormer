@@ -3,7 +3,7 @@
 ## Iteration 0 - Initialization
 
 - Goal: understand the repository, select a weak-period benchmark, and prepare auditable experiment tooling before changing behavior.
-- Files read: `AGENT.md`, `HOW_TO_DO_RESEARCH.md`, `README.md`, `src/models/PhaseFormer.py`, `src/models/pl_bases/default_module.py`, `src/dataset/data_info.py`, `src/dataset/data_factory.py`, `src/dataset/data_loader.py`, `src/utils/metrics.py`, `run_weather.py`, `run_electricity.py`.
+- Files read: `MANAGE_RULES.md`, `HOW_TO_DO_RESEARCH.md`, `README.md`, `src/models/PhaseFormer.py`, `src/models/pl_bases/default_module.py`, `src/dataset/data_info.py`, `src/dataset/data_factory.py`, `src/dataset/data_loader.py`, `src/utils/metrics.py`, `run_weather.py`, `run_electricity.py`.
 - Dataset choice: Weather 720 -> 96 for the first comparable experiment. It is local, multivariate, and less strictly periodic than traffic/electricity.
 - Baseline plan: run `scripts/research_weather_weak.py --variant baseline --horizon 96 --epochs 30`.
 - Initial hypothesis list:
