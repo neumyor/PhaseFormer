@@ -1,5 +1,32 @@
 # Agent Maintenance Log
 
+## 2026-08-11 — Adaptive Phase Warping exploration
+
+Follow-up to Phase Alignment (2ab472b, 3b805d4, 08c74e4): replace the bounded
+per-token phase correction with a monotonic, data-driven phase warp. A speed
+field from `[value, time marks]` defines a normalized cumulative-sum map from
+time-in-cycle to continuous phase (phi[0]=0, phi[L-1]=L-1), expressing
+per-stage compression/stretch while preserving order; uniform speed reduces to
+the identity grid (warm start). `use_phase_warp` flag, mutually exclusive with
+`use_phase_align`, module constructed last. 26/26 tests pass. Audit set per
+`experiment-and-error-analysis` skill in `research_runs/phase_warp_full/`.
+
+- Stage A (30%/8ep, val-only): same sign pattern as Phase Alignment — 192
+  horizons slightly positive (ETTm1 192 +0.54, Weather 192 +0.50), ETTm1 96 and
+  Weather 96 eliminated.
+- Stage B (full budget, seed 2021, test): no stable cross-task gain. vs matched
+  original — clearly negative ETTm2 96 (dMSE -2.38%), mild positive on 192-horizon
+  tasks (ETTm1 192, ETTm2 192, Weather 192). Weather 192 is the only task beating
+  the gold standard on both metrics (dMSE +0.17%, dMAE +0.21%), within single-seed
+  noise. Result mirrors Phase Alignment, consistent with screening.
+- Sample-level (Weather 192, ETTm2 96): Weather 192 54.1% of cells improve (net
+  -0.0018 delta_mae), improvement concentrated in later horizon segments and NOT
+  from peak/std alignment (peak closer 1/10, std closer 0/10); ETTm2 96 53.1%
+  regress (net +0.0032), regression cases show peak farther from truth in 8/10.
+- Conclusion: no significant stable gain; mechanism flag-gated and out of
+  `_LATEST_POLICY`. Same verdict as Phase Alignment — the fixed phase grid is not
+  the bottleneck on this diagnostic grid.
+
 ## 2026-08-11 — Adaptive Phase Alignment exploration
 
 New mechanism (b2d06ba, d1d2be1, 626b0f2): replace the fixed `time % period_len`
