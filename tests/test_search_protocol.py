@@ -21,9 +21,10 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertEqual(run_id(first), run_id(second))
         self.assertEqual(first["config_hash"], second["config_hash"])
 
-    def test_plan_defines_exactly_thirteen_mechanisms(self):
-        self.assertEqual(len(MECHANISMS), 13)
+    def test_plan_defines_exactly_fourteen_mechanisms(self):
+        self.assertEqual(len(MECHANISMS), 14)
         self.assertIn("phase_align", MECHANISMS)
+        self.assertIn("phase_warp", MECHANISMS)
 
     def test_compact_latent_remains_head_divisible(self):
         hp = {"latent_dim": 10, "phase_attn_heads": 2, "phase_encoder_hidden": 3, "predictor_hidden": 5}

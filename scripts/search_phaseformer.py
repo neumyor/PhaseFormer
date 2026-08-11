@@ -139,6 +139,10 @@ MECHANISMS = {
         "phase_align_hidden": 8,
         "phase_align_position_encoding": False,
     },
+    "phase_warp": {
+        "use_phase_warp": True,
+        "phase_warp_hidden": 8,
+    },
 }
 
 

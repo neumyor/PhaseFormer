@@ -17,6 +17,7 @@ ABLATION_MODES = {
     "phase_sparse_event",
     "phase_all",
     "phase_align",
+    "phase_warp",
     "best_nonresidual",
 }
 
@@ -499,6 +500,12 @@ def get_ablation_overrides(mode):
             phase_align_hidden=8,
             phase_align_position_encoding=False,
         )
+    if mode == "phase_warp":
+        return dict(
+            scheme_name="phase_warp",
+            use_phase_warp=True,
+            phase_warp_hidden=8,
+        )
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -675,6 +682,10 @@ class PhaseFormerPresetConfig:
             "phase_align_position_encoding", False
         )
         self.phase_align_chunk = hyperparams.get("phase_align_chunk", 240)
+        self.use_phase_warp = hyperparams.get("use_phase_warp", False)
+        self.phase_warp_hidden = hyperparams.get("phase_warp_hidden", 8)
+        self.phase_warp_mark_dim = hyperparams.get("phase_warp_mark_dim", None)
+        self.phase_warp_chunk = hyperparams.get("phase_warp_chunk", 240)
         self.use_phase_sparse_event_calibration = hyperparams.get(
             "use_phase_sparse_event_calibration", False
         )
