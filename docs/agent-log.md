@@ -65,3 +65,62 @@
   verification was static (AST parse + behavioral-equivalence simulation for the
   presets table). Full `uv run pytest` and a GPU smoke run should be executed in
   the real `raft`/`py310` environment to confirm runtime equivalence.
+
+## 2026-08-11 — Weather 192 weak-period mechanism exploration
+
+Follow-up to the original-vs-latest benchmark: the current `_LATEST_POLICY`
+table has no entry for (Weather, 192), so `latest` falls back to the original
+guardrail. Question: which weak-period mechanisms are actually useful for
+Weather 720→192? Ran a validation-isolated search following
+`EXPERIMENT_SEARCH_PLAN.md` (val-only until a frozen winner).
+
+### Protocol
+
+- Entry point: `scripts/search_phaseformer.py` (fixed a startup import-order bug
+  — `from src...` ran before the `sys.path.insert`, so the script failed with
+  `ModuleNotFoundError: No module named 'src'` when invoked directly).
+- Stages: period screen → mechanism screen (30% / 8ep) → full-budget confirm
+  (100% / 30ep, seeds 2021+2022) → 3-seed test was truncated by user decision
+  after the 2-seed confirm proved stable.
+- All runs: val-only (no test read during search), loss=huber, lr 0.001,
+  batch 64, period search {12, 24, 48}.
+
+### Results (val, period 48)
+
+| run | seeds | avg val_MAE | avg val_MSE | dMAE% | dMSE% |
+|---|---|---|---|---|---|
+| **channel_residual** (gate 0.5) | 2 | 0.29925 | 0.43405 | **−4.93** | **−4.39** |
+| channel_adaptive (channel head + adaptive gate) | 1 | 0.30001 | 0.43241 | −4.69 | −4.75 |
+| phase_stack (uncert+level+hifreq+sparse) | 2 | 0.31090 | 0.45132 | −1.23 | −0.59 |
+| adaptive_g02 (shared head + adaptive gate) | 1 | 0.31405 | 0.44393 | −0.23 | −2.22 |
+| original | 2 | 0.31477 | 0.45400 | — | — |
+
+### Findings
+
+- **Period 48 wins** for Weather 192 (val MAE 0.341 vs 0.346 / 0.363 for 12 / 24).
+  Note Weather 96's enhanced preset uses period 12 — the optimal cycle length
+  differs across horizons.
+- **Channel-wise weak-period residual head is the only robust winner**, stable
+  across seeds (0.2993 / 0.2992). It extrapolates a per-channel centered
+  trajectory + persistence anchor, gated at 0.5.
+- **Adaptive gate adds nothing** on top of the fixed channel head (channel vs
+  channel+adaptive ≈ equal); on the shared head it is a mild regression.
+- **Phase adapters (uncertainty/level/hifreq/sparse) give only ~−1%** here, far
+  below the Weather-96 preset's benefit — their effect does not transfer to the
+  192-horizon setting.
+- time_mark and phase_local_trend are clearly negative / no-op for this task.
+
+### Artifacts
+
+- Search runner output: `research_runs/weather192_explore/runs/` (per-experiment
+  `metrics.csv`, `config.json`, best checkpoint).
+- Logs: `~/.claude/jobs/eee0ff88/tmp/full/` and `tmp/final/`.
+- The 3-seed `--evaluate-test` confirm round was launched then stopped by user
+  request ("无需三个seed了，可以结束了"); no test-set numbers were produced.
+  Test-set validation of the channel-residual winner is still outstanding.
+
+### Open question
+
+Whether to promote a channel_residual entry for (Weather, 192) into
+`_LATEST_POLICY` — and whether the same mechanism helps Weather 336/720, which
+currently also fall back to the original guardrail.
