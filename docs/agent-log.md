@@ -47,6 +47,13 @@ the identity grid (warm start). `use_phase_warp` flag, mutually exclusive with
 - Stage A (30%/8ep, val-only): same sign pattern as Phase Alignment — 192
   horizons slightly positive (ETTm1 192 +0.54, Weather 192 +0.50), ETTm1 96 and
   Weather 96 eliminated.
+- Report regenerated 2026-08-12 per the updated `experiment-and-error-analysis`
+  skill contract: audit set in `research_runs/phase_warp_full/` is now exactly
+  the six files (run.yaml, results.csv, sample_errors.csv, selected_cases.npz,
+  objective_error_analysis.md, objective_error_analysis.zip) plus `figures/`
+  over all 10 settings (single sample_errors.csv / selected_cases.npz with
+  `setting` identifiers; ZIP = Markdown + referenced figures, byte-identical;
+  PDF removed). Raw training runs preserved under `research_runs/phase_warp_runs/`.
 - Stage B (full budget, seed 2021, test): no stable cross-task gain. vs matched
   original — clearly negative ETTm2 96 (dMSE -2.38%), mild positive on 192-horizon
   tasks (ETTm1 192, ETTm2 192, Weather 192). Weather 192 is the only task beating
