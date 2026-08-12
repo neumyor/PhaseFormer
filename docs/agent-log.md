@@ -1,5 +1,49 @@
 # Agent Maintenance Log
 
+## 2026-08-12 — Phase-conditioned Amplitude Calibration
+
+New mechanism (4afc634): phase-conditioned amplitude calibration builds on the
+adaptive phase warp representation. `src/models/phase_amp_calib.py`
+(`PhaseAmpCalibration`, flag `use_phase_amp_calib`) predicts per phase slot a
+scale `alpha_l` and shift `beta_l` from the phase-slot position and per-slot
+statistics of the phase history (mean/std/abs-mean/last period/linear trend),
+then applies `h'[l,k] = alpha_l*h[l,k] + beta_l` broadcast over the period axis.
+Zero-init final layer warm-starts at identity (alpha=1, beta=0). Module
+constructed last so flag-off keeps baseline initialization; `phase_amp_calib`
+ablation mode = `phase_warp` + `use_phase_amp_calib`. 31/31 tests pass. Audit
+set in `research_runs/phase_amp_full/` (six files + figures). Reusable analysis
+tool added as `scripts/analyze_experiment.py` (validated against phase_warp_full).
+
+- Stage A (30%/8ep, val-only, `research_runs/phase_amp_screen/`, 10 settings x
+  original/warp/amp_calib): dataset-dependent. amp_calib improves Weather
+  (h192 dMAE −4.76%, h96 −1.83%) and mildly ETTh1/ETTh2 96; regresses ETTm1
+  (h96 +2.78% MAE/+5.17% MSE) and mildly ETTm2.
+- Stage B (full budget, seed 2021, test eval, `research_runs/phase_amp_runs/`,
+  10 settings, paired original + phase_amp_calib):
+  - dMAE improves on 6/10 (ETTh1 192 −0.13, ETTh2 96 −1.38, ETTm1 96 −0.54,
+    ETTm1 192 −0.50, Weather 96 −0.03, Weather 192 −0.46); dMSE improves on 6/10.
+  - Regressions: ETTm2 96 (+1.83/+2.01), ETTh2 192 (+0.62/+0.81), ETTh1 96
+    (+0.09/+0.82), ETTm2 192 (+0.59/−0.34).
+  - **No setting beats the gold standard on both MSE and MAE.** Weather 192
+    beats gold on MSE (+0.25%) but not MAE (−0.07%); Weather 96 beats gold on
+    MAE (+0.20%) but not MSE (−0.51%).
+  - The screen's strong Weather signal (−4.76% at h192) collapsed to −0.46% at
+    full budget; the ETTm1 screen regression inverted to slight improvement.
+  - Calibration activity (mean |alpha−1| over test): most active ETTh1 (~0.79)
+    and Weather 192 (~0.77), near-inactive ETTm2 192 (0.08); high activity with
+    no net gain. beta small (<0.35). max_scale=2.0 permits alpha<0 (sign-flip),
+    and the old log-alpha diagnostic nans showed it does occur.
+  - Training cost: candidate ~1.7–2x slower than original (ETTm1 96 576s vs
+    292s; Weather h192 1509s vs 751s; ETTh1 96 138s vs 82s).
+  - Sample-level (per-cell delta_mae): ETTm2 96 42.6% cells improve (57.4%
+    regress, net +0.00475), ETTh2 96 59.5% improve (net −0.00476); no dominant
+    structural signature across groups beyond the aggregate sign.
+- Conclusion: no stable cross-task gain, consistent with the phase_align and
+  phase_warp explorations — the fixed phase grid is not the bottleneck on this
+  grid, and adding a per-slot amplitude branch costs ~2x training for no net
+  benefit. Mechanism stays flag-gated and out of `_LATEST_POLICY`. Diagnostic
+  hook fixed to |alpha−1| (a820c2a) because log alpha nans when alpha≤0.
+
 ## 2026-08-12 — Simplified report archive validation
 
 - Reduced ZIP validation to three practical checks: successful extraction,
