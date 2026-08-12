@@ -189,3 +189,14 @@ Weather 720→192? Ran a validation-isolated search following
 Whether to promote a channel_residual entry for (Weather, 192) into
 `_LATEST_POLICY` — and whether the same mechanism helps Weather 336/720, which
 currently also fall back to the original guardrail.
+
+## 2026-08-12 — Compress experiment analysis Skill
+
+- Condensed `.claude/skills/experiment-and-error-analysis/SKILL.md` from 300
+  to 168 lines while retaining its experiment protocol, six-file artifact
+  whitelist, unified multi-setting schema, test-set-selection disclosure,
+  programmatic case selection, objective reporting, and Markdown/figure ZIP.
+- Simplified repeated validation language into four required checks, consistent
+  with the existing lightweight-validation requirement.
+- Validation: Skill schema passed `quick_validate.py`; measured at 2,159
+  `o200k_base` tokens and 2,577 `cl100k_base` tokens.
