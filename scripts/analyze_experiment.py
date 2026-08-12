@@ -90,14 +90,15 @@ def load_checkpoint(model, ckpt_path, device):
 def evaluate_test(model, exp_args, horizon, device):
     """Return pred (N,H,C), truth (N,H,C), history (N,seq,C) arrays.
 
-    Also accumulates phase_amp_calib activity diagnostics over batches when the
-    model has the module; the module's hooks hold last-batch values, so we sum
-    the absolute magnitudes here.
+    Also accumulates phase_amp_calib activity and reliability-gate activity
+    diagnostics over batches when the model has those modules; the modules'
+    hooks hold last-batch values, so we sum the absolute magnitudes here.
     """
     test_set, test_loader = data_provider(exp_args.dataset_args, "test")
     preds, truths, histories = [], [], []
-    diag = {"log_alpha": 0.0, "beta": 0.0, "n": 0}
+    diag = {"log_alpha": 0.0, "beta": 0.0, "gate": 0.0, "n": 0}
     has_calib = hasattr(model, "phase_amp_calib")
+    has_gate = hasattr(model, "reliability_gate")
     with torch.inference_mode():
         for batch in test_loader:
             batch_x, batch_y, batch_x_mark, batch_y_mark = [
@@ -116,13 +117,16 @@ def evaluate_test(model, exp_args, horizon, device):
             if has_calib:
                 diag["log_alpha"] += abs(model.phase_amp_calib.last_mean_abs_log_alpha)
                 diag["beta"] += abs(model.phase_amp_calib.last_mean_abs_beta)
-                diag["n"] += 1
+            if has_gate:
+                diag["gate"] += abs(model.reliability_gate.last_mean_gate)
+            diag["n"] += 1
     pred = np.concatenate(preds, axis=0)
     truth = np.concatenate(truths, axis=0)
     history = np.concatenate(histories, axis=0)
-    if has_calib and diag["n"]:
+    if diag["n"]:
         diag["log_alpha"] /= diag["n"]
         diag["beta"] /= diag["n"]
+        diag["gate"] /= diag["n"]
     return pred, truth, history, diag
 
 
@@ -236,6 +240,16 @@ def main():
     p.add_argument("--ranking-metric", default="mae")
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--gold", default="docs/PHASEFORMER_GOLD_STANDARD.md")
+    p.add_argument(
+        "--mechanism-label",
+        default="Phase-conditioned Amplitude Calibration (`use_phase_amp_calib` + `use_phase_warp`)",
+        help="human-readable mechanism name shown in the report header",
+    )
+    p.add_argument(
+        "--defect-hypothesis",
+        default="the mechanism's benefit is dataset-dependent; seed replication is required",
+        help="interpretive hypothesis line in report section 9",
+    )
     args = p.parse_args()
 
     settings = [s.strip() for s in args.settings.split(",") if s.strip()]
@@ -258,6 +272,7 @@ def main():
     eval_store = {}   # setting -> (pred_b, pred_c, truth, history, meta)
     seg_store = {}    # setting -> {group: seg mae lists}
     diag_store = {}   # setting -> {log_alpha, beta} calibration activity
+    raw_store = {}    # setting -> raw aggregate (b_mse, b_mae, c_mse, c_mae)
 
     for setting in settings:
         dataset, horizon, seed = parse_setting(setting)
@@ -305,6 +320,8 @@ def main():
                 mse=f"{c_mse_agg:.4f}", mae=f"{c_mae_agg:.4f}",
                 delta_mse=f"{dmse:.2f}", delta_mae=f"{dmae:.2f}", selected="no",
             ))
+            if mode == candidate_modes[0]:
+                raw_store[setting] = (b_mse_agg, b_mae_agg, c_mse_agg, c_mae_agg)
 
         # sample_errors.csv rows + case selection (first candidate only)
         mode = candidate_modes[0]
@@ -394,7 +411,7 @@ def main():
     # ---- report ----
     md = []
     md.append("# Experiment and Objective Error Analysis")
-    md.append(f"> Phase-conditioned Amplitude Calibration (`use_phase_amp_calib` + `use_phase_warp`) vs matched `{args.baseline_mode}`, all settings seed 2021, period 24.")
+    md.append(f"> {args.mechanism_label} vs matched `{args.baseline_mode}`, all settings seed 2021, period 24.")
     md.append("> Final configuration was NOT selected using test-set results; a single candidate configuration was evaluated (selection.source: fixed).")
     md.append("")
     md.append("## 1. Experiment Setup")
@@ -423,12 +440,12 @@ def main():
     md.append("## 3. Parameter / Configuration Search")
     md.append(f"No hyperparameter search for `{candidate_modes[0]}` (module hidden=8, max_scale=2.0 only). Stage A screened 10 settings at 30%/8ep (validation-only); full-budget runs use per-dataset base hyperparameters. All configurations are retained in `results.csv`.")
     md.append("")
-    md.append("### Amplitude-calibration activity (mean over test batches)")
-    md.append("| setting | mean |alpha-1| | mean |beta| |")
-    md.append("|---|---|---|")
+    md.append("### Amplitude-calibration / reliability-gate activity (mean over test batches)")
+    md.append("| setting | mean |alpha-1| | mean |beta| | mean gate g |")
+    md.append("|---|---|---|---|")
     for setting in settings:
         d = diag_store.get(setting, {})
-        md.append(f"| {setting} | {d.get('log_alpha', float('nan')):.4f} | {d.get('beta', float('nan')):.4f} |")
+        md.append(f"| {setting} | {d.get('log_alpha', float('nan')):.4f} | {d.get('beta', float('nan')):.4f} | {d.get('gate', float('nan')):.4f} |")
     md.append("")
     md.append("## 4. Error Distribution (sample x channel, per setting)")
     md.append("| setting | cells | improved% | regressed% | mean delta_mae |")
@@ -509,14 +526,15 @@ def main():
         dataset, horizon, _ = parse_setting(s)
         c = next(r for r in results_rows if r['setting'] == s and r['model'] == candidate_modes[0])
         g = gold.get((dataset, horizon))
-        if g and float(c['mse']) < g[0] and float(c['mae']) < g[1]:
+        raw = raw_store.get(s)
+        if g and raw and raw[2] < g[0] and raw[3] < g[1]:
             beat_both.append(s)
     if beat_both:
         md.append(f"- Beats the gold standard on both MSE and MAE: {', '.join(beat_both)} (single-seed).")
     else:
         md.append("- No setting beats the gold standard on both MSE and MAE (matched originals sit above gold; single-seed).")
     md.append("")
-    md.append("Hypotheses (unverified, require multi-seed confirmation): the amplitude branch may help weakly-periodic, amplitude-varying series (Weather) while adding noise on more stationary periodic series; the dataset-dependent sign of the effect needs seed replication.")
+    md.append(f"Hypotheses (unverified, require multi-seed confirmation): {args.defect_hypothesis}")
     md.append("")
     md.append("## 10. Experiment Scope")
     md.append("- 5 datasets x 2 horizons, single seed 2021, period 24, module hidden 8 / max_scale 2.0. No search over period/width/scale.")
