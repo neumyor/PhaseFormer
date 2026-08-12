@@ -1,5 +1,15 @@
 # Agent Maintenance Log
 
+## 2026-08-12 — Portable Markdown report bundle
+
+- Replaced the experiment PDF artifact with `objective_error_analysis.zip`.
+- Required the archive to contain only the byte-identical Markdown report and
+  the exact `figures/` images it references, using portable relative paths.
+- Added ZIP integrity, path-safety, member-whitelist, byte-equivalence, and
+  extracted-link validation; prohibited PDF generation.
+- Updated the research guide and active experiment plan to use the same
+  six-file Markdown-plus-ZIP contract.
+
 ## 2026-08-12 — Strict multi-setting experiment artifact layout
 
 - Tightened `experiment-and-error-analysis` so every experiment directory has

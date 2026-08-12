@@ -2,7 +2,7 @@
 name: experiment-and-error-analysis
 description: >
   将用户给定的模型设想实现并按约定设置实验，统计 baseline/candidate 结果，
-  筛选高误差与显著退化样本进行客观分析，并生成可审计的 Markdown/PDF 报告。
+  筛选高误差与显著退化样本进行客观分析，并生成可审计的 Markdown 报告及其 ZIP 图片包。
   当用户要求实现明确模型设想、运行对照实验并开展样本级高误差或退化分析时使用；
   不用于纯算法讨论、仅分析已有汇总结果、单纯 smoke test 或明确不运行实验的任务。
 ---
@@ -28,12 +28,12 @@ research_runs/<experiment_id>/
 ├── sample_errors.csv
 ├── selected_cases.npz
 ├── objective_error_analysis.md
-├── objective_error_analysis.pdf
+├── objective_error_analysis.zip
 └── figures/
     └── <setting>__<figure_name>.png
 ```
 
-这是严格白名单，不是最低集合。`experiment_id` 根目录不得出现其他文件或子目录；`figures/` 只保存被 Markdown/PDF 实际引用的分析图，不保存独立数据。不要在该目录保留 checkpoint、命令脚本、环境快照、stdout、TensorBoard、全量预测、每个 setting 的独立结果文件或临时文件。运行所需的临时产物放在仓库忽略的临时位置，报告完成后清理本次运行生成的临时产物；不得删除运行前已经存在且来源不明的用户文件。
+这是严格白名单，不是最低集合。`experiment_id` 根目录不得出现其他文件或子目录；`figures/` 只保存被 Markdown 实际引用的分析图，不保存独立数据。不要在该目录保留 PDF、checkpoint、命令脚本、环境快照、stdout、TensorBoard、全量预测、每个 setting 的独立结果文件或临时文件。运行所需的临时产物放在仓库忽略的临时位置，报告与压缩包完成后清理本次运行生成的临时产物；不得删除运行前已经存在且来源不明的用户文件。
 
 一次运行可以包含多个 setting。将 setting 定义为一组评估条件，为其分配稳定且唯一的字符串 `setting`，例如 `ETTh1_h96_seed2021`；baseline、candidate 和不同 config 是同一 setting 下的比较行，不要写进 setting 名。所有 setting 共用上述六个文件和 `figures/`，禁止创建 setting 子目录或 `results_<setting>.csv` 等拆分文件。
 
@@ -169,7 +169,7 @@ analysis:
 
 将所有 setting 的案例写入同一个 `selected_cases.npz`（即 sample cases 的唯一容器）。文件内必须包含与每条案例记录对齐的 `setting` 字符串数组，并用统一数组或以 setting 为前缀的键保存案例数据；禁止生成每个 setting 独立的 NPZ。该文件必须足以按 setting 重算案例指标和重绘图。
 
-将全部图表写入唯一的 `figures/`，文件名以对应 `setting` 开头，例如 `ETTh1_h96_seed2021_candidate__regression_01.png`。Markdown 和 PDF 只引用该目录中的图；删除未被任一报告引用的冗余图。
+将全部图表写入唯一的 `figures/`，文件名以对应 `setting` 开头，例如 `ETTh1_h96_seed2021_candidate__regression_01.png`。Markdown 只使用 `figures/<filename>` 形式的相对路径引用该目录中的图；禁止绝对路径、`file://`、仓库外路径和 `..` 路径。删除未被 Markdown 引用的冗余图。
 
 只把下面这样的内容写成客观观察：
 
@@ -195,11 +195,11 @@ Candidate std = 0.82，truth std = 0.54。
 
 ## 8. 生成报告
 
-从跨 setting 汇总的 `run.yaml`、`results.csv`、`sample_errors.csv` 和 `selected_cases.npz` 生成一组内容一致的报告：
+从跨 setting 汇总的 `run.yaml`、`results.csv`、`sample_errors.csv` 和 `selected_cases.npz` 生成 Markdown 报告及其便携压缩包：
 
 ```text
 objective_error_analysis.md
-objective_error_analysis.pdf
+objective_error_analysis.zip
 ```
 
 Markdown 是 canonical report，至少包含：
@@ -218,11 +218,21 @@ Markdown 是 canonical report，至少包含：
 ## 10. Experiment Scope
 ```
 
-报告必须按 `setting` 分组展示或明确标识每个结果与案例。可视化保存到 `figures/` 后嵌入 Markdown；PDF 使用相同数据和图生成。不得按 setting 生成多份 Markdown 或 PDF。若使用 test 调参，在报告显著位置写明：
+报告必须按 `setting` 分组展示或明确标识每个结果与案例。可视化保存到 `figures/` 后以相对路径嵌入 Markdown；不得按 setting 生成多份 Markdown 或 ZIP。若使用 test 调参，在报告显著位置写明：
 
 > Final configuration was selected using test-set results.
 
 同时列出 test-set selection 的配置范围和轮次。报告回答哪里更差或更好、差多少、哪些样本最明显、有哪些可测量差异以及出现次数；原因解释只能作为明确标记的假设。
+
+最后生成 `objective_error_analysis.zip`。压缩包根目录只包含：
+
+```text
+objective_error_analysis.md
+figures/
+  <Markdown 实际引用的图片>
+```
+
+压缩包中的 Markdown 必须与实验目录中的 `objective_error_analysis.md` 字节一致；图片必须与实验目录 `figures/` 中的对应文件字节一致。先解析 Markdown 得到引用图片白名单，再逐项写入 ZIP；禁止用递归打包整个实验目录的方式构建压缩包。不要把 `run.yaml`、CSV、NPZ、未引用图片、父级 `experiment_id` 目录、绝对路径、符号链接、隐藏文件、`.DS_Store`、`__MACOSX/` 或其他内容写入压缩包。用户解压后应能直接打开根目录 Markdown，并通过其相对路径看到全部图片。
 
 ## 9. 最终闭环校验
 
@@ -244,16 +254,18 @@ Markdown 是 canonical report，至少包含：
 
 从单一 `selected_cases.npz` 逐 setting 重新计算报告中的关键案例指标，确认数值一致。
 
-### Reports
+### Report and archive
 
 - 确认 Markdown 表格和图来自实际落盘数据；
-- 确认 PDF 与 Markdown 的核心数字和结论一致；
-- 确认 Markdown/PDF 引用的图均位于 `figures/`，且 `figures/` 没有未引用图；
-- 渲染并检查 PDF，确保无缺图、乱码、截断或严重分页问题。
+- 确认 Markdown 引用的图均位于 `figures/`，且 `figures/` 没有未引用图；
+- 校验 ZIP 完整性与 CRC，确认能够无错误解压；
+- 拒绝包含绝对路径、`..`、符号链接、隐藏文件或白名单外成员的 ZIP；
+- 解压到临时目录，确认 Markdown 与根目录原件字节一致、图片集合和内容完全一致；
+- 从解压后的 Markdown 重新解析图片引用，确认每个相对路径都存在且没有多余图片。
 
 ### Files
 
-确认根目录恰好包含六个非空审计文件和 `figures/`，不存在其他文件或子目录；确认不存在按 setting 拆分的 CSV、YAML、NPZ、Markdown 或 PDF；确认四个数据文件都能覆盖 `run.yaml` 声明的全部 setting。完成后写入：
+确认根目录恰好包含六个非空审计文件和 `figures/`，不存在其他文件或子目录；确认不存在 PDF，且不存在按 setting 拆分的 CSV、YAML、NPZ、Markdown 或 ZIP；确认四个数据文件都能覆盖 `run.yaml` 声明的全部 setting。完成后写入：
 
 ```yaml
 validation:
@@ -261,7 +273,9 @@ validation:
   case_ranking_checked: true
   case_metrics_checked: true
   markdown_checked: true
-  pdf_render_checked: true
+  archive_integrity_checked: true
+  archive_contents_checked: true
+  archive_links_checked: true
   settings_coverage_checked: true
   directory_whitelist_checked: true
   status: passed
@@ -282,7 +296,7 @@ User Idea
 → Select Cases
 → selected_cases.npz
 → Objective Analysis
-→ MD + PDF
+→ MD + ZIP bundle
 → Recompute & Validate
 → validation: passed
 ```

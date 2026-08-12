@@ -22,7 +22,7 @@
 - Codex：`$experiment-and-error-analysis`，入口为 `.agents/skills/experiment-and-error-analysis/`；
 - Claude Code：`/experiment-and-error-analysis`，入口为 `.claude/skills/experiment-and-error-analysis/`。
 
-该 Skill 负责实现候选机制、记录 baseline/candidate 搜索、计算样本级误差、程序化筛选案例并生成可审计的 Markdown/PDF 报告。仅讨论设想、仅分析用户已经提供的汇总结果、只做 smoke test，或用户明确要求不运行实验时，不触发该 Skill。
+该 Skill 负责实现候选机制、记录 baseline/candidate 搜索、计算样本级误差、程序化筛选案例，并生成可审计的 Markdown 报告及包含报告与引用图片的便携 ZIP。仅讨论设想、仅分析用户已经提供的汇总结果、只做 smoke test，或用户明确要求不运行实验时，不触发该 Skill。
 
 Skill 对每个 `experiment_id` 使用严格白名单：根目录只允许六个审计文件和一个 `figures/` 目录，不保留 checkpoint、命令脚本、环境快照、日志、全量预测或其他中间产物。一次运行包含多个 setting 时，所有 setting 必须汇总到同一组文件，并以显式 `setting` 字段区分，禁止按 setting 拆分文件或目录。
 
@@ -78,12 +78,12 @@ research_runs/<experiment_id>/
   sample_errors.csv
   selected_cases.npz
   objective_error_analysis.md
-  objective_error_analysis.pdf
+  objective_error_analysis.zip
   figures/
     <setting>__<figure_name>.png
 ```
 
-根目录必须恰好包含上述六个文件和 `figures/`，不得增加其他文件或子目录。`figures/` 只保留被报告引用的图。每个 setting 表示一组 dataset、horizon、seed、split 等评估条件，baseline、candidate 和不同 config 在同一 setting 下比较：`results.csv` 与 `sample_errors.csv` 必须包含 `setting` 列，`selected_cases.npz` 必须包含与案例对齐的 `setting` 数组，`run.yaml` 必须完整列举 settings；不得为每个 setting 单独生成文件或目录。
+根目录必须恰好包含上述六个文件和 `figures/`，不得增加其他文件或子目录，也不得生成 PDF。`figures/` 只保留被 Markdown 以相对路径引用的图。ZIP 根目录只包含与外部原件字节一致的 `objective_error_analysis.md` 和它实际引用的 `figures/` 图片，解压后必须能直接浏览完整报告。每个 setting 表示一组 dataset、horizon、seed、split 等评估条件，baseline、candidate 和不同 config 在同一 setting 下比较：`results.csv` 与 `sample_errors.csv` 必须包含 `setting` 列，`selected_cases.npz` 必须包含与案例对齐的 `setting` 数组，`run.yaml` 必须完整列举 settings；不得为每个 setting 单独生成文件或目录。
 
 ---
 
