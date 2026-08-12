@@ -20,7 +20,7 @@
 - 增加独立验证评估器，加载最低 `val_loss` checkpoint 后计算 `val_mae`、`val_mse`；搜索候选不调用 `trainer.test()`。
 - bad case 改从验证集导出，限制 8 个，包含样本索引、变量、时间戳、预测/真实值路径、错误模式和下一步动作。
 - 用当前修复后的真实 Huber 和 best-checkpoint 协议重新训练 original baseline，作为协议诊断和候选搜索所需的 matched rerun；它不得替换 `docs/PHASEFORMER_GOLD_STANDARD.md`。最终报告同时给出相对金标准的结果，以及在协议不完全一致时的 matched rerun 配对结果。
-- 每个实验保存配置、命令、环境、checkpoint、验证指标、耗时、显存峰值和 bad case；集中生成 leaderboard 与 Pareto 表。
+- 每个 `experiment_id` 严格只保存 `run.yaml`、`results.csv`、`sample_errors.csv`、`selected_cases.npz`、`objective_error_analysis.md`、`objective_error_analysis.zip` 和 `figures/`，不生成 PDF。ZIP 只打包 Markdown 与其实际引用的图片，解压后可直接浏览。配置、环境、验证指标、耗时、显存峰值与 bad case 元数据写入这组汇总文件，不单独保留命令、checkpoint、日志、全量预测或其他中间产物；同一次运行的多个 setting 通过统一的 `setting` 字段管理，不拆分文件或目录。
 
 ### 2. 每数据集选择共享机制
 

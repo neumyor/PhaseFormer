@@ -22,9 +22,9 @@
 - Codex：`$experiment-and-error-analysis`，入口为 `.agents/skills/experiment-and-error-analysis/`；
 - Claude Code：`/experiment-and-error-analysis`，入口为 `.claude/skills/experiment-and-error-analysis/`。
 
-该 Skill 负责实现候选机制、记录 baseline/candidate 搜索、计算样本级误差、程序化筛选案例并生成可审计的 Markdown/PDF 报告。仅讨论设想、仅分析用户已经提供的汇总结果、只做 smoke test，或用户明确要求不运行实验时，不触发该 Skill。
+该 Skill 负责实现候选机制、记录 baseline/candidate 搜索、计算样本级误差、程序化筛选案例，并生成可审计的 Markdown 报告及包含报告与引用图片的便携 ZIP。仅讨论设想、仅分析用户已经提供的汇总结果、只做 smoke test，或用户明确要求不运行实验时，不触发该 Skill。
 
-Skill 定义六类最低审计产物；本文件、`MANAGE_RULES.md` 或具体实验计划要求的 checkpoint、环境、命令、运行日志等补充证据仍须保留，不得为了缩减为六个文件而删除。
+Skill 对每个 `experiment_id` 使用严格白名单：根目录只允许六个审计文件和一个 `figures/` 目录，不保留 checkpoint、命令脚本、环境快照、日志、全量预测或其他中间产物。一次运行包含多个 setting 时，所有 setting 必须汇总到同一组文件，并以显式 `setting` 字段区分，禁止按 setting 拆分文件或目录。
 
 ---
 
@@ -32,7 +32,7 @@ Skill 定义六类最低审计产物；本文件、`MANAGE_RULES.md` 或具体�
 > 现状说明：`docs/archive/ITERATION_BRIEF.md` 与 `docs/archive/ITERATION_LOG.md` 记录了历史科研轮次，作为可追溯档案保留。当前分支的现行迭代计划与记录分别使用 `EXPERIMENT_SEARCH_PLAN.md`（任务网格/搜索/成本）与 `docs/agent-log.md`（追加式维护日志）；新的科研过程建议把关键结论写入 `docs/agent-log.md` 并在需要时引用归档日志。
 
 
-迭代过程中只维护两个核心文档工件，避免文档膨胀；实验配置、日志、预测结果、bad case 等证据产物按统一目录组织，并在核心文档中引用。
+迭代过程中只维护两个核心文档工件，避免文档膨胀；实验结果与 bad case 证据按本节的严格目录组织，并在核心文档中引用。
 
 ### 1.1 `docs/archive/ITERATION_BRIEF.md`
 
@@ -69,20 +69,21 @@ Skill 定义六类最低审计产物；本文件、`MANAGE_RULES.md` 或具体�
 research_runs/<experiment_id>/
 ```
 
-建议结构：
+固定结构：
 
 ```text
 research_runs/<experiment_id>/
-  config.yaml              # 本次实验关键配置或参数快照
-  commands.sh              # 实际运行命令
-  metrics.csv              # 汇总指标
-  runtime.md               # 时间、显存、硬件、依赖等运行信息
-  predictions/             # 可选：预测值、真实值、样本索引
-  bad_cases/               # 可选：bad case 表格、图或摘要
-  notes.md                 # 可选：补充观察
+  run.yaml
+  results.csv
+  sample_errors.csv
+  selected_cases.npz
+  objective_error_analysis.md
+  objective_error_analysis.zip
+  figures/
+    <setting>__<figure_name>.png
 ```
 
-不是每次实验都必须生成全部文件；但任何被用于关键结论、当前最佳方案或 bad case 归因的证据，都必须能从 `docs/archive/ITERATION_LOG.md` 追溯到对应产物。
+根目录必须恰好包含上述六个文件和 `figures/`，不得增加其他文件或子目录，也不得生成 PDF。`figures/` 只保留被 Markdown 以相对路径引用的图。ZIP 根目录只包含与外部原件字节一致的 `objective_error_analysis.md` 和它实际引用的 `figures/` 图片，解压后必须能直接浏览完整报告。每个 setting 表示一组 dataset、horizon、seed、split 等评估条件，baseline、candidate 和不同 config 在同一 setting 下比较：`results.csv` 与 `sample_errors.csv` 必须包含 `setting` 列，`selected_cases.npz` 必须包含与案例对齐的 `setting` 数组，`run.yaml` 必须完整列举 settings；不得为每个 setting 单独生成文件或目录。
 
 ---
 
@@ -156,7 +157,7 @@ Agent 应默认采用最低成本路径验证假设，只有在证据支持继�
 
 * 不要默认跑全量数据集、全量 horizon 或长时间训练。
 * 每轮先设计最小可验证实验，明确为什么这个实验足以支持或否定当前假设。
-* 优先复用已有结果、checkpoint、日志和中间产物，但必须说明可比性。
+* 可以在运行期间复用已有结果、checkpoint、日志和中间产物，但必须说明可比性；不得将它们复制进最终 `experiment_id` 目录，本次运行新生成的临时产物在六个审计文件和图表完成后清理。
 * 新机制先做单数据集/单 horizon/短训练验证；只有出现正向信号或关键失败证据时，才扩展到更多数据集、horizon 或 seed。
 * 长实验前应确认：代码已通过 smoke test，实验设置可复现，输出路径不会覆盖已有结果。
 * 训练成本、推理成本和显存/内存开销是模型质量的一部分，不能只看预测指标。
@@ -264,7 +265,7 @@ bad case 分析至少关注：趋势、周期、突变、峰值、低谷、长�
 
 ## 8. 实验记录规则
 
-所有关键实验必须可复现。记录至少包括：
+所有关键实验必须可复现。以下信息统一写入该 `experiment_id` 的 `run.yaml`、`results.csv` 或最终报告，不创建额外记录文件：
 
 * 实验编号；
 * 日期或轮次；

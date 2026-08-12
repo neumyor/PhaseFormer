@@ -1,5 +1,38 @@
 # Agent Maintenance Log
 
+## 2026-08-12 — Simplified report archive validation
+
+- Reduced ZIP validation to three practical checks: successful extraction,
+  presence of the Markdown and referenced figures, and valid relative image
+  links after extraction.
+- Replaced the three detailed archive validation flags with one
+  `archive_checked` status.
+
+## 2026-08-12 — Portable Markdown report bundle
+
+- Replaced the experiment PDF artifact with `objective_error_analysis.zip`.
+- Required the archive to contain only the byte-identical Markdown report and
+  the exact `figures/` images it references, using portable relative paths.
+- Added ZIP integrity, path-safety, member-whitelist, byte-equivalence, and
+  extracted-link validation; prohibited PDF generation.
+- Updated the research guide and active experiment plan to use the same
+  six-file Markdown-plus-ZIP contract.
+
+## 2026-08-12 — Strict multi-setting experiment artifact layout
+
+- Tightened `experiment-and-error-analysis` so every experiment directory has
+  exactly six audit files plus one `figures/` directory.
+- Prohibited retained checkpoints, command files, environment snapshots, logs,
+  full predictions, temporary files, and per-setting output files inside an
+  experiment directory.
+- Required all settings from one run to share `run.yaml`, `results.csv`,
+  `sample_errors.csv`, `selected_cases.npz`, and one Markdown/PDF report pair,
+  with an explicit `setting` identifier in every applicable artifact.
+- Updated the repository research guide and active search plan to use the same
+  strict whitelist.
+- Validation: checked Skill metadata, setting coverage requirements, directory
+  whitelist language, repository references, whitespace, and the staged diff.
+
 ## 2026-08-11 — Adaptive Phase Warping exploration
 
 Follow-up to Phase Alignment (2ab472b, 3b805d4, 08c74e4): replace the bounded
@@ -216,3 +249,14 @@ Weather 720→192? Ran a validation-isolated search following
 Whether to promote a channel_residual entry for (Weather, 192) into
 `_LATEST_POLICY` — and whether the same mechanism helps Weather 336/720, which
 currently also fall back to the original guardrail.
+
+## 2026-08-12 — Compress experiment analysis Skill
+
+- Condensed `.claude/skills/experiment-and-error-analysis/SKILL.md` from 300
+  to 168 lines while retaining its experiment protocol, six-file artifact
+  whitelist, unified multi-setting schema, test-set-selection disclosure,
+  programmatic case selection, objective reporting, and Markdown/figure ZIP.
+- Simplified repeated validation language into four required checks, consistent
+  with the existing lightweight-validation requirement.
+- Validation: Skill schema passed `quick_validate.py`; measured at 2,159
+  `o200k_base` tokens and 2,577 `cl100k_base` tokens.

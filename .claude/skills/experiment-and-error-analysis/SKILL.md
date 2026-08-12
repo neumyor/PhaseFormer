@@ -1,25 +1,22 @@
 ---
 name: experiment-and-error-analysis
 description: >
-  将用户给定的模型设想实现并按约定设置实验，统计 baseline/candidate 结果，
-  筛选高误差与显著退化样本进行客观分析，并生成可审计的 Markdown/PDF 报告。
-  当用户要求实现明确模型设想、运行对照实验并开展样本级高误差或退化分析时使用；
-  不用于纯算法讨论、仅分析已有汇总结果、单纯 smoke test 或明确不运行实验的任务。
+  实现用户给定的模型设想并运行 baseline/candidate 对照实验，筛选高误差与显著退化样本，
+  生成可审计的 Markdown 报告及其 ZIP 图片包。当用户同时要求实现明确设想、运行实验和开展
+  样本级错误分析时使用；不用于纯讨论、仅分析已有汇总结果、单纯 smoke test 或明确不运行实验的任务。
 ---
 
 # Experiment and Error Analysis
 
-## 全局原则
+## 原则与产物
 
-- 不重复询问用户已经明确的信息；普通未指定参数沿用 baseline。
-- 仅在实现含义、baseline、数据、训练协议或评价目标存在重要歧义时确认。
-- 用户未提供代码时，使实现局部、可关闭，并保持关闭后 baseline 路径不变。
-- 允许根据 test 集结果调整模型、参数或机制；保留所有参与选择的实验，并在配置和报告中明确披露 test-set selection。不得将相关结果描述为盲测或无偏泛化估计。
-- 高误差报告只陈述可直接测量的现象；如需讨论原因，将其与观察分开，并明确标记为待验证假设。
-- 关键数字、样本和图必须能从落盘文件重新验证。
-- 遵守仓库的 `MANAGE_RULES.md`、`HOW_TO_DO_RESEARCH.md` 和当前实验计划；发生冲突时，以用户当前明确要求和仓库规则为准，并记录采用的协议。
+- 遵守 `MANAGE_RULES.md`、`HOW_TO_DO_RESEARCH.md` 和当前实验计划；用户当前明确要求优先。
+- 未指定参数沿用 baseline；仅在实现、baseline、数据、协议或目标存在重要歧义时询问。
+- 实现应局部、可关闭，flag-off 保持 baseline 路径；不要夹带无关模块。
+- 允许根据 test 集结果调参，但保留全部选择轨迹，并显著披露 test-set selection；不得称为盲测或无偏泛化估计。
+- 报告区分可测量观察与原因假设；所有数字、案例和图均须可从落盘文件复核。
 
-每次完整运行至少保留下列规范审计集合：
+每个 `experiment_id` 严格只保留下列六个非空文件和一个图目录：
 
 ```text
 research_runs/<experiment_id>/
@@ -28,159 +25,94 @@ research_runs/<experiment_id>/
 ├── sample_errors.csv
 ├── selected_cases.npz
 ├── objective_error_analysis.md
-└── objective_error_analysis.pdf
+├── objective_error_analysis.zip
+└── figures/
+    └── <setting>__<figure_name>.png
 ```
 
-这些是最低产物，不是删除清单。继续保留仓库规则或实验计划要求的 checkpoint、命令、环境、日志、全量预测或其他可复现证据；不要删除既有用户产物。
+根目录不得有其他文件或目录；`figures/` 只保留 Markdown 引用的图。禁止保留 PDF、checkpoint、脚本、环境快照、日志、TensorBoard、全量预测和临时文件。临时产物放在仓库忽略的位置，完成后仅清理本次生成的内容，不删除来源不明的用户文件。
 
-## 1. 确认并记录实验
+一次运行可含多个 setting。`setting` 是 dataset、horizon、seed、split 等评估条件的稳定唯一字符串（如 `ETTh1_h96_seed2021`）；baseline、candidate 和 config 不写入其名称。所有 setting 共用上述文件，靠显式 `setting` 字段区分；禁止 setting 子目录或按 setting 拆分 YAML/CSV/NPZ/Markdown/ZIP。
 
-从用户设想、代码仓库和已有实验设置中确认：
+## 1. 确认、实现与运行
 
-- mechanism 如何进入计算流程；
-- baseline 与 candidate；
-- dataset、lookback、horizon、seed；
-- optimizer、loss、learning rate、epoch、checkpoint rule；
-- metrics 和参数选择方式。
-
-创建 `run.yaml`，至少记录：
+确认 mechanism、baseline/candidate、dataset、split、lookback、horizon、seed、optimizer、loss、learning rate、epoch、checkpoint rule、metrics 和参数选择方式。创建 `run.yaml`，至少记录：
 
 ```yaml
 experiment_id:
-code:
-  repository:
-  branch:
-  commit:
-  modified_files:
-mechanism:
-  description:
-  feature_flag:
+code: {repository:, branch:, commit:, modified_files: []}
+mechanism: {description:, feature_flag:}
 experiment:
   baseline:
   candidate:
-  datasets:
-  horizons:
-  seeds:
+  settings:
+    - {setting:, dataset:, split:, lookback:, horizon:, seed:}
   training:
   metrics:
+execution:
+  environment:
+  settings:
+    - {setting:, commands: [], runtime:}
 selection:
   source: test | validation | fixed
-  selected_config:
-  search_notes:
-analysis:
-  ranking_metric:
-  top_k:
-  dedup_rule:
+  selected_configs:
+    - {setting:, config_id:, search_notes:}
+analysis: {ranking_metric: mae, top_k: 10, dedup_rule:}
 ```
 
-若最终参数依据 test 结果选择，将 `selection.source` 标为 `test`，并在 `search_notes` 记录测试反馈如何影响后续配置。
+`experiment.settings`、`execution.settings`、`selection.selected_configs` 必须覆盖同一 setting 集。若 test 结果影响最终参数，设 `selection.source: test`，并在 `search_notes` 记录配置、指标、尝试顺序和选择依据。
 
-## 2. 实现并检查 Candidate
+实现 candidate 时：找到最小插入点；增加 feature flag；检查 forward、shape、smoke test 和 flag-off baseline 等价性；把 commit、修改文件和验证状态写入 `run.yaml`。已有实现也需核对设想与可运行性。
 
-用户未提供实现时：
-
-1. 找到最小插入位置；
-2. 实现机制并尽量增加 feature flag；
-3. 完成 forward、shape 和 smoke test；
-4. 检查 flag-off 是否保持 baseline 行为。
-
-已有实现时，检查其是否符合设想并能正常运行。将 commit、修改文件、机制说明和验证状态写入 `run.yaml`。不要顺便加入与设想无关的 loss、residual、normalization 或其他模块。
-
-## 3. 运行实验与参数搜索
-
-运行 baseline、candidate 以及实际尝试的配置。每次运行至少记录：
-
-- dataset、horizon、seed、config；
-- MSE、MAE 和用户指定指标；
-- 相对 baseline 的变化；
-- 是否最终选中。
-
-允许依据 test 结果修改参数并重新实验，但必须保留真正参与选择的全部配置，不能只留下最终最好结果。
-
-写入 `results.csv`：
+运行 baseline、candidate 及实际尝试的全部配置。所有 setting 写入单一 `results.csv`：
 
 ```text
-config_id,dataset,horizon,seed,model,key_params,mse,mae,delta_mse,delta_mae,selected
+setting,config_id,dataset,horizon,seed,model,key_params,mse,mae,delta_mse,delta_mae,selected
 ```
 
-## 4. 计算样本级误差
+至少记录 MSE、MAE、用户指定指标、相对 baseline 变化和是否入选；失败运行及原因也应在 `run.yaml` 或报告记录。不能只保留最优配置。
 
-使用最终比较的 baseline 和 candidate 在 evaluation 数据上的输出，按 `sample × channel` 或任务适用的最细粒度计算 MSE、MAE、candidate-minus-baseline delta，以及必要的时间范围和 channel 信息。
+## 2. 样本误差与案例
 
-写入 `sample_errors.csv`：
+用最终比较的 baseline/candidate evaluation 输出，按 `sample × channel` 或任务可用的最细粒度计算 MSE、MAE、candidate-minus-baseline delta、time range 和 channel。所有 setting 写入单一 `sample_errors.csv`：
 
 ```text
-sample_id,channel,time_range,baseline_mse,candidate_mse,delta_mse,baseline_mae,candidate_mae,delta_mae
+setting,baseline_config_id,candidate_config_id,sample_id,channel,time_range,baseline_mse,candidate_mse,delta_mse,baseline_mae,candidate_mae,delta_mae
 ```
 
-该文件必须足以重新执行 high-error ranking。如果仓库规则需要保留全量预测，则同时保留，不因生成该表而删除。
+每个 setting 只写最终 baseline/candidate 对；文件必须足以重新排名，不保留全量预测。
 
-## 5. 筛选案例
-
-默认以程序化规则筛选三组：
+按程序化规则逐 setting 筛选，默认每组 Top 5–10，并依 `dedup_rule` 去除连续窗口或同 channel 高度重复案例：
 
 1. **Baseline High Error**：baseline error 最大；
-2. **Candidate Regression**：`candidate_error - baseline_error` 最大；
-3. **Candidate Improvement**：candidate 相对 baseline 改善最大。
+2. **Candidate Regression**：candidate − baseline 最大；
+3. **Candidate Improvement**：baseline − candidate 最大。
 
-每组默认 Top 5–10。连续窗口或同 channel 高度重复时，按 `run.yaml` 中的规则去重。不要为了支持某种解释人工挑选案例。
-
-在 `run.yaml` 记录选择结果：
+不得为支持解释而人工挑选。将选择结果写入 `run.yaml`：
 
 ```yaml
 analysis:
   ranking_metric: mae
   top_k: 10
   dedup_rule:
-  baseline_high_error: []
-  candidate_regression: []
-  candidate_improvement: []
+  selections:
+    - setting:
+      baseline_high_error: []
+      candidate_regression: []
+      candidate_improvement: []
 ```
 
-## 6. 保存并分析选中案例
+把全部 setting 的入选案例保存在单一 `selected_cases.npz`：至少含对齐的 `setting`、sample/channel/time metadata、historical input、truth、baseline prediction 和 candidate prediction。可用统一数组或 setting 前缀键，但必须能逐 setting 重算指标和重绘图。
 
-对选中的少量案例保存：
+计算适用的描述统计，如 MSE/MAE、mean/std/min/max、range、linear slope、peak/trough position 和 horizon segment error；仅必要时计算 lag、频谱或 autocorrelation。图中对比 history/truth/baseline/candidate，保存为 `figures/<setting>__<figure_name>.png`，Markdown 仅用 `figures/<filename>` 相对路径；禁止绝对路径、`file://`、`..`、符号链接及未引用图。
 
-- historical input、ground truth；
-- baseline prediction、candidate prediction；
-- sample、channel 和 time metadata。
+只把可测量内容写成观察，例如“Candidate MAE 高 0.083”或“Candidate peak 在 step 71，truth 在 step 48”。“没有学会趋势”“phase shift”“机制导致 amplitude instability”等只能标为待验证假设，并附验证方法。
 
-计算适合任务的描述性量，例如 MSE/MAE、mean/std/min/max、range、linear slope、peak/trough position、horizon segment error，必要时再计算 lag、频谱或 autocorrelation。生成 history/truth/baseline/candidate 对比图。
+## 3. 汇总与报告
 
-将足以重算案例指标和重绘图的数据写入 `selected_cases.npz`。
+基于 `results.csv`、`sample_errors.csv`、`selected_cases.npz` 总结整体指标、误差分布、horizon-wise error、dataset/horizon/channel 差异、代表案例和跨案例重复的可测量模式（如 `Candidate std > truth std: 8/10`）。不创建额外摘要文件。
 
-只把下面这样的内容写成客观观察：
-
-```text
-Candidate MAE 比 baseline 高 0.083。
-Candidate peak 位于 step 71，truth peak 位于 step 48。
-Candidate std = 0.82，truth std = 0.54。
-```
-
-不要把“没有学会趋势”“存在 phase shift”“机制导致 amplitude instability”等未经验证的解释写成事实。需要归因时，将其单列为假设，并给出后续验证方法。
-
-## 7. 汇总客观缺陷
-
-基于 `results.csv`、`sample_errors.csv` 和 `selected_cases.npz` 总结：
-
-- 整体指标提升或退化；
-- error distribution 和 horizon-wise error；
-- dataset、horizon、channel 差异；
-- high-error cases；
-- 多案例重复出现的可测量模式。
-
-例如记录 `Candidate std > truth std: 8 / 10`，而不是据此直接声称某个机制原因。将这些内容直接纳入最终报告，不创建重复摘要文件。
-
-## 8. 生成报告
-
-从 `run.yaml`、`results.csv`、`sample_errors.csv` 和 `selected_cases.npz` 生成内容一致的：
-
-```text
-objective_error_analysis.md
-objective_error_analysis.pdf
-```
-
-Markdown 是 canonical report，至少包含：
+生成 canonical `objective_error_analysis.md`，至少包含：
 
 ```markdown
 # Experiment and Objective Error Analysis
@@ -196,69 +128,41 @@ Markdown 是 canonical report，至少包含：
 ## 10. Experiment Scope
 ```
 
-可视化直接嵌入 Markdown；PDF 使用相同数据生成。若使用 test 调参，在报告显著位置写明：
+按 setting 分组或明确标识所有结果与案例。报告回答哪里更好/更差、差多少、哪些样本最明显、有哪些可测量差异及出现次数；归因只能作为假设。若使用 test 调参，显著写明：
 
 > Final configuration was selected using test-set results.
 
-同时列出 test-set selection 的配置范围和轮次。报告回答哪里更差或更好、差多少、哪些样本最明显、有哪些可测量差异以及出现次数；原因解释只能作为明确标记的假设。
+并列出参与选择的配置范围、轮次和依据。
 
-## 9. 最终闭环校验
+生成 `objective_error_analysis.zip`，其根目录只能包含：
 
-文件生成后执行以下校验。
+```text
+objective_error_analysis.md
+figures/<Markdown 实际引用的图片>
+```
 
-### Results
+ZIP 中 Markdown/图片须与实验目录原件字节一致。解析 Markdown 得到图片白名单后逐项写入 ZIP，不得递归打包实验目录；排除其他审计文件、未引用图、父目录、绝对路径、符号链接、隐藏文件、`.DS_Store` 和 `__MACOSX/`。解压后应能直接打开 Markdown 并看到全部图片。
 
-- 确认 `run.yaml` 的 selected config 存在于 `results.csv`；
-- 重算报告中的 MSE、MAE 和 delta；
-- 确认所有参与选择的配置均已保留；
-- 确认 test-set selection 已正确披露。
+## 4. 必要校验
 
-### Ranking
+完成后进行简要但真实的闭环检查：
 
-依据 `run.yaml` 的 metric、Top-K 和 dedup rule，从 `sample_errors.csv` 重新筛选，确认 sample ID 与 `run.yaml`、`selected_cases.npz` 和报告一致。
+- 每个声明的 setting 在 `run.yaml`、`results.csv`、`sample_errors.csv` 和 `selected_cases.npz` 中一致；selected config 存在，所有搜索配置均保留，test selection 已披露。
+- 按记录规则抽查重算汇总指标、Top-K 排名和关键案例指标。
+- Markdown 引用图均存在；ZIP 只含 Markdown 及其引用图，解压后路径有效且文件与原件一致。
+- 实验目录恰好符合六文件加 `figures/` 的白名单，无按 setting 拆分产物或 PDF。
 
-### Cases
-
-从 `selected_cases.npz` 重新计算报告中的关键案例指标，确认数值一致。
-
-### Reports
-
-- 确认 Markdown 表格和图来自实际落盘数据；
-- 确认 PDF 与 Markdown 的核心数字和结论一致；
-- 渲染并检查 PDF，确保无缺图、乱码、截断或严重分页问题。
-
-### Files
-
-确认六个最低审计文件存在且非空，并确认仓库额外要求的证据产物也已保留。完成后写入：
+在 `run.yaml` 记录：
 
 ```yaml
 validation:
   results_checked: true
-  case_ranking_checked: true
-  case_metrics_checked: true
-  markdown_checked: true
-  pdf_render_checked: true
+  ranking_and_cases_checked: true
+  report_and_archive_checked: true
+  directory_and_settings_checked: true
   status: passed
 ```
 
-任一步骤未完成时写 `status: incomplete` 和具体 `issues`；未实际完成校验时不得写 `passed`。
+未完成的项目设为 `false`，并写 `status: incomplete` 与 `issues`；不得虚报 `passed`。
 
-## Workflow
-
-```text
-User Idea
-→ Confirm Setup
-→ Implement Candidate
-→ Run/Search Experiments
-→ results.csv
-→ Sample Errors
-→ sample_errors.csv
-→ Select Cases
-→ selected_cases.npz
-→ Objective Analysis
-→ MD + PDF
-→ Recompute & Validate
-→ validation: passed
-```
-
-用尽量少的规范产物保存完整证据链，使实验结果、高误差样本和报告都能反向复核，同时保留项目规则要求的必要中间证据。
+流程：确认设置 → 最小实现 → 对照/搜索实验 → 汇总结果 → 样本误差 → 程序化选例 → 客观分析 → Markdown + ZIP → 必要校验。始终以单组跨 setting 产物维持完整证据链。
