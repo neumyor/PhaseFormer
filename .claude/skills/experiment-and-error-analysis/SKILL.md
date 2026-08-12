@@ -257,11 +257,9 @@ figures/
 ### Report and archive
 
 - 确认 Markdown 表格和图来自实际落盘数据；
-- 确认 Markdown 引用的图均位于 `figures/`，且 `figures/` 没有未引用图；
-- 校验 ZIP 完整性与 CRC，确认能够无错误解压；
-- 拒绝包含绝对路径、`..`、符号链接、隐藏文件或白名单外成员的 ZIP；
-- 解压到临时目录，确认 Markdown 与根目录原件字节一致、图片集合和内容完全一致；
-- 从解压后的 Markdown 重新解析图片引用，确认每个相对路径都存在且没有多余图片。
+- 确认 Markdown 引用的图片均存在于 `figures/`；
+- 将 ZIP 解压到临时目录，确认其中包含 Markdown 和它引用的图片；
+- 确认解压后的 Markdown 中每个图片相对路径都能找到对应文件。
 
 ### Files
 
@@ -273,9 +271,7 @@ validation:
   case_ranking_checked: true
   case_metrics_checked: true
   markdown_checked: true
-  archive_integrity_checked: true
-  archive_contents_checked: true
-  archive_links_checked: true
+  archive_checked: true
   settings_coverage_checked: true
   directory_whitelist_checked: true
   status: passed

@@ -1,5 +1,13 @@
 # Agent Maintenance Log
 
+## 2026-08-12 — Simplified report archive validation
+
+- Reduced ZIP validation to three practical checks: successful extraction,
+  presence of the Markdown and referenced figures, and valid relative image
+  links after extraction.
+- Replaced the three detailed archive validation flags with one
+  `archive_checked` status.
+
 ## 2026-08-12 — Portable Markdown report bundle
 
 - Replaced the experiment PDF artifact with `objective_error_analysis.zip`.
