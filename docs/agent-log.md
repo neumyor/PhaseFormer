@@ -1,5 +1,48 @@
 # Agent Maintenance Log
 
+## 2026-08-12 — Reliability-aware Adaptive Phase Evolution (RAPE)
+
+New mechanism (67bb537): compose the adaptive phase warp + amplitude
+calibration with a per-sample, per-channel ReliabilityGate. The gate
+g=sigmoid(MLP(history volatility, linear slope, same-slot phase instability,
+adaptation magnitude)) fuses `h~ = g*h_adapted + (1-g)*h_identity`, letting the
+model fall back to the original fixed-grid phase prior on stable strong-period
+windows. Zero-init gate -> g=0.5 at construction; warp+amp are identity then,
+so the fused output equals the identity phase for any g (warm start). Mutually
+exclusive with phase_align/phase_warp/phase_amp_calib, constructed last.
+37/37 tests pass. Audit set in `research_runs/phase_rape_full/` (six files +
+figures). Reuses `scripts/analyze_experiment.py`, extended with reliability-gate
+activity + configurable report labels.
+
+- Stage A (30%/8ep, val-only, 10 settings x original/warp/amp_calib/rape):
+  rape improves Weather h192 (−6.45%) and slightly mitigates the ETTm1
+  amp_calib regression; near-neutral elsewhere.
+- Stage B (full budget, seed 2021, test eval, `research_runs/phase_rape_runs/`,
+  10 settings, paired original + phase_rape):
+  - dMAE improves on 6/10 (ETTh1 96/192, ETTh2 96, ETTm1 96/192, Weather 192);
+    dMSE improves on 5/10 (ETTh1 96/192, ETTm1 192, Weather 96/192).
+  - **Weather h192 beats the gold standard on both metrics** (dMSE +0.41%,
+    dMAE +0.00% at 4-decimal precision; marginal, single-seed). ETTh1 h192
+    beats gold on MSE (+1.66%) but not MAE (−0.84%); dMSE −3.36% is the largest
+    improvement seen across all mechanisms so far.
+  - Regressions: ETTm2 96 (+1.13/+1.97), ETTh2 192 (+1.07/+1.60), ETTm2 192
+    (+0.91/+0.20), Weather 96 (+0.26/−0.65).
+  - vs amp_calib (no gate, prior round): the gate helps ETTh1 96/192 (dMSE
+    −0.01 vs +0.82; −3.36 vs −1.69) and Weather h192 (−0.90 vs −0.72), but is
+    neutral-to-worse on ETTh2 192, ETTm1 192, ETTm2 192.
+  - Reliability gate activity (mean g over test): high on 8/10 settings
+    (0.70-0.92), lowest on ETTm2 192 (0.42) and Weather 96 (0.61). The gate
+    mostly commits to the adapted representation rather than selectively
+    falling back to the original phase prior; the "reliability-aware
+    selection" is only weakly realized.
+  - Training cost: candidate ~1.5-2.9x slower than original (Weather h192
+    2120s vs 745s; ETTh1 96 146s vs 83s).
+- Conclusion: no stable cross-task gain; two genuinely positive settings
+  (ETTh1 h192 MSE, Weather h192 dual-metric gold beat) both improve over the
+  no-gate amp_calib, but the benefit is dataset-dependent and within
+  single-seed spread. Mechanism stays flag-gated and out of `_LATEST_POLICY`;
+  the gate is not a reliable cross-task fix.
+
 ## 2026-08-12 — Phase-conditioned Amplitude Calibration
 
 New mechanism (4afc634): phase-conditioned amplitude calibration builds on the
