@@ -150,6 +150,13 @@ MECHANISMS = {
         "phase_amp_calib_hidden": 8,
         "phase_amp_calib_max_scale": 2.0,
     },
+    "phase_rape": {
+        "use_phase_rape": True,
+        "phase_warp_hidden": 8,
+        "phase_amp_calib_hidden": 8,
+        "phase_amp_calib_max_scale": 2.0,
+        "phase_rape_gate_hidden": 8,
+    },
 }
 
 

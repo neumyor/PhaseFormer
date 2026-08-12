@@ -22,6 +22,7 @@ from src.models.phase_adapters import (
 from src.models.phase_align import PhaseAlignment
 from src.models.phase_warp import PhaseWarping
 from src.models.phase_amp_calib import PhaseAmpCalibration
+from src.models.phase_rape import ReliabilityGate
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -631,6 +632,37 @@ class PhaseFormer(DefaultPLModule):
                 max_scale=getattr(configs, "phase_amp_calib_max_scale", 2.0),
             )
 
+        # Reliability-aware Adaptive Phase Evolution (RAPE): phase warp +
+        # amplitude calibration + a per-sample reliability gate that fuses the
+        # adapted representation with the original fixed-grid phase prior.
+        # Constructed last; at construction warp and amp are identity, so the
+        # fused output reduces to the identity phase for any gate value (warm
+        # start), and flag-off keeps baseline initialization.
+        self.use_phase_rape = getattr(configs, "use_phase_rape", False)
+        if self.use_phase_rape:
+            if self.use_phase_align or self.use_phase_warp or self.use_phase_amp_calib:
+                raise ValueError(
+                    "use_phase_rape is mutually exclusive with use_phase_align, "
+                    "use_phase_warp and use_phase_amp_calib"
+                )
+            mark_dim = getattr(configs, "phase_rape_mark_dim", None)
+            if mark_dim is None:
+                mark_dim = getattr(configs, "time_mark_dim", 4)
+            self.phase_rape_mark_dim = mark_dim
+            self.phase_warp_mark_dim = mark_dim
+            self.phase_warp = PhaseWarping(
+                mark_dim=mark_dim,
+                hidden=getattr(configs, "phase_warp_hidden", 8),
+                chunk_t=getattr(configs, "phase_warp_chunk", 240),
+            )
+            self.phase_amp_calib = PhaseAmpCalibration(
+                hidden=getattr(configs, "phase_amp_calib_hidden", 8),
+                max_scale=getattr(configs, "phase_amp_calib_max_scale", 2.0),
+            )
+            self.reliability_gate = ReliabilityGate(
+                hidden=getattr(configs, "phase_rape_gate_hidden", 8),
+            )
+
     # phase rearrangement helpers
     @staticmethod
     def _to_phase_series(x_periods):
@@ -668,7 +700,7 @@ class PhaseFormer(DefaultPLModule):
         x_periods = x.view(B, C, self.num_periods_input, self.period_len)
 
         # 5) Parallel by phase view (B, C, L, P_in)
-        if self.use_phase_align or self.use_phase_warp:
+        if self.use_phase_align or self.use_phase_warp or self.use_phase_rape:
             mark_dim = (
                 self.phase_align_mark_dim if self.use_phase_align
                 else self.phase_warp_mark_dim
@@ -684,6 +716,15 @@ class PhaseFormer(DefaultPLModule):
                 mark = F.pad(mark, (0, 0, 0, self.pad_seq_len), mode="circular")
             if self.use_phase_align:
                 phase_series = self.phase_alignment(x_periods, mark)
+            elif self.use_phase_rape:
+                phase_identity = self._to_phase_series(x_periods)
+                phase_warped = self.phase_warp(x_periods, mark)
+                phase_adapted = self.phase_amp_calib(phase_warped)
+                gate = self.reliability_gate(x_in, phase_adapted, phase_identity)
+                phase_series = (
+                    gate.unsqueeze(-1).unsqueeze(-1) * phase_adapted
+                    + (1.0 - gate).unsqueeze(-1).unsqueeze(-1) * phase_identity
+                )
             else:
                 phase_series = self.phase_warp(x_periods, mark)
         else:
