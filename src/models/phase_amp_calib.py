@@ -46,7 +46,9 @@ class PhaseAmpCalibration(nn.Module):
         nn.init.zeros_(self.net[-1].weight)
         nn.init.zeros_(self.net[-1].bias)
 
-        # Diagnostic hooks (plain floats, never in the state_dict).
+        # Diagnostic hooks (plain floats, never in the state_dict). |alpha-1|
+        # measures deviation from identity scaling; >1 indicates alpha<0 (a
+        # phase sign-flip, reachable because max_scale allows negative alpha).
         self.last_mean_abs_log_alpha = 0.0
         self.last_mean_abs_beta = 0.0
 
@@ -92,6 +94,6 @@ class PhaseAmpCalibration(nn.Module):
         out = alpha.unsqueeze(-1) * phase_series + beta.unsqueeze(-1)
 
         with torch.no_grad():
-            self.last_mean_abs_log_alpha = float(torch.log(alpha).abs().mean())
+            self.last_mean_abs_log_alpha = float((alpha - 1.0).abs().mean())
             self.last_mean_abs_beta = float(beta.abs().mean())
         return out
