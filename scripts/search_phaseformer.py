@@ -143,6 +143,13 @@ MECHANISMS = {
         "use_phase_warp": True,
         "phase_warp_hidden": 8,
     },
+    "phase_amp_calib": {
+        "use_phase_warp": True,
+        "phase_warp_hidden": 8,
+        "use_phase_amp_calib": True,
+        "phase_amp_calib_hidden": 8,
+        "phase_amp_calib_max_scale": 2.0,
+    },
 }
 
 

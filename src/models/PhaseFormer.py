@@ -21,6 +21,7 @@ from src.models.phase_adapters import (
 )
 from src.models.phase_align import PhaseAlignment
 from src.models.phase_warp import PhaseWarping
+from src.models.phase_amp_calib import PhaseAmpCalibration
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -620,6 +621,15 @@ class PhaseFormer(DefaultPLModule):
                 hidden=getattr(configs, "phase_warp_hidden", 8),
                 chunk_t=getattr(configs, "phase_warp_chunk", 240),
             )
+        # Phase-conditioned amplitude calibration builds on the (warped) phase
+        # representation, so it is constructed after phase_align/phase_warp to
+        # keep the flag-off initialization identical for those modules too.
+        self.use_phase_amp_calib = getattr(configs, "use_phase_amp_calib", False)
+        if self.use_phase_amp_calib:
+            self.phase_amp_calib = PhaseAmpCalibration(
+                hidden=getattr(configs, "phase_amp_calib_hidden", 8),
+                max_scale=getattr(configs, "phase_amp_calib_max_scale", 2.0),
+            )
 
     # phase rearrangement helpers
     @staticmethod
@@ -680,6 +690,8 @@ class PhaseFormer(DefaultPLModule):
             phase_series = self._to_phase_series(x_periods)
         if self.use_phase_uncertainty_shrinkage:
             phase_series = self.phase_uncertainty_shrinkage(phase_series)
+        if self.use_phase_amp_calib:
+            phase_series = self.phase_amp_calib(phase_series)
 
         # 6-8) Embedding -> routing layers -> top predictor
         # Initial latent from embedding

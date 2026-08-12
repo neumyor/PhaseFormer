@@ -18,6 +18,7 @@ ABLATION_MODES = {
     "phase_all",
     "phase_align",
     "phase_warp",
+    "phase_amp_calib",
     "best_nonresidual",
 }
 
@@ -506,6 +507,15 @@ def get_ablation_overrides(mode):
             use_phase_warp=True,
             phase_warp_hidden=8,
         )
+    if mode == "phase_amp_calib":
+        return dict(
+            scheme_name="phase_amp_calib",
+            use_phase_warp=True,
+            phase_warp_hidden=8,
+            use_phase_amp_calib=True,
+            phase_amp_calib_hidden=8,
+            phase_amp_calib_max_scale=2.0,
+        )
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -686,6 +696,11 @@ class PhaseFormerPresetConfig:
         self.phase_warp_hidden = hyperparams.get("phase_warp_hidden", 8)
         self.phase_warp_mark_dim = hyperparams.get("phase_warp_mark_dim", None)
         self.phase_warp_chunk = hyperparams.get("phase_warp_chunk", 240)
+        self.use_phase_amp_calib = hyperparams.get("use_phase_amp_calib", False)
+        self.phase_amp_calib_hidden = hyperparams.get("phase_amp_calib_hidden", 8)
+        self.phase_amp_calib_max_scale = hyperparams.get(
+            "phase_amp_calib_max_scale", 2.0
+        )
         self.use_phase_sparse_event_calibration = hyperparams.get(
             "use_phase_sparse_event_calibration", False
         )
