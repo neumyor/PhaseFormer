@@ -195,6 +195,18 @@ MECHANISMS = {
         "harmonic_modulation_hidden": 8,
         "harmonic_modulation_max_scale": 2.0,
     },
+    # Cumulative ablation ladder (plan stage 10): A(+Correction),
+    # B(+Geometry), C(+Rotation), D(+Harmonic = dyn_stack).
+    "dyn_geo": {
+        "use_phase_correction": True,
+        "phase_use_circular_pos": True,
+    },
+    "dyn_geo_rot": {
+        "use_phase_correction": True,
+        "phase_use_circular_pos": True,
+        "use_phase_rotation": True,
+        "phase_rotation_hidden": 8,
+    },
 }
 
 

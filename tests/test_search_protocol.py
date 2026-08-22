@@ -22,7 +22,7 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertEqual(first["config_hash"], second["config_hash"])
 
     def test_plan_defines_expected_mechanisms(self):
-        self.assertEqual(len(MECHANISMS), 23)
+        self.assertEqual(len(MECHANISMS), 25)
         self.assertIn("phase_align", MECHANISMS)
         self.assertIn("phase_warp", MECHANISMS)
         self.assertIn("phase_amp_calib", MECHANISMS)
@@ -35,6 +35,8 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertIn("phase_rotation", MECHANISMS)
         self.assertIn("harmonic_modulation", MECHANISMS)
         self.assertIn("dyn_stack", MECHANISMS)
+        self.assertIn("dyn_geo", MECHANISMS)
+        self.assertIn("dyn_geo_rot", MECHANISMS)
 
     def test_compact_latent_remains_head_divisible(self):
         hp = {"latent_dim": 10, "phase_attn_heads": 2, "phase_encoder_hidden": 3, "predictor_hidden": 5}
