@@ -96,9 +96,12 @@ def evaluate_test(model, exp_args, horizon, device):
     """
     test_set, test_loader = data_provider(exp_args.dataset_args, "test")
     preds, truths, histories = [], [], []
-    diag = {"log_alpha": 0.0, "beta": 0.0, "gate": 0.0, "n": 0}
+    diag = {"log_alpha": 0.0, "beta": 0.0, "gate": 0.0, "delta": 0.0, "theta": 0.0, "gamma": 0.0, "n": 0}
     has_calib = hasattr(model, "phase_amp_calib")
     has_gate = hasattr(model, "reliability_gate")
+    has_corr = hasattr(model, "phase_correction")
+    has_rot = hasattr(model, "phase_rotation")
+    has_harm = hasattr(model, "harmonic_modulation")
     with torch.inference_mode():
         for batch in test_loader:
             batch_x, batch_y, batch_x_mark, batch_y_mark = [
@@ -119,14 +122,19 @@ def evaluate_test(model, exp_args, horizon, device):
                 diag["beta"] += abs(model.phase_amp_calib.last_mean_abs_beta)
             if has_gate:
                 diag["gate"] += abs(model.reliability_gate.last_mean_gate)
+            if has_corr:
+                diag["delta"] += abs(model.phase_correction.last_mean_delta)
+            if has_rot:
+                diag["theta"] += abs(model.phase_rotation.last_mean_theta)
+            if has_harm:
+                diag["gamma"] += abs(model.harmonic_modulation.last_mean_abs_gamma)
             diag["n"] += 1
     pred = np.concatenate(preds, axis=0)
     truth = np.concatenate(truths, axis=0)
     history = np.concatenate(histories, axis=0)
     if diag["n"]:
-        diag["log_alpha"] /= diag["n"]
-        diag["beta"] /= diag["n"]
-        diag["gate"] /= diag["n"]
+        for k in ("log_alpha", "beta", "gate", "delta", "theta", "gamma"):
+            diag[k] /= diag["n"]
     return pred, truth, history, diag
 
 
@@ -250,6 +258,25 @@ def main():
         default="the mechanism's benefit is dataset-dependent; seed replication is required",
         help="interpretive hypothesis line in report section 9",
     )
+    p.add_argument(
+        "--mechanism-description",
+        default=(
+            "phase-conditioned amplitude calibration (`use_phase_amp_calib`), "
+            "per-phase-slot scale `alpha_l` / shift `beta_l` from phase-slot "
+            "position and per-slot statistics, applied as "
+            "`h'[l,k]=alpha_l*h[l,k]+beta_l` on the warped phase representation; "
+            "warm-started at identity; flag-off byte-identical."
+        ),
+        help="mechanism description used in report section 1",
+    )
+    p.add_argument(
+        "--scope-note",
+        default=(
+            "5 datasets x 2 horizons, single seed 2021, period 24, module hidden 8 "
+            "/ max_scale 2.0. No search over period/width/scale."
+        ),
+        help="scope line used in report section 10",
+    )
     args = p.parse_args()
 
     settings = [s.strip() for s in args.settings.split(",") if s.strip()]
@@ -316,7 +343,7 @@ def main():
             dmae = (b_mae_agg - c_mae_agg) / b_mae_agg * 100.0
             results_rows.append(dict(
                 setting=setting, config_id=config_c, dataset=dataset, horizon=horizon,
-                seed=seed, model=mode, key_params="warp24_ampcalib_h8",
+                seed=seed, model=mode, key_params=f"{mode}_h8",
                 mse=f"{c_mse_agg:.4f}", mae=f"{c_mae_agg:.4f}",
                 delta_mse=f"{dmse:.2f}", delta_mae=f"{dmae:.2f}", selected="no",
             ))
@@ -415,7 +442,7 @@ def main():
     md.append("> Final configuration was NOT selected using test-set results; a single candidate configuration was evaluated (selection.source: fixed).")
     md.append("")
     md.append("## 1. Experiment Setup")
-    md.append(f"- mechanism: phase-conditioned amplitude calibration (`use_phase_amp_calib`), per-phase-slot scale `alpha_l` / shift `beta_l` from phase-slot position and per-slot statistics, applied as `h'[l,k]=alpha_l*h[l,k]+beta_l` on the warped phase representation; warm-started at identity; flag-off byte-identical.")
+    md.append(f"- mechanism: {args.mechanism_description}")
     md.append(f"- baseline: matched `{args.baseline_mode}` rerun; gold standard (`docs/PHASEFORMER_GOLD_STANDARD.md`) is the fixed reference.")
     md.append(f"- settings: {', '.join(settings)}")
     md.append("- training: lookback 720, period 24, huber loss, ETT batch 256 / Weather 64, best-val checkpoint, full budget per-dataset epochs.")
@@ -440,13 +467,22 @@ def main():
     md.append("## 3. Parameter / Configuration Search")
     md.append(f"No hyperparameter search for `{candidate_modes[0]}` (module hidden=8, max_scale=2.0 only). Stage A screened 10 settings at 30%/8ep (validation-only); full-budget runs use per-dataset base hyperparameters. All configurations are retained in `results.csv`.")
     md.append("")
-    md.append("### Amplitude-calibration / reliability-gate activity (mean over test batches)")
-    md.append("| setting | mean |alpha-1| | mean |beta| | mean gate g |")
-    md.append("|---|---|---|---|")
-    for setting in settings:
-        d = diag_store.get(setting, {})
-        md.append(f"| {setting} | {d.get('log_alpha', float('nan')):.4f} | {d.get('beta', float('nan')):.4f} | {d.get('gate', float('nan')):.4f} |")
-    md.append("")
+    md.append("### Mechanism activity (mean over test batches)")
+    labels = {
+        "log_alpha": "mean |alpha-1|", "beta": "mean |beta|", "gate": "mean gate g",
+        "delta": "mean |delta|", "theta": "mean |theta|", "gamma": "mean |gamma-1|",
+    }
+    present = [
+        k for k in ("log_alpha", "beta", "gate", "delta", "theta", "gamma")
+        if any(diag_store.get(s, {}).get(k, 0.0) > 0 for s in settings)
+    ]
+    if present:
+        md.append("| setting | " + " | ".join(labels[k] for k in present) + " |")
+        md.append("|---|" + "---|" * len(present))
+        for setting in settings:
+            d = diag_store.get(setting, {})
+            md.append("| " + setting + " | " + " | ".join(f"{d.get(k, float('nan')):.4f}" for k in present) + " |")
+        md.append("")
     md.append("## 4. Error Distribution (sample x channel, per setting)")
     md.append("| setting | cells | improved% | regressed% | mean delta_mae |")
     md.append("|---|---|---|---|---|")
@@ -537,7 +573,7 @@ def main():
     md.append(f"Hypotheses (unverified, require multi-seed confirmation): {args.defect_hypothesis}")
     md.append("")
     md.append("## 10. Experiment Scope")
-    md.append("- 5 datasets x 2 horizons, single seed 2021, period 24, module hidden 8 / max_scale 2.0. No search over period/width/scale.")
+    md.append(f"- {args.scope_note}")
     md.append("- Deliberately excluded: promotion to `_LATEST_POLICY`; comparison vs `latest` presets.")
     md.append("")
     md_path = out_dir / "objective_error_analysis.md"

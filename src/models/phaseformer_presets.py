@@ -21,6 +21,13 @@ ABLATION_MODES = {
     "phase_amp_calib",
     "phase_rape",
     "best_nonresidual",
+    # Dynamic-phase mechanisms (weak-residual-phaseformer plan stages 1-5).
+    "dyn_corr",
+    "dyn_corr_geo",
+    "dyn_corr_geo_rot",
+    "dyn_stack",
+    "residual_full",
+    "no_residual",
 }
 
 
@@ -526,6 +533,47 @@ def get_ablation_overrides(mode):
             phase_amp_calib_max_scale=2.0,
             phase_rape_gate_hidden=8,
         )
+    # Dynamic-phase mechanisms (weak-residual-phaseformer plan stages 1-5).
+    # Cumulative ladder mirrors the search runner's MECHANISMS so the same
+    # configs are reachable through build_hyperparams for full-budget confirms.
+    if mode == "dyn_corr":
+        return dict(scheme_name="dyn_corr", use_phase_correction=True)
+    if mode == "dyn_corr_geo":
+        return dict(
+            scheme_name="dyn_corr_geo",
+            use_phase_correction=True,
+            phase_use_circular_pos=True,
+        )
+    if mode == "dyn_corr_geo_rot":
+        return dict(
+            scheme_name="dyn_corr_geo_rot",
+            use_phase_correction=True,
+            phase_use_circular_pos=True,
+            use_phase_rotation=True,
+            phase_rotation_hidden=8,
+        )
+    if mode == "dyn_stack":
+        return dict(
+            scheme_name="dyn_stack",
+            use_phase_correction=True,
+            phase_use_circular_pos=True,
+            use_phase_rotation=True,
+            phase_rotation_hidden=8,
+            use_harmonic_modulation=True,
+            harmonic_modulation_hidden=8,
+            harmonic_modulation_max_scale=2.0,
+        )
+    if mode == "residual_full":
+        return dict(
+            scheme_name="residual_full",
+            use_weak_period_residual=True,
+            weak_period_residual_gate_init=0.5,
+            use_phase_local_trend=True,
+            phase_local_trend_window=3,
+            phase_local_trend_gate_init=0.0,
+        )
+    if mode == "no_residual":
+        return dict(scheme_name="no_residual", use_residual_head=False)
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 

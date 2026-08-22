@@ -9,6 +9,7 @@ from src.models.phase_geometry import CircularPhaseEmbedding, build_circular_emb
 from src.models.phase_rotation import PhaseRotation
 from src.models.harmonic_modulation import HarmonicModulation
 from src.models.phaseformer_presets import (
+    ABLATION_MODES,
     PhaseFormerPresetConfig,
     build_hyperparams,
     make_exp_args,
@@ -197,6 +198,15 @@ class PhaseFormerDynamicMechanismTests(unittest.TestCase):
         self.assertFalse(hasattr(model, "weak_period_residual"))
         y_hat, Z, y_phase_steps = _forward_eval(model)
         self.assertEqual(tuple(y_hat.shape), (2, 96, 7))
+
+    def test_new_ablation_modes_build_and_forward(self):
+        for mode in ["dyn_corr", "dyn_corr_geo", "dyn_corr_geo_rot", "dyn_stack",
+                     "residual_full", "no_residual"]:
+            self.assertIn(mode, ABLATION_MODES, msg=mode)
+            model, hp = _make_model("ETTh1", 336, mode)
+            y_hat, Z, y_phase_steps = _forward_eval(model)
+            self.assertEqual(tuple(y_hat.shape), (2, 336, 7), msg=mode)
+            self.assertTrue(torch.isfinite(y_hat).all(), msg=mode)
 
     def test_residual_head_off_matches_original_params(self):
         # use_residual_head=False on the phase-only original is a no-op for the
