@@ -207,6 +207,21 @@ MECHANISMS = {
         "use_phase_rotation": True,
         "phase_rotation_hidden": 8,
     },
+    # Final plan structure: dynamic-phase stack + residual reconstruction heads.
+    "dyn_full": {
+        "use_phase_correction": True,
+        "phase_use_circular_pos": True,
+        "use_phase_rotation": True,
+        "phase_rotation_hidden": 8,
+        "use_harmonic_modulation": True,
+        "harmonic_modulation_hidden": 8,
+        "harmonic_modulation_max_scale": 2.0,
+        "use_weak_period_residual": True,
+        "weak_period_residual_gate_init": 0.5,
+        "use_phase_local_trend": True,
+        "phase_local_trend_window": 3,
+        "phase_local_trend_gate_init": 0.0,
+    },
 }
 
 

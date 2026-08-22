@@ -201,7 +201,7 @@ class PhaseFormerDynamicMechanismTests(unittest.TestCase):
 
     def test_new_ablation_modes_build_and_forward(self):
         for mode in ["dyn_corr", "dyn_corr_geo", "dyn_corr_geo_rot", "dyn_stack",
-                     "residual_full", "no_residual"]:
+                     "residual_full", "no_residual", "dyn_full"]:
             self.assertIn(mode, ABLATION_MODES, msg=mode)
             model, hp = _make_model("ETTh1", 336, mode)
             y_hat, Z, y_phase_steps = _forward_eval(model)

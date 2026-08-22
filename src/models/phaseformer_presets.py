@@ -28,6 +28,7 @@ ABLATION_MODES = {
     "dyn_stack",
     "residual_full",
     "no_residual",
+    "dyn_full",
 }
 
 
@@ -574,6 +575,22 @@ def get_ablation_overrides(mode):
         )
     if mode == "no_residual":
         return dict(scheme_name="no_residual", use_residual_head=False)
+    if mode == "dyn_full":
+        return dict(
+            scheme_name="dyn_full",
+            use_phase_correction=True,
+            phase_use_circular_pos=True,
+            use_phase_rotation=True,
+            phase_rotation_hidden=8,
+            use_harmonic_modulation=True,
+            harmonic_modulation_hidden=8,
+            harmonic_modulation_max_scale=2.0,
+            use_weak_period_residual=True,
+            weak_period_residual_gate_init=0.5,
+            use_phase_local_trend=True,
+            phase_local_trend_window=3,
+            phase_local_trend_gate_init=0.0,
+        )
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
