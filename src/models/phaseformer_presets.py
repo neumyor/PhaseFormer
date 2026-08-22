@@ -22,8 +22,11 @@ ABLATION_MODES = {
     "phase_rape",
     "best_nonresidual",
     # Dynamic-phase mechanisms (weak-residual-phaseformer plan stages 1-5).
+    "phase_correction",
     "dyn_corr",
+    "dyn_geo",
     "dyn_corr_geo",
+    "dyn_geo_rot",
     "dyn_corr_geo_rot",
     "dyn_stack",
     "residual_full",
@@ -537,17 +540,17 @@ def get_ablation_overrides(mode):
     # Dynamic-phase mechanisms (weak-residual-phaseformer plan stages 1-5).
     # Cumulative ladder mirrors the search runner's MECHANISMS so the same
     # configs are reachable through build_hyperparams for full-budget confirms.
-    if mode == "dyn_corr":
-        return dict(scheme_name="dyn_corr", use_phase_correction=True)
-    if mode == "dyn_corr_geo":
+    if mode in ("dyn_corr", "phase_correction"):
+        return dict(scheme_name=mode, use_phase_correction=True)
+    if mode in ("dyn_corr_geo", "dyn_geo"):
         return dict(
-            scheme_name="dyn_corr_geo",
+            scheme_name=mode,
             use_phase_correction=True,
             phase_use_circular_pos=True,
         )
-    if mode == "dyn_corr_geo_rot":
+    if mode in ("dyn_corr_geo_rot", "dyn_geo_rot"):
         return dict(
-            scheme_name="dyn_corr_geo_rot",
+            scheme_name=mode,
             use_phase_correction=True,
             phase_use_circular_pos=True,
             use_phase_rotation=True,
