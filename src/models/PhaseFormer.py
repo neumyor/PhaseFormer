@@ -23,6 +23,10 @@ from src.models.phase_align import PhaseAlignment
 from src.models.phase_warp import PhaseWarping
 from src.models.phase_amp_calib import PhaseAmpCalibration
 from src.models.phase_rape import ReliabilityGate
+from src.models.phase_correction import PhaseCorrection
+from src.models.phase_geometry import CircularPhaseEmbedding
+from src.models.phase_rotation import PhaseRotation
+from src.models.harmonic_modulation import HarmonicModulation
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -38,6 +42,7 @@ class CrossPhaseRoutingLayer(nn.Module):
         attention_dim: Optional[int] = None,
         use_pos_embed: bool = False,
         pos_dropout: float = 0.0,
+        use_circular_pos: bool = False,
     ):
         super().__init__()
         # The attention_dim parameter is kept for interface compatibility; it does not
@@ -53,17 +58,25 @@ class CrossPhaseRoutingLayer(nn.Module):
         self.head_dim = self.attention_dim // num_heads
         self.dropout = dropout
         self.use_pos_embed = use_pos_embed
+        self.use_circular_pos = use_circular_pos
         self.period_len = period_len
 
         # Learnable routers shared across batch and channels
         self.router = nn.Parameter(torch.randn(num_routers, latent_dim))
         nn.init.trunc_normal_(self.router, std=0.02)
 
-        # Optional phase positional embeddings (length equals period_len)
+        # Optional phase positional embeddings (length equals period_len).
+        # The learnable pos_embedding is always created when use_pos_embed is on
+        # (also when circular geometry is enabled) so that toggling the circular
+        # flag does not shift the RNG draws consumed by this layer; the circular
+        # buffer below replaces it in forward() when use_circular_pos is set.
         if self.use_pos_embed:
             self.pos_embedding = nn.Parameter(torch.zeros(period_len, latent_dim))
             nn.init.trunc_normal_(self.pos_embedding, std=0.02)
             self.pos_dropout = nn.Dropout(pos_dropout)
+        if self.use_circular_pos:
+            # Non-persistent buffer: no parameters, no RNG draws.
+            self.circular_embedding = CircularPhaseEmbedding(period_len, latent_dim)
 
         # Two-stage attention: routers aggregate then distribute
         self.router_sender = AttentionLayer(
@@ -96,15 +109,23 @@ class CrossPhaseRoutingLayer(nn.Module):
         B, C, L, D = Z.shape
         x = Z.view(B * C, L, D)
 
-        # Optional positional embedding
+        # Optional positional embedding. When circular geometry is enabled the
+        # learnable embedding is replaced by the fixed circular (Fourier) phase
+        # embedding; the learnable parameters are still created at construction
+        # (see __init__) purely to keep flag-off initialization identical.
         if self.use_pos_embed:
+            pe_source = (
+                self.circular_embedding.embedding
+                if self.use_circular_pos
+                else self.pos_embedding
+            )
             if L == self.period_len:
-                pe = self.pos_embedding.unsqueeze(0).expand(B * C, -1, -1)
+                pe = pe_source.unsqueeze(0).expand(B * C, -1, -1)
             elif L < self.period_len:
-                pe = self.pos_embedding[:L, :].unsqueeze(0).expand(B * C, -1, -1)
+                pe = pe_source[:L, :].unsqueeze(0).expand(B * C, -1, -1)
             else:
                 repeat_factor = (L + self.period_len - 1) // self.period_len
-                expanded_pe = self.pos_embedding.repeat(repeat_factor, 1)
+                expanded_pe = pe_source.repeat(repeat_factor, 1)
                 pe = expanded_pe[:L, :].unsqueeze(0).expand(B * C, -1, -1)
             x = x + pe
             x = self.pos_dropout(x)
@@ -229,6 +250,7 @@ class CrossPhaseRoutingUnit(nn.Module):
         phase_num_routers: int = 8,
         phase_use_pos_embed: bool = False,
         phase_pos_dropout: float = 0.0,
+        phase_use_circular_pos: bool = False,
         phase_encoder_use_mlp: bool = False,
         phase_encoder_dropout: float = 0.0,
         predictor_use_mlp: bool = False,
@@ -258,6 +280,7 @@ class CrossPhaseRoutingUnit(nn.Module):
             attention_dim=phase_attention_dim,
             use_pos_embed=phase_use_pos_embed,
             pos_dropout=phase_pos_dropout,
+            use_circular_pos=phase_use_circular_pos,
         )
 
         if self.apply_out_proj:
@@ -399,6 +422,7 @@ class PhaseFormer(DefaultPLModule):
         self.phase_num_routers = getattr(configs, "phase_num_routers", 8)
         self.phase_use_pos_embed = getattr(configs, "phase_use_pos_embed", False)
         self.phase_pos_dropout = getattr(configs, "phase_pos_dropout", 0.0)
+        self.phase_use_circular_pos = getattr(configs, "phase_use_circular_pos", False)
 
         # period calculations
         self.num_periods_input = (self.seq_len + self.period_len - 1) // self.period_len
@@ -413,7 +437,16 @@ class PhaseFormer(DefaultPLModule):
         if self.use_revin:
             self.revin = RevIN(num_features=self.enc_in, eps=self.revin_eps, affine=self.revin_affine)
 
+        # Residual-branch master switch (experiment plan stage 1): when disabled,
+        # the WeakPeriodResidualHead and PhaseLocalTrendHead are both turned off,
+        # i.e. the model predicts purely from the phase path with no residual branch.
+        self.use_residual_head = getattr(configs, "use_residual_head", True)
+        if not self.use_residual_head:
+            self.use_weak_period_residual = False
+
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
+        if not self.use_residual_head:
+            self.use_weak_period_residual = False
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
         )
@@ -456,6 +489,8 @@ class PhaseFormer(DefaultPLModule):
             )
 
         self.use_phase_local_trend = getattr(configs, "use_phase_local_trend", False)
+        if not self.use_residual_head:
+            self.use_phase_local_trend = False
         if self.use_phase_local_trend:
             self.phase_local_trend = PhaseLocalTrendHead(
                 num_periods_output=self.num_periods_output,
@@ -545,6 +580,7 @@ class PhaseFormer(DefaultPLModule):
                     phase_num_routers=self.phase_num_routers,
                     phase_use_pos_embed=self.phase_use_pos_embed,
                     phase_pos_dropout=self.phase_pos_dropout,
+                    phase_use_circular_pos=self.phase_use_circular_pos,
                     phase_encoder_use_mlp=getattr(configs, "phase_encoder_use_mlp", False),
                     phase_encoder_dropout=getattr(configs, "phase_encoder_dropout", 0.0),
                     predictor_use_mlp=getattr(configs, "predictor_use_mlp", False),
@@ -572,6 +608,7 @@ class PhaseFormer(DefaultPLModule):
                         phase_num_routers=self.phase_num_routers,
                         phase_use_pos_embed=self.phase_use_pos_embed,
                         phase_pos_dropout=self.phase_pos_dropout,
+                        phase_use_circular_pos=self.phase_use_circular_pos,
                         phase_encoder_use_mlp=getattr(configs, "phase_encoder_use_mlp", False),
                         phase_encoder_dropout=getattr(configs, "phase_encoder_dropout", 0.0),
                         predictor_use_mlp=getattr(configs, "predictor_use_mlp", False),
@@ -663,6 +700,48 @@ class PhaseFormer(DefaultPLModule):
                 hidden=getattr(configs, "phase_rape_gate_hidden", 8),
             )
 
+        # Dynamic-phase mechanisms (experiment plan stages 2-5). Constructed
+        # after every shared module (and RAPE) so that toggling any of these
+        # flags does not shift the RNG draws consumed by the shared path: with
+        # the same seed, flag-on and flag-off share identical parameter
+        # initialization for everything except the new module itself. Each new
+        # module is a warm-start identity: correction (delta=0 -> no shift),
+        # rotation (theta=0 -> no rotation) and harmonic modulation
+        # (gamma=1, beta=0 -> identity).
+        self.use_phase_correction = getattr(configs, "use_phase_correction", False)
+        self.phase_correction_hidden = getattr(
+            configs, "phase_correction_hidden", self.latent_dim
+        )
+        if self.use_phase_correction:
+            self.phase_correction = PhaseCorrection(
+                dim=self.latent_dim,
+                hidden=self.phase_correction_hidden,
+            )
+
+        self.use_phase_rotation = getattr(configs, "use_phase_rotation", False)
+        self.phase_rotation_hidden = getattr(configs, "phase_rotation_hidden", 8)
+        if self.use_phase_rotation:
+            self.phase_rotation = PhaseRotation(
+                cond_dim=self.num_periods_input,
+                hidden=self.phase_rotation_hidden,
+            )
+
+        self.use_harmonic_modulation = getattr(
+            configs, "use_harmonic_modulation", False
+        )
+        self.harmonic_modulation_hidden = getattr(
+            configs, "harmonic_modulation_hidden", 8
+        )
+        self.harmonic_modulation_max_scale = getattr(
+            configs, "harmonic_modulation_max_scale", 2.0
+        )
+        if self.use_harmonic_modulation:
+            self.harmonic_modulation = HarmonicModulation(
+                cond_dim=self.num_periods_input,
+                hidden=self.harmonic_modulation_hidden,
+                max_scale=self.harmonic_modulation_max_scale,
+            )
+
     # phase rearrangement helpers
     @staticmethod
     def _to_phase_series(x_periods):
@@ -737,6 +816,17 @@ class PhaseFormer(DefaultPLModule):
         # 6-8) Embedding -> routing layers -> top predictor
         # Initial latent from embedding
         Z = self.embedding(phase_series)  # (B, C, L, D)
+
+        # Dynamic phase correction: re-align the latent phase tokens along the
+        # phase-slot axis by a predicted per-slot offset (stage 2).
+        if self.use_phase_correction:
+            Z = self.phase_correction(Z)
+
+        # Phase rotation: rotate pairs of latent features by a predicted angle
+        # conditioned on the input periodic features (stage 4).
+        if self.use_phase_rotation:
+            Z = self.phase_rotation(Z, phase_series)
+
         phase_series_cur = phase_series
 
         for layer_index, unit in enumerate(self.routing_layers):
@@ -744,6 +834,11 @@ class PhaseFormer(DefaultPLModule):
             if layer_index < len(self.routing_layers) - 1:
                 # intermediate layers must produce P_in for the next layer
                 phase_series_cur = y_phase_steps_p_in
+
+        # Harmonic feature modulation: rescale/shift the routed latent from input
+        # periodic features, between routing and prediction (stage 5).
+        if self.use_harmonic_modulation:
+            Z = self.harmonic_modulation(Z, phase_series)
 
         # final predictor to produce P_out
         y_phase_steps = self.predictor(Z)  # (B, C, L, P_out)

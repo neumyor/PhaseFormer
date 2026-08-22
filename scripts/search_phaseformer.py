@@ -157,6 +157,44 @@ MECHANISMS = {
         "phase_amp_calib_max_scale": 2.0,
         "phase_rape_gate_hidden": 8,
     },
+    # ---- dynamic-phase mechanisms (weak-residual-phaseformer plan) ----
+    # Stage 1: residual-branch contribution. `residual_full` enables both
+    # residual heads on the original phase path; `no_residual` disables them.
+    # Together the pair isolates the residual-branch contribution (same seed,
+    # same phase path, only the two heads differ).
+    "residual_full": {
+        "use_weak_period_residual": True,
+        "weak_period_residual_gate_init": 0.5,
+        "use_phase_local_trend": True,
+        "phase_local_trend_window": 3,
+        "phase_local_trend_gate_init": 0.0,
+    },
+    "no_residual": {"use_residual_head": False},
+    # Stage 2: dynamic phase correction (per-slot phase offset on latent tokens).
+    "phase_correction": {"use_phase_correction": True},
+    # Stage 3: circular (Fourier) phase geometry replacing the learnable pos embed.
+    "circular_geometry": {"phase_use_circular_pos": True},
+    # Stage 4: phase rotation of latent feature pairs.
+    "phase_rotation": {
+        "use_phase_rotation": True,
+        "phase_rotation_hidden": 8,
+    },
+    # Stage 5: harmonic feature modulation (gamma*z + beta) before the predictor.
+    "harmonic_modulation": {
+        "use_harmonic_modulation": True,
+        "harmonic_modulation_hidden": 8,
+        "harmonic_modulation_max_scale": 2.0,
+    },
+    # Stage 9 final structure: correction + geometry + rotation + harmonic.
+    "dyn_stack": {
+        "use_phase_correction": True,
+        "phase_use_circular_pos": True,
+        "use_phase_rotation": True,
+        "phase_rotation_hidden": 8,
+        "use_harmonic_modulation": True,
+        "harmonic_modulation_hidden": 8,
+        "harmonic_modulation_max_scale": 2.0,
+    },
 }
 
 

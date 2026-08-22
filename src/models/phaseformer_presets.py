@@ -714,6 +714,23 @@ class PhaseFormerPresetConfig:
         self.use_phase_rape = hyperparams.get("use_phase_rape", False)
         self.phase_rape_gate_hidden = hyperparams.get("phase_rape_gate_hidden", 8)
         self.phase_rape_mark_dim = hyperparams.get("phase_rape_mark_dim", None)
+
+        # Dynamic-phase mechanism flags (experiment plan stages 1-5).
+        self.use_residual_head = hyperparams.get("use_residual_head", True)
+        self.phase_use_circular_pos = hyperparams.get("phase_use_circular_pos", False)
+        self.use_phase_correction = hyperparams.get("use_phase_correction", False)
+        self.phase_correction_hidden = hyperparams.get(
+            "phase_correction_hidden", self.latent_dim
+        )
+        self.use_phase_rotation = hyperparams.get("use_phase_rotation", False)
+        self.phase_rotation_hidden = hyperparams.get("phase_rotation_hidden", 8)
+        self.use_harmonic_modulation = hyperparams.get("use_harmonic_modulation", False)
+        self.harmonic_modulation_hidden = hyperparams.get(
+            "harmonic_modulation_hidden", 8
+        )
+        self.harmonic_modulation_max_scale = hyperparams.get(
+            "harmonic_modulation_max_scale", 2.0
+        )
         self.use_phase_sparse_event_calibration = hyperparams.get(
             "use_phase_sparse_event_calibration", False
         )
