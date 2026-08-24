@@ -29,6 +29,8 @@ class PhaseDeformation(nn.Module):
       - last_mean_rate: mean |v|
       - last_mean_stretch: mean |s - 1|
       - last_mean_delta: mean |cumulative displacement|
+      - last_rate: per-(sample, channel, slot) advance rate v
+      - last_stretch: per-(sample, channel, slot) stretch factor s
       - last_delta: per-(sample, channel, slot) cumulative displacement
     """
 
@@ -59,6 +61,8 @@ class PhaseDeformation(nn.Module):
         self.last_mean_rate = 0.0
         self.last_mean_stretch = 0.0
         self.last_mean_delta = 0.0
+        self.last_rate = None  # (B, C, L)
+        self.last_stretch = None  # (B, C, L)
         self.last_delta = None  # (B, C, L)
 
     def forward(self, tokens):  # (B, C, L, D)
@@ -88,5 +92,7 @@ class PhaseDeformation(nn.Module):
             self.last_mean_rate = float(rate.abs().mean())
             self.last_mean_stretch = float((stretch - 1.0).abs().mean())
             self.last_mean_delta = float(delta.abs().mean())
+            self.last_rate = rate.detach()
+            self.last_stretch = stretch.detach()
             self.last_delta = delta.detach()
         return out
