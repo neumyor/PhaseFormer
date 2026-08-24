@@ -92,7 +92,7 @@ class FullAttention(nn.Module):
         self.output_attention = output_attention
         self.dropout = nn.Dropout(attention_dropout)
 
-    def forward(self, queries, keys, values, attn_mask, tau=None, delta=None):
+    def forward(self, queries, keys, values, attn_mask, tau=None, delta=None, bias=None):
         B, L, H, E = queries.shape
         _, S, _, D = values.shape
         scale = self.scale or 1.0 / sqrt(E)
@@ -105,7 +105,14 @@ class FullAttention(nn.Module):
 
             scores.masked_fill_(attn_mask.mask, -np.inf)
 
-        A = self.dropout(torch.softmax(scale * scores, dim=-1))
+        scores = scale * scores
+        if bias is not None:
+            # Subtract a geometry bias from the scaled logits (circular phase
+            # interaction, next-stage plan stage 2): B(i, j) = min(|i-j|, P-|i-j|).
+            # Must broadcast against (B, H, L, S), e.g. (1, 1, L, S).
+            scores = scores - bias
+
+        A = self.dropout(torch.softmax(scores, dim=-1))
         V = torch.einsum("bhls,bshd->blhd", A, values)
 
         if self.output_attention:
@@ -233,7 +240,7 @@ class AttentionLayer(nn.Module):
         self.out_projection = nn.Linear(d_values * n_heads // downsample_div, d_model)
         self.n_heads = n_heads
 
-    def forward(self, queries, keys, values, attn_mask, tau=None, delta=None):
+    def forward(self, queries, keys, values, attn_mask, tau=None, delta=None, bias=None):
         B, L, _ = queries.shape
         _, S, _ = keys.shape
         H = self.n_heads
@@ -243,7 +250,7 @@ class AttentionLayer(nn.Module):
         values = self.value_projection(values).view(B, S, H, -1)
 
         out, attn = self.inner_attention(
-            queries, keys, values, attn_mask, tau=tau, delta=delta
+            queries, keys, values, attn_mask, tau=tau, delta=delta, bias=bias
         )
         out = out.view(B, L, -1)
 

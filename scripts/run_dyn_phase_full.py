@@ -17,7 +17,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PY = "/home/niuyiming/.conda/envs/py310/bin/python"
-GPUS = [3, 1]
+GPUS = [0, 1, 2, 3]
 
 
 def main():
@@ -29,18 +29,20 @@ def main():
     p.add_argument("--run-prefix", required=True)
     p.add_argument("--batch-size", type=int, default=None)
     p.add_argument("--seed", type=int, default=2021)
+    p.add_argument("--gpus", default=None, help="comma-separated GPU indices (default: all free GPUS)")
     args = p.parse_args()
 
     datasets = [d.strip() for d in args.datasets.split(",") if d.strip()]
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
+    gpus = [int(g) for g in args.gpus.split(",")] if args.gpus else list(GPUS)
 
     queue = [(ds, h) for ds in datasets for h in horizons]
     total = len(queue)
     done = 0
     procs = {}  # gpu -> (proc, label)
     while queue or procs:
-        for gpu in GPUS:
+        for gpu in gpus:
             if gpu not in procs and queue:
                 ds, h = queue.pop(0)
                 env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu))
@@ -51,6 +53,7 @@ def main():
                     "--lookback", "720", "--seed", str(args.seed),
                     "--output-dir", args.output_dir,
                     "--run-prefix", f"{args.run_prefix}_{ds}_{h}",
+                    "--resume",
                 ]
                 if args.batch_size:
                     cmd += ["--batch-size", str(args.batch_size)]

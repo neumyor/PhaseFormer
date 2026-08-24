@@ -17,12 +17,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PY = "/home/niuyiming/.conda/envs/py310/bin/python"
-# GPU 3 is fully free; GPU 1 has ~4GB free beside another job (models peak ~200MB).
-GPUS = [3, 1]
+GPUS = [0, 1, 2, 3]
 
 DATASETS = ["ETTh1", "ETTh2", "ETTm1", "Electricity", "Traffic"]
 HORIZONS = [336, 720]
-# Cumulative ladder A->D (plan stage 10) + residual pair (plan stage 1).
+# Cumulative ladder A->D (plan stage 10) + residual pair (plan stage 1)
+# + next-stage paper plan mechanisms (velocity, circular bias, adaptive gate).
 MECHANISMS = [
     "original",
     "phase_correction",
@@ -31,6 +31,10 @@ MECHANISMS = [
     "dyn_stack",
     "residual_full",
     "no_residual",
+    "phase_velocity",
+    "phase_vel_geo",
+    "residual_adaptive",
+    "next_full",
 ]
 OUTPUT_DIR = "research_runs/dyn_phase_screen"
 STAGE = "mechanism_screen_1"
@@ -101,7 +105,7 @@ def main():
     queue = queue_jobs()
     skipped = [j for j in queue if run_exists(*j)]
     for j in skipped:
-        print(f"SKIP (completed): {' '.join(j)}", flush=True)
+        print(f"SKIP (completed): {' '.join(str(x) for x in j)}", flush=True)
     queue = [j for j in queue if not run_exists(*j)]
     total = len(queue)
     done = 0

@@ -222,6 +222,51 @@ MECHANISMS = {
         "phase_local_trend_window": 3,
         "phase_local_trend_gate_init": 0.0,
     },
+    # ---- next-stage paper plan (Adaptive Phase-Residual Trajectory Modeling) ----
+    # Stage 1: phase velocity trajectory (upgrades offset phi'=phi+delta to
+    # phi_t = phi_{t-1} + delta_phi_t via velocity cumsum).
+    "phase_velocity": {
+        "use_phase_velocity": True,
+        "phase_velocity_hidden": 8,
+        "phase_velocity_scale": 0.1,
+    },
+    # Stage 2: velocity + circular attention bias (QK^T - B_circle, geometry at
+    # the interaction layer instead of only the position embedding).
+    "phase_vel_geo": {
+        "use_phase_velocity": True,
+        "phase_velocity_hidden": 8,
+        "phase_velocity_scale": 0.1,
+        "phase_use_circular_attn_bias": True,
+        "phase_circular_attn_bias_scale": 1.0,
+    },
+    # Stage 3: adaptive residual fusion gate (y = (1-alpha) y_p + alpha y_r,
+    # alpha from the latent phase feature).
+    "residual_adaptive": {
+        "use_weak_period_residual": True,
+        "weak_period_residual_gate_init": 0.5,
+        "use_phase_local_trend": True,
+        "phase_local_trend_window": 3,
+        "phase_local_trend_gate_init": 0.0,
+        "use_adaptive_residual_gate": True,
+        "adaptive_residual_gate_hidden": 8,
+        "adaptive_residual_gate_init": 0.5,
+    },
+    # Final next-stage model: velocity + circular bias + adaptive residual gate.
+    "next_full": {
+        "use_phase_velocity": True,
+        "phase_velocity_hidden": 8,
+        "phase_velocity_scale": 0.1,
+        "phase_use_circular_attn_bias": True,
+        "phase_circular_attn_bias_scale": 1.0,
+        "use_weak_period_residual": True,
+        "weak_period_residual_gate_init": 0.5,
+        "use_phase_local_trend": True,
+        "phase_local_trend_window": 3,
+        "phase_local_trend_gate_init": 0.0,
+        "use_adaptive_residual_gate": True,
+        "adaptive_residual_gate_hidden": 8,
+        "adaptive_residual_gate_init": 0.5,
+    },
 }
 
 
