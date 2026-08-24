@@ -32,6 +32,22 @@ ABLATION_MODES = {
     "residual_full",
     "no_residual",
     "dyn_full",
+    # Next-stage paper plan mechanisms (Adaptive Phase-Residual Trajectory
+    # Modeling): stages 1-3 (velocity, circular bias, adaptive residual gate).
+    "phase_velocity",
+    "phase_vel_geo",
+    "residual_adaptive",
+    "next_full",
+    # Pure-phase plan mechanisms (Adaptive Phase Geometry Forecasting):
+    # stage 1 multi-scale representation, stage 2 deformation, stage 3 phase
+    # graph / circular bias, stage 4 trajectory decoder, final pure_full.
+    "multiscale_phase",
+    "phase_deformation",
+    "phase_geo",
+    "phase_graph",
+    "predictor_mlp",
+    "trajectory_decoder",
+    "pure_full",
 }
 
 
@@ -594,6 +610,116 @@ def get_ablation_overrides(mode):
             phase_local_trend_window=3,
             phase_local_trend_gate_init=0.0,
         )
+    # Next-stage paper plan mechanisms (Adaptive Phase-Residual Trajectory
+    # Modeling). phase_velocity = A2/B1 (stage 1), phase_vel_geo = B2 (stage 2
+    # adds the circular attention bias), residual_adaptive = R2 (stage 3) and
+    # next_full = C (velocity + circular bias + adaptive residual gate).
+    if mode == "phase_velocity":
+        return dict(
+            scheme_name="phase_velocity",
+            use_phase_velocity=True,
+            phase_velocity_hidden=8,
+            phase_velocity_scale=0.1,
+        )
+    if mode == "phase_vel_geo":
+        return dict(
+            scheme_name="phase_vel_geo",
+            use_phase_velocity=True,
+            phase_velocity_hidden=8,
+            phase_velocity_scale=0.1,
+            phase_use_circular_attn_bias=True,
+            phase_circular_attn_bias_scale=1.0,
+        )
+    if mode == "residual_adaptive":
+        return dict(
+            scheme_name="residual_adaptive",
+            use_weak_period_residual=True,
+            weak_period_residual_gate_init=0.5,
+            use_phase_local_trend=True,
+            phase_local_trend_window=3,
+            phase_local_trend_gate_init=0.0,
+            use_adaptive_residual_gate=True,
+            adaptive_residual_gate_hidden=8,
+            adaptive_residual_gate_init=0.5,
+        )
+    if mode == "next_full":
+        return dict(
+            scheme_name="next_full",
+            use_phase_velocity=True,
+            phase_velocity_hidden=8,
+            phase_velocity_scale=0.1,
+            phase_use_circular_attn_bias=True,
+            phase_circular_attn_bias_scale=1.0,
+            use_weak_period_residual=True,
+            weak_period_residual_gate_init=0.5,
+            use_phase_local_trend=True,
+            phase_local_trend_window=3,
+            phase_local_trend_gate_init=0.0,
+            use_adaptive_residual_gate=True,
+            adaptive_residual_gate_hidden=8,
+            adaptive_residual_gate_init=0.5,
+        )
+    # Pure-phase plan mechanisms (Adaptive Phase Geometry Forecasting).
+    # Each module is a warm-start identity and independently ablable; pure_full
+    # stacks all four with residual reconstruction disabled so every gain comes
+    # from the phase path.
+    if mode == "multiscale_phase":
+        return dict(
+            scheme_name="multiscale_phase",
+            use_multiscale_phase=True,
+            phase_multiscale_long_period=48,
+            phase_multiscale_coarse=2,
+        )
+    if mode == "phase_deformation":
+        return dict(
+            scheme_name="phase_deformation",
+            use_phase_deformation=True,
+            phase_deformation_hidden=8,
+            phase_deformation_scale=0.2,
+        )
+    if mode == "phase_geo":
+        return dict(
+            scheme_name="phase_geo",
+            phase_use_circular_attn_bias=True,
+            phase_circular_attn_bias_scale=1.0,
+        )
+    if mode == "phase_graph":
+        return dict(
+            scheme_name="phase_graph",
+            use_phase_graph=True,
+            phase_graph_hidden=16,
+            phase_graph_k=2,
+        )
+    if mode == "predictor_mlp":
+        return dict(
+            scheme_name="predictor_mlp",
+            predictor_use_mlp=True,
+            predictor_dropout=0.0,
+        )
+    if mode == "trajectory_decoder":
+        return dict(
+            scheme_name="trajectory_decoder",
+            use_trajectory_decoder=True,
+            phase_decoder_hidden=64,
+            phase_decoder_order=2,
+        )
+    if mode == "pure_full":
+        return dict(
+            scheme_name="pure_full",
+            use_residual_head=False,
+            use_multiscale_phase=True,
+            phase_multiscale_long_period=48,
+            phase_multiscale_coarse=2,
+            use_phase_deformation=True,
+            phase_deformation_hidden=8,
+            phase_deformation_scale=0.2,
+            use_phase_graph=True,
+            phase_graph_hidden=16,
+            phase_graph_k=2,
+            use_trajectory_decoder=True,
+            phase_decoder_hidden=64,
+            phase_decoder_order=2,
+        )
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -786,6 +912,12 @@ class PhaseFormerPresetConfig:
         # Dynamic-phase mechanism flags (experiment plan stages 1-5).
         self.use_residual_head = hyperparams.get("use_residual_head", True)
         self.phase_use_circular_pos = hyperparams.get("phase_use_circular_pos", False)
+        self.phase_use_circular_attn_bias = hyperparams.get(
+            "phase_use_circular_attn_bias", False
+        )
+        self.phase_circular_attn_bias_scale = hyperparams.get(
+            "phase_circular_attn_bias_scale", 1.0
+        )
         self.use_phase_correction = hyperparams.get("use_phase_correction", False)
         self.phase_correction_hidden = hyperparams.get(
             "phase_correction_hidden", self.latent_dim
@@ -798,6 +930,19 @@ class PhaseFormerPresetConfig:
         )
         self.harmonic_modulation_max_scale = hyperparams.get(
             "harmonic_modulation_max_scale", 2.0
+        )
+        # Next-stage paper plan mechanism flags (stages 1 and 3).
+        self.use_phase_velocity = hyperparams.get("use_phase_velocity", False)
+        self.phase_velocity_hidden = hyperparams.get("phase_velocity_hidden", 8)
+        self.phase_velocity_scale = hyperparams.get("phase_velocity_scale", 0.1)
+        self.use_adaptive_residual_gate = hyperparams.get(
+            "use_adaptive_residual_gate", False
+        )
+        self.adaptive_residual_gate_hidden = hyperparams.get(
+            "adaptive_residual_gate_hidden", 8
+        )
+        self.adaptive_residual_gate_init = hyperparams.get(
+            "adaptive_residual_gate_init", 0.5
         )
         self.use_phase_sparse_event_calibration = hyperparams.get(
             "use_phase_sparse_event_calibration", False
@@ -812,6 +957,30 @@ class PhaseFormerPresetConfig:
         self.phase_sparse_event_temperature = hyperparams.get(
             "phase_sparse_event_temperature", 0.2
         )
+        # Pure-phase plan mechanism flags (stages 1-4) + predictor head type.
+        self.predictor_use_mlp = hyperparams.get("predictor_use_mlp", False)
+        self.predictor_dropout = hyperparams.get("predictor_dropout", 0.0)
+        self.use_multiscale_phase = hyperparams.get("use_multiscale_phase", False)
+        self.phase_multiscale_long_period = hyperparams.get(
+            "phase_multiscale_long_period", 2 * self.period_len
+        )
+        self.phase_multiscale_coarse = hyperparams.get("phase_multiscale_coarse", 2)
+        self.use_phase_deformation = hyperparams.get("use_phase_deformation", False)
+        self.phase_deformation_hidden = hyperparams.get(
+            "phase_deformation_hidden", 8
+        )
+        self.phase_deformation_scale = hyperparams.get(
+            "phase_deformation_scale", 0.2
+        )
+        self.use_phase_graph = hyperparams.get("use_phase_graph", False)
+        self.phase_graph_hidden = hyperparams.get("phase_graph_hidden", 16)
+        self.phase_graph_k = hyperparams.get("phase_graph_k", 2)
+        self.use_trajectory_decoder = hyperparams.get(
+            "use_trajectory_decoder", False
+        )
+        self.phase_decoder_hidden = hyperparams.get("phase_decoder_hidden", 64)
+        self.phase_decoder_order = hyperparams.get("phase_decoder_order", 2)
+
     def get(self, key, default=None):
         return getattr(self, key, default)
 

@@ -22,7 +22,7 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertEqual(first["config_hash"], second["config_hash"])
 
     def test_plan_defines_expected_mechanisms(self):
-        self.assertEqual(len(MECHANISMS), 26)
+        self.assertEqual(len(MECHANISMS), 30)
         self.assertIn("phase_align", MECHANISMS)
         self.assertIn("phase_warp", MECHANISMS)
         self.assertIn("phase_amp_calib", MECHANISMS)

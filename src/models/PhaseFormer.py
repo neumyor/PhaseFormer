@@ -27,6 +27,12 @@ from src.models.phase_correction import PhaseCorrection
 from src.models.phase_geometry import CircularPhaseEmbedding
 from src.models.phase_rotation import PhaseRotation
 from src.models.harmonic_modulation import HarmonicModulation
+from src.models.phase_velocity import PhaseVelocity
+from src.models.adaptive_residual_gate import AdaptiveResidualGate
+from src.models.multiscale_phase import MultiScalePhase
+from src.models.phase_deformation import PhaseDeformation
+from src.models.phase_graph import PhaseGraph
+from src.models.phase_decoder import TrajectoryDecoder
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -43,6 +49,8 @@ class CrossPhaseRoutingLayer(nn.Module):
         use_pos_embed: bool = False,
         pos_dropout: float = 0.0,
         use_circular_pos: bool = False,
+        use_circular_attn_bias: bool = False,
+        circular_attn_bias_scale: float = 1.0,
     ):
         super().__init__()
         # The attention_dim parameter is kept for interface compatibility; it does not
@@ -59,6 +67,8 @@ class CrossPhaseRoutingLayer(nn.Module):
         self.dropout = dropout
         self.use_pos_embed = use_pos_embed
         self.use_circular_pos = use_circular_pos
+        self.use_circular_attn_bias = use_circular_attn_bias
+        self.circular_attn_bias_scale = circular_attn_bias_scale
         self.period_len = period_len
 
         # Learnable routers shared across batch and channels
@@ -130,13 +140,34 @@ class CrossPhaseRoutingLayer(nn.Module):
             x = x + pe
             x = self.pos_dropout(x)
 
+        # Circular attention bias (next-stage plan stage 2): anchors each router
+        # at a canonical phase position r * P / R on the phase circle and
+        # penalizes attention to phase slots far from it, so the interaction
+        # layer itself (not just the position embedding) becomes cycle-aware.
+        # The bias is deterministic from (R, P, L): no parameters, no RNG draws.
+        if self.use_circular_attn_bias:
+            r_pos = torch.arange(
+                self.num_routers, device=Z.device, dtype=torch.float32
+            ) * (self.period_len / self.num_routers)
+            slot_pos = torch.arange(L, device=Z.device, dtype=torch.float32)
+            raw = (r_pos.unsqueeze(1) - slot_pos.unsqueeze(0)).abs()  # (R, L)
+            dist = torch.minimum(raw, self.period_len - raw)  # circular distance
+            bias = self.circular_attn_bias_scale * (dist / (self.period_len / 2))
+            bias_sender = bias.unsqueeze(0).unsqueeze(0)  # (1, 1, R, L)
+            bias_receiver = bias.t().unsqueeze(0).unsqueeze(0)  # (1, 1, L, R)
+        else:
+            bias_sender = None
+            bias_receiver = None
+
         # Stage 1: routers aggregate token information
         batch_router = self.router.unsqueeze(0).expand(B * C, -1, -1)  # (BC, R, D)
-        router_buffer, _ = self.router_sender(batch_router, x, x, attn_mask=None)
+        router_buffer, _ = self.router_sender(
+            batch_router, x, x, attn_mask=None, bias=bias_sender
+        )
 
         # Stage 2: routers distribute information back to tokens
         router_receive, _ = self.router_receiver(
-            x, router_buffer, router_buffer, attn_mask=None
+            x, router_buffer, router_buffer, attn_mask=None, bias=bias_receiver
         )
 
         # Residual + LayerNorm
@@ -251,6 +282,8 @@ class CrossPhaseRoutingUnit(nn.Module):
         phase_use_pos_embed: bool = False,
         phase_pos_dropout: float = 0.0,
         phase_use_circular_pos: bool = False,
+        phase_use_circular_attn_bias: bool = False,
+        phase_circular_attn_bias_scale: float = 1.0,
         phase_encoder_use_mlp: bool = False,
         phase_encoder_dropout: float = 0.0,
         predictor_use_mlp: bool = False,
@@ -281,6 +314,8 @@ class CrossPhaseRoutingUnit(nn.Module):
             use_pos_embed=phase_use_pos_embed,
             pos_dropout=phase_pos_dropout,
             use_circular_pos=phase_use_circular_pos,
+            use_circular_attn_bias=phase_use_circular_attn_bias,
+            circular_attn_bias_scale=phase_circular_attn_bias_scale,
         )
 
         if self.apply_out_proj:
@@ -423,6 +458,12 @@ class PhaseFormer(DefaultPLModule):
         self.phase_use_pos_embed = getattr(configs, "phase_use_pos_embed", False)
         self.phase_pos_dropout = getattr(configs, "phase_pos_dropout", 0.0)
         self.phase_use_circular_pos = getattr(configs, "phase_use_circular_pos", False)
+        self.phase_use_circular_attn_bias = getattr(
+            configs, "phase_use_circular_attn_bias", False
+        )
+        self.phase_circular_attn_bias_scale = getattr(
+            configs, "phase_circular_attn_bias_scale", 1.0
+        )
 
         # period calculations
         self.num_periods_input = (self.seq_len + self.period_len - 1) // self.period_len
@@ -581,6 +622,8 @@ class PhaseFormer(DefaultPLModule):
                     phase_use_pos_embed=self.phase_use_pos_embed,
                     phase_pos_dropout=self.phase_pos_dropout,
                     phase_use_circular_pos=self.phase_use_circular_pos,
+                    phase_use_circular_attn_bias=self.phase_use_circular_attn_bias,
+                    phase_circular_attn_bias_scale=self.phase_circular_attn_bias_scale,
                     phase_encoder_use_mlp=getattr(configs, "phase_encoder_use_mlp", False),
                     phase_encoder_dropout=getattr(configs, "phase_encoder_dropout", 0.0),
                     predictor_use_mlp=getattr(configs, "predictor_use_mlp", False),
@@ -742,6 +785,102 @@ class PhaseFormer(DefaultPLModule):
                 max_scale=self.harmonic_modulation_max_scale,
             )
 
+        # Next-stage dynamic-phase mechanisms (paper plan stages 1 and 3).
+        # Constructed after every shared module (and the stage 2-5 mechanisms
+        # above) for the same RNG-draw preservation reason: flag-on and flag-off
+        # share identical initialization for everything except the new module.
+        # PhaseVelocity is a warm-start identity (velocity=0 -> no shift);
+        # AdaptiveResidualGate starts at alpha = gate_init (default 0.5).
+        self.use_phase_velocity = getattr(configs, "use_phase_velocity", False)
+        self.phase_velocity_hidden = getattr(configs, "phase_velocity_hidden", 8)
+        self.phase_velocity_scale = getattr(configs, "phase_velocity_scale", 0.1)
+        if self.use_phase_velocity:
+            self.phase_velocity = PhaseVelocity(
+                dim=self.latent_dim,
+                hidden=self.phase_velocity_hidden,
+                velocity_scale=self.phase_velocity_scale,
+            )
+
+        self.use_adaptive_residual_gate = getattr(
+            configs, "use_adaptive_residual_gate", False
+        )
+        self.adaptive_residual_gate_hidden = getattr(
+            configs, "adaptive_residual_gate_hidden", 8
+        )
+        self.adaptive_residual_gate_init = getattr(
+            configs, "adaptive_residual_gate_init", 0.5
+        )
+        if self.use_adaptive_residual_gate:
+            self.adaptive_residual_gate = AdaptiveResidualGate(
+                phase_dim=self.latent_dim,
+                enc_in=self.enc_in,
+                hidden=self.adaptive_residual_gate_hidden,
+                gate_init=self.adaptive_residual_gate_init,
+            )
+
+        # Pure-phase mechanisms (pure-phase plan stages 1-4). Constructed after
+        # every shared module (and the residual-gate mechanism above) so that
+        # toggling any of these flags does not shift the RNG draws consumed by
+        # the shared path: flag-on and flag-off share identical initialization
+        # for everything except the new module itself. Each new module is a
+        # warm-start identity: MultiScalePhase (zeta=0), PhaseDeformation
+        # (rate=0 -> identity scatter), PhaseGraph (message=0). TrajectoryDecoder
+        # is an alternative top-level predictor, not an identity.
+        self.use_multiscale_phase = getattr(configs, "use_multiscale_phase", False)
+        self.phase_multiscale_long_period = getattr(
+            configs, "phase_multiscale_long_period", 2 * self.period_len
+        )
+        self.phase_multiscale_coarse = getattr(configs, "phase_multiscale_coarse", 2)
+        if self.use_multiscale_phase:
+            if self.phase_multiscale_long_period != self.period_len * self.phase_multiscale_coarse:
+                raise ValueError(
+                    "phase_multiscale_long_period must equal period_len * phase_multiscale_coarse "
+                    "so the coarse long-period view stays phase-aligned"
+                )
+            self.multiscale_phase = MultiScalePhase(
+                latent_dim=self.latent_dim,
+                period_len=self.period_len,
+                num_periods_input=self.num_periods_input,
+                coarse=self.phase_multiscale_coarse,
+            )
+
+        self.use_phase_deformation = getattr(configs, "use_phase_deformation", False)
+        self.phase_deformation_hidden = getattr(
+            configs, "phase_deformation_hidden", 8
+        )
+        self.phase_deformation_scale = getattr(
+            configs, "phase_deformation_scale", 0.2
+        )
+        if self.use_phase_deformation:
+            self.phase_deformation = PhaseDeformation(
+                dim=self.latent_dim,
+                hidden=self.phase_deformation_hidden,
+                velocity_scale=self.phase_deformation_scale,
+            )
+
+        self.use_phase_graph = getattr(configs, "use_phase_graph", False)
+        self.phase_graph_hidden = getattr(configs, "phase_graph_hidden", 16)
+        self.phase_graph_k = getattr(configs, "phase_graph_k", 2)
+        if self.use_phase_graph:
+            self.phase_graph = PhaseGraph(
+                dim=self.latent_dim,
+                hidden=self.phase_graph_hidden,
+                k=self.phase_graph_k,
+            )
+
+        self.use_trajectory_decoder = getattr(
+            configs, "use_trajectory_decoder", False
+        )
+        self.phase_decoder_hidden = getattr(configs, "phase_decoder_hidden", 64)
+        self.phase_decoder_order = getattr(configs, "phase_decoder_order", 2)
+        if self.use_trajectory_decoder:
+            self.trajectory_decoder = TrajectoryDecoder(
+                latent_dim=self.latent_dim,
+                p_out=self.num_periods_output,
+                hidden=self.phase_decoder_hidden,
+                order=self.phase_decoder_order,
+            )
+
     # phase rearrangement helpers
     @staticmethod
     def _to_phase_series(x_periods):
@@ -814,18 +953,36 @@ class PhaseFormer(DefaultPLModule):
             phase_series = self.phase_amp_calib(phase_series)
 
         # 6-8) Embedding -> routing layers -> top predictor
-        # Initial latent from embedding
+        # Initial latent from embedding.
         Z = self.embedding(phase_series)  # (B, C, L, D)
 
-        # Dynamic phase correction: re-align the latent phase tokens along the
-        # phase-slot axis by a predicted per-slot offset (stage 2).
+        # Multi-scale phase representation (pure-phase plan, stage 1): add a
+        # gated long-period phase view at the same slot grid. zeta=0 at init
+        # keeps the exact single-phase baseline.
+        if self.use_multiscale_phase:
+            Z = Z + self.multiscale_phase(phase_series)
+
+        # Dynamic phase evolution: re-align the latent phase tokens along the
+        # phase-slot axis. PhaseCorrection (static per-slot offset) and
+        # PhaseVelocity (cumulative drift) precede the nonlinear deformation
+        # field; the three are mutually exclusive, with deformation the most
+        # expressive (rate + stretch -> non-uniform warp).
         if self.use_phase_correction:
             Z = self.phase_correction(Z)
+        elif self.use_phase_velocity:
+            Z = self.phase_velocity(Z)
+        elif self.use_phase_deformation:
+            Z = self.phase_deformation(Z)
 
         # Phase rotation: rotate pairs of latent features by a predicted angle
         # conditioned on the input periodic features (stage 4).
         if self.use_phase_rotation:
             Z = self.phase_rotation(Z, phase_series)
+
+        # Geometry-aware phase interaction (pure-phase plan, stage 3): explicit
+        # circular-graph message passing over the phase slots before routing.
+        if self.use_phase_graph:
+            Z = self.phase_graph(Z)
 
         phase_series_cur = phase_series
 
@@ -840,8 +997,14 @@ class PhaseFormer(DefaultPLModule):
         if self.use_harmonic_modulation:
             Z = self.harmonic_modulation(Z, phase_series)
 
-        # final predictor to produce P_out
-        y_phase_steps = self.predictor(Z)  # (B, C, L, P_out)
+        # final predictor to produce P_out. TrajectoryDecoder (pure-phase plan,
+        # stage 4) replaces the linear/MLP predictor with a per-slot polynomial
+        # trajectory over the future cycles; both have the same (B, C, L, P_out)
+        # output signature.
+        if self.use_trajectory_decoder:
+            y_phase_steps = self.trajectory_decoder(Z)  # (B, C, L, P_out)
+        else:
+            y_phase_steps = self.predictor(Z)  # (B, C, L, P_out)
         if self.use_phase_local_trend:
             phase_trend = self.phase_local_trend(phase_series)
             if self.training:
@@ -862,6 +1025,8 @@ class PhaseFormer(DefaultPLModule):
             residual_hat = self.weak_period_residual(x_in)
             if self.use_adaptive_weak_period_gate:
                 residual_gate = self.adaptive_weak_period_gate(x_in, phase_series)
+            elif self.use_adaptive_residual_gate:
+                residual_gate = self.adaptive_residual_gate(Z, x_in)
             else:
                 residual_gate = torch.sigmoid(self.weak_period_residual_gate)
             y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
