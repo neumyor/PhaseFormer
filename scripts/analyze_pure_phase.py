@@ -146,7 +146,11 @@ def main():
         zeta_vecs = {}    # mode -> (D,) zeta vector
         smooth_vals = {}  # mode -> smoothness
         for mode in modes:
-            run_dir = find_run_dir(args.run_dir, args.run_prefix, mode, ds, horizon, seed)
+            try:
+                run_dir = find_run_dir(args.run_dir, args.run_prefix, mode, ds, horizon, seed)
+            except FileNotFoundError:
+                print(f"SKIP (no run): {setting} {mode}", flush=True)
+                continue
             hp = json.loads((run_dir / "config.json").read_text())["hyperparams"]
             model, exp_args = build_model(ds, horizon, args.lookback, hp, args.device)
             load_checkpoint(model, run_dir / "checkpoints" / "best.ckpt", args.device)

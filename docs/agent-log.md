@@ -1,5 +1,34 @@
 # Agent Maintenance Log
 
+## 2026-08-24 — Pure Phase Modeling (phase-only forecasting, no residual)
+
+Implemented 4 warm-start pure-phase modules (commits 1653cd1, 00f09dc) and ran
+the next-stage plan (`docs/PhaseFormer_pure_phase_next_stage_experiment_plan.md`)
+at full budget: MultiScalePhase (period-axis long view, zeta gate), PhaseDeformation
+(rate+stretch -> cumsum displacement warp), PhaseGraph (circular message passing),
+TrajectoryDecoder (per-slot polynomial over the future axis). 7 modes registered
+(multiscale_phase / phase_deformation / phase_geo / phase_graph / predictor_mlp /
+trajectory_decoder / pure_full). Report:
+`docs/PhaseFormer_pure_phase_experiment_results_feedback.md`.
+
+- **Result (61/70 runs; 9 missing — Traffic h720 trajectory_decoder+pure_full,
+  ETTh1 h720 all 7; user stopped the run mid-batch-2)**:
+  - representation/evolution/interaction modules are parity with original:
+    avg ΔMSE multiscale +0.53%, deformation −0.09%, phase_geo −0.16%,
+    phase_graph −0.10%, predictor_mlp +0.03% (no consistent wins).
+  - **TrajectoryDecoder is catastrophic** on 3/5 datasets (ETTm1 +90.5%/+71.8%,
+    Electricity +26%, Traffic h336 +59.4%); mild improvement only on ETTh1/ETTh2.
+    Analysis: it makes output smoother (−5.4% |dy|) but destroys phase peak
+    alignment (peak_shift 3.67 vs 3.24). pure_full inherits the failure
+    (avg +33.5%; best single result ETTh2 h720 −4.2%).
+  - Deformation field learned compression (s≈0.67) but cumulative displacement
+    <0.1 slot — numerically near-inactive. Multiscale zeta gate IS open
+    (mean|ζ|≈0.17, 99% dims) but no MSE benefit.
+  - **Conclusion: the "adaptive phase geometry" narrative is not supported** —
+    pure-phase gains ≤±0.5% and the trajectory decoder dominates negatively.
+- Artifacts: `research_runs/pure_phase_summary.csv`, `research_runs/pure_phase_analysis/`
+  (4 CSVs + figures/), per-run `research_runs/dyn_phase_full/dynphase_*_<mode>_*/`.
+
 ## 2026-08-12 — Reliability-aware Adaptive Phase Evolution (RAPE)
 
 New mechanism (67bb537): compose the adaptive phase warp + amplitude
