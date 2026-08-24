@@ -1,6 +1,7 @@
 # PhaseFormer 残差通路拓扑实验计划
 
-> 状态：执行中  
+> 状态：方案与代码已完成；实验按用户要求暂不执行
+>
 > 分支：`weak-residual-phaseformer`  
 > 建立日期：2026-08-24  
 > 本文件是本轮实验的唯一计划锚点；实现、筛选、确认和结果解释均以此为准。
@@ -21,7 +22,8 @@
 
 ## 2. 统一残差拓扑
 
-所有新增通路均默认关闭，并在开启时零初始化，使初始输出严格退化为原始 PhaseFormer。
+所有新增通路均默认关闭。R2--R5 的修正投影零初始化，使初始输出严格退化为原始
+PhaseFormer；R1 则刻意保留现有完整预测凸融合的 persistence anchor，作为已知设计对照。
 
 | ID | 模式 | 残差路径 | 融合位置 | 目的 |
 |---|---|---|---|---|
@@ -32,9 +34,18 @@
 | R4 | `residual_latent_layerwise` | 初始 phase latent → 独立零初始化投影 | 每个 routing layer 后注入 | 测试逐层残差；一层模型中与 R3 结构等价 |
 | R5 | `residual_hybrid` | R4 + R2 | 每层 latent + 输出加法 | 测试多级残差互补性 |
 
+预注册假设：
+
+- H1：R1 对强趋势 setting 可能最强，但完整预测凸融合更容易污染 phase path 已经正确的样本。
+- H2：R2 的零初始化加法修正比 R1 保守，预期在 residual 有害的 setting 回退更小。
+- H3：R3 让 routing/predictor 共同处理残差信息，预期比直接输出融合更适合弱但非纯趋势的误差。
+- H4：R4 只应在多层主干优于 R3；若一层不等价或多层无稳定增益，则逐层重复注入没有证据。
+- H5：R5 只有同时超过 R2/R4 才说明 latent 与 output residual 互补，否则视为重复建模。
+
 公平性约束：
 
-- R1 沿用当前共享 `WeakPeriodResidualHead`，固定 gate init=0.5；不叠加其他 phase/dynamic 模块。
+- R1 沿用当前共享 `WeakPeriodResidualHead` 的计算语义，固定 gate init=0.5；对照头在所有
+  共享模块之后构造，以免 feature flag 改变主干随机初始化；不叠加其他 phase/dynamic 模块。
 - R2/R5 共用同一个零初始化输入→输出修正头，固定 gate init=0.5。
 - R3/R4/R5 的 latent 投影均为 `D→D`、无 bias、零初始化；不搜索宽度和 gate。
 - 不改变 period、loss、LR、batch size、数据划分、early stop 或 checkpoint 规则。
@@ -109,5 +120,37 @@ research_runs/residual_topology_v1/
 
 ## 6. 执行记录
 
-结果、失败、协议偏差和最终决策统一回填
-`docs/PhaseFormer_residual_topology_results.md`；本文件只在实验设计或范围发生变化时更新。
+本轮交付止于实验方案、可运行代码和充分测试，不启动训练、不读取测试集、不生成结果或
+误差分析包。未来获准执行时，结果、失败、协议偏差和最终决策再新建结果文档回填；本文件
+仍作为唯一计划锚点。
+
+实现入口：
+
+- 模型原语：`src/models/residual_topology.py`；
+- PhaseFormer 接线：`src/models/PhaseFormer.py`；
+- preset 与搜索注册：`src/models/phaseformer_presets.py`、`scripts/search_phaseformer.py`；
+- 可复现调度：`scripts/run_residual_topology.py`；
+- 专项测试：`tests/test_residual_topology.py`。
+
+未来执行命令：
+
+```bash
+# 审计完整 24-job 验证集矩阵，不训练
+python scripts/run_residual_topology.py --stage screen --dry-run
+
+# 实际 Stage A（仅在未来获准后运行）
+python scripts/run_residual_topology.py --stage screen
+
+# 示例：冻结 R2/R4 后运行 Stage B
+python scripts/run_residual_topology.py \
+  --stage full \
+  --modes original,residual_output_additive,residual_latent_layerwise
+```
+
+## 7. 交付验证
+
+- Python 编译检查通过。
+- 全量单元测试 `90/90` 通过；覆盖拓扑前向、初始等价、共享初始化、梯度、单步更新、
+  多层/单层关系、321 通道输入和汇总计算。
+- Stage A dry-run 生成预注册的 24 条命令；Stage B 示例 dry-run 生成 4 条命令。
+- 以上均为静态、单元或 dry-run 验证；未训练模型、未读取测试集、无实验指标。

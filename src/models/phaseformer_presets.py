@@ -48,6 +48,12 @@ ABLATION_MODES = {
     "predictor_mlp",
     "trajectory_decoder",
     "pure_full",
+    # Residual-topology experiment: output, latent and hybrid long skips.
+    "residual_output_convex",
+    "residual_output_additive",
+    "residual_latent_long",
+    "residual_latent_layerwise",
+    "residual_hybrid",
 }
 
 
@@ -720,6 +726,38 @@ def get_ablation_overrides(mode):
             phase_decoder_hidden=64,
             phase_decoder_order=2,
         )
+    # Residual-topology modes.  No mode below enables phase-local trend or a
+    # dynamic-phase module, so the only experimental variable is the residual
+    # path and its insertion point.
+    if mode == "residual_output_convex":
+        return dict(
+            scheme_name="residual_output_convex",
+            use_topology_output_convex_residual=True,
+            topology_output_convex_gate_init=0.5,
+        )
+    if mode == "residual_output_additive":
+        return dict(
+            scheme_name="residual_output_additive",
+            use_additive_output_residual=True,
+            additive_output_residual_gate_init=0.5,
+        )
+    if mode == "residual_latent_long":
+        return dict(
+            scheme_name="residual_latent_long",
+            use_latent_long_residual=True,
+        )
+    if mode == "residual_latent_layerwise":
+        return dict(
+            scheme_name="residual_latent_layerwise",
+            use_layerwise_latent_residual=True,
+        )
+    if mode == "residual_hybrid":
+        return dict(
+            scheme_name="residual_hybrid",
+            use_layerwise_latent_residual=True,
+            use_additive_output_residual=True,
+            additive_output_residual_gate_init=0.5,
+        )
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -977,6 +1015,25 @@ class PhaseFormerPresetConfig:
         self.phase_graph_k = hyperparams.get("phase_graph_k", 2)
         self.use_trajectory_decoder = hyperparams.get(
             "use_trajectory_decoder", False
+        )
+        # Residual-topology experiment flags.
+        self.use_additive_output_residual = hyperparams.get(
+            "use_additive_output_residual", False
+        )
+        self.use_topology_output_convex_residual = hyperparams.get(
+            "use_topology_output_convex_residual", False
+        )
+        self.topology_output_convex_gate_init = hyperparams.get(
+            "topology_output_convex_gate_init", 0.5
+        )
+        self.additive_output_residual_gate_init = hyperparams.get(
+            "additive_output_residual_gate_init", 0.5
+        )
+        self.use_latent_long_residual = hyperparams.get(
+            "use_latent_long_residual", False
+        )
+        self.use_layerwise_latent_residual = hyperparams.get(
+            "use_layerwise_latent_residual", False
         )
         self.phase_decoder_hidden = hyperparams.get("phase_decoder_hidden", 64)
         self.phase_decoder_order = hyperparams.get("phase_decoder_order", 2)

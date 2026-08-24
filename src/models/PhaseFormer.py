@@ -33,6 +33,10 @@ from src.models.multiscale_phase import MultiScalePhase
 from src.models.phase_deformation import PhaseDeformation
 from src.models.phase_graph import PhaseGraph
 from src.models.phase_decoder import TrajectoryDecoder
+from src.models.residual_topology import (
+    AdditiveOutputResidualHead,
+    LatentResidualPath,
+)
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -881,6 +885,69 @@ class PhaseFormer(DefaultPLModule):
                 order=self.phase_decoder_order,
             )
 
+        # Residual-topology experiment.  These modules are constructed after
+        # every shared component so enabling them cannot change shared-module
+        # initialization.  Their projections are zero-initialized, making the
+        # additive, long-latent, layer-wise and hybrid modes exact warm starts
+        # of the original phase-only model.
+        self.use_additive_output_residual = getattr(
+            configs, "use_additive_output_residual", False
+        )
+        self.use_topology_output_convex_residual = getattr(
+            configs, "use_topology_output_convex_residual", False
+        )
+        self.use_latent_long_residual = getattr(
+            configs, "use_latent_long_residual", False
+        )
+        self.use_layerwise_latent_residual = getattr(
+            configs, "use_layerwise_latent_residual", False
+        )
+        if not self.use_residual_head:
+            self.use_additive_output_residual = False
+            self.use_topology_output_convex_residual = False
+            self.use_latent_long_residual = False
+            self.use_layerwise_latent_residual = False
+        if self.use_latent_long_residual and self.use_layerwise_latent_residual:
+            raise ValueError(
+                "use_latent_long_residual and use_layerwise_latent_residual "
+                "are mutually exclusive"
+            )
+        if self.use_additive_output_residual:
+            self.additive_output_residual = AdditiveOutputResidualHead(
+                self.seq_len, self.pred_len
+            )
+            gate_init = float(
+                getattr(configs, "additive_output_residual_gate_init", 0.5)
+            )
+            gate_init = min(max(gate_init, 1e-4), 1.0 - 1e-4)
+            gate_logit = torch.logit(torch.tensor(gate_init))
+            self.additive_output_residual_gate = nn.Parameter(
+                torch.full((1, 1, self.enc_in), float(gate_logit))
+            )
+        if self.use_topology_output_convex_residual:
+            # Semantically identical to the existing shared NLinear residual
+            # branch, but constructed here (after all shared modules) so the
+            # R0/R1 comparison keeps shared initialization exactly matched.
+            self.topology_output_convex_residual = WeakPeriodResidualHead(
+                self.seq_len, self.pred_len
+            )
+            gate_init = float(
+                getattr(configs, "topology_output_convex_gate_init", 0.5)
+            )
+            gate_init = min(max(gate_init, 1e-4), 1.0 - 1e-4)
+            gate_logit = torch.logit(torch.tensor(gate_init))
+            self.topology_output_convex_gate = nn.Parameter(
+                torch.full((1, 1, self.enc_in), float(gate_logit))
+            )
+        if self.use_latent_long_residual:
+            self.latent_residual_path = LatentResidualPath(
+                self.latent_dim, num_injections=1
+            )
+        elif self.use_layerwise_latent_residual:
+            self.latent_residual_path = LatentResidualPath(
+                self.latent_dim, num_injections=len(self.routing_layers)
+            )
+
     # phase rearrangement helpers
     @staticmethod
     def _to_phase_series(x_periods):
@@ -984,13 +1051,21 @@ class PhaseFormer(DefaultPLModule):
         if self.use_phase_graph:
             Z = self.phase_graph(Z)
 
+        residual_latent_anchor = Z
         phase_series_cur = phase_series
 
         for layer_index, unit in enumerate(self.routing_layers):
             Z, y_phase_steps_p_in = unit(phase_series_cur, Z)
+            if self.use_layerwise_latent_residual:
+                Z = Z + self.latent_residual_path(
+                    residual_latent_anchor, layer_index
+                )
             if layer_index < len(self.routing_layers) - 1:
                 # intermediate layers must produce P_in for the next layer
                 phase_series_cur = y_phase_steps_p_in
+
+        if self.use_latent_long_residual:
+            Z = Z + self.latent_residual_path(residual_latent_anchor)
 
         # Harmonic feature modulation: rescale/shift the routed latent from input
         # periodic features, between routing and prediction (stage 5).
@@ -1030,6 +1105,16 @@ class PhaseFormer(DefaultPLModule):
             else:
                 residual_gate = torch.sigmoid(self.weak_period_residual_gate)
             y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
+
+        if self.use_topology_output_convex_residual:
+            residual_hat = self.topology_output_convex_residual(x_in)
+            gate = torch.sigmoid(self.topology_output_convex_gate)
+            y_hat = (1.0 - gate) * y_hat + gate * residual_hat
+
+        if self.use_additive_output_residual:
+            correction = self.additive_output_residual(x_in)
+            gate = torch.sigmoid(self.additive_output_residual_gate)
+            y_hat = y_hat + gate * correction
 
         if self.use_time_mark_adjustment and x_mark_dec is not None:
             time_adjustment = self.time_mark_adjustment(

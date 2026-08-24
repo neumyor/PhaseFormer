@@ -267,6 +267,26 @@ MECHANISMS = {
         "adaptive_residual_gate_hidden": 8,
         "adaptive_residual_gate_init": 0.5,
     },
+    # ---- residual topology experiment ----
+    "residual_output_convex": {
+        "use_topology_output_convex_residual": True,
+        "topology_output_convex_gate_init": 0.5,
+    },
+    "residual_output_additive": {
+        "use_additive_output_residual": True,
+        "additive_output_residual_gate_init": 0.5,
+    },
+    "residual_latent_long": {
+        "use_latent_long_residual": True,
+    },
+    "residual_latent_layerwise": {
+        "use_layerwise_latent_residual": True,
+    },
+    "residual_hybrid": {
+        "use_layerwise_latent_residual": True,
+        "use_additive_output_residual": True,
+        "additive_output_residual_gate_init": 0.5,
+    },
 }
 
 

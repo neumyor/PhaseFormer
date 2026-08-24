@@ -383,3 +383,26 @@ currently also fall back to the original guardrail.
   with the existing lightweight-validation requirement.
 - Validation: Skill schema passed `quick_validate.py`; measured at 2,159
   `o200k_base` tokens and 2,577 `cl100k_base` tokens.
+
+## 2026-08-24 — Residual topology plan and implementation
+
+- Added `docs/PhaseFormer_residual_topology_plan.md` as the experiment anchor.
+  It preregisters R0 original, R1 full-forecast convex output residual, R2
+  zero-initialized additive output correction, R3 one-shot latent long skip,
+  R4 layer-wise latent injection, and R5 R2+R4 hybrid across four representative
+  settings.
+- Implemented the residual primitives and PhaseFormer wiring, registered all five
+  candidate modes in presets/search, and added the resumable
+  `scripts/run_residual_topology.py` scheduler with validation-screen/full-confirm
+  stages and matched-delta summaries.
+- Preserved comparison fairness by constructing the R1 control head after all
+  shared modules so feature flags do not shift shared RNG initialization. R2--R5
+  are exact zero-initialized warm starts; the residual master switch disables all
+  new paths.
+- Verification: Python compilation passed; the complete suite passed `90/90`;
+  Stage A dry-run produced 24 commands and the frozen-candidate Stage B example
+  produced four commands. Tests cover forward shapes, finite values, exact shared
+  initialization, zero-init equivalence, gradients, optimizer movement, one-layer
+  R3/R4 equivalence, multi-layer depth, 321-channel input, and summary arithmetic.
+- Per the revised user scope, no training was launched, no test split was read,
+  and no experimental result or error-analysis package was generated.
