@@ -1,6 +1,6 @@
 # PhaseFormer 残差通路拓扑实验计划
 
-> 状态：方案与代码已完成；实验按用户要求暂不执行
+> 状态：方案与代码已完成；Stage A（24 run）与 Stage B（12 run）均已执行并汇总，见 `docs/PhaseFormer_residual_topology_results.md`
 >
 > 分支：`weak-residual-phaseformer`  
 > 建立日期：2026-08-24  

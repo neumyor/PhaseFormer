@@ -406,3 +406,34 @@ currently also fall back to the original guardrail.
   R3/R4 equivalence, multi-layer depth, 321-channel input, and summary arithmetic.
 - Per the revised user scope, no training was launched, no test split was read,
   and no experimental result or error-analysis package was generated.
+
+## 2026-08-24 — Residual topology experiments executed (Stage A + Stage B)
+
+- Executed the plan end-to-end on 4× A100-40GB (multi-GPU via
+  `CUDA_VISIBLE_DEVICES`). **Stage A**: 24 validation-screen runs
+  (`search_phaseformer.py --stage mechanism_screen_1`, 30% data, ≤8 epochs,
+  no `--evaluate-test`). **Stage B**: 12 full-budget confirm runs
+  (`benchmark_phaseformer_suite.py`, 100% data, ≤30 epochs, val early stop +
+  best ckpt, test metrics). Tests passed 90/90 before launch.
+- **R3≡R4 equivalence verified numerically** on ETTh2-h720 (1 layer): identical
+  val_mae=0.66184554, val_mse=0.82789717, params=734 → implementation correct.
+- **Stage A freeze** (score = 0.5·ΔMAE% + 0.5·ΔMSE%): R1 convex (15.55) and R2
+  additive (13.59) → R0+R1+R2 advanced; all candidates 4/4 settings both-metric
+  improvement, no regression.
+- **Stage B result (test, positive = improvement)**: residual output fusion is
+  cross-setting inconsistent — ETTh2-h720 **strong** (R1 ΔMAE +5.75/ΔMSE +7.66,
+  R2 +5.69/+7.56), Electricity **mild** (+0.81/+1.57, +0.41/+1.32), ETTh1/ETTm1
+  neutral-to-slightly-negative (R1 −0.75/−0.06, −0.19/−0.83). Reproduces the
+  prior dynamic-phase finding exactly. R1 ≥ R2 on 3/4 settings → H2 ("additive
+  correction beats convex fusion") **not supported**; R3/R4/R5 provide no
+  additional benefit.
+- Judgment call disclosed: plan gated Electricity behind "前三项通过且仍有正向
+  信号"; borderline, but ran it (extra ~1 GPU·h) to complete all 4 planned
+  settings, consistent with prior full-budget residual evidence.
+- Single-seed only; **`_LATEST_POLICY` not updated**. No champion topology.
+- Artifacts: `research_runs/residual_topology_screen_runs/` (24 metrics.csv +
+  `screen_summary.csv` + `stage_a_selection_notes.md`), `research_runs/
+  residual_topology_full_runs/` (12 metrics.csv + per-setting `*_summary.csv` +
+  `full_summary.csv`). Report: `docs/PhaseFormer_residual_topology_results.md`.
+- Plan §4 (sample-level error analysis package at `research_runs/
+  residual_topology_v1/`) was **not produced** — see report; flag if needed.
