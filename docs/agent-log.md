@@ -3,13 +3,13 @@
 ## 2026-08-24 — Pure Phase Modeling (phase-only forecasting, no residual)
 
 Implemented 4 warm-start pure-phase modules (commits 1653cd1, 00f09dc) and ran
-the next-stage plan (`docs/PhaseFormer_pure_phase_next_stage_experiment_plan.md`)
+the next-stage plan (`docs/PhaseFormer_pure_phase_plan.md`)
 at full budget: MultiScalePhase (period-axis long view, zeta gate), PhaseDeformation
 (rate+stretch -> cumsum displacement warp), PhaseGraph (circular message passing),
 TrajectoryDecoder (per-slot polynomial over the future axis). 7 modes registered
 (multiscale_phase / phase_deformation / phase_geo / phase_graph / predictor_mlp /
 trajectory_decoder / pure_full). Report:
-`docs/PhaseFormer_pure_phase_experiment_results_feedback.md`.
+`docs/PhaseFormer_pure_phase_results.md`.
 
 - **Result (61/70 runs; 9 missing — Traffic h720 trajectory_decoder+pure_full,
   ETTh1 h720 all 7; user stopped the run mid-batch-2)**:
@@ -234,7 +234,7 @@ training passes it as float64.
 ## 2026-08-11 — Original PhaseFormer gold standard
 
 - Transcribed the user-provided paper Table 5 screenshot into
-  `docs/PHASEFORMER_GOLD_STANDARD.md`.
+  `docs/PhaseFormer_gold_standard.md`.
 - Recorded 28 original PhaseFormer results covering ETTh1, ETTh2, ETTm1,
   ETTm2, Weather, Electricity, and Traffic at horizons 96, 192, 336, and 720,
   with input length 720 and explicit MSE/MAE column ordering.
@@ -304,7 +304,7 @@ training passes it as float64.
 - Archived 18 unused `src/models/layers/*` legacy modules to
   `archive/layers_legacy/` (the active model only imports
   `SelfAttention_Family.py`), with an explaining README.
-- Archived `ITERATION_BRIEF.md` / `ITERATION_LOG.md` to `docs/archive/` and
+- Archived `iteration_brief.md` / `iteration_log.md` to `docs/archive/` and
   repointed references in `MANAGE_RULES.md` / `HOW_TO_DO_RESEARCH.md` to the archived
   paths, clarifying the current active plan/log are `EXPERIMENT_SEARCH_PLAN.md`
   and `docs/agent-log.md`.

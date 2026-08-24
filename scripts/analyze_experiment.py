@@ -247,7 +247,7 @@ def main():
     p.add_argument("--top-k", type=int, default=10)
     p.add_argument("--ranking-metric", default="mae")
     p.add_argument("--device", default="cuda:0")
-    p.add_argument("--gold", default="docs/PHASEFORMER_GOLD_STANDARD.md")
+    p.add_argument("--gold", default="docs/PhaseFormer_gold_standard.md")
     p.add_argument(
         "--mechanism-label",
         default="Phase-conditioned Amplitude Calibration (`use_phase_amp_calib` + `use_phase_warp`)",
@@ -443,7 +443,7 @@ def main():
     md.append("")
     md.append("## 1. Experiment Setup")
     md.append(f"- mechanism: {args.mechanism_description}")
-    md.append(f"- baseline: matched `{args.baseline_mode}` rerun; gold standard (`docs/PHASEFORMER_GOLD_STANDARD.md`) is the fixed reference.")
+    md.append(f"- baseline: matched `{args.baseline_mode}` rerun; gold standard (`docs/PhaseFormer_gold_standard.md`) is the fixed reference.")
     md.append(f"- settings: {', '.join(settings)}")
     md.append("- training: lookback 720, period 24, huber loss, ETT batch 256 / Weather 64, best-val checkpoint, full budget per-dataset epochs.")
     md.append("- code: run.yaml in this directory.")

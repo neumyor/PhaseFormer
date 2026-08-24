@@ -64,7 +64,7 @@ Input → Phase Alignment → Phase tokens → Cross Phase Routing → Phase Pre
 
 ### 3.2 与金标准对照（matched rerun，未静默替换金标准）
 
-金标准 `docs/PHASEFORMER_GOLD_STANDARD.md` 为固定参照。本实验 matched rerun 与金标准偏差在单 seed 随机方差范围内（例：ETTh1 h96 MSE +0.5%/MAE +1.1%，ETTh2 h96 MSE +2.1%/MAE +1.5%，Traffic h96 MSE +0.7%/MAE −2.4%），不改变金标准权威性。
+金标准 `docs/PhaseFormer_gold_standard.md` 为固定参照。本实验 matched rerun 与金标准偏差在单 seed 随机方差范围内（例：ETTh1 h96 MSE +0.5%/MAE +1.1%，ETTh2 h96 MSE +2.1%/MAE +1.5%，Traffic h96 MSE +0.7%/MAE −2.4%），不改变金标准权威性。
 
 ### 3.3 训练耗时（full-budget，original）
 
@@ -338,4 +338,4 @@ Phase Alignment → Embedding → Dynamic Phase Correction → Geometry → Rota
 | 审计（dyn_full） | `research_runs/dyn_phase_audit_{etth2,electricity}_720/`（six-file 协议） |
 | 审计（DPC 单独） | `research_runs/dyn_phase_audit_{etth2,electricity}_720_dpc/`（six-file 协议） |
 
-> 全部数值可由对应 `metrics.csv` 逐行复核；本反馈文件与 `docs/DYNAMIC_PHASE_EXPERIMENT_REPORT.md` 数据一致。
+> 全部数值可由对应 `metrics.csv` 逐行复核；本反馈文件与 `docs/PhaseFormer_dynamic_phase_report.md` 数据一致。

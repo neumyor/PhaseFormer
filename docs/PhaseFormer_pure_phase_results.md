@@ -1,6 +1,6 @@
 # PhaseFormer Pure Phase Modeling 下一阶段实验结果反馈
 
-> 计划文档：`docs/PhaseFormer_pure_phase_next_stage_experiment_plan.md`
+> 计划文档：`docs/PhaseFormer_pure_phase_plan.md`
 > 对应提交：`1653cd1`（模块实现）、`00f09dc`（实验/分析工具链）
 > 报告日期：2026-08-24
 
@@ -311,7 +311,7 @@ decoder 从"★★★ 实验"变成决定性负因子。计划的优先级排序
 - 最终目标主张 "所有性能提升来自 phase representation / interaction / evolution /
   decoding，不依赖 residual branch"。
 - **可测量核对**：本阶段 4 个机制的端到端收益（|avg ΔMSE|≤0.5% 或为负）远小于
-  上阶段 residual 系列的收益（对比 `docs/PhaseFormer_next_stage_experiment_results_feedback.md`）；
+  上阶段 residual 系列的收益（对比 `docs/PhaseFormer_adaptive_residual_results.md`）；
   最终模型 pure_full 平均 +33.5%。**该论文叙事在当前协议与数据集族下不被数据支持。**
 
 ---

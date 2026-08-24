@@ -5,7 +5,7 @@
 >
 > - 分支：`weak-residual-phaseformer`
 > - 实验日期：2026-08-22 ~ 2026-08-23
-> - 金标准：`docs/PHASEFORMER_GOLD_STANDARD.md`（固定参照，未被修改）
+> - 金标准：`docs/PhaseFormer_gold_standard.md`（固定参照，未被修改）
 
 ---
 
@@ -101,7 +101,7 @@
 
 ### 2.2 与金标准对照（仅以同协议 matched rerun 为参照）
 
-金标准 `docs/PHASEFORMER_GOLD_STANDARD.md` 为固定参照，本实验的所有提升声明均须与其同 setting 结果配对比较，不得静默替换。
+金标准 `docs/PhaseFormer_gold_standard.md` 为固定参照，本实验的所有提升声明均须与其同 setting 结果配对比较，不得静默替换。
 
 matched rerun（本表）与金标准的偏差在训练随机方差范围内（单 seed）。例如 ETTh1 h96：本实验 0.3608/0.3862 vs 金标准 0.359/0.382，双指标略差（MSE +0.5%、MAE +1.1%）；ETTh2 h96：0.2808/0.3430 vs 0.275/0.338，双指标略差（MSE +2.1%、MAE +1.5%）；Traffic h96：0.3635/0.2322 vs 0.361/0.238（MSE +0.7%、MAE −2.4%）；Traffic h192：0.3778/0.2399 vs 0.373/0.243（MSE +1.3%、MAE −1.3%）。由于金标准仅保留三位小数且本实验为单 seed，这些微小差异不能作为稳健收益，也不改变金标准的权威性。
 
