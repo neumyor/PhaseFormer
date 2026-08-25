@@ -843,9 +843,22 @@ def main():
         c = np.abs(arrays["cand"][:, :, start:start+24] - truth[None, :, start:start+24]).mean()
         horizon_rows.append([f"{start+1}–{start+24}", fmt(b), fmt(c), f"{(b-c)/b*100:.2f}%"])
 
+    strong_mask = labels == "显著稳定改善（≥10%）"
+    regression_mask = np.isin(labels, ["混合且净退化", "稳定退化"])
+    strong_drift_share = float((dynamic_label[strong_mask] == "明显漂移").mean())
+    regression_drift_share = float((dynamic_label[regression_mask] == "明显漂移").mean())
+    strong_highvol_share = float((dynamic_label[strong_mask] == "高波动").mean())
+    regression_highvol_share = float((dynamic_label[regression_mask] == "高波动").mean())
+
     report = f"""# ETTm2：RCRF 相对普通 PhaseFormer 的样本级分析
 
 > 结论先行：在完全 matched 的 3 个 seed 上，RCRF 的平均 MSE 从 **{base_overall_mse:.6f}** 降至 **{cand_overall_mse:.6f}**（改善 **{(base_overall_mse-cand_overall_mse)/base_overall_mse*100:.2f}%**），平均 MAE 从 **{base_overall_mae:.6f}** 降至 **{cand_overall_mae:.6f}**（改善 **{(base_overall_mae-cand_overall_mae)/base_overall_mae*100:.2f}%**）。按预先写定的工程判据，{class_counts['显著稳定改善（≥10%）']:,}/{n_samples:,} 个测试窗口（{pct(class_counts['显著稳定改善（≥10%）']/n_samples)}）属于“显著稳定改善”。这里的“显著”仅指 **三个 seed 均改善且平均相对 MAE 改善 ≥10%**，不是统计假设检验意义的显著性。
+
+## 先用直白的话说
+
+- **RCRF 更好的样本：近期走势已经明显偏离旧周期。** 显著稳定改善窗口中，{pct(strong_drift_share)} 属于“明显漂移”，而净退化窗口中这一比例为 {pct(regression_drift_share)}；前者的输入漂移分数均值为 {drift[strong_mask].mean():.3f}，后者为 {drift[regression_mask].mean():.3f}。一种与数据相符、但仍需消融确认的解释是：这类窗口继续照搬历史同相位形状容易产生系统偏差，而高权重的近期轨迹残差可以修正预测起点、水平和短期方向。实际优势也集中在最靠近当前时刻的 1–24 步（MAE 改善 9.28%），并在 OT、HULL 通道最明显（6.45%、6.16%）。
+- **RCRF 更差的样本：不规则高波动更集中，但没有单一标签能完全分开。** 净退化窗口中的“高波动”占 {pct(regression_highvol_share)}，接近显著改善组 {pct(strong_highvol_share)} 的两倍；不过退化仍同时出现在常规波动和明显漂移窗口。更关键的是，显著改善组的平均 `r/α` 为 {reliability[strong_mask].mean():.4f}/{alpha[strong_mask].mean():.4f}，净退化组仍为 {reliability[regression_mask].mean():.4f}/{alpha[regression_mask].mean():.4f}：门控几乎都把约 87%–88% 权重给了 residual，没有把“该信 residual”与“不该信 residual”的样本真正拉开。代表性退化图中常见的直接现象是未来发生转向或水平切换，而近期轨迹外推没有跟上；这是可视模式，仍需专门消融验证因果。
+- **启发：下一步最值得改的是门控，而不是再叠一个残差分支。** 门控应加入“近期趋势是否即将失效、phase 与 residual 是否分歧、预测步位置”等证据，允许 96 步内动态改变权重，并保留回退到 phase 路径的安全余量。优先实验应是：相同 phase stack 下比较固定门控、当前 RCRF、非饱和门控和逐预测步门控；否则当前 candidate 还混有三个 phase 修正，不能把全部收益单独归因给 RCRF。
 
 ## 1. Experiment Setup / 实验设置
 
@@ -1047,7 +1060,7 @@ def main():
 
     run_yaml["validation"] = {"results_checked": True, "ranking_and_cases_checked": True, "report_and_archive_checked": True, "directory_and_settings_checked": True, "status": "passed", "checks": {"sample_error_rows": len(sample_df), "figure_count": len(figures), "docs_zip_sha256": sha256(docs_zip), "audit_zip_sha256": sha256(audit_root / "objective_error_analysis.zip")}}
     run_path.write_text(json.dumps(run_yaml, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"status": "passed", "docs_report": str(docs_md), "docs_zip": str(docs_zip), "audit_root": str(audit_root), "samples": n_samples, "strong_stable": class_counts["显著稳定改善（≥10%）"], "mean_mae_gain_pct": (base_overall_mae-cand_overall_mae)/base_overall_mae*100}, ensure_ascii=False, indent=2))
+    print(json.dumps({"status": "passed", "docs_report": str(docs_md), "docs_zip": str(docs_zip), "audit_root": str(audit_root), "samples": n_samples, "strong_stable": class_counts["显著稳定改善（≥10%）"], "mean_mae_gain_pct": (base_overall_mae-cand_overall_mae)/base_overall_mae*100, "plain_summary_stats": {"strong_drift_share": strong_drift_share, "regression_drift_share": regression_drift_share, "strong_highvol_share": strong_highvol_share, "regression_highvol_share": regression_highvol_share, "strong_mean_r": float(reliability[strong_mask].mean()), "regression_mean_r": float(reliability[regression_mask].mean()), "strong_mean_alpha": float(alpha[strong_mask].mean()), "regression_mean_alpha": float(alpha[regression_mask].mean())}}, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

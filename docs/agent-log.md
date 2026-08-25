@@ -529,7 +529,12 @@ currently also fall back to the original guardrail.
 - User-facing report and 11 figures:
   `docs/ETTm2_RCRF_sample_analysis/ETTm2_RCRF_sample_analysis.md`; portable ZIP:
   `docs/ETTm2_RCRF_sample_analysis.zip`. Canonical six-file audit package:
-  `research_runs/ettm2_rcrf_sample_analysis_v1/`.
+  `research_runs/ettm2_rcrf_sample_analysis_v1/`. The report opens with a
+  plain-language evidence summary: strong improvements overrepresent drift
+  windows (38.38% vs 28.14% among net regressions), while net regressions
+  overrepresent high-volatility windows (21.65% vs 11.99%); nearly identical
+  alpha values in both groups identify gate saturation/discrimination as the
+  next mechanism to test.
 - Validation passed: 54 relevant unit tests; six checkpoint metrics reproduced
   within 1e-5; exported branches and gates reconstruct the final RCRF output
   within 2e-5; 239,925 sample-error rows were re-aggregated; Top-K, setting
