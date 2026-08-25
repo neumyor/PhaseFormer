@@ -1,5 +1,46 @@
 # Agent Maintenance Log
 
+## 2026-08-25 — Golden combo stability experiment (gold_combo_stability_v1)
+
+Running `docs/PhaseFormer_gold_combo_plan.md` end-to-end (user authorized full
+run on all 4 GPUs). Implementation committed `a5f0b1f` (RCRF module +
+`gold_combo_*` preset modes), tooling `7694579` (analyze/fill scripts).
+
+- **RCRF** (`ReliabilityCoupledResidualFusion`): reliability
+  `r = Var_l(mean_k x) / (Var_l(mean_k x) + mean_l Var_k x + eps)` computed from
+  the **pre-shrinkage** phase series; sensitivity `s = s_max·tanh(s_raw)` with
+  `s_raw` initialized at `atanh(s0/s_max)` (s0=0 ⇒ α=0.5 constant = fixed-gate
+  warm start); `alpha = sigmoid(logit(α₀) + s·(1−r))`, sample×channel.
+- **Stage A** (validation-only, 30% data, 8 epochs, seed 2021, 18/18 runs;
+  `test_mse/test_mae` empty = no test loader; unique config hashes). 6-ratio
+  score: s2 0.80473 < adaptive 0.80720 < s0 0.80739 < fixed 0.80827.
+  **Frozen candidate: `gold_combo_reliability_s2`** (selection source
+  `validation_only`, test not read before freeze). record:
+  `research_runs/gold_combo_screen_runs/freeze_record.json`.
+- **Stage B** complete (27/27, all 4 GPUs): original/latest/frozen × 3 settings
+  × seeds 2021/2022/2023. Frozen candidate `gold_combo_reliability_s2`:
+  - ETTh2-720: 3-seed mean MSE 0.394228±0.005051, MAE 0.429443±0.002123 —
+    **stable**, above Golden (0.402/0.436) +1.93%/+1.50%.
+  - ETTm2-96: MSE 0.159755±0.000180, MAE 0.245331±0.000280 — **stable**, above
+    Golden (0.163/0.256) +1.99%/+4.17%; also beats `latest` both metrics.
+  - Electricity-336: all 3 seeds below Golden (MSE 0.162954/0.164409/0.164977,
+    MAE 0.253420/0.254921/0.255533) but MSE mean+std 0.16516 crosses Golden 0.165
+    by a rounding-level margin → NOT a stable gain per plan; slight regression vs
+    `latest` (+0.47%/+0.51%). 3-seed mean vs Golden is −0.54%/−0.92% (improvement).
+  - **Cross-dataset success criterion MET** (2/3 stable + remaining ≤1% regression
+    vs Golden). Honest caveat recorded: no rounding-level margin claimed as stable.
+- RCRF activity (r-α corr ≈ −1.0 across all 9 setting×seed): ETTh2 r=0.193→α≈0.77-0.81
+  (sens 1.65-1.86); ETTm2 r=0.019→α≈0.87 (sens 1.97-2.01, low-reliability leans
+  residual); Electricity r=0.772→α≈0.31 (sens 0.78-0.94, high-reliability leans
+  phase — the mechanism behind the small regression vs `latest`).
+- Smoke (3 settings) validated finite val loss, best.ckpt, validation-only
+  isolation. Unit tests green (incl. 15 RCRF + gold_combo preset tests).
+- Audit package `research_runs/gold_combo_stability_v1/` complete + validated:
+  six-file protocol + figures/ (18 referenced PNGs, ZIP byte-identical), npz 2.2MB
+  (269 aligned selected cells), sample_errors.csv per-cell 704MB (gitignored).
+  Tables filled `docs/PhaseFormer_gold_combo_experiment_tables.md`; results doc
+  `docs/PhaseFormer_gold_combo_results.md`. Committed via SSH over 443.
+
 ## 2026-08-24 — Pure Phase Modeling (phase-only forecasting, no residual)
 
 Implemented 4 warm-start pure-phase modules (commits 1653cd1, 00f09dc) and ran
