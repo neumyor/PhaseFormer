@@ -253,23 +253,48 @@ def main():
     write_csv(out_dir / "results.csv", results_rows)
     write_csv(out_dir / "sample_errors.csv", sample_rows)
 
+    # selected_cases.npz keeps only the programmatically selected cells per
+    # setting (aligned history / truth / baseline / candidate slices), never
+    # full predictions — consistent with the sample_errors.csv re-ranking rule.
     npz = {}
     for ds, hz in SETTINGS:
         for seed in FULL_SEEDS:
             setting = f"{ds}_h{hz}_seed{seed}"
-            for label in ("original", "latest", frozen):
-                e = evals[(setting, label)]
-                npz[f"{setting}_{label}_pred"] = e["pred"].astype(np.float32)
-                npz[f"{setting}_{label}_truth"] = e["truth"].astype(np.float32)
-                npz[f"{setting}_{label}_history"] = e["hist"].astype(np.float32)
-                npz[f"{setting}_{label}_cell_mse"] = e["mse"].astype(np.float32)
-                npz[f"{setting}_{label}_cell_mae"] = e["mae"].astype(np.float32)
+            base = evals[(setting, "latest")]
+            cand = evals[(setting, frozen)]
+            orig = evals[(setting, "original")]
             sel = next(s for s in selections if s["setting"] == setting)
-            base_shape = evals[(setting, "latest")]["mse"].shape
+            base_shape = base["mse"].shape
             for cls in ("baseline_high_error", "candidate_regression", "candidate_improvement"):
                 npz[f"{setting}_{cls}_idx"] = np.array(
                     [np.unravel_index(i, base_shape) for i in sel[cls]], dtype=np.int64,
                 )
+            # Union of selected cells across the three classes.
+            cells = {}
+            for cls in ("baseline_high_error", "candidate_regression", "candidate_improvement"):
+                for flat_idx in sel[cls]:
+                    sample_id, channel = np.unravel_index(flat_idx, base_shape)
+                    key = (int(sample_id), int(channel))
+                    if key not in cells:
+                        cells[key] = dict(
+                            sample_id=key[0], channel=key[1],
+                            history=base["hist"][key[0], :, key[1]],
+                            truth=base["truth"][key[0], :, key[1]],
+                            baseline_pred=base["pred"][key[0], :, key[1]],
+                            candidate_pred=cand["pred"][key[0], :, key[1]],
+                            original_pred=orig["pred"][key[0], :, key[1]],
+                            classes=[],
+                        )
+                    cells[key]["classes"].append(cls)
+            for i, (key, c) in enumerate(sorted(cells.items())):
+                pref = f"{setting}_case{i}"
+                npz[f"{pref}_sample"] = np.array([c["sample_id"], c["channel"]], dtype=np.int64)
+                npz[f"{pref}_classes"] = np.array(c["classes"])
+                npz[f"{pref}_history"] = c["history"].astype(np.float32)
+                npz[f"{pref}_truth"] = c["truth"].astype(np.float32)
+                npz[f"{pref}_baseline_pred"] = c["baseline_pred"].astype(np.float32)
+                npz[f"{pref}_candidate_pred"] = c["candidate_pred"].astype(np.float32)
+                npz[f"{pref}_original_pred"] = c["original_pred"].astype(np.float32)
     np.savez_compressed(out_dir / "selected_cases.npz", **npz)
 
     md = build_markdown(freeze, results_rows, rcrf_activity, selections, args, figure_paths)

@@ -10,6 +10,7 @@ import argparse
 import csv
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -200,25 +201,29 @@ def section4b(full, frozen):
     L = ["### 4.2 三 seed 聚合", "",
          "| Setting | Model | MSE mean±sample std | MAE mean±sample std | vs Golden MSE/MAE | vs matched original MSE/MAE | vs latest MSE/MAE |",
          "|---|---|---|---|---|---|---|"]
+    def mean_of(mode):
+        mses, maes = [], []
+        for seed in FULL_SEEDS:
+            r = full.get((ds, hz, seed, mode))
+            if r is not None:
+                mses.append(float(r["test_mse"]))
+                maes.append(float(r["test_mae"]))
+        return mses, maes
     for ds, hz in SETTINGS:
         gm, ga = GOLDEN[(ds, hz)]
-        vals = {}
         for mode in ["original", "latest", frozen]:
-            mses, maes = [], []
-            for seed in FULL_SEEDS:
-                r = full.get((ds, hz, seed, mode))
-                if r is not None:
-                    mses.append(float(r["test_mse"]))
-                    maes.append(float(r["test_mae"]))
+            mses, maes = mean_of(mode)
             if not mses:
                 continue
             mean_m, std_m = sum(mses) / len(mses), _std(mses)
             mean_a, std_a = sum(maes) / len(maes), _std(maes)
-            orig = full.get((ds, hz, FULL_SEEDS[0], "original"))
-            latest = full.get((ds, hz, FULL_SEEDS[0], "latest"))
+            om, oa = mean_of("original")
+            lm, la = mean_of("latest")
+            om_m, om_a = (sum(om) / len(om), sum(oa) / len(oa)) if om else (None, None)
+            lm_m, lm_a = (sum(lm) / len(lm), sum(la) / len(la)) if lm else (None, None)
             vs_g = f"{_pct(gm - mean_m, gm)}/{_pct(ga - mean_a, ga)}"
-            vs_o = f"{_pct(mean_m - float(orig['test_mse']), float(orig['test_mse']))}/{_pct(mean_a - float(orig['test_mae']), float(orig['test_mae']))}" if orig else "TBD"
-            vs_l = f"{_pct(mean_m - float(latest['test_mse']), float(latest['test_mse']))}/{_pct(mean_a - float(latest['test_mae']), float(latest['test_mae']))}" if latest and mode != "latest" else "—"
+            vs_o = f"{_pct(mean_m - om_m, om_m)}/{_pct(mean_a - om_a, om_a)}" if om_m else "TBD"
+            vs_l = f"{_pct(mean_m - lm_m, lm_m)}/{_pct(mean_a - lm_a, lm_a)}" if lm_m and mode != "latest" else "—"
             L.append(f"| {ds}-{hz} | `{mode}` | {mean_m:.6f}±{std_m:.6f} | {mean_a:.6f}±{std_a:.6f} | {vs_g} | {vs_o} | {vs_l} |")
     L.append("")
     return L
@@ -251,14 +256,12 @@ def section4c(full, frozen):
         if ok:
             passes += 1
         else:
-            # Remaining setting: 3-seed mean regression vs matched original <= 1% both metrics.
-            orig = full.get((ds, hz, FULL_SEEDS[0], "original"))
-            if orig:
-                om, oa = float(orig["test_mse"]), float(orig["test_mae"])
-                reg_m = (mean_m - om) / om * 100.0
-                reg_a = (mean_a - oa) / oa * 100.0
-                if reg_m > 1.0 or reg_a > 1.0:
-                    regress_ok = False
+            # Remaining setting (plan §4): 3-seed mean regression vs Golden <= 1% both metrics.
+            # Positive reg_m/reg_a = candidate above Golden (degradation); <=1% allowed.
+            reg_m = (mean_m - gm) / gm * 100.0
+            reg_a = (mean_a - ga) / ga * 100.0
+            if reg_m > 1.0 or reg_a > 1.0:
+                regress_ok = False
         L.append(f"| {ds}-{hz} | {'是' if mse_all else '否'} | {'是' if mae_all else '否'} | {'是' if mse_mstd else '否'} | {'是' if mae_mstd else '否'} | {'是' if ok else '否'} |")
     success = passes >= 2 and regress_ok
     L += ["", "| 跨数据集总判定 | 待填 |", "|---|---|",
@@ -269,54 +272,118 @@ def section4c(full, frozen):
     return L
 
 
-def section5(frozen, results, sample):
+MD_REPORT = REPO / "research_runs/gold_combo_stability_v1/objective_error_analysis.md"
+
+
+def parse_rcrf_activity():
+    """Parse §8 RCRF activity lines from the audit markdown (source of truth)."""
+    act = {}
+    if not MD_REPORT.exists():
+        return act
+    NUM = r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?"
+    for line in MD_REPORT.read_text().splitlines():
+        m = re.search(
+            rf"- (\S+): mean r=({NUM}), mean alpha=({NUM}), "
+            rf"alpha std=({NUM}), sensitivity=({NUM}), "
+            rf"r-alpha corr=({NUM})",
+            line,
+        )
+        if m:
+            act[m.group(1)] = {
+                "mean_r": m.group(2), "mean_alpha": m.group(3),
+                "alpha_std": m.group(4), "sensitivity": m.group(5),
+                "corr": m.group(6),
+            }
+    return act
+
+
+def section5(frozen, results):
     L = ["## 5. 门控与误差分析待填表", "", "### 5.1 RCRF 活性", "",
          "| Setting | Seed | mean reliability r | mean gate α | gate std | sensitivity mean/range | 低可靠度是否对应更高 α |",
          "|---|---:|---:|---:|---:|---:|---|"]
-    act = {}
-    if results:
-        # Derive RCRF activity from results/sample deltas where the frozen candidate is RCRF.
-        for r in results:
-            if r["model"] == frozen:
-                act.setdefault(r["setting"], []).append(r)
-    if frozen in RCRF_MODES and results:
-        # Recompute per-setting activity from the audit package's own aggregates
-        # (mean r / alpha are recomputed by analyze_gold_combo; here we fall back
-        # to the per-cell delta direction as a proxy only if activity not present).
+    act = parse_rcrf_activity()
+    if frozen in RCRF_MODES and act:
         for (ds, hz) in SETTINGS:
             for seed in FULL_SEEDS:
-                L.append(f"| {ds}-{hz} | {seed} | TBD | TBD | TBD | TBD | TBD |")
+                a = act.get(f"{ds}_h{hz}_seed{seed}")
+                if not a:
+                    L.append(f"| {ds}-{hz} | {seed} | TBD | TBD | TBD | TBD | TBD |")
+                    continue
+                corr = float(a["corr"])
+                coupled = "是（corr={:.3f}）".format(corr) if corr < 0 else "否（corr={:.3f}）".format(corr)
+                L.append(f"| {ds}-{hz} | {seed} | {a['mean_r']} | {a['mean_alpha']} | {a['alpha_std']} | {a['sensitivity']} | {coupled} |")
     else:
-        L.append("| (冻结候选非 RCRF) | — | — | — | — | — | 不适用 |")
+        L.append("| (冻结候选非 RCRF 或分析缺) | — | — | — | — | — | 不适用 |")
     L += ["", "### 5.2 sample×channel 误差分布（candidate 相对 latest）", "",
           "| Setting | Seed | cells | improved % | regressed % | mean ΔMSE | mean ΔMAE | baseline high-error top-10 | regression top-10 | improvement top-10 |",
           "|---|---:|---:|---:|---:|---:|---:|---|---|---|"]
-    if sample and frozen:
-        by = {}
-        for row in sample:
-            by.setdefault(row["setting"], []).append(row)
+    if frozen and SAMPLE_CSV.exists():
+        stats = aggregate_sample_errors(SAMPLE_CSV)
         for (ds, hz) in SETTINGS:
             for seed in FULL_SEEDS:
                 setting = f"{ds}_h{hz}_seed{seed}"
-                rows = by.get(setting, [])
-                if not rows:
+                s = stats.get(setting)
+                if not s:
                     L.append(f"| {ds}-{hz} | {seed} | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |")
                     continue
-                n = len(rows)
-                imp = sum(1 for r in rows if float(r["delta_mse"]) < 0)
-                reg = sum(1 for r in rows if float(r["delta_mse"]) > 0)
-                mean_dm = sum(float(r["delta_mse"]) for r in rows) / n
-                mean_da = sum(float(r["delta_mae"]) for r in rows) / n
-                # Top-10 cell ids per class from the sample_errors ordering.
-                bh = sorted(rows, key=lambda r: -float(r["baseline_mse"]))[:10]
-                rg = sorted(rows, key=lambda r: -float(r["delta_mse"]))[:10]
-                im = sorted(rows, key=lambda r: float(r["delta_mse"]))[:10]
-                fmt = lambda rs: ",".join(f"{int(r['sample_id'])}:{r['channel']}" for r in rs)
-                L.append(f"| {ds}-{hz} | {seed} | {n} | {imp / n * 100:.2f}% | {reg / n * 100:.2f}% | {mean_dm:.6f} | {mean_da:.6f} | {fmt(bh)} | {fmt(rg)} | {fmt(im)} |")
+                fmt = lambda cells: ",".join(f"{c[0]}:{c[1]}" for c in cells)
+                L.append(f"| {ds}-{hz} | {seed} | {s['n']} | {s['imp_pct']:.2f}% | {s['reg_pct']:.2f}% | {s['mean_dm']:.6f} | {s['mean_da']:.6f} | {fmt(s['bh'])} | {fmt(s['rg'])} | {fmt(s['im'])} |")
     else:
         L.append("| (待 Stage B + 分析) | — | — | — | — | — | — | — | — | — |")
     L.append("")
     return L
+
+
+def aggregate_sample_errors(path):
+    """Stream sample_errors.csv per setting; keep only counts, means, top-10s."""
+    import heapq
+    stats = {}
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            setting = row["setting"]
+            st = stats.setdefault(setting, {
+                "n": 0, "sum_dm": 0.0, "sum_da": 0.0, "imp": 0, "reg": 0,
+                "bh": [], "rg": [], "im": [],
+            })
+            sample_id, channel = int(row["sample_id"]), int(row["channel"])
+            bm = float(row["baseline_mse"])
+            dm = float(row["delta_mse"])
+            da = float(row["delta_mae"])
+            st["n"] += 1
+            st["sum_dm"] += dm
+            st["sum_da"] += da
+            if dm < 0:
+                st["imp"] += 1
+            elif dm > 0:
+                st["reg"] += 1
+            # Keep top-10 per class with heapq (negative for max-heap).
+            _push_top(st["bh"], (bm, sample_id, channel), 10)        # baseline high error
+            _push_top(st["rg"], (dm, sample_id, channel), 10)        # candidate regression
+            _push_top(st["im"], (-dm, sample_id, channel), 10)       # candidate improvement
+    out = {}
+    for setting, st in stats.items():
+        out[setting] = {
+            "n": st["n"],
+            "imp_pct": st["imp"] / st["n"] * 100.0 if st["n"] else 0.0,
+            "reg_pct": st["reg"] / st["n"] * 100.0 if st["n"] else 0.0,
+            "mean_dm": st["sum_dm"] / st["n"] if st["n"] else 0.0,
+            "mean_da": st["sum_da"] / st["n"] if st["n"] else 0.0,
+            "bh": sorted(st["bh"])[::-1][:10],
+            "rg": sorted(st["rg"])[::-1][:10],
+            "im": [(v[0], v[1], v[2]) for v in sorted(st["im"])[:10]],
+        }
+        out[setting]["bh"] = [(v[1], v[2]) for v in out[setting]["bh"]]
+        out[setting]["rg"] = [(v[1], v[2]) for v in out[setting]["rg"]]
+        out[setting]["im"] = [(v[1], v[2]) for v in out[setting]["im"]]
+    return out
+
+
+def _push_top(lst, item, k):
+    import heapq
+    heapq.heappush(lst, item)
+    if len(lst) > k:
+        heapq.heappop(lst)
 
 
 def section6(freeze, screen, full, audit_exists):
@@ -379,7 +446,7 @@ def section7(full, frozen):
         stable = all(x < gm for x in mses) and all(x < ga for x in maes) and (mean_m + std_m) < gm and (mean_a + std_a) < ga
         if stable:
             ok_settings.append(f"{ds}-{hz}")
-        lines.append(f"{ds}-{hz}：MSE {mean_m:.6f}±{std_m:.6f}，MAE {mean_a:.6f}±{std_a:.6f}，相对 Golden {_pct(gm - mean_m, gm):+}/{_pct(ga - mean_a, ga):+}%")
+        lines.append(f"{ds}-{hz}：MSE {mean_m:.6f}±{std_m:.6f}，MAE {mean_a:.6f}±{std_a:.6f}，相对 Golden {_pct(gm - mean_m, gm)}/{_pct(ga - mean_a, ga)}")
     L.append("三 seed 下，稳定双指标超过 Golden 的 setting 为：" + ("、".join(ok_settings) if ok_settings else "无") + "。")
     L.extend(lines)
     L.append("跨数据集成功标准：满足（2/3 settings 稳定 + 剩余 ≤1%）" if len(ok_settings) >= 2 else "跨数据集成功标准：不满足（待 Stage B 复核）。")
@@ -417,7 +484,6 @@ def main():
     for r in full:
         full_keyed[(r["dataset"], int(r["horizon"]), int(r["seed"]), r["mode"])] = r
     results = load_csv(RESULTS_CSV)
-    sample = load_csv(SAMPLE_CSV)
     frozen = freeze.get("frozen_candidate", "")
 
     L = hdrs()
@@ -428,7 +494,7 @@ def main():
     L += section4(full_keyed, frozen)
     L += section4b(full_keyed, frozen)
     L += section4c(full_keyed, frozen)
-    L += section5(frozen, results, sample)
+    L += section5(frozen, results)
     L += section6(freeze, screen_keyed, full_keyed, args.audit_exists)
     L += section7(full_keyed, frozen)
     content = "\n".join(L)
