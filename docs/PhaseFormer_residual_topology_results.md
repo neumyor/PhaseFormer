@@ -104,7 +104,7 @@
 
 ### 3.3 与金标准对比（`docs/PhaseFormer_gold_standard.md`，指示性）
 
-按金标准规则：相对改善率 = (gold − new)/gold × 100（正 = 提升）；仅 MSE、MAE 均低于金标准才称"双指标提升"。**协议披露**：本实验为 matched rerun（lookback 720、period 24、seed 2021、huber、val early stop），与金标准论文协议（损失/早停/seed 数未披露）不一致——**matched original 在所有 4 个 setting 均差于金标准**（MSE −0.7%~−5.8%），协议偏移明显。故相对金标准 Δ 混入协议差与机制收益，**仅作指示性参照，不构成相对论文的直接提升声明**（金标准规则 §4/§5）。
+按金标准规则：相对改善率 = (gold − new)/gold × 100（正 = 提升）；仅 MSE、MAE 均低于金标准才称"双指标提升"。**协议披露**：本实验为 matched rerun（lookback 720、period 24、seed 2021、huber、val early stop），与金标准论文协议（损失/早停/seed 数未披露）不一致——**本轮 4 个 setting 的 matched original 均差于金标准**（MSE −0.7%~−5.8%），协议偏移明显；注意该规律不适用于上一轮 10-setting（见下文"与上一轮的关系"：ETTh1-720 的 matched original 本身即优于金标准）。故相对金标准 Δ 混入协议差与机制收益，**仅作指示性参照，不构成相对论文的直接提升声明**（金标准规则 §4/§5）。
 
 | Setting（金 MSE/MAE） | mode | test MSE/MAE | ΔMSE% | ΔMAE% | 判定 |
 |---|---:|---:|---:|---:|---|
@@ -131,6 +131,10 @@
 - **仅 ETTh2-h720（1 层）R1/A1、R2/A2 双指标低于金标准**（+2.2~2.3% MSE、+1.5~1.6% MAE，幅度超舍入量级）——残差融合在此 setting 补上协议差（original −5.8%）并反超。
 - **Electricity R1** 名义双指标提升，但 ΔMAE = +0.004% 处于金标准三位小数舍入量级 → 按金标准规则 §4 视为**单指标（MSE）提升**更稳妥；R2/A1/A2 亦仅单指标提升。
 - ETTh1/ETTm1 无任何 mode 达到金标准（协议差吞掉残差收益）。金标准视角**不改变配对结论**：R1 仍最强、逐层级联不转移、跨 setting 无冠军、单 seed 不更新 `_LATEST_POLICY`。
+- **与上一轮（动态相位 full-budget，`docs/PhaseFormer_dynamic_phase_report.md` §8）的关系**：上一轮的残差重构机制（residual_full / dyn_full）曾在 5 个 setting 双指标低于金标准——ETTh1-720（但 matched original 已 +3.0/+2.2 超金标准，属协议优势）、ETTh2-336、ETTh2-720、Electricity-336、Electricity-720（后两者 MAE 舍入量级）。本轮只重测了其中 ETTh2-720 与 Electricity-336，且**机制不同**（本轮 R1 = 输出凸融合头；上轮 residual_full = 残差重构 + 动态机制栈）：
+  - **ETTh2-720 两轮一致超金标准**：R1 +2.29/+1.61 ≈ 上轮 residual_full +2.76/+1.87（方向与量级一致）；
+  - **Electricity-336 本轮 R1 弱于上轮**：R1 仅 +0.91/+0.00（MAE 舍入级），上轮 residual_full +1.92/+0.74 双指标超 → 输出凸融合头在该 setting 弱于残差重构机制，不能重复上轮的金标准级优势。
+  - 本轮未覆盖上轮超金标准的 ETTh1-720 / ETTh2-336 / Electricity-720（setting 不同，无矛盾）。
 
 ## 4. 假设核对（计划 §2 预注册）
 
