@@ -437,3 +437,33 @@ currently also fall back to the original guardrail.
   `full_summary.csv`). Report: `docs/PhaseFormer_residual_topology_results.md`.
 - Plan §4 (sample-level error analysis package at `research_runs/
   residual_topology_v1/`) was **not produced** — see report; flag if needed.
+
+## 2026-08-25 — Output-residual layerwise variants (A1/A2) screened and confirmed
+
+- Completed the output×depth design-space cell the first round left open: R1/R2
+  had only single-point output fusion; added **A1** `residual_output_layerwise_convex`
+  (R1 convex fusion applied at each routing depth) and **A2**
+  `residual_output_layerwise_additive` (R2 additive correction at each depth).
+  Implemented via `PhaseSlotResidualHead` (zero-init Linear(seq_len→P) in the
+  phase-slot domain (B,C,24,30); `anchor=True` = convex/persistence, `anchor=False`
+  = additive/warm-start), intermediate gates shape (1,enc_in,1,1), constructed only
+  for `phase_layers−1` intermediate depths. 1-layer ⇒ A1≡R1, A2≡R2 exactly.
+- Tests extended (90→99/99): module broadcast/anchor tests; one-layer reduction to
+  parent; multilayer warm-start (A2 == original); closed-gate A1 == R1; gate/head
+  receive gradients; master-switch disable. Feature-flag init isolation preserved.
+- **Stage A** (validation, 8 added runs): A1 ≥ R1 on all settings (avg 15.72 vs
+  15.55), A2 < R2 (13.42 vs 13.59). Strict freeze top-2 = A1+R1; per user request
+  to compare both layerwise forms, sent **A1+A2** to Stage B (deviation disclosed
+  in `stage_a_selection_notes.md`).
+- **Stage B** (test, 8 runs, 20 total with reused originals): **layerwise does NOT
+  transfer** — all multilayer settings A1 ≤ R1 and A2 ≤ R2 except A2@Electricity
+  (+0.59/+1.83 vs R2 +0.41/+1.32). Test-set avg score R1 1.75 > R2 1.53 > A1 1.38 >
+  A2 1.31. **Stage A validation signal reversed on test** (A1≥R1 on val vs A1<R1 on
+  test everywhere) — a clean screen-vs-confirm divergence, consistent with the
+  single-seed / validation-not-guarantee protocol caveat.
+- 1-layer degeneracy verified numerically (ETTh2 A1≡R1, A2≡R2 byte-identical
+  metrics). All deltas recomputed from on-disk `*_summary.csv` and match
+  `full_summary.csv`. Report updated with §3.2 four-form comparison and H6.
+  Conclusion unchanged: single-point output convex fusion (R1) remains the
+  correct insertion point; layerwise cascade not adopted. `_LATEST_POLICY` not
+  updated (single seed).
