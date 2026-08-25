@@ -36,6 +36,7 @@ from src.models.phase_decoder import TrajectoryDecoder
 from src.models.residual_topology import (
     AdditiveOutputResidualHead,
     LatentResidualPath,
+    PhaseSlotResidualHead,
 )
 
 class CrossPhaseRoutingLayer(nn.Module):
@@ -902,14 +903,27 @@ class PhaseFormer(DefaultPLModule):
         self.use_layerwise_latent_residual = getattr(
             configs, "use_layerwise_latent_residual", False
         )
+        self.use_layerwise_output_convex = getattr(
+            configs, "use_layerwise_output_convex", False
+        )
+        self.use_layerwise_output_additive = getattr(
+            configs, "use_layerwise_output_additive", False
+        )
         if not self.use_residual_head:
             self.use_additive_output_residual = False
             self.use_topology_output_convex_residual = False
             self.use_latent_long_residual = False
             self.use_layerwise_latent_residual = False
+            self.use_layerwise_output_convex = False
+            self.use_layerwise_output_additive = False
         if self.use_latent_long_residual and self.use_layerwise_latent_residual:
             raise ValueError(
                 "use_latent_long_residual and use_layerwise_latent_residual "
+                "are mutually exclusive"
+            )
+        if self.use_layerwise_output_convex and self.use_layerwise_output_additive:
+            raise ValueError(
+                "use_layerwise_output_convex and use_layerwise_output_additive "
                 "are mutually exclusive"
             )
         if self.use_additive_output_residual:
@@ -947,6 +961,58 @@ class PhaseFormer(DefaultPLModule):
             self.latent_residual_path = LatentResidualPath(
                 self.latent_dim, num_injections=len(self.routing_layers)
             )
+
+        # Layer-wise output residual (A1/A2): fuse an input-derived residual
+        # onto every intermediate routing layer's phase-series prediction.  On
+        # 1-layer models there are no intermediate layers, so these modes reduce
+        # exactly to their single-point parents (R1 convex / R2 additive), which
+        # the presets enable via use_topology_output_convex_residual /
+        # use_additive_output_residual.  Gates are per-channel (1, C, 1, 1) so
+        # they broadcast over the (B, C, num_slots, P) phase-series tensor.
+        num_intermediate = max(self.phase_layers - 1, 0)
+        self.layerwise_convex_residual = None
+        self.layerwise_convex_gates = None
+        self.layerwise_additive_residual = None
+        self.layerwise_additive_gates = None
+        if num_intermediate > 0:
+            if self.use_layerwise_output_convex:
+                self.layerwise_convex_residual = nn.ModuleList(
+                    PhaseSlotResidualHead(
+                        self.seq_len,
+                        self.num_periods_input,
+                        self.period_len,
+                        anchor=True,
+                    )
+                    for _ in range(num_intermediate)
+                )
+                gate_init = float(
+                    getattr(configs, "layerwise_output_convex_gate_init", 0.0)
+                )
+                gate_init = min(max(gate_init, 1e-4), 1.0 - 1e-4)
+                gate_logit = torch.logit(torch.tensor(gate_init))
+                self.layerwise_convex_gates = nn.ParameterList(
+                    nn.Parameter(torch.full((1, self.enc_in, 1, 1), float(gate_logit)))
+                    for _ in range(num_intermediate)
+                )
+            if self.use_layerwise_output_additive:
+                self.layerwise_additive_residual = nn.ModuleList(
+                    PhaseSlotResidualHead(
+                        self.seq_len,
+                        self.num_periods_input,
+                        self.period_len,
+                        anchor=False,
+                    )
+                    for _ in range(num_intermediate)
+                )
+                gate_init = float(
+                    getattr(configs, "layerwise_output_additive_gate_init", 0.5)
+                )
+                gate_init = min(max(gate_init, 1e-4), 1.0 - 1e-4)
+                gate_logit = torch.logit(torch.tensor(gate_init))
+                self.layerwise_additive_gates = nn.ParameterList(
+                    nn.Parameter(torch.full((1, self.enc_in, 1, 1), float(gate_logit)))
+                    for _ in range(num_intermediate)
+                )
 
     # phase rearrangement helpers
     @staticmethod
@@ -1062,6 +1128,24 @@ class PhaseFormer(DefaultPLModule):
                 )
             if layer_index < len(self.routing_layers) - 1:
                 # intermediate layers must produce P_in for the next layer
+                if (
+                    self.use_layerwise_output_convex
+                    and self.layerwise_convex_residual is not None
+                ):
+                    resid = self.layerwise_convex_residual[layer_index](
+                        x_in, phase_series_cur[:, :, -1, :]
+                    )
+                    gate = torch.sigmoid(self.layerwise_convex_gates[layer_index])
+                    y_phase_steps_p_in = (
+                        (1.0 - gate) * y_phase_steps_p_in + gate * resid
+                    )
+                elif (
+                    self.use_layerwise_output_additive
+                    and self.layerwise_additive_residual is not None
+                ):
+                    corr = self.layerwise_additive_residual[layer_index](x_in)
+                    gate = torch.sigmoid(self.layerwise_additive_gates[layer_index])
+                    y_phase_steps_p_in = y_phase_steps_p_in + gate * corr
                 phase_series_cur = y_phase_steps_p_in
 
         if self.use_latent_long_residual:

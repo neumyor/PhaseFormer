@@ -23,6 +23,8 @@ ALL_MODES = [
     "residual_latent_long",
     "residual_latent_layerwise",
     "residual_hybrid",
+    "residual_output_layerwise_convex",
+    "residual_output_layerwise_additive",
 ]
 
 

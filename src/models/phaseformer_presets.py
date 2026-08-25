@@ -54,6 +54,10 @@ ABLATION_MODES = {
     "residual_latent_long",
     "residual_latent_layerwise",
     "residual_hybrid",
+    # Layer-wise output residuals (A1/A2): convex / additive fusion applied at
+    # every routing depth instead of only the final output.
+    "residual_output_layerwise_convex",
+    "residual_output_layerwise_additive",
 }
 
 
@@ -758,6 +762,28 @@ def get_ablation_overrides(mode):
             use_additive_output_residual=True,
             additive_output_residual_gate_init=0.5,
         )
+    # Layer-wise output residuals.  Each enables the single-point parent
+    # (R1 convex / R2 additive) at the final output plus the same fusion form at
+    # every intermediate routing layer.  On 1-layer models they reduce to the
+    # parent; the convex intermediate gate starts closed (gate_init 0.0 ->
+    # clamped 1e-4) so construction-time output is (near-)identical to the
+    # parent.
+    if mode == "residual_output_layerwise_convex":
+        return dict(
+            scheme_name="residual_output_layerwise_convex",
+            use_topology_output_convex_residual=True,
+            topology_output_convex_gate_init=0.5,
+            use_layerwise_output_convex=True,
+            layerwise_output_convex_gate_init=0.0,
+        )
+    if mode == "residual_output_layerwise_additive":
+        return dict(
+            scheme_name="residual_output_layerwise_additive",
+            use_additive_output_residual=True,
+            additive_output_residual_gate_init=0.5,
+            use_layerwise_output_additive=True,
+            layerwise_output_additive_gate_init=0.5,
+        )
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -1034,6 +1060,18 @@ class PhaseFormerPresetConfig:
         )
         self.use_layerwise_latent_residual = hyperparams.get(
             "use_layerwise_latent_residual", False
+        )
+        self.use_layerwise_output_convex = hyperparams.get(
+            "use_layerwise_output_convex", False
+        )
+        self.use_layerwise_output_additive = hyperparams.get(
+            "use_layerwise_output_additive", False
+        )
+        self.layerwise_output_convex_gate_init = hyperparams.get(
+            "layerwise_output_convex_gate_init", 0.0
+        )
+        self.layerwise_output_additive_gate_init = hyperparams.get(
+            "layerwise_output_additive_gate_init", 0.5
         )
         self.phase_decoder_hidden = hyperparams.get("phase_decoder_hidden", 64)
         self.phase_decoder_order = hyperparams.get("phase_decoder_order", 2)

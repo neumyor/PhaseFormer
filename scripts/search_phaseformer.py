@@ -287,6 +287,20 @@ MECHANISMS = {
         "use_additive_output_residual": True,
         "additive_output_residual_gate_init": 0.5,
     },
+    # Layer-wise output residuals (A1/A2): same fusion form at every routing
+    # depth instead of only the final output.
+    "residual_output_layerwise_convex": {
+        "use_topology_output_convex_residual": True,
+        "topology_output_convex_gate_init": 0.5,
+        "use_layerwise_output_convex": True,
+        "layerwise_output_convex_gate_init": 0.0,
+    },
+    "residual_output_layerwise_additive": {
+        "use_additive_output_residual": True,
+        "additive_output_residual_gate_init": 0.5,
+        "use_layerwise_output_additive": True,
+        "layerwise_output_additive_gate_init": 0.5,
+    },
 }
 
 

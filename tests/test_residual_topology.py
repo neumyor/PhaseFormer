@@ -17,6 +17,7 @@ from src.models.phaseformer_presets import (
 from src.models.residual_topology import (
     AdditiveOutputResidualHead,
     LatentResidualPath,
+    PhaseSlotResidualHead,
 )
 from scripts.run_residual_topology import (
     ALL_MODES,
@@ -60,6 +61,22 @@ class ResidualTopologyModuleTests(unittest.TestCase):
                 correction, torch.zeros_like(correction), atol=0, rtol=0
             )
 
+    def test_phase_slot_head_zero_init_and_broadcast(self):
+        head = PhaseSlotResidualHead(seq_len=12, num_periods=5, num_slots=24)
+        x = torch.randn(2, 12, 4)
+        out = head(x)
+        self.assertEqual(tuple(out.shape), (2, 4, 24, 5))
+        torch.testing.assert_close(out, torch.zeros_like(out), atol=0, rtol=0)
+
+    def test_phase_slot_head_anchor_broadcast(self):
+        head = PhaseSlotResidualHead(seq_len=12, num_periods=5, num_slots=24, anchor=True)
+        x = torch.randn(2, 12, 4)
+        last_period = torch.randn(2, 4, 5)
+        out = head(x, last_period)
+        self.assertEqual(tuple(out.shape), (2, 4, 24, 5))
+        expected = last_period.unsqueeze(1).expand(-1, 24, -1, -1).permute(0, 2, 1, 3)
+        torch.testing.assert_close(out, expected, atol=0, rtol=0)
+
 
 class PhaseFormerResidualTopologyTests(unittest.TestCase):
     MODES = [
@@ -68,6 +85,8 @@ class PhaseFormerResidualTopologyTests(unittest.TestCase):
         "residual_latent_long",
         "residual_latent_layerwise",
         "residual_hybrid",
+        "residual_output_layerwise_convex",
+        "residual_output_layerwise_additive",
     ]
 
     def test_modes_build_and_forward(self):
@@ -207,6 +226,92 @@ class PhaseFormerResidualTopologyTests(unittest.TestCase):
         self.assertFalse(hasattr(model, "additive_output_residual"))
         self.assertFalse(hasattr(model, "latent_residual_path"))
 
+    def test_master_switch_disables_layerwise_output_modes(self):
+        for mode in (
+            "residual_output_layerwise_convex",
+            "residual_output_layerwise_additive",
+        ):
+            model = make_model(mode=mode, use_residual_head=False)
+            self.assertFalse(model.use_layerwise_output_convex, msg=mode)
+            self.assertFalse(model.use_layerwise_output_additive, msg=mode)
+            self.assertFalse(model.use_topology_output_convex_residual, msg=mode)
+            self.assertFalse(model.use_additive_output_residual, msg=mode)
+            self.assertIsNone(model.layerwise_convex_residual, msg=mode)
+            self.assertIsNone(model.layerwise_additive_residual, msg=mode)
+
+    def test_layerwise_intermediate_heads_only_on_multilayer(self):
+        multi = make_model(dataset="ETTh1", horizon=336, mode="residual_output_layerwise_convex")
+        self.assertEqual(multi.phase_layers, 3)
+        self.assertEqual(len(multi.layerwise_convex_residual), 2)
+        one = make_model(dataset="ETTh2", horizon=720, mode="residual_output_layerwise_convex")
+        self.assertEqual(one.phase_layers, 1)
+        self.assertIsNone(one.layerwise_convex_residual)
+        self.assertIsNone(one.layerwise_convex_gates)
+
+    def test_layerwise_convex_reduces_to_convex_on_one_layer(self):
+        x = torch.randn(2, 720, 7)
+        marks = torch.rand(2, 720, 5)
+        base = forward(make_model(dataset="ETTh2", horizon=720, mode="residual_output_convex"), x, marks)
+        layerwise = forward(
+            make_model(dataset="ETTh2", horizon=720, mode="residual_output_layerwise_convex"),
+            x, marks,
+        )
+        torch.testing.assert_close(layerwise, base, atol=0, rtol=0)
+
+    def test_layerwise_additive_reduces_to_additive_on_one_layer(self):
+        x = torch.randn(2, 720, 7)
+        marks = torch.rand(2, 720, 5)
+        base = forward(make_model(dataset="ETTh2", horizon=720, mode="residual_output_additive"), x, marks)
+        layerwise = forward(
+            make_model(dataset="ETTh2", horizon=720, mode="residual_output_layerwise_additive"),
+            x, marks,
+        )
+        torch.testing.assert_close(layerwise, base, atol=0, rtol=0)
+
+    def test_layerwise_additive_is_warm_start_on_multilayer(self):
+        x = torch.randn(2, 720, 7)
+        marks = torch.rand(2, 720, 5)
+        baseline = forward(make_model(), x, marks)
+        candidate = forward(
+            make_model(mode="residual_output_layerwise_additive"), x, marks
+        )
+        torch.testing.assert_close(candidate, baseline, atol=1e-6, rtol=1e-6)
+
+    def test_layerwise_convex_closed_gates_match_parent_on_multilayer(self):
+        # Closing the intermediate convex gates makes the layerwise mode exactly
+        # its single-point parent (R1) because the final fusion is identical.
+        x = torch.randn(2, 720, 7)
+        marks = torch.rand(2, 720, 5)
+        parent = forward(make_model(mode="residual_output_convex"), x, marks)
+        candidate = make_model(mode="residual_output_layerwise_convex")
+        for gate in candidate.layerwise_convex_gates:
+            gate.data.fill_(-50.0)  # sigmoid ~ 0 -> intermediate fusion = identity
+        torch.testing.assert_close(
+            forward(candidate, x, marks), parent, atol=1e-6, rtol=1e-6
+        )
+
+    def test_layerwise_additive_intermediate_head_moves_optimizer(self):
+        # With an open gate the intermediate correction must actually change the
+        # output and receive gradients, proving the path is not dead.
+        x = torch.randn(2, 720, 7)
+        marks = torch.rand(2, 720, 5)
+        target = torch.randn(2, 336, 7)
+        model = make_model(mode="residual_output_layerwise_additive")
+        model.train()
+        for gate in model.layerwise_additive_gates:
+            gate.data.fill_(10.0)  # sigmoid ~ 1 -> correction fully applied
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        before = model(x, marks, None, None)[0].detach().clone()
+        loss = (model(x, marks, None, None)[0] - target).square().mean()
+        optimizer.zero_grad()
+        loss.backward()
+        self.assertIsNotNone(model.layerwise_additive_residual[0].linear.weight.grad)
+        self.assertIsNotNone(model.layerwise_additive_gates[0].grad)
+        optimizer.step()
+        after = model(x, marks, None, None)[0].detach()
+        self.assertTrue(torch.isfinite(after).all())
+        self.assertFalse(torch.equal(after, before))
+
 
 class ResidualTopologyRunnerTests(unittest.TestCase):
     def test_dry_run_command_matrices_cover_plan(self):
@@ -217,7 +322,7 @@ class ResidualTopologyRunnerTests(unittest.TestCase):
             output_dir="research_runs/example",
         )
         screen = screen_commands(args)
-        self.assertEqual(len(screen), 24)
+        self.assertEqual(len(screen), 32)
         self.assertTrue(all("--evaluate-test" not in cmd for cmd in screen))
         args.modes = ["original", "residual_output_additive"]
         full = full_commands(args)
