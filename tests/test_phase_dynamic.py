@@ -19,8 +19,10 @@ from src.models.phaseformer_presets import (
     ABLATION_MODES,
     PhaseFormerPresetConfig,
     build_hyperparams,
+    get_ablation_overrides,
     make_exp_args,
 )
+from src.models.phase_adapters import ReliabilityCoupledResidualFusion
 
 
 def _make_model(dataset, horizon, mode, seed=2021, **hyper_updates):
@@ -553,6 +555,196 @@ class PhaseFormerDynamicMechanismTests(unittest.TestCase):
         self.assertFalse(
             any(k.startswith(residual_prefixes) for k in no_res.state_dict())
         )
+
+
+class ReliabilityCoupledResidualFusionTests(unittest.TestCase):
+    """gold_combo_stability_v1: RCRF reliability, gate and integration."""
+
+    def _strong_phase_series(self, B=2, C=3, L=24, P=30):
+        # Perfectly periodic per-slot template: Var_l(mean_k) > 0, Var_k ~ 0.
+        template = torch.linspace(-1.0, 1.0, L).view(1, 1, L, 1).expand(B, C, L, 1)
+        series = template + 1e-3 * torch.randn(B, C, L, P)
+        return series
+
+    def _noisy_phase_series(self, B=2, C=3, L=24, P=30):
+        return torch.randn(B, C, L, P)
+
+    def _fused(self, module, phase_series):
+        y_phase = torch.randn(2, 96, 3)
+        y_residual = torch.randn(2, 96, 3)
+        return module(y_phase, y_residual, phase_series)
+
+    def test_reliability_limits(self):
+        module = ReliabilityCoupledResidualFusion(sensitivity_init=0.0)
+        r_strong = module._reliability(self._strong_phase_series())
+        r_noisy = module._reliability(self._noisy_phase_series())
+        self.assertTrue((r_strong > 0.9).all().item())
+        self.assertTrue((r_noisy < 0.2).all().item())
+        r_all = torch.cat([r_strong, r_noisy])
+        self.assertTrue((r_all >= 0.0).all().item())
+        self.assertTrue((r_all <= 1.0).all().item())
+
+    def test_gate_shape_and_range(self):
+        module = ReliabilityCoupledResidualFusion(sensitivity_init=2.0)
+        y, alpha = self._fused(module, self._noisy_phase_series())
+        self.assertEqual(tuple(y.shape), (2, 96, 3))
+        self.assertEqual(tuple(alpha.shape), (2, 3))
+        self.assertTrue(torch.isfinite(y).all().item())
+        self.assertTrue((alpha > 0.0).all().item())
+        self.assertTrue((alpha < 1.0).all().item())
+
+    def test_initial_gate_matches_prior(self):
+        # s0=0 -> alpha == prior (0.5) for every sample/channel.
+        s0 = ReliabilityCoupledResidualFusion(sensitivity_init=0.0)
+        _, alpha = self._fused(s0, self._noisy_phase_series())
+        torch.testing.assert_close(alpha, torch.full_like(alpha, 0.5), atol=1e-6, rtol=0)
+        self.assertEqual(s0.sensitivity, 0.0)
+        # s0=2 -> initial sensitivity exactly 2; low reliability pushes alpha > 0.5.
+        s2 = ReliabilityCoupledResidualFusion(sensitivity_init=2.0)
+        self.assertAlmostEqual(s2.sensitivity, 2.0, places=6)
+        _, alpha2 = self._fused(s2, self._noisy_phase_series())
+        self.assertTrue((alpha2 > 0.5).all().item())
+
+    def test_sensitivity_direction(self):
+        # Same low-reliability input: higher sensitivity must raise alpha.
+        low = self._noisy_phase_series()
+        s0 = ReliabilityCoupledResidualFusion(sensitivity_init=0.0)
+        s2 = ReliabilityCoupledResidualFusion(sensitivity_init=2.0)
+        _, a0 = self._fused(s0, low)
+        _, a2 = self._fused(s2, low)
+        self.assertTrue((a2 > a0).all().item())
+        # High-reliability input: coupling term (1-r) ~ 0, alpha stays at prior.
+        strong = self._strong_phase_series()
+        _, a_strong = self._fused(s2, strong)
+        torch.testing.assert_close(
+            a_strong, torch.full_like(a_strong, 0.5), atol=0.02, rtol=0
+        )
+
+    def test_forward_backward(self):
+        module = ReliabilityCoupledResidualFusion(sensitivity_init=2.0)
+        y, alpha = self._fused(module, self._noisy_phase_series())
+        loss = y.sum() + alpha.sum()
+        loss.backward()
+        self.assertIsNotNone(module.gate_bias.grad)
+        self.assertIsNotNone(module.s_raw.grad)
+        self.assertTrue(torch.isfinite(module.gate_bias.grad).all().item())
+        self.assertTrue(torch.isfinite(module.s_raw.grad).all().item())
+
+    def test_mutual_exclusion_with_adaptive_gate(self):
+        model, _ = _make_model(
+            "ETTh1", 336, "original",
+            use_weak_period_residual=True,
+            use_rcrf_fusion=True,
+            rcrf_alpha_init=0.5,
+            rcrf_sensitivity_init=2.0,
+            use_adaptive_weak_period_gate=True,
+        )
+        self.assertTrue(model.use_rcrf_fusion)
+        self.assertTrue(hasattr(model, "rcrf_fusion"))
+        # The adaptive gate must not be constructed under RCRF.
+        self.assertFalse(hasattr(model, "adaptive_weak_period_gate"))
+        y_hat, Z, y_phase_steps = _forward_eval(model)
+        self.assertTrue(torch.isfinite(y_hat).all().item())
+
+    def test_flag_off_regression(self):
+        # Enabling RCRF replaces only the fixed-gate parameter: every other
+        # parameter of the weak-residual model is bit-identical at construction.
+        off, _ = _make_model(
+            "ETTm2", 96, "original",
+            use_weak_period_residual=True,
+            use_rcrf_fusion=False,
+            weak_period_residual_gate_init=0.5,
+        )
+        on, _ = _make_model(
+            "ETTm2", 96, "original",
+            use_weak_period_residual=True,
+            use_rcrf_fusion=True,
+        )
+        off_keys = {k for k in off.state_dict() if k != "weak_period_residual_gate"}
+        on_keys = {k for k in on.state_dict() if not k.startswith("rcrf_fusion")}
+        self.assertEqual(off_keys, on_keys)
+        for key in off_keys:
+            torch.testing.assert_close(
+                off.state_dict()[key], on.state_dict()[key], atol=0, rtol=0, msg=key
+            )
+
+    def test_fixed_gate_equals_s0_at_init(self):
+        # RCRF with initial sensitivity 0 is exactly the fixed 0.5 gate: the
+        # coupling term vanishes and alpha stays at the prior. Same shared params
+        # under the same seed -> identical forward at construction time.
+        fixed, _ = _make_model("ETTh1", 336, "gold_combo_fixed")
+        s0, _ = _make_model("ETTh1", 336, "gold_combo_reliability_s0")
+        x_enc = torch.randn(2, 720, 7)
+        x_mark_enc = torch.rand(2, 720, 5)
+        fy, _, _ = _forward_eval(fixed, x_enc, x_mark_enc)
+        sy, _, _ = _forward_eval(s0, x_enc, x_mark_enc)
+        torch.testing.assert_close(sy, fy, atol=1e-6, rtol=1e-6)
+
+    def test_gold_combo_presets_reach_ablation_modes(self):
+        for mode in ["gold_combo_fixed", "gold_combo_adaptive",
+                     "gold_combo_reliability_s0", "gold_combo_reliability_s2"]:
+            self.assertIn(mode, ABLATION_MODES, msg=mode)
+            hp = build_hyperparams("ETTh2", 720, mode)
+            self.assertEqual(hp["scheme_name"], mode)
+            self.assertTrue(hp["use_weak_period_residual"])
+            self.assertAlmostEqual(hp["weak_period_residual_gate_init"], 0.5)
+            self.assertEqual(hp["phase_uncertainty_min"], 0.2)
+            self.assertEqual(hp["phase_level_calib_gate_init"], 0.2)
+            self.assertEqual(hp["phase_noise_hifreq_strength"], 0.8)
+            model, _ = _make_model("ETTh2", 720, mode)
+            y_hat, Z, y_phase_steps = _forward_eval(model)
+            self.assertEqual(tuple(y_hat.shape), (2, 720, 7), msg=mode)
+            self.assertTrue(torch.isfinite(y_hat).all(), msg=mode)
+
+    def test_rcrf_preset_flags_and_sensitivity(self):
+        s0 = get_ablation_overrides("gold_combo_reliability_s0")
+        s2 = get_ablation_overrides("gold_combo_reliability_s2")
+        self.assertTrue(s0["use_rcrf_fusion"])
+        self.assertEqual(s0["rcrf_sensitivity_init"], 0.0)
+        self.assertEqual(s2["rcrf_sensitivity_init"], 2.0)
+        self.assertEqual(s0["rcrf_alpha_init"], 0.5)
+        self.assertEqual(s0["rcrf_s_max"], 4.0)
+        adaptive = get_ablation_overrides("gold_combo_adaptive")
+        self.assertTrue(adaptive["use_adaptive_weak_period_gate"])
+        fixed = get_ablation_overrides("gold_combo_fixed")
+        self.assertNotIn("use_adaptive_weak_period_gate", fixed)
+        self.assertNotIn("use_rcrf_fusion", fixed)
+
+    def test_seed_passing_changes_init(self):
+        m1, _ = _make_model("ETTh1", 336, "gold_combo_reliability_s2")
+        m1b, _ = _make_model("ETTh1", 336, "gold_combo_reliability_s2")
+        m2, _ = _make_model("ETTh1", 336, "gold_combo_reliability_s2", seed=2022)
+        for key in m1.state_dict():
+            torch.testing.assert_close(
+                m1.state_dict()[key], m1b.state_dict()[key], atol=0, rtol=0, msg=key
+            )
+        differing = sum(
+            1 for key in m1.state_dict()
+            if not torch.equal(m1.state_dict()[key], m2.state_dict()[key])
+        )
+        self.assertGreater(differing, 0)
+
+    def test_search_runner_reaches_gold_combo_modes(self):
+        import sys
+        import scripts.search_phaseformer as sp
+
+        argv = [
+            "search_phaseformer.py",
+            "--dataset", "ETTh2", "--horizon", "720",
+            "--stage", "mechanism_screen_1",
+            "--mechanism", "gold_combo_reliability_s2",
+            "--max-epochs", "8", "--percent", "30", "--seed", "2021",
+            "--loss", "huber", "--num-workers", "0",
+        ]
+        old = sys.argv
+        try:
+            sys.argv = argv
+            args = sp.parse_args()
+            spec = sp.build_spec(args)
+        finally:
+            sys.argv = old
+        self.assertTrue(spec["hyperparams"]["use_rcrf_fusion"])
+        self.assertEqual(spec["hyperparams"]["rcrf_sensitivity_init"], 2.0)
 
 
 if __name__ == "__main__":

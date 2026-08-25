@@ -58,6 +58,14 @@ ABLATION_MODES = {
     # every routing depth instead of only the final output.
     "residual_output_layerwise_convex",
     "residual_output_layerwise_additive",
+    # Cross-dataset golden-combo mechanisms (gold_combo_stability_v1): shared
+    # phase stack (uncertainty min 0.2 / period-level 0.2 / high-frequency
+    # 0.8-0.5-w7) with four output fusion variants.  The residual gate prior
+    # alpha_0 = 0.5 is shared by all four.
+    "gold_combo_fixed",
+    "gold_combo_adaptive",
+    "gold_combo_reliability_s0",
+    "gold_combo_reliability_s2",
 }
 
 
@@ -784,6 +792,43 @@ def get_ablation_overrides(mode):
             use_layerwise_output_additive=True,
             layerwise_output_additive_gate_init=0.5,
         )
+    # Golden-combo modes (gold_combo_stability_v1).  All four share the phase
+    # stack frozen in the plan: uncertainty min 0.2 / trend gate 0.05,
+    # period-level gate 0.2 / slope gate 0.05, high-frequency 0.8 / 0.5 / w7.
+    # The shared residual gate prior is alpha_0 = 0.5; only the output fusion
+    # differs (fixed / existing 3-feature MLP gate / RCRF at two sensitivities).
+    if mode in ("gold_combo_fixed", "gold_combo_adaptive",
+                "gold_combo_reliability_s0", "gold_combo_reliability_s2"):
+        overrides = {
+            "use_phase_uncertainty_shrinkage": True,
+            "phase_uncertainty_min": 0.2,
+            "phase_uncertainty_trend_gate_init": 0.05,
+            "use_phase_period_level_calibration": True,
+            "phase_level_slope_window": 3,
+            "phase_level_slope_gate_init": 0.05,
+            "phase_level_calib_gate_init": 0.2,
+            "use_phase_noise_hifreq_damping": True,
+            "phase_noise_hifreq_strength": 0.8,
+            "phase_noise_hifreq_threshold": 0.5,
+            "phase_noise_hifreq_temperature": 0.2,
+            "phase_noise_hifreq_window": 7,
+            "use_weak_period_residual": True,
+            "weak_period_residual_gate_init": 0.5,
+        }
+        if mode == "gold_combo_fixed":
+            overrides["scheme_name"] = mode
+            return overrides
+        if mode == "gold_combo_adaptive":
+            overrides["scheme_name"] = mode
+            overrides["use_adaptive_weak_period_gate"] = True
+            return overrides
+        sensitivity = 0.0 if mode == "gold_combo_reliability_s0" else 2.0
+        overrides["scheme_name"] = mode
+        overrides["use_rcrf_fusion"] = True
+        overrides["rcrf_alpha_init"] = 0.5
+        overrides["rcrf_sensitivity_init"] = sensitivity
+        overrides["rcrf_s_max"] = 4.0
+        return overrides
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -915,6 +960,12 @@ class PhaseFormerPresetConfig:
         self.adaptive_weak_period_gate_hidden = hyperparams.get(
             "adaptive_weak_period_gate_hidden", 8
         )
+        # RCRF (gold_combo_stability_v1): reliability-coupled convex fusion gate.
+        self.use_rcrf_fusion = hyperparams.get("use_rcrf_fusion", False)
+        self.rcrf_alpha_init = hyperparams.get("rcrf_alpha_init", 0.5)
+        self.rcrf_sensitivity_init = hyperparams.get("rcrf_sensitivity_init", 0.0)
+        self.rcrf_s_max = hyperparams.get("rcrf_s_max", 4.0)
+        self.rcrf_eps = hyperparams.get("rcrf_eps", 1e-6)
         self.use_time_mark_adjustment = hyperparams.get("use_time_mark_adjustment", False)
         self.time_mark_dim = hyperparams.get("time_mark_dim", 4)
         self.time_mark_hidden = hyperparams.get("time_mark_hidden", 32)

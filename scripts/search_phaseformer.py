@@ -35,6 +35,7 @@ from src.training.runner import build_logger, build_trainer, restore_best_checkp
 from src.dataset.data_factory import data_provider
 from src.models.PhaseFormer import PhaseFormer
 from src.models.phaseformer_presets import (
+    ABLATION_MODES,
     PhaseFormerPresetConfig,
     build_hyperparams,
     make_exp_args,
@@ -350,13 +351,18 @@ def apply_compact(hp):
 
 def build_spec(args):
     overrides = json.loads(args.overrides)
-    if args.mechanism not in MECHANISMS:
+    if args.mechanism in MECHANISMS:
+        base = build_hyperparams(args.dataset, args.horizon, "original")
+        base.update(MECHANISMS[args.mechanism])
+    elif args.mechanism in ABLATION_MODES or args.mechanism in ("latest", "best_nonresidual"):
+        # Preset modes reachable through build_hyperparams (latest and the
+        # gold_combo_* cross-dataset mechanisms).
+        base = build_hyperparams(args.dataset, args.horizon, args.mechanism)
+    else:
         raise ValueError(f"unknown mechanism: {args.mechanism}")
-    base = build_hyperparams(args.dataset, args.horizon, "original")
     # The experiment seed is explicit; do not inherit legacy per-task seeds.
     base["seed"] = args.seed
     base["period_len"] = args.period
-    base.update(MECHANISMS[args.mechanism])
     base["scheme_name"] = args.mechanism
     base["train_epochs"] = args.max_epochs
     base["loss_func"] = args.loss
@@ -617,7 +623,11 @@ def parse_args():
     p.add_argument("--dataset", required=True, choices=list(PLANNED_BATCH_SIZE))
     p.add_argument("--horizon", required=True, type=int, choices=[96, 192, 336, 720])
     p.add_argument("--stage", required=True, choices=["smoke", "baseline", "period_screen", "mechanism_screen_1", "mechanism_screen_2", "mechanism_full8", "hp_low", "hp_mid", "finalist", "confirm"])
-    p.add_argument("--mechanism", default="original", choices=list(MECHANISMS))
+    p.add_argument(
+        "--mechanism",
+        default="original",
+        choices=list(MECHANISMS) + ["latest", "best_nonresidual"] + sorted(ABLATION_MODES),
+    )
     p.add_argument("--period", type=int, default=24)
     p.add_argument("--lookback", type=int, default=720)
     p.add_argument("--percent", type=int, default=100)

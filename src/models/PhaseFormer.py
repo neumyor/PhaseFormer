@@ -18,6 +18,7 @@ from src.models.phase_adapters import (
     PhasePeriodLevelCalibration,
     PhaseSparseEventCalibration,
     PhaseNoiseHighFreqDamping,
+    ReliabilityCoupledResidualFusion,
 )
 from src.models.phase_align import PhaseAlignment
 from src.models.phase_warp import PhaseWarping
@@ -496,6 +497,11 @@ class PhaseFormer(DefaultPLModule):
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
         )
+        # RCRF (Reliability-Coupled Residual Fusion) replaces the fixed/adaptive
+        # gate with a reliability-coupled convex gate. It is mutually exclusive
+        # with the adaptive gates: when enabled, the adaptive gate modules are not
+        # constructed and forward routes exclusively through RCRF.
+        self.use_rcrf_fusion = getattr(configs, "use_rcrf_fusion", False)
         if self.use_weak_period_residual:
             residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
             if residual_head_type == "channel":
@@ -513,7 +519,14 @@ class PhaseFormer(DefaultPLModule):
                     self.seq_len, self.pred_len
                 )
             gate_init = float(getattr(configs, "weak_period_residual_gate_init", 0.2))
-            if self.use_adaptive_weak_period_gate:
+            if self.use_rcrf_fusion:
+                self.rcrf_fusion = ReliabilityCoupledResidualFusion(
+                    alpha_init=getattr(configs, "rcrf_alpha_init", 0.5),
+                    sensitivity_init=getattr(configs, "rcrf_sensitivity_init", 0.0),
+                    s_max=getattr(configs, "rcrf_s_max", 4.0),
+                    eps=getattr(configs, "rcrf_eps", 1e-6),
+                )
+            elif self.use_adaptive_weak_period_gate:
                 self.adaptive_weak_period_gate = AdaptiveWeakPeriodGate(
                     enc_in=self.enc_in,
                     hidden=getattr(configs, "adaptive_weak_period_gate_hidden", 8),
@@ -1080,6 +1093,11 @@ class PhaseFormer(DefaultPLModule):
                 phase_series = self.phase_warp(x_periods, mark)
         else:
             phase_series = self._to_phase_series(x_periods)
+        # RCRF computes its reliability from the RAW phase series, before the
+        # uncertainty shrinkage (and amp calibration) mutate the phase history,
+        # so the correction modules never change the evidence that gates their
+        # own contribution.
+        phase_series_raw = phase_series
         if self.use_phase_uncertainty_shrinkage:
             phase_series = self.phase_uncertainty_shrinkage(phase_series)
         if self.use_phase_amp_calib:
@@ -1182,13 +1200,16 @@ class PhaseFormer(DefaultPLModule):
 
         if self.use_weak_period_residual:
             residual_hat = self.weak_period_residual(x_in)
-            if self.use_adaptive_weak_period_gate:
-                residual_gate = self.adaptive_weak_period_gate(x_in, phase_series)
-            elif self.use_adaptive_residual_gate:
-                residual_gate = self.adaptive_residual_gate(Z, x_in)
+            if self.use_rcrf_fusion:
+                y_hat, _ = self.rcrf_fusion(y_hat, residual_hat, phase_series_raw)
             else:
-                residual_gate = torch.sigmoid(self.weak_period_residual_gate)
-            y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
+                if self.use_adaptive_weak_period_gate:
+                    residual_gate = self.adaptive_weak_period_gate(x_in, phase_series)
+                elif self.use_adaptive_residual_gate:
+                    residual_gate = self.adaptive_residual_gate(Z, x_in)
+                else:
+                    residual_gate = torch.sigmoid(self.weak_period_residual_gate)
+                y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
 
         if self.use_topology_output_convex_residual:
             residual_hat = self.topology_output_convex_residual(x_in)

@@ -414,3 +414,70 @@ class PhaseNoiseHighFreqDamping(nn.Module):
         smooth = self._smooth(y_hat)
         high_freq = y_hat - smooth
         return smooth + damping * high_freq
+
+
+class ReliabilityCoupledResidualFusion(nn.Module):
+    """Reliability-Coupled Residual Fusion (RCRF).
+
+    Convexly fuses the phase forecast and the NLinear weak-period residual:
+
+        r     = Var_l(mean_k x_lk) / (Var_l(mean_k x_lk) + mean_l Var_k(x_lk) + eps)
+        s     = s_max * tanh(s_raw)
+        alpha = sigmoid(logit(alpha_0) + s * (1 - r))
+        y     = (1 - alpha) * y_phase + alpha * y_residual
+
+    ``r`` is a per-sample/channel reliability computed from the RAW phase series
+    (before uncertainty shrinkage), so the correction modules never change the
+    evidence that gates their own contribution.  ``s`` is a learnable, tanh-bounded
+    sensitivity: s=0 keeps the gate at the fixed prior alpha_0; larger s pushes the
+    gate toward the residual path when same-phase histories are unreliable.
+    Diagnostic hooks mirror the PhaseVelocity.last_delta convention: the last
+    reliability / gate / sensitivity are captured outside the autograd graph.
+    """
+
+    def __init__(
+        self,
+        alpha_init: float = 0.5,
+        sensitivity_init: float = 0.0,
+        s_max: float = 4.0,
+        eps: float = 1e-6,
+    ):
+        super().__init__()
+        self.s_max = max(float(s_max), 1e-4)
+        self.eps = max(float(eps), 1e-8)
+        alpha_init = min(max(float(alpha_init), 1e-4), 1.0 - 1e-4)
+        self.gate_bias = nn.Parameter(
+            torch.tensor(float(torch.logit(torch.tensor(alpha_init))))
+        )
+        s0 = min(max(float(sensitivity_init), 0.0), self.s_max - 1e-4)
+        self.s_raw = nn.Parameter(
+            torch.tensor(float(torch.atanh(torch.tensor(s0 / self.s_max))))
+        )
+        self.last_r = None
+        self.last_alpha = None
+        self.last_sensitivity = None
+
+    @property
+    def sensitivity(self):
+        """Current scalar sensitivity s = s_max * tanh(s_raw)."""
+        return float(self.s_max * torch.tanh(self.s_raw).detach())
+
+    def _reliability(self, phase_series):  # (B, C, L, P) pre-shrinkage
+        template = phase_series.mean(dim=-1)  # (B, C, L)  mean over periods k
+        phase_signal = template.var(dim=2, unbiased=False)  # (B, C)  Var_l(mean_k x_lk)
+        phase_noise = phase_series.var(dim=-1, unbiased=False).mean(dim=2)  # (B, C)  mean_l Var_k
+        return phase_signal / (phase_signal + phase_noise + self.eps)
+
+    def forward(self, y_phase, y_residual, phase_series):
+        # y_phase, y_residual: (B, T, C); phase_series: (B, C, L, P) pre-shrinkage.
+        r = self._reliability(phase_series)  # (B, C)
+        s = self.s_max * torch.tanh(self.s_raw)
+        logit_alpha = self.gate_bias + s * (1.0 - r)
+        alpha = torch.sigmoid(logit_alpha)  # (B, C)
+        alpha_t = alpha.unsqueeze(1)  # (B, 1, C) broadcasts over the horizon
+        y = (1.0 - alpha_t) * y_phase + alpha_t * y_residual
+        with torch.no_grad():
+            self.last_r = r.detach()
+            self.last_alpha = alpha.detach()
+            self.last_sensitivity = float(s.detach())
+        return y, alpha

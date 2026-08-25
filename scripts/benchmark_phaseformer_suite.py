@@ -105,6 +105,11 @@ def run_one(args, mode, dataset, horizon):
     hyperparams = build_hyperparams(dataset, horizon, mode)
     if args.epochs is not None:
         hyperparams["train_epochs"] = args.epochs
+    if args.learning_rate is not None:
+        hyperparams["learning_rate"] = args.learning_rate
+    if args.loss is not None:
+        hyperparams["loss_func"] = args.loss
+        hyperparams["use_huber_loss"] = args.loss == "huber"
     if args.batch_size is not None:
         batch_size = args.batch_size
     else:
@@ -311,6 +316,8 @@ def main():
     parser.add_argument("--modes", default="original,latest")
     parser.add_argument("--lookback", type=int, default=720)
     parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--learning-rate", type=float, default=None)
+    parser.add_argument("--loss", choices=["huber", "mae"], default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument("--num-workers", type=int, default=0)
