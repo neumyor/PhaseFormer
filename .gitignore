@@ -11,3 +11,5 @@ docs/*.zip
 
 # macOS noise
 .DS_Store
+# Deprecated experiment plan/result documents retained locally for reference.
+/docs/deprecated/
