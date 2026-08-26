@@ -18,6 +18,7 @@ from src.models.phase_adapters import (
     PhasePeriodLevelCalibration,
     PhaseSparseEventCalibration,
     PhaseNoiseHighFreqDamping,
+    PeriodPositionEncodedResidualHead,
     ReliabilityCoupledResidualFusion,
 )
 from src.models.phase_align import PhaseAlignment
@@ -502,9 +503,36 @@ class PhaseFormer(DefaultPLModule):
         # with the adaptive gates: when enabled, the adaptive gate modules are not
         # constructed and forward routes exclusively through RCRF.
         self.use_rcrf_fusion = getattr(configs, "use_rcrf_fusion", False)
+        self.use_periodic_residual_pe = getattr(
+            configs, "use_periodic_residual_pe", False
+        )
         if self.use_weak_period_residual:
             residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
-            if residual_head_type == "channel":
+            if residual_head_type == "periodic_pe":
+                if not self.use_periodic_residual_pe:
+                    raise ValueError(
+                        "weak_period_residual_head_type=periodic_pe requires "
+                        "use_periodic_residual_pe=True"
+                    )
+                self.weak_period_residual = PeriodPositionEncodedResidualHead(
+                    self.seq_len,
+                    self.pred_len,
+                    self.period_len,
+                    encoding_type=getattr(
+                        configs, "periodic_residual_pe_type", "harmonic"
+                    ),
+                    pe_dim=getattr(configs, "periodic_residual_pe_dim", 16),
+                    temperature=getattr(
+                        configs, "periodic_residual_pe_temperature", 0.1
+                    ),
+                    cycle_decay=getattr(
+                        configs, "periodic_residual_pe_cycle_decay", 0.1
+                    ),
+                    blend_init=getattr(
+                        configs, "periodic_residual_pe_blend_init", 0.1
+                    ),
+                )
+            elif residual_head_type == "channel":
                 self.weak_period_residual = ChannelWiseWeakPeriodResidualHead(
                     self.seq_len, self.pred_len, self.enc_in
                 )
@@ -1199,7 +1227,12 @@ class PhaseFormer(DefaultPLModule):
         y_hat = y_full.permute(0, 2, 1)  # (B, pred_len, C)
 
         if self.use_weak_period_residual:
-            residual_hat = self.weak_period_residual(x_in)
+            if self.use_periodic_residual_pe:
+                residual_hat = self.weak_period_residual(
+                    x_in, x_mark_enc=x_mark_enc, x_mark_dec=x_mark_dec
+                )
+            else:
+                residual_hat = self.weak_period_residual(x_in)
             if self.use_rcrf_fusion:
                 y_hat, _ = self.rcrf_fusion(y_hat, residual_hat, phase_series_raw)
             else:

@@ -66,6 +66,25 @@ ABLATION_MODES = {
     "gold_combo_adaptive",
     "gold_combo_reliability_s0",
     "gold_combo_reliability_s2",
+    # Period-position-encoded NLinear residual candidates.  All inherit the
+    # frozen gold_combo_reliability_s2 stack and differ only in PE type.
+    "rcrf_pe_st",
+    "rcrf_pe_cycle",
+    "rcrf_pe_harmonic",
+    "rcrf_pe_traffic",
+    "rcrf_pe_time2vec",
+    "rcrf_pe_lff",
+    "rcrf_pe_calendar",
+}
+
+PERIODIC_RESIDUAL_PE_MODES = {
+    "rcrf_pe_st": "st_informer",
+    "rcrf_pe_cycle": "cycle",
+    "rcrf_pe_harmonic": "harmonic",
+    "rcrf_pe_traffic": "traffic",
+    "rcrf_pe_time2vec": "time2vec",
+    "rcrf_pe_lff": "lff",
+    "rcrf_pe_calendar": "calendar",
 }
 
 
@@ -829,6 +848,21 @@ def get_ablation_overrides(mode):
         overrides["rcrf_sensitivity_init"] = sensitivity
         overrides["rcrf_s_max"] = 4.0
         return overrides
+    if mode in PERIODIC_RESIDUAL_PE_MODES:
+        # Controlled extension of the frozen RCRF candidate: the phase stack,
+        # RCRF formula, NLinear map and all training settings stay unchanged.
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode,
+            weak_period_residual_head_type="periodic_pe",
+            use_periodic_residual_pe=True,
+            periodic_residual_pe_type=PERIODIC_RESIDUAL_PE_MODES[mode],
+            periodic_residual_pe_dim=16,
+            periodic_residual_pe_temperature=0.1,
+            periodic_residual_pe_cycle_decay=0.1,
+            periodic_residual_pe_blend_init=0.1,
+        )
+        return overrides
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -836,6 +870,7 @@ def _without_residual(overrides):
     sanitized = dict(overrides)
     sanitized["use_weak_period_residual"] = False
     sanitized["use_adaptive_weak_period_gate"] = False
+    sanitized["use_periodic_residual_pe"] = False
     return sanitized
 
 
@@ -966,6 +1001,24 @@ class PhaseFormerPresetConfig:
         self.rcrf_sensitivity_init = hyperparams.get("rcrf_sensitivity_init", 0.0)
         self.rcrf_s_max = hyperparams.get("rcrf_s_max", 4.0)
         self.rcrf_eps = hyperparams.get("rcrf_eps", 1e-6)
+        self.use_periodic_residual_pe = hyperparams.get(
+            "use_periodic_residual_pe", False
+        )
+        self.periodic_residual_pe_type = hyperparams.get(
+            "periodic_residual_pe_type", "harmonic"
+        )
+        self.periodic_residual_pe_dim = hyperparams.get(
+            "periodic_residual_pe_dim", 16
+        )
+        self.periodic_residual_pe_temperature = hyperparams.get(
+            "periodic_residual_pe_temperature", 0.1
+        )
+        self.periodic_residual_pe_cycle_decay = hyperparams.get(
+            "periodic_residual_pe_cycle_decay", 0.1
+        )
+        self.periodic_residual_pe_blend_init = hyperparams.get(
+            "periodic_residual_pe_blend_init", 0.1
+        )
         self.use_time_mark_adjustment = hyperparams.get("use_time_mark_adjustment", False)
         self.time_mark_dim = hyperparams.get("time_mark_dim", 4)
         self.time_mark_hidden = hyperparams.get("time_mark_hidden", 32)

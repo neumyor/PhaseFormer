@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -55,6 +57,241 @@ class WeakPeriodResidualHead(nn.Module):
         centered = (x - last).permute(0, 2, 1).contiguous()
         delta = self.linear(centered).permute(0, 2, 1).contiguous()
         return delta + last.expand(-1, delta.size(1), -1)
+
+
+class PeriodPositionEncodedResidualHead(nn.Module):
+    """NLinear residual augmented by a position-only periodic retrieval path.
+
+    A positional kernel matches every forecast position to historical positions,
+    applies the resulting weights to the centered history, and convexly blends
+    that periodic copy with the ordinary NLinear delta.  Unlike adding a fixed
+    position vector before a linear map (which can collapse into an ordinary
+    bias/weight), this construction makes the historical-to-future matching
+    induced by the position encoding directly observable.
+
+    ``encoding_type`` selects only the position representation; the NLinear
+    map, attention temperature, recency decay, and horizon-wise blend are shared
+    across all variants for a controlled comparison.
+    """
+
+    ENCODING_TYPES = {
+        "st_informer",
+        "cycle",
+        "harmonic",
+        "traffic",
+        "time2vec",
+        "lff",
+        "calendar",
+    }
+
+    def __init__(
+        self,
+        seq_len: int,
+        pred_len: int,
+        period_len: int,
+        encoding_type: str = "harmonic",
+        pe_dim: int = 16,
+        temperature: float = 0.1,
+        cycle_decay: float = 0.1,
+        blend_init: float = 0.1,
+    ):
+        super().__init__()
+        if encoding_type not in self.ENCODING_TYPES:
+            raise ValueError(
+                f"Unsupported periodic residual position encoding: {encoding_type}"
+            )
+        if seq_len <= 0 or pred_len <= 0 or period_len <= 1:
+            raise ValueError("seq_len/pred_len must be positive and period_len > 1")
+        if pe_dim < 2:
+            raise ValueError("pe_dim must be at least 2")
+        if temperature <= 0:
+            raise ValueError("temperature must be positive")
+        if cycle_decay < 0:
+            raise ValueError("cycle_decay must be non-negative")
+
+        self.seq_len = int(seq_len)
+        self.pred_len = int(pred_len)
+        self.period_len = int(period_len)
+        self.encoding_type = encoding_type
+        self.pe_dim = int(pe_dim)
+        self.temperature = float(temperature)
+        self.cycle_decay = float(cycle_decay)
+
+        # Keep exactly the same NLinear parameterization and zero initialization
+        # as WeakPeriodResidualHead; PE adds only a structured periodic pathway.
+        self.linear = nn.Linear(self.seq_len, self.pred_len)
+        nn.init.zeros_(self.linear.weight)
+        nn.init.zeros_(self.linear.bias)
+
+        blend_init = min(max(float(blend_init), 1e-4), 1.0 - 1e-4)
+        blend_logit = float(torch.logit(torch.tensor(blend_init)))
+        self.blend_logits = nn.Parameter(torch.full((self.pred_len,), blend_logit))
+
+        if self.encoding_type == "time2vec":
+            num_periodic = max(1, self.pe_dim - 1)
+            harmonic = torch.arange(1, num_periodic + 1, dtype=torch.float32)
+            harmonic = (harmonic - 1).remainder(8) + 1
+            init_frequency = 2.0 * math.pi * harmonic / self.period_len
+            self.time2vec_frequency = nn.Parameter(init_frequency)
+            self.time2vec_phase = nn.Parameter(torch.zeros(num_periodic))
+            self.time2vec_linear_weight = nn.Parameter(torch.ones(1))
+            self.time2vec_linear_bias = nn.Parameter(torch.zeros(1))
+        elif self.encoding_type == "lff":
+            num_frequency = max(1, self.pe_dim // 2)
+            harmonic = torch.arange(1, num_frequency + 1, dtype=torch.float32)
+            init_frequency = 2.0 * math.pi * harmonic / self.period_len
+            self.register_buffer("lff_base_frequency", init_frequency)
+            self.lff_log_frequency_scale = nn.Parameter(torch.zeros(num_frequency))
+
+        self.last_beta = None
+        self.last_attention = None
+        self.last_attention_entropy = None
+        self.last_top_lags = None
+
+    @staticmethod
+    def _paired_sincos(angle):
+        return torch.stack((torch.sin(angle), torch.cos(angle)), dim=-1).flatten(-2)
+
+    def _st_informer_encoding(self, positions, dim=None):
+        dim = int(dim or self.pe_dim)
+        num_frequency = max(1, dim // 2)
+        index = torch.arange(num_frequency, device=positions.device, dtype=positions.dtype)
+        denominator = torch.pow(
+            positions.new_tensor(1000.0), 2.0 * index / max(float(dim), 1.0)
+        )
+        angle = positions.unsqueeze(-1) / denominator
+        return self._paired_sincos(angle)[..., :dim]
+
+    def _cycle_encoding(self, positions, harmonics):
+        harmonic = torch.arange(
+            1, harmonics + 1, device=positions.device, dtype=positions.dtype
+        )
+        angle = 2.0 * math.pi * positions.unsqueeze(-1) * harmonic / self.period_len
+        return self._paired_sincos(angle)
+
+    def _index_encoding(self, positions):
+        if self.encoding_type == "st_informer":
+            return self._st_informer_encoding(positions)
+        if self.encoding_type == "cycle":
+            return self._cycle_encoding(positions, harmonics=1)
+        if self.encoding_type == "harmonic":
+            return self._cycle_encoding(positions, harmonics=4)
+        if self.encoding_type == "traffic":
+            absolute = self._st_informer_encoding(positions, dim=self.pe_dim)
+            periodic = self._cycle_encoding(
+                positions, harmonics=max(1, self.pe_dim // 2)
+            )[..., : self.pe_dim]
+            return absolute + periodic
+        if self.encoding_type == "time2vec":
+            scale = max(float(self.seq_len + self.pred_len - 1), 1.0)
+            normalized = 2.0 * positions / scale - 1.0
+            linear = (
+                normalized.unsqueeze(-1) * self.time2vec_linear_weight
+                + self.time2vec_linear_bias
+            )
+            periodic = torch.sin(
+                positions.unsqueeze(-1) * self.time2vec_frequency
+                + self.time2vec_phase
+            )
+            return torch.cat((linear, periodic), dim=-1)
+        if self.encoding_type == "lff":
+            frequency = self.lff_base_frequency * torch.exp(
+                self.lff_log_frequency_scale
+            )
+            angle = positions.unsqueeze(-1) * frequency
+            return self._paired_sincos(angle)[..., : self.pe_dim]
+        raise RuntimeError("calendar encoding requires timestamp marks")
+
+    @staticmethod
+    def _calendar_encoding(marks):
+        """Encode raw [month, day, weekday, hour, optional 15-min slot] marks."""
+        if marks is None or marks.size(-1) < 4:
+            raise ValueError("calendar PE requires raw timestamp marks with >=4 fields")
+        month = marks[..., 0]
+        day = marks[..., 1]
+        weekday = marks[..., 2]
+        hour = marks[..., 3]
+        minute_slot = marks[..., 4] if marks.size(-1) >= 5 else torch.zeros_like(hour)
+        time_of_day = (hour + minute_slot / 4.0) / 24.0
+        cycles = torch.stack(
+            (
+                time_of_day,
+                2.0 * time_of_day,
+                weekday / 7.0,
+                (day - 1.0) / 31.0,
+                (month - 1.0) / 12.0,
+            ),
+            dim=-1,
+        )
+        return PeriodPositionEncodedResidualHead._paired_sincos(2.0 * math.pi * cycles)
+
+    def _attention_weights(self, x, x_mark_enc=None, x_mark_dec=None):
+        dtype, device = x.dtype, x.device
+        history_pos = torch.arange(self.seq_len, device=device, dtype=dtype)
+        future_pos = torch.arange(
+            self.seq_len,
+            self.seq_len + self.pred_len,
+            device=device,
+            dtype=dtype,
+        )
+
+        if self.encoding_type == "calendar":
+            if x_mark_enc is None or x_mark_dec is None:
+                raise ValueError("calendar PE requires encoder and decoder timestamp marks")
+            history_embedding = self._calendar_encoding(x_mark_enc.to(dtype=dtype))
+            future_embedding = self._calendar_encoding(
+                x_mark_dec[:, -self.pred_len :, :].to(dtype=dtype)
+            )
+            history_embedding = F.normalize(history_embedding, dim=-1, eps=1e-6)
+            future_embedding = F.normalize(future_embedding, dim=-1, eps=1e-6)
+            similarity = torch.einsum(
+                "bhd,bld->bhl", future_embedding, history_embedding
+            )
+        else:
+            history_embedding = F.normalize(
+                self._index_encoding(history_pos), dim=-1, eps=1e-6
+            )
+            future_embedding = F.normalize(
+                self._index_encoding(future_pos), dim=-1, eps=1e-6
+            )
+            similarity = torch.matmul(future_embedding, history_embedding.transpose(0, 1))
+
+        lag_cycles = (future_pos[:, None] - history_pos[None, :]) / self.period_len
+        logits = similarity / self.temperature - self.cycle_decay * lag_cycles
+        if similarity.ndim == 3:
+            logits = logits.unsqueeze(0) if logits.ndim == 2 else logits
+        return torch.softmax(logits, dim=-1)
+
+    def forward(self, x, x_mark_enc=None, x_mark_dec=None):
+        # x: (B, L, C), all computations stay on the normalized model scale.
+        if x.size(1) != self.seq_len:
+            raise ValueError(f"expected seq_len={self.seq_len}, got {x.size(1)}")
+        last = x[:, -1:, :]
+        centered = (x - last).permute(0, 2, 1).contiguous()  # (B,C,L)
+        linear_delta = self.linear(centered).permute(0, 2, 1).contiguous()
+        attention = self._attention_weights(x, x_mark_enc, x_mark_dec)
+        if attention.ndim == 2:
+            periodic_delta = torch.einsum("hl,bcl->bhc", attention, centered)
+        else:
+            periodic_delta = torch.einsum("bhl,bcl->bhc", attention, centered)
+        beta = torch.sigmoid(self.blend_logits).view(1, self.pred_len, 1)
+        delta = (1.0 - beta) * linear_delta + beta * periodic_delta
+
+        with torch.no_grad():
+            self.last_beta = beta.detach()
+            self.last_attention = attention.detach()
+            entropy = -(attention * attention.clamp_min(1e-12).log()).sum(dim=-1)
+            self.last_attention_entropy = float(entropy.mean().detach())
+            mean_attention = attention.mean(dim=0) if attention.ndim == 3 else attention
+            top_history = mean_attention.argmax(dim=-1)
+            future_index = torch.arange(
+                self.seq_len,
+                self.seq_len + self.pred_len,
+                device=x.device,
+            )
+            self.last_top_lags = (future_index - top_history).detach()
+
+        return delta + last.expand(-1, self.pred_len, -1)
 
 
 class ChannelWiseWeakPeriodResidualHead(nn.Module):
