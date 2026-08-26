@@ -5,5 +5,9 @@
 /selected_exps
 /research_runs
 
+# Generated analysis assets stay local; commit only concise Markdown reports.
+docs/**/figures/
+docs/*.zip
+
 # macOS noise
 .DS_Store

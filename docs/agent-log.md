@@ -508,3 +508,34 @@ currently also fall back to the original guardrail.
   Conclusion unchanged: single-point output convex fusion (R1) remains the
   correct insertion point; layerwise cascade not adopted. `_LATEST_POLICY` not
   updated (single seed).
+
+## 2026-08-25 — ETTm2 RCRF sample-level analysis
+
+- Ran a matched ETTm2-h96 comparison of ordinary PhaseFormer versus
+  `gold_combo_reliability_s2` with lookback 720, batch 256, MAE loss, lr 3e-4,
+  best-validation checkpoints, and seeds 2021/2022/2023. The raw runs are under
+  `research_runs/ettm2_rcrf_sample_raw/`.
+- RCRF improved every seed. Mean test MSE changed 0.167989 → 0.159761 (4.90%);
+  mean test MAE changed 0.256186 → 0.245333 (4.24%). These are matched-rerun
+  deltas, not replacements for `docs/PhaseFormer_gold_standard.md`.
+- Added `scripts/analyze_ettm2_rcrf_samples.py` to reconstruct all six
+  checkpoints and export sample×channel errors, phase/residual branch outputs,
+  reliability `r`, gate `alpha`, dataset statistics, deterministic categories,
+  non-overlapping Top-K cases, and Chinese matplotlib figures.
+- Operational “significant stable improvement” means all three seeds improve
+  and mean relative window MAE improves by at least 10%: 2,035/11,425 windows
+  (17.81%). It is explicitly not a statistical-significance claim. Net
+  regression occurs on 2,697 windows (23.61%).
+- User-facing report and 11 figures:
+  `docs/ETTm2_RCRF_sample_analysis/ETTm2_RCRF_sample_analysis.md`; portable ZIP:
+  `docs/ETTm2_RCRF_sample_analysis.zip`. Canonical six-file audit package:
+  `research_runs/ettm2_rcrf_sample_analysis_v1/`.
+- Validation passed: 54 relevant unit tests; six checkpoint metrics reproduced
+  within 1e-5; exported branches and gates reconstruct the final RCRF output
+  within 2e-5; 239,925 sample-error rows were re-aggregated; Top-K, setting
+  coverage, Chinese glyph rendering, Markdown references, directory whitelist,
+  and byte-identical ZIP members were checked.
+- Corrected the ETT dataset roots in `src/dataset/data_info.py` from the absent
+  `resources/all_datasets/ETT-small` directory to the repository's actual
+  `resources/all_datasets/ETT` directory. No model architecture or default
+  hyperparameter was changed.
