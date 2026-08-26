@@ -572,3 +572,29 @@ currently also fall back to the original guardrail.
 - Environment fallback: base conda, Python 3.13.5, torch 2.7.1+cu126, RTX 4090;
   the documented py310 path was absent. Results doc:
   `docs/PhaseFormer_periodic_residual_pe_results.md`.
+
+## 2026-08-26 — ICPT periodic residual follow-up plan (design only)
+
+- Closed the NLinear+periodic-PE round and designed its successor without
+  implementing or running experiments. The proposed Inter-Cycle Patch
+  Transformer (ICPT) treats each complete `P=24` cycle as a token, models
+  cycle-to-cycle motif evolution, and replaces only the NLinear residual head;
+  the current PhaseFormer phase path and outer RCRF equation stay fixed.
+- The complementarity claim is structural and pre-registered: PhaseFormer
+  summarizes the same-phase axis of the cycle matrix, whereas ICPT embeds each
+  complete-cycle row and models the inter-cycle axis. Controls include last-cycle
+  repetition, CycleNet-style recurrent template, ICPT without PE, ICPT-only,
+  fixed fusion, non-period-aligned patches, no anchor, and no attention.
+- Planned a validation-only screen of nine PE variants plus no-PE: fixed/learned
+  absolute, Time2Vec, RoPE, relative bias, ALiBi, LFF, absolute+relative, and
+  calendar. Calendar is ranked separately because it consumes real timestamp
+  information. A frozen index-PE must beat ICPT-none, not only NLinear.
+- Formal confirmation covers six datasets/settings, three seeds, matched current
+  RCRF and fixed Golden comparisons, resource accounting, internal attention/
+  gate diagnostics and programmatic sample errors. Pre-registered adoption
+  requires at least 4/6 settings to improve both mean metrics, all remaining
+  regressions ≤0.5%, and at least 4/6 settings to stably beat Golden before any
+  optional 28-task expansion.
+- Complete empty result tables, commands, validation gates, workload and stop
+  rules are in `docs/PhaseFormer_intercycle_patch_residual_experiment_plan.md`.
+  No code, checkpoint, validation metric or test metric was produced in this step.
