@@ -606,3 +606,31 @@ currently also fall back to the original guardrail.
 - Complete empty result tables, commands, validation gates, workload and stop
   rules are in `docs/PhaseFormer_intercycle_patch_residual_experiment_plan.md`.
   No code, checkpoint, validation metric or test metric was produced in this step.
+
+## 2026-08-26 — ICPT periodic residual experiment: Stage 0 pass, Stage A gate failure
+
+Executed the pre-registered ICPT plan
+(`docs/PhaseFormer_intercycle_patch_residual_experiment_plan.md`) under full-GPU
+authorization. Implementation committed `372a5af` (ICPT module, PE variants,
+PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
+`bca8909`.
+
+- **Stage 0**: `pytest tests/ -q` all green (124 existing + 15 new ICPT tests);
+  P0–P9 PE forward/backward finite with gradients; flag-off paths untouched.
+- **Stage A** (architecture screen, validation-only, 30% data, ≤8 epochs, seed
+  2021): 16 runs over 4 settings × {A2 gold_combo, A3 repeat-last-cycle,
+  A4 CycleNet-style, A5 ICPT-none} on GPUs 0/1. Metrics in
+  `research_runs/phaseformer_icpt_pe_screen/screen_summary.csv`.
+- **A5 vs A2 gate** (8 ratios = 4 settings × MSE/MAE): mean **1.137**, worst
+  **1.278**; only ETTh2-720 improves both metrics (0.960/0.973). Gate failed —
+  neither mean<1 nor ≥3/4 settings both-metric improve holds.
+- **Architecture diagnosis**: A3 RepeatLastCycle (≈0.7–4.7K params) is near
+  parity only on ETTh2-720, regresses 15–60% elsewhere; A4 CycleNet
+  (≈ A2 param count) is statistically indistinguishable from A2 on all 4
+  settings; A5 ICPT (24.7K–28.2K params, far smaller than NLinear) beats A2 only
+  on ETTh2-720, regresses 7–28% on the other three.
+- **Decision per plan §13**: Stage A architecture gate failed → **ICPT main line
+  stopped**; no PE freeze, no Stage B/C/D. `freeze_record.json` written with
+  `stage_a_passed: false`; test set was never read.
+- Plan doc updated: tables 9.1/9.2 filled with actuals, 9.3–9.8 marked 不适用,
+  §7 B/C/D sections marked 未运行, status header reflects the stop.
