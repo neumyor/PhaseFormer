@@ -1,5 +1,12 @@
 # Agent Maintenance Log
 
+## 2026-08-26 — Merge experiment plans and results into closed-loop experiment files
+
+- 根据用户要求，将动态相位、Pure Phase、残差拓扑、Golden 组合和周期位置编码路线整理为“一条实验路线一个文件”，每个文件统一包含：设想、整体计划、实现与结果、最终结论。
+- 新增：`docs/PhaseFormer_dynamic_phase_experiment.md`、`docs/PhaseFormer_pure_phase_experiment.md`、`docs/PhaseFormer_residual_topology_experiment.md`、`docs/PhaseFormer_gold_combo_experiment.md`、`docs/PhaseFormer_periodic_residual_pe_experiment.md`。
+- `intercycle patch residual` 按用户要求未纳入；原始 plan/results 文件保留为审计来源。
+- 验证：静态检查新增文档结构与 git diff；未重新运行训练实验。
+
 ## 2026-08-25 — Golden combo stability experiment (gold_combo_stability_v1)
 
 Running `docs/PhaseFormer_gold_combo_plan.md` end-to-end (user authorized full
