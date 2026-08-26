@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 
 import config.base_config as config_module
@@ -940,13 +941,15 @@ def get_ablation_overrides(mode):
         )
         return overrides
     # Stage D mechanism ablations of the frozen ICPT-best candidate.
-    # ``_frozen_icpt_pe`` is patched at runtime by the experiment runner with the
-    # Stage-B frozen index-PE; the default keeps none so presets are usable in
-    # unit tests before any freeze exists.
+    # The frozen index-PE is resolved from the ICPT_FROZEN_PE environment
+    # variable (set by the experiment runner after Stage B freezes), so the
+    # same preset name builds with the frozen PE inside subprocess runners.
+    # The default keeps none so presets are usable in unit tests before any
+    # freeze exists.
     if mode in ("icpt_only", "icpt_fixed_fusion", "icpt_patch16",
                 "icpt_no_anchor", "icpt_no_attention"):
         overrides = get_ablation_overrides("rcrf_icpt_none")
-        pe = getattr(_icpt_frozen_pe, "value", "none") or "none"
+        pe = os.environ.get("ICPT_FROZEN_PE") or "none"
         overrides["intercycle_pe_type"] = pe
         overrides["scheme_name"] = mode
         if mode == "icpt_only":
@@ -964,12 +967,6 @@ def get_ablation_overrides(mode):
             overrides["intercycle_use_attention"] = False
         return overrides
     raise ValueError(f"Unsupported ablation mode: {mode}")
-
-
-class _icpt_frozen_pe:
-    """Holder for the Stage-B frozen index-PE (patchable by the runner)."""
-
-    value = None
 
 
 def _without_residual(overrides):
