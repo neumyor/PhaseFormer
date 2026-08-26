@@ -526,9 +526,10 @@ currently also fall back to the original guardrail.
   and mean relative window MAE improves by at least 10%: 2,035/11,425 windows
   (17.81%). It is explicitly not a statistical-significance claim. Net
   regression occurs on 2,697 windows (23.61%).
-- User-facing report and 11 figures:
-  `docs/ETTm2_RCRF_sample_analysis/ETTm2_RCRF_sample_analysis.md`; portable ZIP:
-  `docs/ETTm2_RCRF_sample_analysis.zip`. Canonical six-file audit package:
+- Version-controlled user-facing report:
+  `docs/ETTm2_RCRF_sample_analysis/ETTm2_RCRF_sample_analysis.md`. The 11
+  generated figures and portable ZIP remain local-only under ignored paths.
+  Canonical six-file audit package:
   `research_runs/ettm2_rcrf_sample_analysis_v1/`. The report opens with a
   plain-language evidence summary: strong improvements overrepresent drift
   windows (38.38% vs 28.14% among net regressions), while net regressions
@@ -572,6 +573,13 @@ currently also fall back to the original guardrail.
 - Environment fallback: base conda, Python 3.13.5, torch 2.7.1+cu126, RTX 4090;
   the documented py310 path was absent. Results doc:
   `docs/PhaseFormer_periodic_residual_pe_results.md`.
+
+## 2026-08-26 — Generated asset history cleanup
+
+- Rewrote the branch commits after `be8a22e` to remove the ETTm2 report's 11
+  generated PNGs and ZIP from version control while preserving them locally.
+- Added ignore rules for `docs/**/figures/` and `docs/*.zip`; reports, code,
+  numeric results, and experiment conclusions are unchanged.
 
 ## 2026-08-26 — ICPT periodic residual follow-up plan (design only)
 
