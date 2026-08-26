@@ -100,3 +100,15 @@ Golden 固定取自 `docs/PhaseFormer_gold_standard.md`；matched rerun 不替�
 
 审计目录固定为 `research_runs/periodic_residual_pe_v1/`，严格保留六个文件和
 `figures/`；原始 checkpoint 与日志只存放在忽略目录，完成审计后不进入正式包。
+
+## 6. 完成状态与决策（2026-08-26）
+
+- Stage A 24/24 validation-only 筛选完成；`rcrf_pe_lff` 以六项比值均值
+  `0.9995488`、最差 `1.0003643` 冻结，test 在冻结后才读取。
+- Stage B 18/18 全量训练完成。LFF 相对当前 RCRF 在 ETTh2、ETTm2 的三 seed 平均
+  MSE/MAE 均改善；Electricity 平均 MSE/MAE 回退 `0.089%/0.099%`，小于 0.5%上限。
+- LFF 在 ETTh2、ETTm2 稳定超过固定 Golden；Electricity 不满足全 seed 门槛。
+  因此预注册的“跨数据集有效”标准通过，但不宣称三数据集全胜，也暂不替换全局默认头。
+- 详细结果、样本分析、内部量和局限见
+  `docs/PhaseFormer_periodic_residual_pe_results.md`；规范审计包位于
+  `research_runs/periodic_residual_pe_v1/`。

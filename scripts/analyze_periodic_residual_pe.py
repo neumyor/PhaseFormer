@@ -564,7 +564,7 @@ def build_report(result_rows, screen, sample_stats, case_records, diags, figures
     lines = [
         "# Experiment and Objective Error Analysis",
         "",
-        "> **直白结论：** 给 NLinear 残差支路加入可学习 Fourier 周期位置匹配后，ETTh2 和 ETTm2 稳定获得了很小但跨 seed 一致的额外收益；Electricity 没有同步受益，说明它是有效的周期归纳偏置，而不是普遍增益模块。相对固定 Golden，候选在 ETTh2、ETTm2 达到预注册的稳定超越，Electricity 为 17/18 个 seed×指标组合低于 Golden，但 seed 2022 MSE=0.165042 略高于 0.165，因此不能称三数据集全部稳定超越。",
+        "> **直白结论：** 给 NLinear 残差支路加入可学习 Fourier 周期位置匹配后，ETTh2 每个 seed 的双指标都改善，ETTm2 每个 seed 的 MAE 都改善且三 seed 均值双指标改善；Electricity 没有同步受益，说明它是有效的周期归纳偏置，而不是普遍增益模块。相对固定 Golden，候选在 ETTh2、ETTm2 达到预注册的稳定超越；全体 18 个 seed×指标组合中有 17 个低于 Golden，而 Electricity 为 5/6，唯一例外是 seed 2022 MSE=0.165042 略高于 0.165。",
         "",
         "## 1. Experiment Setup",
         "",

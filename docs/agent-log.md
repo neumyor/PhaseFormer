@@ -544,3 +544,31 @@ currently also fall back to the original guardrail.
   `resources/all_datasets/ETT-small` directory to the repository's actual
   `resources/all_datasets/ETT` directory. No model architecture or default
   hyperparameter was changed.
+
+## 2026-08-26 — Periodic position encoding for the RCRF residual branch
+
+- Implemented a flag-isolated `PeriodPositionEncodedResidualHead`: a shared
+  NLinear delta is blended with a position-similarity periodic retrieval delta
+  before the unchanged outer RCRF. Added seven controlled PE presets: ST-Informer,
+  single-cycle, fixed harmonics, Traffic hybrid, Time2Vec, learnable Fourier
+  features (LFF), and calendar cycles. RoPE was excluded because NLinear has no
+  query/key and adding attention would confound the architecture comparison.
+- Stage A completed 24 validation-only screens (30% data, at most 8 epochs,
+  seed 2021, no test read). LFF froze first with six-ratio mean `0.9995488` and
+  worst `1.0003643`; Time2Vec was second. Stage B completed all 18 current-RCRF
+  versus LFF runs across ETTh2-720, ETTm2-96, Electricity-336 and three seeds.
+- Mean MSE/MAE current RCRF→LFF: ETTh2 `0.394228/0.429443 →
+  0.393591/0.428967` (+0.162%/+0.111%); ETTm2 `0.159762/0.245333 →
+  0.159678/0.245196` (+0.052%/+0.056%); Electricity `0.164114/0.254625 →
+  0.164260/0.254876` (−0.089%/−0.099%). The pre-registered cross-dataset
+  effectiveness rule passes, but LFF is not a universal RCRF improvement.
+- Relative to fixed Golden, LFF is stably better on ETTh2 and ETTm2. Across all
+  18 dataset×seed×metric cells, 17 are below Golden; Electricity seed-2022 MSE
+  `0.165042` is the sole exception versus `0.165`.
+- Canonical audit `research_runs/periodic_residual_pe_v1/` contains 5,028,081
+  sample×channel rows, 270 programmatically selected cases, 44 Chinese
+  matplotlib figures and the exact ZIP whitelist. All 18 checkpoints reproduced
+  logged metrics within 1e-5; setting/case/CSV/NPZ/report/ZIP validation passed.
+- Environment fallback: base conda, Python 3.13.5, torch 2.7.1+cu126, RTX 4090;
+  the documented py310 path was absent. Results doc:
+  `docs/PhaseFormer_periodic_residual_pe_results.md`.
