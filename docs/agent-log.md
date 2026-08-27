@@ -677,3 +677,28 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   will run; no-position is an ablation rather than a gate that blocks PE tests.
 - Formal three-seed test and Golden comparison are allowed only after a frozen
   candidate beats the matched NLinear validation gate.
+
+## 2026-08-27 — ICPT full-horizon head experiment: validation gate failure
+
+- Implemented the ordered `30×24→H` full-horizon ICPT head, last-value
+  centering/anchoring, cycle-anchor control, and nine index/calendar position
+  variants. The legacy decoder remains the default flag-off path.
+- Stage 0 passed: 146 repository tests, finite forward/backward for every
+  candidate, exact zero-init last-value persistence, history-only calendar
+  invariance, and two ETTm2 5%/1-epoch GPU smoke runs. The full-horizon matrix
+  matches NLinear's `720→H`; total residual-head overhead ranges from 8.07% at
+  H=96 to 1.08% at H=720.
+- Stage A completed all 48 validation-only runs on ETTh2-720, ETTm2-96,
+  Electricity-336, and Weather-336 (seed 2021, 30% train, at most 8 epochs),
+  with no test loader and no OOM. All candidates improved both metrics only on
+  ETTh2.
+- `sincos_relative` had the best eight-ratio mean versus matched RCRF-NLinear
+  at 0.999544, but its worst ratio was 1.041909 and it improved both metrics in
+  only 1/4 settings. Calendar also failed (mean 1.002364, worst 1.042364).
+  Consequently no candidate was frozen and formal three-seed testing was not
+  run.
+- Relative to the stopped decoder ICPT, the new no-PE head recovered roughly
+  18.4%/12.6% MSE/MAE on ETTm2, 13.6%/5.2% on Electricity, and 20.2%/16.7%
+  on Weather. This validates the head/anchor diagnosis but not stable
+  superiority over NLinear. Full results and the stop decision are in
+  `docs/PhaseFormer_icpt_horizon_head_experiment.md`.

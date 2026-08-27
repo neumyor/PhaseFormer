@@ -1,6 +1,6 @@
 # ICPT Full-Horizon Head 与位置编码实验
 
-> 状态：**方案已预注册，尚未产生本轮 validation/test 结果。** 本实验使用新实验编号，不修改或覆盖上一轮 ICPT 失败结论。
+> 状态：**Stage 0 与 validation-only Stage A 已完成；没有候选通过预注册门槛，Stage B 未运行，test 从未读取。** 本实验使用新实验编号，不修改或覆盖上一轮 ICPT 失败结论。
 
 ## 1. 实验要验证的设想
 
@@ -50,43 +50,69 @@
 
 ## 3. 实现方式和实验结果
 
-### 3.1 Stage 0 待填
+### 3.1 Stage 0：实现与测试
 
 | 检查 | 结果 |
 |---|---|
-| old ICPT / RCRF flag-off 完全不变 | 待填 |
-| P0–P9 shape、finite forward/backward | 待填 |
-| 零初始化严格等于 last-value persistence | 待填 |
-| calendar 不读取未来 timestamp/target | 待填 |
-| 参数量倍率与 full-horizon head 维度 | 待填 |
-| ETTm2 5% / 1 epoch smoke | 待填 |
+| old ICPT / RCRF flag-off 完全不变 | 通过；旧 decoder 仍是默认路径，新增 full-horizon 路径仅由新 preset 开启 |
+| P0–P9 shape、finite forward/backward | 通过；全部候选输出形状正确、数值有限且梯度可回传 |
+| 零初始化严格等于 last-value persistence | 通过；full-horizon head 初始增量为零 |
+| calendar 不读取未来 timestamp/target | 通过；只消费 encoder/history timestamp，改变未来 mark 不改变输出 |
+| 参数量倍率与 full-horizon head 维度 | head 均为 `720→H`；residual head 相对 NLinear 在 H=96/192/336/720 时为 1.0807×/1.0403×/1.0231×/1.0108× |
+| ETTm2 5% / 1 epoch smoke | 通过；none validation 0.15927/0.28294，calendar 0.16082/0.28479，均未构造 test loader |
 
-### 3.2 Stage A 待填
+完整回归测试共 **146 项全部通过**。Stage A 的 48 条命令也全部完成，无 OOM、无缺失 run。
+
+### 3.2 Stage A：validation-only 广筛结果
+
+下表均为单 seed、30% 训练数据、最多 8 epoch 的 validation MSE/MAE；不是正式 test 结果。
 
 | 候选 | ETTh2-720 | ETTm2-96 | Electricity-336 | Weather-336 | 8 项均值/最差比 | 合格/排名 |
 |---|---|---|---|---|---|---|
-| A2 NLinear | 待填 | 待填 | 待填 | 待填 | 1 / 1 | baseline |
-| C0 cycle anchor | 待填 | 待填 | 待填 | 待填 | 待填 | control |
-| P0 none | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P1 sin/cos | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P2 learned abs | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P3 Time2Vec | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P4 RoPE | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P5 relative | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P6 ALiBi | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P7 LFF | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P8 sin/cos+relative | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P9 calendar（单列） | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
+| A2 NLinear | 0.63206/0.55913 | **0.11817/0.23265** | **0.13936/0.23060** | **0.54069**/0.36654 | 1.00000/1.00000 | baseline |
+| C0 cycle anchor | 0.58392/0.54703 | 0.12656/0.24286 | 0.14337/**0.23053** | 0.57538/0.37380 | 1.01619/1.07099 | control |
+| P0 none | 0.57968/0.54782 | 0.12319/0.23788 | 0.14225/0.23464 | 0.55003/0.36122 | 1.00035/1.04241 | 不合格 |
+| P1 sin/cos | 0.57847/0.54716 | 0.12312/0.23782 | 0.14220/0.23455 | 0.54956/0.36101 | 0.99960/1.04188 | 不合格 |
+| P2 learned abs | **0.57205/0.54216** | 0.12328/0.23852 | **0.14168/0.23319** | 0.56207/0.36192 | 0.99975/1.04320 | 不合格 |
+| P3 Time2Vec | 0.57401/0.54476 | 0.12372/0.23866 | 0.14262/0.23579 | 0.55522/0.36159 | 1.00181/1.04694 | 不合格 |
+| P4 RoPE | 0.58005/0.54802 | 0.12309/0.23773 | 0.14236/0.23477 | 0.55942/0.36314 | 1.00328/1.04159 | 不合格 |
+| P5 relative | 0.57967/0.54782 | 0.12320/0.23789 | 0.14224/0.23463 | 0.54988/0.36116 | 1.00030/1.04254 | 不合格 |
+| P6 ALiBi | 0.58010/0.54811 | **0.12308**/0.23779 | 0.14225/0.23469 | 0.55239/0.36203 | 1.00118/1.04147 | 不合格 |
+| P7 LFF | 0.57967/0.54782 | 0.12316/0.23785 | 0.14221/0.23461 | 0.55008/0.36115 | 1.00024/1.04221 | 不合格 |
+| P8 sin/cos+relative | 0.57847/0.54716 | 0.12313/0.23783 | 0.14219/0.23455 | 0.54947/**0.36094** | **0.99954**/1.04191 | 不合格 |
+| P9 calendar（单列） | 0.57614/0.54619 | 0.12318/0.23780 | 0.14228/0.23521 | 0.55665/0.36491 | 1.00236/1.04236 | 不合格 |
 
-### 3.3 Stage B 待填
+关键观察：
+
+- 所有 full-horizon 候选都只在 ETTh2-720 上同时改善 MSE/MAE；ETTm2 两项均退化约 2.2%–4.7%，Electricity 两项均退化约 1.1%–2.3%，Weather 则是 MSE 退化、MAE 小幅改善。因此没有任何候选达到“至少 3/4 setting 双指标改善”的条件。
+- P8 的八项平均比值最低，为 **0.999544**，即相对 A2 宏平均仅好约 **0.046%**；但其最差项仍回退 **4.191%**。它相对无 PE 的 P0，八项平均只改善约 **0.082%**，说明位置编码的独立贡献很小。
+- P2 在 ETTh2 和 Electricity 最好，但在 Weather 的 MSE 相对 P0 反而退化 2.19%；P8 在 Weather 最好，却没有解决 ETTm2/Electricity 的退化。calendar 也不合格。没有证据支持某一种 PE 能跨数据集稳定提高 ICPT。
+- last-value anchor 整体优于 cycle anchor：P0 的八项平均比为 1.00035，C0 为 1.01619；但 Electricity 的 cycle anchor MAE 略好，说明 anchor 不是所有数据集退化的唯一原因。
+
+与上一轮 future-query decoder ICPT-none 相比，新 P0 的变化如下。旧结果只保留到 5 位小数，因此改善率为近似值：
+
+| Setting | 旧 decoder ICPT | 新 full-horizon P0 | 新 head 相对旧 head |
+|---|---:|---:|---:|
+| ETTh2-720 | 0.60690/0.54418 | 0.57968/0.54782 | MSE 改善约 4.5%，MAE 退化约 0.7% |
+| ETTm2-96 | 0.15099/0.27222 | 0.12319/0.23788 | MSE/MAE 改善约 18.4%/12.6% |
+| Electricity-336 | 0.16461/0.24755 | 0.14225/0.23464 | MSE/MAE 改善约 13.6%/5.2% |
+| Weather-336 | 0.68911/0.43357 | 0.55003/0.36122 | MSE/MAE 改善约 20.2%/16.7% |
+
+这说明上一轮 ICPT 的主要问题确实包括 decoder、容量与锚点设计；改成 NLinear 同形状的全 horizon head 后，三个原本严重退化的数据集都明显恢复。但恢复仍不足以稳定超过 NLinear，位置编码也没有补上剩余差距。
+
+### 3.3 Stage B：按门槛停止
 
 | Setting | Golden MSE/MAE | A2 mean±std | 冻结候选 mean±std | 相对 A2 | 稳定超过 Golden |
 |---|---|---|---|---|---|
-| ETTh2-720 | 0.402 / 0.436 | 待填 | 待填 | 待填 | 待填 |
-| ETTm2-96 | 0.163 / 0.256 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | 0.165 / 0.257 | 待填 | 待填 | 待填 | 待填 |
-| Weather-336 | 0.242 / 0.278 | 待填 | 待填 | 待填 | 待填 |
+| ETTh2-720 | 0.402 / 0.436 | 未运行 | 无冻结候选 | 不适用 | 不可判断 |
+| ETTm2-96 | 0.163 / 0.256 | 未运行 | 无冻结候选 | 不适用 | 不可判断 |
+| Electricity-336 | 0.165 / 0.257 | 未运行 | 无冻结候选 | 不适用 | 不可判断 |
+| Weather-336 | 0.242 / 0.278 | 未运行 | 无冻结候选 | 不适用 | 不可判断 |
+
+`freeze_record.json` 记录 `frozen_index_candidate=null`、`calendar_eligible=false`、`test_read_before_freeze=false`、`screen_passed=false`。因此没有运行三 seed full-train，也没有读取 test；Stage A 的 validation 数值不能与固定 Golden test 数值直接比较。
 
 ## 4. 最终结论
 
-待 Stage A/B 按预注册门槛完成后填写。无论成功或失败，都必须明确区分相对 matched NLinear、相对固定 Golden、位置编码独立贡献和 anchor/head 结构贡献。
+本轮结论是：**PatchTST 式 full-horizon head 是对旧 ICPT 的有效结构修正，但 ICPT 仍不能稳定替代 NLinear；位置编码没有成为决定性增益来源。** ETTh2-720 的强正向信号说明跨周期 token 在长 horizon 上可能有价值，但 ETTm2、Electricity 和 Weather 的不一致结果使任何“稳定超过 NLinear/Golden”的结论都不成立。
+
+因此保留当前 RCRF-NLinear 默认方案，不冻结任何 ICPT PE，也不启动正式 test。若继续研究，优先级不应是继续枚举 PE，而应检查周期长度是否与数据真实周期匹配、共享通道模型是否损失变量特异性，以及 full-horizon Transformer 的优化/正则化是否适配短中 horizon；这些都应建立新的预注册实验，不能从本轮 validation 反复调参。
