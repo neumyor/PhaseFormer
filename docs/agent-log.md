@@ -610,14 +610,15 @@ currently also fall back to the original guardrail.
   requires at least 4/6 settings to improve both mean metrics, all remaining
   regressions ≤0.5%, and at least 4/6 settings to stably beat Golden before any
   optional 28-task expansion.
-- Complete empty result tables, commands, validation gates, workload and stop
-  rules are in `docs/PhaseFormer_intercycle_patch_residual_experiment_plan.md`.
-  No code, checkpoint, validation metric or test metric was produced in this step.
+- The design, validation gates, executed results, and stop decision were later
+  consolidated into `docs/PhaseFormer_intercycle_patch_residual_experiment.md`.
+  No code, checkpoint, validation metric or test metric was produced in this
+  design-only step.
 
 ## 2026-08-26 — ICPT periodic residual experiment: Stage 0 pass, Stage A gate failure
 
 Executed the pre-registered ICPT plan
-(`docs/PhaseFormer_intercycle_patch_residual_experiment_plan.md`) under full-GPU
+(`docs/PhaseFormer_intercycle_patch_residual_experiment.md`) under full-GPU
 authorization. Implementation committed `372a5af` (ICPT module, PE variants,
 PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 `bca8909`.
@@ -633,8 +634,8 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   neither mean<1 nor ≥3/4 settings both-metric improve holds.
 - **Architecture diagnosis**: A3 RepeatLastCycle (≈0.7–4.7K params) is near
   parity only on ETTh2-720, regresses 15–60% elsewhere; A4 CycleNet
-  (≈ A2 param count) is statistically indistinguishable from A2 on all 4
-  settings; A5 ICPT (24.7K–28.2K params, far smaller than NLinear) beats A2 only
+  (≈ A2 param count) is numerically within 1.3% of A2 on all 4 settings, with
+  no statistical claim from the single seed; A5 ICPT (24.7K–28.2K params, far smaller than NLinear) beats A2 only
   on ETTh2-720, regresses 7–28% on the other three.
 - **Decision per plan §13**: Stage A architecture gate failed → **ICPT main line
   stopped**; no PE freeze, no Stage B/C/D. `freeze_record.json` written with
@@ -648,3 +649,16 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   SOCKS5 proxy at `127.0.0.1:7897`.
 - Added reusable temporary `core.sshCommand` examples to `AGENTS.md`; the
   commands leave the configured remote URL unchanged.
+
+## 2026-08-27 — ICPT report consolidation and result review
+
+- Consolidated the ICPT plan and filled Stage A results into
+  `docs/PhaseFormer_intercycle_patch_residual_experiment.md`, following the
+  repository's four-section closed-loop report format.
+- Recomputed the reported A5-vs-A2 percentage changes: ETTh2-720 improves
+  3.98%/2.67% MSE/MAE, while ETTm2, Electricity, and Weather regress by
+  7.35%–27.77%. The pre-registered Stage A failure decision is unchanged.
+- Clarified that Stage B/C/D and formal Golden comparison were not run, so the
+  experiment neither ranks position encodings nor supports a Golden-beating
+  claim. The locally generated screen CSV is absent from the current checkout,
+  which limits independent run-level re-aggregation.
