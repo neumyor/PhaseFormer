@@ -662,3 +662,18 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   experiment neither ranks position encodings nor supports a Golden-beating
   claim. The locally generated screen CSV is absent from the current checkout,
   which limits independent run-level re-aggregation.
+
+## 2026-08-27 — ICPT full-horizon head experiment preregistration
+
+- Started a new, separately identified ICPT experiment at
+  `docs/PhaseFormer_icpt_horizon_head_experiment.md`; the stopped decoder-based
+  ICPT result remains unchanged.
+- Replaced future-query decoding in the candidate with an ordered flattened
+  full-horizon head and restored last-value centering/anchoring. With
+  `d_model=24`, the `30×24→H` prediction matrix matches NLinear's `720→H`
+  matrix size; the cycle encoder is the only additional capacity.
+- Pre-registered a validation-only four-setting screen of none plus eight index
+  position encodings and a separately ranked calendar encoding. All encodings
+  will run; no-position is an ablation rather than a gate that blocks PE tests.
+- Formal three-seed test and Golden comparison are allowed only after a frozen
+  candidate beats the matched NLinear validation gate.
