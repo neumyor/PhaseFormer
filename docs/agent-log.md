@@ -1,5 +1,25 @@
 # Agent Maintenance Log
 
+## 2026-08-27 — Periodic-residual next-stage 288-run formal matrix completed
+
+- 完成预注册 288-run 矩阵（12 setting × 8 mode × 3 seed；ETTh1/ETTh2/ETTm1/
+  ETTm2/Weather/Electricity × horizon 96/192，lookback 720、period 24；
+  full-train、best-val checkpoint、单次 test 读取）。4 张 GPU 并行（
+  `scripts/_gpu_periodic_residual_runner.py` 按命令轮转分片），全部 run 正常完成，
+  无缺失/重复 key。
+- 汇总器生成 `research_runs/periodic_residual_next_stage_v1/formal_summary.csv` 与
+  `decision_summary.json`；结果回填至
+  `docs/PhaseFormer_periodic_residual_next_stage.md` §3.2/§3.3，结论写入 §4。
+- 机制诊断（`scripts/collect_mechanism_diagnostics.py`，seed 2021、best.ckpt 前向）
+  输出 `mechanism_diagnostics.csv`：D1 内容检索熵随样本变化未塌缩但 gate 只在
+  Electricity 打开；D2 内层周期 gate 持续偏低；D3 路由按数据集选周期（ETTh→P24、
+  ETTm1→P96、Weather→P12）但 correction gate 几乎恒为 0。
+- 结论：**没有候选满足替换 A2 的统一门槛**。I0（`rcrf_icpt_none`）达到 8/12
+  双指标改善（宏平均 0.9969，Weather/Electricity 稳定超 Golden），但 ETTh2-96
+  MSE 回退 +6.5% 被挡在门槛外；D1/D2/D3 均在 ±0.6% 内、机制 gate 收敛到零。
+  先前“ICPT 系统性弱于 NLinear”的结论只在 ETTh2 上成立。原始 checkpoint 与
+  metrics 保留在被 `.gitignore` 忽略的 `research_runs/periodic_residual_next_stage_v1/`。
+
 ## 2026-08-27 — ICPT ETTh2/ETTm2 formal test rerun
 
 - 按 full-train、best-validation checkpoint、single test read 协议完成
