@@ -726,3 +726,23 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   before further tests, and uses RCRF+NLinear+LFF as the primary incumbent.
   Protocol, success rules and empty result tables are in
   `docs/PhaseFormer_periodic_residual_next_stage.md`.
+
+## 2026-08-27 — Periodic-complementary residual candidates implemented
+
+- Implemented `PhaseErrorPeriodicMemoryHead`,
+  `DualReliabilityPeriodicFusion`, and `AdaptiveMultiPeriodResidualHead` in
+  `src/models/periodic_residual_experts.py`. D1/D3 start exactly as NLinear;
+  D2 preserves the old LFF component outputs but replaces its global blend with
+  sample/channel residual-cycle reliability.
+- Added isolated presets `rcrf_phase_error_memory`,
+  `rcrf_dual_reliability_lff`, and `rcrf_multiperiod`; existing NLinear, LFF
+  and both ICPT paths remain unchanged by default.
+- Added a formal runner/summarizer that expands the frozen six-dataset,
+  96/192, three-seed matrix to 36 commands and 288 model runs. Summarization
+  refuses incomplete/duplicate matrices and computes sample std, A2 ratios,
+  stable-Golden counts and the pre-registered replacement gate.
+- Verification: 160 repository unit tests passed; full PhaseFormer forwards at
+  both horizons, actual `720→192` finite backward, exact NLinear warm starts,
+  normalized/sample-varying diagnostics, all dataset presets, dry-run count and
+  synthetic summarization were checked. No training/test experiment was run.
+  Code commit: `d1ab49e`.

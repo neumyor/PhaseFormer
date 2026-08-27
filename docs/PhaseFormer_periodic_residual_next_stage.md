@@ -1,6 +1,6 @@
 # PhaseFormer 周期互补残差下一阶段实验
 
-> 状态：**实验方案已预注册，代码实现与 Stage 0 测试待完成；尚未产生本轮训练、validation 或 test 结果。** 本轮不会用少量 setting 提前淘汰 ICPT，所有预注册模型都必须完成 12 个 setting 的三 seed 正式测试。
+> 状态：**实验方案、三个候选、preset、288-run runner 与汇总器均已完成；Stage 0 的静态/单元/CPU 前反向测试通过，尚未产生本轮训练、validation 或 test 结果。** 本轮不会用少量 setting 提前淘汰 ICPT，所有预注册模型都必须完成 12 个 setting 的三 seed 正式测试。
 
 ## 1. 实验要验证的设想
 
@@ -68,19 +68,49 @@ I0/I1 同时保留，是为了把“ICPT 本身”和“decoder/head 设计”�
 
 本轮三个方向是在已知 ETTh2-720、ETTm2-96 test 结果后提出，I0/I1 也已有部分 test 暴露，因此本轮不是完全盲测。为限制进一步 test-set selection，本文件冻结后不得根据单个 test 结果修改候选、周期列表、门控初值或训练超参数；若之后修改，必须建立新实验编号并保留本轮完整结果。
 
+### 2.6 执行与汇总入口
+
+先检查固定矩阵，应输出 `commands=36 model_runs=288`：
+
+```bash
+python scripts/run_periodic_residual_next_stage.py --stage dry-run
+```
+
+正式顺序执行并允许按 run 续跑：
+
+```bash
+python scripts/run_periodic_residual_next_stage.py --stage full --resume
+```
+
+只有 288 个 run 全部存在时，汇总器才会生成 `formal_summary.csv` 和 `decision_summary.json`；缺失或重复 run 会明确失败：
+
+```bash
+python scripts/run_periodic_residual_next_stage.py --stage summarize
+```
+
 ## 3. 实现方式和待填结果
 
 ### 3.1 Stage 0
 
 | 检查 | 结果 |
 |---|---|
-| A0/A1/A2/I0/I1 flag-off 回归 | 待填 |
-| D1/D2/D3 96/192 shape 与 finite forward/backward | 待填 |
-| D1/D3 零门控严格恢复 NLinear warm start | 待填 |
-| D1 attention、D2 双可靠性、D3 周期权重归一化 | 待填 |
-| D2 refactor 前后原 `rcrf_pe_lff` 输出一致 | 待填 |
-| 6 数据集 preset 和 288-run dry-run 清单 | 待填 |
-| ETTm2 与 Weather 5%/1 epoch smoke | 待填，本轮代码阶段不要求正式训练 |
+| A0/A1/A2/I0/I1 flag-off 回归 | 通过；全仓库 160 项测试全部成功 |
+| D1/D2/D3 96/192 shape 与 finite forward/backward | 通过；完整 PhaseFormer 两个 horizon 前向有限，三个 head 在 `720→192` 上反向有限 |
+| D1/D3 零门控严格恢复 NLinear warm start | 通过，逐元素精确相等 |
+| D1 attention、D2 双可靠性、D3 周期权重归一化 | 通过；并验证 D1 按样本变化、D2 对重复误差提高周期权重、D3 对正弦输入选择正确周期 |
+| D2 refactor 前后原 `rcrf_pe_lff` 输出一致 | 通过；component 重构与原 blend 逐元素一致，原 LFF 仍使用可学习 `beta` |
+| 6 数据集 preset 和 288-run dry-run 清单 | 通过；36 个 setting×seed 命令，每条 8 个 mode，共 288 model runs |
+| 正式汇总器 | 通过 synthetic complete-matrix 测试；三 seed sample std、A2 比值、Golden 稳定性和门槛判断均自动生成 |
+| ETTm2 与 Weather 5%/1 epoch smoke | 未运行；本轮按用户要求只完成代码与计划，不启动训练 |
+
+候选 residual head 的可训练参数量如下；D2 为 LFF head 与双可靠性 fusion 合计：
+
+| Horizon | NLinear | D1 | D2 | D3 |
+|---:|---:|---:|---:|---:|
+| 96 | 69,216 | 69,728（1.0074×） | 69,323（1.0015×） | 69,316（1.0014×） |
+| 192 | 138,432 | 139,040（1.0044×） | 138,635（1.0015×） | 138,628（1.0014×） |
+
+实现提交为 `d1ab49e`。新增模块位于 `src/models/periodic_residual_experts.py`，preset/融合入口位于 `src/models/phaseformer_presets.py` 与 `src/models/PhaseFormer.py`，正式执行和严格汇总入口为 `scripts/run_periodic_residual_next_stage.py`。
 
 ### 3.2 三 seed 正式 test 表
 
