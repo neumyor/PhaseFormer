@@ -21,6 +21,11 @@ from src.models.phase_adapters import (
     PeriodPositionEncodedResidualHead,
     ReliabilityCoupledResidualFusion,
 )
+from src.models.periodic_residual_experts import (
+    AdaptiveMultiPeriodResidualHead,
+    DualReliabilityPeriodicFusion,
+    PhaseErrorPeriodicMemoryHead,
+)
 from src.models.intercycle_patch import (
     CycleNetStyleResidualHead,
     InterCyclePatchResidualHead,
@@ -511,9 +516,21 @@ class PhaseFormer(DefaultPLModule):
         self.use_periodic_residual_pe = getattr(
             configs, "use_periodic_residual_pe", False
         )
+        self.use_dual_reliability_fusion = getattr(
+            configs, "use_dual_reliability_fusion", False
+        )
         self.intercycle_head_requires_marks = False
         if self.use_weak_period_residual:
             residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
+            if self.use_dual_reliability_fusion and not self.use_rcrf_fusion:
+                raise ValueError("dual reliability fusion requires use_rcrf_fusion=True")
+            if (
+                self.use_dual_reliability_fusion
+                and residual_head_type != "periodic_pe"
+            ):
+                raise ValueError(
+                    "dual reliability fusion requires the periodic_pe residual head"
+                )
             if residual_head_type == "periodic_pe":
                 if not self.use_periodic_residual_pe:
                     raise ValueError(
@@ -537,6 +554,7 @@ class PhaseFormer(DefaultPLModule):
                     blend_init=getattr(
                         configs, "periodic_residual_pe_blend_init", 0.1
                     ),
+                    learn_blend=not self.use_dual_reliability_fusion,
                 )
             elif residual_head_type == "intercycle":
                 self.weak_period_residual = InterCyclePatchResidualHead(
@@ -576,6 +594,39 @@ class PhaseFormer(DefaultPLModule):
                 self.weak_period_residual = CycleNetStyleResidualHead(
                     self.seq_len, self.pred_len, self.period_len
                 )
+            elif residual_head_type == "phase_error_memory":
+                self.weak_period_residual = PhaseErrorPeriodicMemoryHead(
+                    self.seq_len,
+                    self.pred_len,
+                    self.period_len,
+                    memory_dim=getattr(configs, "phase_error_memory_dim", 16),
+                    temperature=getattr(
+                        configs, "phase_error_memory_temperature", 0.1
+                    ),
+                    recency_decay=getattr(
+                        configs, "phase_error_memory_recency_decay", 0.1
+                    ),
+                    max_correction=getattr(
+                        configs, "phase_error_memory_max_correction", 0.5
+                    ),
+                )
+            elif residual_head_type == "adaptive_multiperiod":
+                self.weak_period_residual = AdaptiveMultiPeriodResidualHead(
+                    self.seq_len,
+                    self.pred_len,
+                    periods=getattr(
+                        configs, "multiperiod_residual_periods", (12, 24, 48, 96)
+                    ),
+                    routing_temperature=getattr(
+                        configs, "multiperiod_residual_temperature", 0.15
+                    ),
+                    recency_decay=getattr(
+                        configs, "multiperiod_residual_recency_decay", 0.1
+                    ),
+                    max_correction=getattr(
+                        configs, "multiperiod_residual_max_correction", 0.5
+                    ),
+                )
             elif residual_head_type == "channel":
                 self.weak_period_residual = ChannelWiseWeakPeriodResidualHead(
                     self.seq_len, self.pred_len, self.enc_in
@@ -592,12 +643,32 @@ class PhaseFormer(DefaultPLModule):
                 )
             gate_init = float(getattr(configs, "weak_period_residual_gate_init", 0.2))
             if self.use_rcrf_fusion:
-                self.rcrf_fusion = ReliabilityCoupledResidualFusion(
-                    alpha_init=getattr(configs, "rcrf_alpha_init", 0.5),
-                    sensitivity_init=getattr(configs, "rcrf_sensitivity_init", 0.0),
-                    s_max=getattr(configs, "rcrf_s_max", 4.0),
-                    eps=getattr(configs, "rcrf_eps", 1e-6),
-                )
+                if self.use_dual_reliability_fusion:
+                    self.dual_reliability_fusion = DualReliabilityPeriodicFusion(
+                        pred_len=self.pred_len,
+                        alpha_init=getattr(configs, "rcrf_alpha_init", 0.5),
+                        phase_sensitivity_init=getattr(
+                            configs, "rcrf_sensitivity_init", 0.0
+                        ),
+                        phase_s_max=getattr(configs, "rcrf_s_max", 4.0),
+                        periodic_init=getattr(
+                            configs, "dual_reliability_periodic_init", 0.1
+                        ),
+                        periodic_sensitivity_init=getattr(
+                            configs, "dual_reliability_sensitivity_init", 2.0
+                        ),
+                        periodic_s_max=getattr(
+                            configs, "dual_reliability_s_max", 4.0
+                        ),
+                        eps=getattr(configs, "rcrf_eps", 1e-6),
+                    )
+                else:
+                    self.rcrf_fusion = ReliabilityCoupledResidualFusion(
+                        alpha_init=getattr(configs, "rcrf_alpha_init", 0.5),
+                        sensitivity_init=getattr(configs, "rcrf_sensitivity_init", 0.0),
+                        s_max=getattr(configs, "rcrf_s_max", 4.0),
+                        eps=getattr(configs, "rcrf_eps", 1e-6),
+                    )
             elif self.use_adaptive_weak_period_gate:
                 self.adaptive_weak_period_gate = AdaptiveWeakPeriodGate(
                     enc_in=self.enc_in,
@@ -1271,22 +1342,30 @@ class PhaseFormer(DefaultPLModule):
         y_hat = y_full.permute(0, 2, 1)  # (B, pred_len, C)
 
         if self.use_weak_period_residual:
-            if self.use_periodic_residual_pe or self.intercycle_head_requires_marks:
-                residual_hat = self.weak_period_residual(
+            if self.use_dual_reliability_fusion:
+                linear_hat, periodic_hat = self.weak_period_residual.forward_components(
                     x_in, x_mark_enc=x_mark_enc, x_mark_dec=x_mark_dec
                 )
+                y_hat, _ = self.dual_reliability_fusion(
+                    y_hat, linear_hat, periodic_hat, phase_series_raw
+                )
             else:
-                residual_hat = self.weak_period_residual(x_in)
-            if self.use_rcrf_fusion:
-                y_hat, _ = self.rcrf_fusion(y_hat, residual_hat, phase_series_raw)
-            else:
-                if self.use_adaptive_weak_period_gate:
-                    residual_gate = self.adaptive_weak_period_gate(x_in, phase_series)
-                elif self.use_adaptive_residual_gate:
-                    residual_gate = self.adaptive_residual_gate(Z, x_in)
+                if self.use_periodic_residual_pe or self.intercycle_head_requires_marks:
+                    residual_hat = self.weak_period_residual(
+                        x_in, x_mark_enc=x_mark_enc, x_mark_dec=x_mark_dec
+                    )
                 else:
-                    residual_gate = torch.sigmoid(self.weak_period_residual_gate)
-                y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
+                    residual_hat = self.weak_period_residual(x_in)
+                if self.use_rcrf_fusion:
+                    y_hat, _ = self.rcrf_fusion(y_hat, residual_hat, phase_series_raw)
+                else:
+                    if self.use_adaptive_weak_period_gate:
+                        residual_gate = self.adaptive_weak_period_gate(x_in, phase_series)
+                    elif self.use_adaptive_residual_gate:
+                        residual_gate = self.adaptive_residual_gate(Z, x_in)
+                    else:
+                        residual_gate = torch.sigmoid(self.weak_period_residual_gate)
+                    y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
 
         if self.use_topology_output_convex_residual:
             residual_hat = self.topology_output_convex_residual(x_in)

@@ -94,6 +94,7 @@ class PeriodPositionEncodedResidualHead(nn.Module):
         temperature: float = 0.1,
         cycle_decay: float = 0.1,
         blend_init: float = 0.1,
+        learn_blend: bool = True,
     ):
         super().__init__()
         if encoding_type not in self.ENCODING_TYPES:
@@ -125,7 +126,11 @@ class PeriodPositionEncodedResidualHead(nn.Module):
 
         blend_init = min(max(float(blend_init), 1e-4), 1.0 - 1e-4)
         blend_logit = float(torch.logit(torch.tensor(blend_init)))
-        self.blend_logits = nn.Parameter(torch.full((self.pred_len,), blend_logit))
+        blend_logits = torch.full((self.pred_len,), blend_logit)
+        if learn_blend:
+            self.blend_logits = nn.Parameter(blend_logits)
+        else:
+            self.register_buffer("blend_logits", blend_logits)
 
         if self.encoding_type == "time2vec":
             num_periodic = max(1, self.pe_dim - 1)
@@ -262,8 +267,8 @@ class PeriodPositionEncodedResidualHead(nn.Module):
             logits = logits.unsqueeze(0) if logits.ndim == 2 else logits
         return torch.softmax(logits, dim=-1)
 
-    def forward(self, x, x_mark_enc=None, x_mark_dec=None):
-        # x: (B, L, C), all computations stay on the normalized model scale.
+    def forward_components(self, x, x_mark_enc=None, x_mark_dec=None):
+        """Return the NLinear and periodic-copy forecasts before blending."""
         if x.size(1) != self.seq_len:
             raise ValueError(f"expected seq_len={self.seq_len}, got {x.size(1)}")
         last = x[:, -1:, :]
@@ -274,11 +279,8 @@ class PeriodPositionEncodedResidualHead(nn.Module):
             periodic_delta = torch.einsum("hl,bcl->bhc", attention, centered)
         else:
             periodic_delta = torch.einsum("bhl,bcl->bhc", attention, centered)
-        beta = torch.sigmoid(self.blend_logits).view(1, self.pred_len, 1)
-        delta = (1.0 - beta) * linear_delta + beta * periodic_delta
 
         with torch.no_grad():
-            self.last_beta = beta.detach()
             self.last_attention = attention.detach()
             entropy = -(attention * attention.clamp_min(1e-12).log()).sum(dim=-1)
             self.last_attention_entropy = float(entropy.mean().detach())
@@ -291,7 +293,18 @@ class PeriodPositionEncodedResidualHead(nn.Module):
             )
             self.last_top_lags = (future_index - top_history).detach()
 
-        return delta + last.expand(-1, self.pred_len, -1)
+        anchor = last.expand(-1, self.pred_len, -1)
+        return anchor + linear_delta, anchor + periodic_delta
+
+    def forward(self, x, x_mark_enc=None, x_mark_dec=None):
+        # x: (B, L, C), all computations stay on the normalized model scale.
+        y_linear, y_periodic = self.forward_components(
+            x, x_mark_enc=x_mark_enc, x_mark_dec=x_mark_dec
+        )
+        beta = torch.sigmoid(self.blend_logits).view(1, self.pred_len, 1)
+        with torch.no_grad():
+            self.last_beta = beta.detach()
+        return (1.0 - beta) * y_linear + beta * y_periodic
 
 
 class ChannelWiseWeakPeriodResidualHead(nn.Module):

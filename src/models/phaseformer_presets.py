@@ -76,6 +76,12 @@ ABLATION_MODES = {
     "rcrf_pe_time2vec",
     "rcrf_pe_lff",
     "rcrf_pe_calendar",
+    # Periodic-complementary residual next stage. These preserve NLinear and
+    # add phase-template-error memory, dual evidence routing, or multi-period
+    # lag retrieval respectively.
+    "rcrf_phase_error_memory",
+    "rcrf_dual_reliability_lff",
+    "rcrf_multiperiod",
     # Inter-Cycle Patch Transformer residual candidates (ICPT plan).  A3/A4 are
     # simple cycle baselines; rcrf_icpt_* swap the NLinear head for the ICPT
     # transformer with the position encoding given by the suffix.  All inherit
@@ -121,6 +127,12 @@ PERIODIC_RESIDUAL_PE_MODES = {
     "rcrf_pe_lff": "lff",
     "rcrf_pe_calendar": "calendar",
 }
+
+PERIODIC_COMPLEMENT_MODES = (
+    "rcrf_phase_error_memory",
+    "rcrf_dual_reliability_lff",
+    "rcrf_multiperiod",
+)
 
 # ICPT position encodings.  P0 is the no-PE architecture baseline; P1-P8 are
 # the pure index-PE candidates ranked together; P9 (calendar) is scored
@@ -961,6 +973,40 @@ def get_ablation_overrides(mode):
             periodic_residual_pe_blend_init=0.1,
         )
         return overrides
+    if mode in PERIODIC_COMPLEMENT_MODES:
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides["scheme_name"] = mode
+        if mode == "rcrf_phase_error_memory":
+            overrides.update(
+                weak_period_residual_head_type="phase_error_memory",
+                phase_error_memory_dim=16,
+                phase_error_memory_temperature=0.1,
+                phase_error_memory_recency_decay=0.1,
+                phase_error_memory_max_correction=0.5,
+            )
+        elif mode == "rcrf_dual_reliability_lff":
+            overrides.update(
+                weak_period_residual_head_type="periodic_pe",
+                use_periodic_residual_pe=True,
+                periodic_residual_pe_type="lff",
+                periodic_residual_pe_dim=16,
+                periodic_residual_pe_temperature=0.1,
+                periodic_residual_pe_cycle_decay=0.1,
+                periodic_residual_pe_blend_init=0.1,
+                use_dual_reliability_fusion=True,
+                dual_reliability_periodic_init=0.1,
+                dual_reliability_sensitivity_init=2.0,
+                dual_reliability_s_max=4.0,
+            )
+        else:
+            overrides.update(
+                weak_period_residual_head_type="adaptive_multiperiod",
+                multiperiod_residual_periods=(12, 24, 48, 96),
+                multiperiod_residual_temperature=0.15,
+                multiperiod_residual_recency_decay=0.1,
+                multiperiod_residual_max_correction=0.5,
+            )
+        return overrides
     # Inter-Cycle Patch Transformer candidates (ICPT plan).  A3/A4 swap the
     # NLinear head for simple cycle baselines; rcrf_icpt_* build the ICPT head
     # with a position encoding.  Everything else inherits the frozen RCRF stack
@@ -1032,6 +1078,7 @@ def _without_residual(overrides):
     sanitized["use_weak_period_residual"] = False
     sanitized["use_adaptive_weak_period_gate"] = False
     sanitized["use_periodic_residual_pe"] = False
+    sanitized["use_dual_reliability_fusion"] = False
     return sanitized
 
 
@@ -1165,6 +1212,9 @@ class PhaseFormerPresetConfig:
         self.use_periodic_residual_pe = hyperparams.get(
             "use_periodic_residual_pe", False
         )
+        self.use_dual_reliability_fusion = hyperparams.get(
+            "use_dual_reliability_fusion", False
+        )
         self.periodic_residual_pe_type = hyperparams.get(
             "periodic_residual_pe_type", "harmonic"
         )
@@ -1179,6 +1229,37 @@ class PhaseFormerPresetConfig:
         )
         self.periodic_residual_pe_blend_init = hyperparams.get(
             "periodic_residual_pe_blend_init", 0.1
+        )
+        self.phase_error_memory_dim = hyperparams.get("phase_error_memory_dim", 16)
+        self.phase_error_memory_temperature = hyperparams.get(
+            "phase_error_memory_temperature", 0.1
+        )
+        self.phase_error_memory_recency_decay = hyperparams.get(
+            "phase_error_memory_recency_decay", 0.1
+        )
+        self.phase_error_memory_max_correction = hyperparams.get(
+            "phase_error_memory_max_correction", 0.5
+        )
+        self.dual_reliability_periodic_init = hyperparams.get(
+            "dual_reliability_periodic_init", 0.1
+        )
+        self.dual_reliability_sensitivity_init = hyperparams.get(
+            "dual_reliability_sensitivity_init", 2.0
+        )
+        self.dual_reliability_s_max = hyperparams.get(
+            "dual_reliability_s_max", 4.0
+        )
+        self.multiperiod_residual_periods = hyperparams.get(
+            "multiperiod_residual_periods", (12, 24, 48, 96)
+        )
+        self.multiperiod_residual_temperature = hyperparams.get(
+            "multiperiod_residual_temperature", 0.15
+        )
+        self.multiperiod_residual_recency_decay = hyperparams.get(
+            "multiperiod_residual_recency_decay", 0.1
+        )
+        self.multiperiod_residual_max_correction = hyperparams.get(
+            "multiperiod_residual_max_correction", 0.5
         )
         # Inter-Cycle Patch Transformer residual head configuration (ICPT plan).
         self.intercycle_period_len = hyperparams.get("intercycle_period_len", 24)
