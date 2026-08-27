@@ -559,6 +559,12 @@ class PhaseFormer(DefaultPLModule):
                     use_attention=getattr(configs, "intercycle_use_attention", True),
                     label_len=getattr(configs, "label_len", 0),
                     dropout=getattr(configs, "intercycle_dropout", 0.0),
+                    prediction_head=getattr(
+                        configs, "intercycle_prediction_head", "decoder"
+                    ),
+                    anchor_mode=getattr(
+                        configs, "intercycle_anchor_mode", None
+                    ),
                 )
                 # Calendar PE reads timestamp marks already provided to the model.
                 self.intercycle_head_requires_marks = self.weak_period_residual.pe_type == "calendar"

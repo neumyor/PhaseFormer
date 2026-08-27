@@ -92,6 +92,18 @@ ABLATION_MODES = {
     "rcrf_icpt_lff",
     "rcrf_icpt_sincos_relative",
     "rcrf_icpt_calendar",
+    # PatchTST-style ordered full-horizon ICPT head and its PE variants.
+    "rcrf_icpt_horizon_cycle_anchor",
+    "rcrf_icpt_horizon_none",
+    "rcrf_icpt_horizon_sincos",
+    "rcrf_icpt_horizon_learned_abs",
+    "rcrf_icpt_horizon_time2vec",
+    "rcrf_icpt_horizon_rope",
+    "rcrf_icpt_horizon_relative",
+    "rcrf_icpt_horizon_alibi",
+    "rcrf_icpt_horizon_lff",
+    "rcrf_icpt_horizon_sincos_relative",
+    "rcrf_icpt_horizon_calendar",
     # Stage D mechanism ablations of the frozen ICPT-best candidate.
     "icpt_only",
     "icpt_fixed_fusion",
@@ -126,6 +138,19 @@ INTERCYCLE_PE_MODES = {
     "rcrf_icpt_calendar": "calendar",
 }
 
+INTERCYCLE_HORIZON_PE_MODES = {
+    "rcrf_icpt_horizon_none": "none",
+    "rcrf_icpt_horizon_sincos": "sincos",
+    "rcrf_icpt_horizon_learned_abs": "learned_abs",
+    "rcrf_icpt_horizon_time2vec": "time2vec",
+    "rcrf_icpt_horizon_rope": "rope",
+    "rcrf_icpt_horizon_relative": "relative",
+    "rcrf_icpt_horizon_alibi": "alibi",
+    "rcrf_icpt_horizon_lff": "lff",
+    "rcrf_icpt_horizon_sincos_relative": "sincos_relative",
+    "rcrf_icpt_horizon_calendar": "calendar",
+}
+
 # Fixed ICPT hyperparameters shared by every rcrf_icpt_* candidate so that the
 # only difference between modes is the position encoding.
 ICPT_FIXED_HYPERPARAMS = {
@@ -141,6 +166,23 @@ ICPT_FIXED_HYPERPARAMS = {
     "intercycle_use_last_cycle_anchor": True,
     "intercycle_use_attention": True,
     "intercycle_dropout": 0.0,
+}
+
+ICPT_HORIZON_FIXED_HYPERPARAMS = {
+    "weak_period_residual_head_type": "intercycle",
+    "intercycle_period_len": 24,
+    "intercycle_d_model": 24,
+    "intercycle_heads": 4,
+    "intercycle_ffn_dim": 48,
+    "intercycle_encoder_layers": 1,
+    "intercycle_decoder_layers": 0,
+    "intercycle_relative_buckets": 16,
+    "intercycle_lff_frequencies": 16,
+    "intercycle_use_last_cycle_anchor": False,
+    "intercycle_use_attention": True,
+    "intercycle_dropout": 0.0,
+    "intercycle_prediction_head": "flatten",
+    "intercycle_anchor_mode": "last_value",
 }
 
 
@@ -940,6 +982,22 @@ def get_ablation_overrides(mode):
             intercycle_pe_type=INTERCYCLE_PE_MODES[mode],
         )
         return overrides
+    if mode in INTERCYCLE_HORIZON_PE_MODES:
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode,
+            **ICPT_HORIZON_FIXED_HYPERPARAMS,
+            intercycle_pe_type=INTERCYCLE_HORIZON_PE_MODES[mode],
+        )
+        return overrides
+    if mode == "rcrf_icpt_horizon_cycle_anchor":
+        overrides = get_ablation_overrides("rcrf_icpt_horizon_none")
+        overrides.update(
+            scheme_name=mode,
+            intercycle_anchor_mode="last_cycle",
+            intercycle_use_last_cycle_anchor=True,
+        )
+        return overrides
     # Stage D mechanism ablations of the frozen ICPT-best candidate.
     # The frozen index-PE is resolved from the ICPT_FROZEN_PE environment
     # variable (set by the experiment runner after Stage B freezes), so the
@@ -1147,6 +1205,12 @@ class PhaseFormerPresetConfig:
             "intercycle_use_attention", True
         )
         self.intercycle_dropout = hyperparams.get("intercycle_dropout", 0.0)
+        self.intercycle_prediction_head = hyperparams.get(
+            "intercycle_prediction_head", "decoder"
+        )
+        self.intercycle_anchor_mode = hyperparams.get(
+            "intercycle_anchor_mode", None
+        )
         self.use_time_mark_adjustment = hyperparams.get("use_time_mark_adjustment", False)
         self.time_mark_dim = hyperparams.get("time_mark_dim", 4)
         self.time_mark_hidden = hyperparams.get("time_mark_hidden", 32)

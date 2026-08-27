@@ -328,6 +328,8 @@ class InterCyclePatchResidualHead(nn.Module):
         use_attention: bool = True,
         label_len: int = 0,
         dropout: float = 0.0,
+        prediction_head: str = "decoder",
+        anchor_mode: str | None = None,
     ):
         super().__init__()
         if pe_type not in ICPTPE_TYPES:
@@ -336,6 +338,12 @@ class InterCyclePatchResidualHead(nn.Module):
             raise ValueError("d_model must be divisible by num_heads")
         if seq_len <= 0 or pred_len <= 0 or period_len <= 1:
             raise ValueError("seq_len/pred_len must be positive and period_len > 1")
+        if prediction_head not in ("decoder", "flatten"):
+            raise ValueError(f"Unsupported ICPT prediction head: {prediction_head}")
+        if anchor_mode is None:
+            anchor_mode = "last_cycle" if use_last_cycle_anchor else "none"
+        if anchor_mode not in ("last_cycle", "last_value", "none"):
+            raise ValueError(f"Unsupported ICPT anchor mode: {anchor_mode}")
 
         self.seq_len = int(seq_len)
         self.pred_len = int(pred_len)
@@ -345,12 +353,16 @@ class InterCyclePatchResidualHead(nn.Module):
         self.use_last_cycle_anchor = bool(use_last_cycle_anchor)
         self.use_attention = bool(use_attention)
         self.label_len = int(label_len)
+        self.prediction_head = prediction_head
+        self.anchor_mode = anchor_mode
 
         self.num_periods_input = (seq_len + period_len - 1) // period_len
         self.num_periods_output = (pred_len + period_len - 1) // period_len
         self.pad_input = self.num_periods_input * period_len - seq_len
         self.trim_output = self.num_periods_output * period_len - pred_len
-        self.max_position = self.num_periods_input + self.num_periods_output
+        self.max_position = self.num_periods_input + (
+            self.num_periods_output if prediction_head == "decoder" else 0
+        )
 
         self.token_pe = _TOKEN_PE[pe_type]
         self.attn_pe = _ATTN_PE[pe_type]
@@ -377,8 +389,11 @@ class InterCyclePatchResidualHead(nn.Module):
         elif self.token_pe == "calendar":
             self.calendar_proj = nn.Linear(10, d_model)
 
-        # Decoder query tokens (one per future cycle).
-        self.learned_query = nn.Parameter(torch.randn(self.num_periods_output, d_model) * 0.02)
+        if prediction_head == "decoder":
+            # Decoder query tokens (one per future cycle).
+            self.learned_query = nn.Parameter(
+                torch.randn(self.num_periods_output, d_model) * 0.02
+            )
 
         if use_attention:
             block_kwargs = dict(
@@ -397,23 +412,34 @@ class InterCyclePatchResidualHead(nn.Module):
             )
             self.decoder_blocks = nn.ModuleList(
                 [_ICPTDecoderBlock(**block_kwargs) for _ in range(decoder_layers)]
+                if prediction_head == "decoder" else []
             )
         else:
             # B5: cycle-token MLP, no attention.  Flatten encoded cycle tokens and
             # predict all future-cycle deltas with an MLP (last layer zero-init).
-            self.mlp_decoder = nn.Sequential(
-                nn.Linear(self.num_periods_input * d_model, ffn_dim),
-                nn.GELU(),
-                nn.Linear(ffn_dim, self.num_periods_output * period_len),
-            )
-            nn.init.zeros_(self.mlp_decoder[-1].weight)
-            nn.init.zeros_(self.mlp_decoder[-1].bias)
+            if prediction_head == "decoder":
+                self.mlp_decoder = nn.Sequential(
+                    nn.Linear(self.num_periods_input * d_model, ffn_dim),
+                    nn.GELU(),
+                    nn.Linear(ffn_dim, self.num_periods_output * period_len),
+                )
+                nn.init.zeros_(self.mlp_decoder[-1].weight)
+                nn.init.zeros_(self.mlp_decoder[-1].bias)
 
-        # Output projection: d_model -> period_len.  Zero init makes the initial
-        # output exactly RepeatLastCycle (warm start / A3 equivalence).
-        self.out_proj = nn.Linear(d_model, period_len)
-        nn.init.zeros_(self.out_proj.weight)
-        nn.init.zeros_(self.out_proj.bias)
+        if prediction_head == "decoder":
+            # Output projection: d_model -> period_len.  Zero init makes the
+            # legacy decoder output exactly RepeatLastCycle.
+            self.out_proj = nn.Linear(d_model, period_len)
+            nn.init.zeros_(self.out_proj.weight)
+            nn.init.zeros_(self.out_proj.bias)
+        else:
+            # PatchTST-style ordered full-horizon head. With d_model=P, its
+            # main matrix has the same shape as NLinear's Linear(L, H).
+            self.horizon_head = nn.Linear(
+                self.num_periods_input * d_model, pred_len
+            )
+            nn.init.zeros_(self.horizon_head.weight)
+            nn.init.zeros_(self.horizon_head.bias)
 
         # Diagnostics (no-grad captured, mirror the RCRF/PhaseVelocity hooks).
         self.last_attention = None
@@ -501,6 +527,14 @@ class InterCyclePatchResidualHead(nn.Module):
         fut_pe = self._calendar_encode(fut_marks, self.calendar_proj)
         return hist_pe, fut_pe
 
+    def _calendar_history_pe(self, x_mark_enc):
+        if x_mark_enc is None:
+            raise ValueError("calendar PE requires encoder timestamp marks")
+        hist_idx = torch.arange(
+            self.num_periods_input, device=x_mark_enc.device, dtype=torch.long
+        ) * self.period_len
+        return self._calendar_encode(x_mark_enc[:, hist_idx, :], self.calendar_proj)
+
     # ---- forward ------------------------------------------------------------
     def forward(self, x, x_mark_enc=None, x_mark_dec=None):
         # x: (B, seq_len, C) normalized scale.
@@ -509,9 +543,12 @@ class InterCyclePatchResidualHead(nn.Module):
             x = F.pad(x, (0, 0, self.pad_input, 0), mode="replicate")
         xt = x.permute(0, 2, 1).contiguous()  # (B, C, K_in*P)
         X = xt.view(B, C, self.num_periods_input, self.period_len)
-        anchor = X[:, :, -1, :]  # (B, C, P)
-        if self.use_last_cycle_anchor:
-            M = X - anchor.unsqueeze(2)
+        cycle_anchor = X[:, :, -1, :]  # (B, C, P)
+        value_anchor = xt[:, :, -1:]  # (B, C, 1)
+        if self.anchor_mode == "last_cycle":
+            M = X - cycle_anchor.unsqueeze(2)
+        elif self.anchor_mode == "last_value":
+            M = X - value_anchor.unsqueeze(2)
         else:
             M = X
         N = B * C
@@ -524,29 +561,38 @@ class InterCyclePatchResidualHead(nn.Module):
 
         # Token-level PE.
         if self.token_pe == "calendar":
-            hist_pe, fut_pe = self._calendar_pe(x_mark_enc, x_mark_dec)
+            if self.prediction_head == "decoder":
+                hist_pe, fut_pe = self._calendar_pe(x_mark_enc, x_mark_dec)
+            else:
+                hist_pe = self._calendar_history_pe(x_mark_enc)
             # Calendar PE is per-sample; broadcast to every channel, then merge.
             hist_pe = hist_pe[:, None, :, :].expand(
                 B, C, self.num_periods_input, self.d_model
             )
-            fut_pe = fut_pe[:, None, :, :].expand(
-                B, C, self.num_periods_output, self.d_model
-            )
             z = z + hist_pe.reshape(N, self.num_periods_input, self.d_model)
-            q = self.learned_query.unsqueeze(0).expand(N, -1, -1) + fut_pe.reshape(
-                N, self.num_periods_output, self.d_model
-            )
+            if self.prediction_head == "decoder":
+                fut_pe = fut_pe[:, None, :, :].expand(
+                    B, C, self.num_periods_output, self.d_model
+                )
+                q = self.learned_query.unsqueeze(0).expand(N, -1, -1) + fut_pe.reshape(
+                    N, self.num_periods_output, self.d_model
+                )
         elif self.token_pe != "none":
             z = z + self._token_pe(hist_positions)
-            q = self.learned_query.unsqueeze(0).expand(N, -1, -1) + self._token_pe(
-                fut_positions
-            )
-        else:
+            if self.prediction_head == "decoder":
+                q = self.learned_query.unsqueeze(0).expand(N, -1, -1) + self._token_pe(
+                    fut_positions
+                )
+        elif self.prediction_head == "decoder":
             q = self.learned_query.unsqueeze(0).expand(N, -1, -1)
 
         if self.use_attention:
             for block in self.encoder_blocks:
                 z = block(z, hist_positions)
+        if self.prediction_head == "flatten":
+            delta = self.horizon_head(z.reshape(N, -1)).reshape(B, C, self.pred_len)
+            self.last_attention = None
+        elif self.use_attention:
             for block in self.decoder_blocks:
                 q = block(q, z, fut_positions, hist_positions)
             delta = self.out_proj(q)  # (N, K_out, P)
@@ -558,18 +604,31 @@ class InterCyclePatchResidualHead(nn.Module):
             )
             self.last_attention = None
 
-        delta = delta.reshape(B, C, self.num_periods_output, self.period_len)
-        if self.use_last_cycle_anchor:
-            Y = anchor.unsqueeze(2) + delta
+        if self.prediction_head == "flatten":
+            if self.anchor_mode == "last_cycle":
+                repeats = (self.pred_len + self.period_len - 1) // self.period_len
+                base = cycle_anchor.repeat(1, 1, repeats)[:, :, : self.pred_len]
+            elif self.anchor_mode == "last_value":
+                base = value_anchor.expand(-1, -1, self.pred_len)
+            else:
+                base = torch.zeros_like(delta)
+            y = (base + delta).permute(0, 2, 1)
         else:
-            Y = delta
-        y = Y.reshape(B, C, self.num_periods_output * self.period_len)
-        if self.trim_output > 0:
-            y = y[:, :, : self.pred_len]
-        y = y.permute(0, 2, 1)  # (B, pred_len, C)
+            delta = delta.reshape(B, C, self.num_periods_output, self.period_len)
+            if self.anchor_mode == "last_cycle":
+                Y = cycle_anchor.unsqueeze(2) + delta
+            elif self.anchor_mode == "last_value":
+                Y = value_anchor.unsqueeze(2) + delta
+            else:
+                Y = delta
+            y = Y.reshape(B, C, self.num_periods_output * self.period_len)
+            if self.trim_output > 0:
+                y = y[:, :, : self.pred_len]
+            y = y.permute(0, 2, 1)  # (B, pred_len, C)
 
         with torch.no_grad():
             self.last_delta_norm = float(delta.detach().norm())
+            anchor = cycle_anchor if self.anchor_mode == "last_cycle" else value_anchor
             self.last_anchor_norm = float(anchor.detach().norm())
         return y
 

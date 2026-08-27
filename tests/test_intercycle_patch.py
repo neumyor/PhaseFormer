@@ -14,6 +14,7 @@ from src.models.intercycle_patch import (
 )
 from src.models.phase_adapters import WeakPeriodResidualHead
 from src.models.phaseformer_presets import (
+    INTERCYCLE_HORIZON_PE_MODES,
     INTERCYCLE_PE_MODES,
     PhaseFormerPresetConfig,
     build_hyperparams,
@@ -156,6 +157,122 @@ class InterCyclePatchHeadTests(unittest.TestCase):
         self.assertTrue(math.isfinite(head.last_delta_norm))
         self.assertTrue(math.isfinite(head.last_anchor_norm))
 
+    def test_horizon_head_all_pes_warm_start_at_last_value(self):
+        x = torch.randn(2, 720, 3)
+        x_mark = _calendar_marks(2, 720)
+        for pe in ICPTPE_TYPES:
+            with self.subTest(pe=pe):
+                head = InterCyclePatchResidualHead(
+                    720,
+                    96,
+                    24,
+                    d_model=24,
+                    num_heads=4,
+                    ffn_dim=48,
+                    pe_type=pe,
+                    prediction_head="flatten",
+                    anchor_mode="last_value",
+                )
+                out = head(x, x_mark_enc=x_mark)
+                torch.testing.assert_close(
+                    out,
+                    x[:, -1:, :].expand(-1, 96, -1),
+                    atol=1e-6,
+                    rtol=1e-6,
+                )
+
+    def test_horizon_head_backbone_learns_after_zero_init_warm_start(self):
+        x = torch.randn(2, 720, 2)
+        x_mark = _calendar_marks(2, 720)
+        for pe in ICPTPE_TYPES:
+            with self.subTest(pe=pe):
+                head = InterCyclePatchResidualHead(
+                    720,
+                    96,
+                    24,
+                    d_model=24,
+                    num_heads=4,
+                    ffn_dim=48,
+                    pe_type=pe,
+                    prediction_head="flatten",
+                    anchor_mode="last_value",
+                )
+                optimizer = torch.optim.SGD(head.parameters(), lr=0.01)
+                out = head(x, x_mark_enc=x_mark)
+                out.square().mean().backward()
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+                out = head(x, x_mark_enc=x_mark)
+                out.square().mean().backward()
+                upstream = [
+                    parameter.grad
+                    for name, parameter in head.named_parameters()
+                    if not name.startswith("horizon_head")
+                    and parameter.grad is not None
+                ]
+                self.assertTrue(upstream)
+                self.assertTrue(any(float(grad.abs().sum()) > 0 for grad in upstream))
+
+    def test_horizon_head_without_pe_still_preserves_token_order(self):
+        head = InterCyclePatchResidualHead(
+            720,
+            96,
+            24,
+            d_model=24,
+            num_heads=4,
+            ffn_dim=48,
+            pe_type="none",
+            prediction_head="flatten",
+            anchor_mode="last_value",
+        ).eval()
+        torch.nn.init.normal_(head.horizon_head.weight, std=0.02)
+        x = torch.randn(1, 720, 1)
+        swapped = x.clone()
+        swapped[:, :24], swapped[:, 24:48] = x[:, 24:48], x[:, :24]
+        with torch.no_grad():
+            out = head(x)
+            swapped_out = head(swapped)
+        self.assertFalse(torch.allclose(out, swapped_out))
+
+    def test_horizon_calendar_uses_history_marks_only(self):
+        head = InterCyclePatchResidualHead(
+            720,
+            96,
+            24,
+            d_model=24,
+            num_heads=4,
+            ffn_dim=48,
+            pe_type="calendar",
+            prediction_head="flatten",
+            anchor_mode="last_value",
+        ).eval()
+        torch.nn.init.normal_(head.horizon_head.weight, std=0.02)
+        x = torch.randn(1, 720, 2)
+        x_mark = _calendar_marks(1, 720)
+        with torch.no_grad():
+            first = head(x, x_mark, _calendar_marks(1, 144, start=0))
+            second = head(x, x_mark, _calendar_marks(1, 144, start=999))
+        torch.testing.assert_close(first, second)
+
+    def test_horizon_head_parameter_budget_is_below_one_point_five_nlinear(self):
+        for pred_len in (96, 192, 336, 720):
+            with self.subTest(pred_len=pred_len):
+                baseline = WeakPeriodResidualHead(720, pred_len)
+                candidate = InterCyclePatchResidualHead(
+                    720,
+                    pred_len,
+                    24,
+                    d_model=24,
+                    num_heads=4,
+                    ffn_dim=48,
+                    pe_type="relative",
+                    prediction_head="flatten",
+                    anchor_mode="last_value",
+                )
+                baseline_params = sum(p.numel() for p in baseline.parameters())
+                candidate_params = sum(p.numel() for p in candidate.parameters())
+                self.assertLess(candidate_params, 1.5 * baseline_params)
+
 
 class InterCyclePatchPresetTests(unittest.TestCase):
     def test_all_icpt_presets_only_replace_the_rcrf_residual_head(self):
@@ -195,6 +312,41 @@ class InterCyclePatchPresetTests(unittest.TestCase):
         config = PhaseFormerPresetConfig(args, 720, 96, hyperparams)
         model = PhaseFormer(config).eval()
         self.assertIsInstance(model.weak_period_residual, WeakPeriodResidualHead)
+
+    def test_horizon_presets_share_structure_and_change_only_pe(self):
+        parent = build_hyperparams("ETTm2", 96, "gold_combo_reliability_s2")
+        for mode, pe in sorted(INTERCYCLE_HORIZON_PE_MODES.items()):
+            with self.subTest(mode=mode):
+                candidate = build_hyperparams("ETTm2", 96, mode)
+                self.assertEqual(candidate["intercycle_prediction_head"], "flatten")
+                self.assertEqual(candidate["intercycle_anchor_mode"], "last_value")
+                self.assertEqual(candidate["intercycle_d_model"], 24)
+                self.assertEqual(candidate["intercycle_pe_type"], pe)
+                for key in (
+                    "use_phase_uncertainty_shrinkage",
+                    "use_phase_period_level_calibration",
+                    "use_phase_noise_hifreq_damping",
+                    "rcrf_alpha_init",
+                    "rcrf_sensitivity_init",
+                    "rcrf_s_max",
+                ):
+                    self.assertEqual(candidate[key], parent[key])
+
+    def test_horizon_presets_build_full_phaseformer(self):
+        x = torch.randn(1, 720, 7)
+        x_mark = _calendar_marks(1, 720)
+        y_mark = _calendar_marks(1, 144, start=672)
+        for mode in sorted(INTERCYCLE_HORIZON_PE_MODES):
+            with self.subTest(mode=mode):
+                hyperparams = build_hyperparams("ETTm2", 96, mode)
+                pl.seed_everything(2021, workers=True)
+                args = make_exp_args("ETTm2", 720, 96, hyperparams)
+                config = PhaseFormerPresetConfig(args, 720, 96, hyperparams)
+                model = PhaseFormer(config).eval()
+                with torch.no_grad():
+                    output, _, _ = model(x, x_mark, None, y_mark)
+                self.assertEqual(tuple(output.shape), (1, 96, 7))
+                self.assertTrue(torch.isfinite(output).all())
 
     def test_calendar_preset_runs_full_phaseformer_forward_with_marks(self):
         hyperparams = build_hyperparams("ETTm2", 96, "rcrf_icpt_calendar")
