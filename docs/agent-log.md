@@ -641,3 +641,10 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `stage_a_passed: false`; test set was never read.
 - Plan doc updated: tables 9.1/9.2 filled with actuals, 9.3–9.8 marked 不适用,
   §7 B/C/D sections marked 未运行, status header reflects the stop.
+
+## 2026-08-27 — GitHub SSH-over-443 route documented
+
+- Verified pull/push route: GitHub's `ssh.github.com:443` through the local
+  SOCKS5 proxy at `127.0.0.1:7897`.
+- Added reusable temporary `core.sshCommand` examples to `AGENTS.md`; the
+  commands leave the configured remote URL unchanged.
