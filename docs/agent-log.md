@@ -1,5 +1,15 @@
 # Agent Maintenance Log
 
+## 2026-08-27 — ICPT ETTh2/ETTm2 formal test rerun
+
+- 按 full-train、best-validation checkpoint、single test read 协议完成
+  ETTh2-720 与 ETTm2-96 的 `RCRF+NLinear`、旧 ICPT decoder、full-horizon ICPT，
+  共 18 个 seed/model runs；GPU 为 RTX 4090。
+- 汇总结果写入 `docs/PhaseFormer_icpt_test_results.md`；原始 checkpoint 与运行产物
+  保留在被 `.gitignore` 忽略的 `research_runs/icpt_etth2_ettm2_full_20260827/`。
+- 结论：full-horizon ICPT 两个 setting 均优于旧 decoder，但未稳定超过
+  RCRF+NLinear 或固定 Golden。
+
 ## 2026-08-26 — Merge experiment plans and results into closed-loop experiment files
 
 - 根据用户要求，将动态相位、Pure Phase、残差拓扑、Golden 组合和周期位置编码路线整理为“一条实验路线一个文件”，每个文件统一包含：设想、整体计划、实现与结果、最终结论。
