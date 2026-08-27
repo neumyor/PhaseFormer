@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 
 import config.base_config as config_module
@@ -75,6 +76,28 @@ ABLATION_MODES = {
     "rcrf_pe_time2vec",
     "rcrf_pe_lff",
     "rcrf_pe_calendar",
+    # Inter-Cycle Patch Transformer residual candidates (ICPT plan).  A3/A4 are
+    # simple cycle baselines; rcrf_icpt_* swap the NLinear head for the ICPT
+    # transformer with the position encoding given by the suffix.  All inherit
+    # the frozen gold_combo_reliability_s2 stack and the RCRF formula unchanged.
+    "rcrf_repeat_last_cycle",
+    "rcrf_cycle_net",
+    "rcrf_icpt_none",
+    "rcrf_icpt_sincos",
+    "rcrf_icpt_learned_abs",
+    "rcrf_icpt_time2vec",
+    "rcrf_icpt_rope",
+    "rcrf_icpt_relative",
+    "rcrf_icpt_alibi",
+    "rcrf_icpt_lff",
+    "rcrf_icpt_sincos_relative",
+    "rcrf_icpt_calendar",
+    # Stage D mechanism ablations of the frozen ICPT-best candidate.
+    "icpt_only",
+    "icpt_fixed_fusion",
+    "icpt_patch16",
+    "icpt_no_anchor",
+    "icpt_no_attention",
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -85,6 +108,39 @@ PERIODIC_RESIDUAL_PE_MODES = {
     "rcrf_pe_time2vec": "time2vec",
     "rcrf_pe_lff": "lff",
     "rcrf_pe_calendar": "calendar",
+}
+
+# ICPT position encodings.  P0 is the no-PE architecture baseline; P1-P8 are
+# the pure index-PE candidates ranked together; P9 (calendar) is scored
+# separately because it consumes real timestamps, not just cycle indices.
+INTERCYCLE_PE_MODES = {
+    "rcrf_icpt_none": "none",
+    "rcrf_icpt_sincos": "sincos",
+    "rcrf_icpt_learned_abs": "learned_abs",
+    "rcrf_icpt_time2vec": "time2vec",
+    "rcrf_icpt_rope": "rope",
+    "rcrf_icpt_relative": "relative",
+    "rcrf_icpt_alibi": "alibi",
+    "rcrf_icpt_lff": "lff",
+    "rcrf_icpt_sincos_relative": "sincos_relative",
+    "rcrf_icpt_calendar": "calendar",
+}
+
+# Fixed ICPT hyperparameters shared by every rcrf_icpt_* candidate so that the
+# only difference between modes is the position encoding.
+ICPT_FIXED_HYPERPARAMS = {
+    "weak_period_residual_head_type": "intercycle",
+    "intercycle_period_len": 24,
+    "intercycle_d_model": 32,
+    "intercycle_heads": 4,
+    "intercycle_ffn_dim": 64,
+    "intercycle_encoder_layers": 1,
+    "intercycle_decoder_layers": 1,
+    "intercycle_relative_buckets": 16,
+    "intercycle_lff_frequencies": 16,
+    "intercycle_use_last_cycle_anchor": True,
+    "intercycle_use_attention": True,
+    "intercycle_dropout": 0.0,
 }
 
 
@@ -863,6 +919,53 @@ def get_ablation_overrides(mode):
             periodic_residual_pe_blend_init=0.1,
         )
         return overrides
+    # Inter-Cycle Patch Transformer candidates (ICPT plan).  A3/A4 swap the
+    # NLinear head for simple cycle baselines; rcrf_icpt_* build the ICPT head
+    # with a position encoding.  Everything else inherits the frozen RCRF stack
+    # unchanged so the only structural difference from A2 is NLinear -> ICPT.
+    if mode == "rcrf_repeat_last_cycle":
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode, weak_period_residual_head_type="repeat_last_cycle"
+        )
+        return overrides
+    if mode == "rcrf_cycle_net":
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(scheme_name=mode, weak_period_residual_head_type="cycle_net")
+        return overrides
+    if mode in INTERCYCLE_PE_MODES:
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode, **ICPT_FIXED_HYPERPARAMS,
+            intercycle_pe_type=INTERCYCLE_PE_MODES[mode],
+        )
+        return overrides
+    # Stage D mechanism ablations of the frozen ICPT-best candidate.
+    # The frozen index-PE is resolved from the ICPT_FROZEN_PE environment
+    # variable (set by the experiment runner after Stage B freezes), so the
+    # same preset name builds with the frozen PE inside subprocess runners.
+    # The default keeps none so presets are usable in unit tests before any
+    # freeze exists.
+    if mode in ("icpt_only", "icpt_fixed_fusion", "icpt_patch16",
+                "icpt_no_anchor", "icpt_no_attention"):
+        overrides = get_ablation_overrides("rcrf_icpt_none")
+        pe = os.environ.get("ICPT_FROZEN_PE") or "none"
+        overrides["intercycle_pe_type"] = pe
+        overrides["scheme_name"] = mode
+        if mode == "icpt_only":
+            # Single-branch: ICPT alone, no phase fusion (gate pinned ~1).
+            overrides.update(use_rcrf_fusion=False, weak_period_residual_gate_init=1.0)
+        elif mode == "icpt_fixed_fusion":
+            # PhaseFormer + fixed 0.5 blend of the ICPT residual.
+            overrides.update(use_rcrf_fusion=False, weak_period_residual_gate_init=0.5)
+        elif mode == "icpt_patch16":
+            # Non-period-aligned 16-length patch tokens instead of 24-length cycles.
+            overrides["intercycle_period_len"] = 16
+        elif mode == "icpt_no_anchor":
+            overrides["intercycle_use_last_cycle_anchor"] = False
+        elif mode == "icpt_no_attention":
+            overrides["intercycle_use_attention"] = False
+        return overrides
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -1019,6 +1122,31 @@ class PhaseFormerPresetConfig:
         self.periodic_residual_pe_blend_init = hyperparams.get(
             "periodic_residual_pe_blend_init", 0.1
         )
+        # Inter-Cycle Patch Transformer residual head configuration (ICPT plan).
+        self.intercycle_period_len = hyperparams.get("intercycle_period_len", 24)
+        self.intercycle_d_model = hyperparams.get("intercycle_d_model", 32)
+        self.intercycle_heads = hyperparams.get("intercycle_heads", 4)
+        self.intercycle_ffn_dim = hyperparams.get("intercycle_ffn_dim", 64)
+        self.intercycle_encoder_layers = hyperparams.get(
+            "intercycle_encoder_layers", 1
+        )
+        self.intercycle_decoder_layers = hyperparams.get(
+            "intercycle_decoder_layers", 1
+        )
+        self.intercycle_pe_type = hyperparams.get("intercycle_pe_type", "none")
+        self.intercycle_relative_buckets = hyperparams.get(
+            "intercycle_relative_buckets", 16
+        )
+        self.intercycle_lff_frequencies = hyperparams.get(
+            "intercycle_lff_frequencies", 16
+        )
+        self.intercycle_use_last_cycle_anchor = hyperparams.get(
+            "intercycle_use_last_cycle_anchor", True
+        )
+        self.intercycle_use_attention = hyperparams.get(
+            "intercycle_use_attention", True
+        )
+        self.intercycle_dropout = hyperparams.get("intercycle_dropout", 0.0)
         self.use_time_mark_adjustment = hyperparams.get("use_time_mark_adjustment", False)
         self.time_mark_dim = hyperparams.get("time_mark_dim", 4)
         self.time_mark_hidden = hyperparams.get("time_mark_hidden", 32)

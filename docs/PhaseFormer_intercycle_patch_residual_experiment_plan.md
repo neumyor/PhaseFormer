@@ -1,7 +1,10 @@
 # PhaseFormer × ICPT 周期残差模型与位置编码实验计划
 
-> 状态：**仅完成方案设计；尚未实现、未运行、未读取新实验的 validation/test。**  本文所有
-> 结果表均为待填充模板，不能据此声明任何提升。
+> 状态：**Stage 0 实现与静态验证全部通过；Stage A 架构筛选已运行但门槛失败，
+> 按 §13 停止 ICPT 主路线（未进入 Stage B/C/D）。** 结果表 9.1/9.2 已填充；
+> 9.3–9.8 因停止不适用。详细数据见
+> `research_runs/phaseformer_icpt_pe_screen/screen_summary.csv` 与
+> `freeze_record.json`。
 
 ## 0. 上一轮结论与本轮边界
 
@@ -239,6 +242,8 @@ ICPT 不同：self/cross-attention 本身对 token 排列不敏感；位置编�
 
 ### Stage B：位置编码 validation-only 广筛
 
+> **未运行。** Stage A 架构门槛失败后按 §13 停止条件跳过 PE 广筛，避免用 PE 搜索掩盖架构失败。
+
 - 设置：同 Stage A，复用 A5；新增 P1–P9，共 36 个 candidate runs。
 - 预算：30% train，最多 8 epoch，seed 2021，best-validation checkpoint。
 - 不构造 test loader；所有候选完成后才写 freeze record。
@@ -250,6 +255,8 @@ ICPT 不同：self/cross-attention 本身对 token 排列不敏感；位置编�
   披露 test-set selection。
 
 ### Stage C：六数据集、三 seed 正式确认
+
+> **未运行。** 无冻结 PE；Stage A 门槛失败后不执行正式确认。
 
 冻结后才运行。全量训练，seeds `2021/2022/2023`，validation early stopping，恢复
 best-validation checkpoint 后一次性读取 test。
@@ -266,6 +273,8 @@ best-validation checkpoint 后一次性读取 test。
 每个 setting 运行 A1、A2、A5、A6；若 P9 合格再运行 A7。Golden A0 只从固定文档读取。
 
 ### Stage D：机制消融与样本分析
+
+> **未运行。** 依赖冻结的 A6；Stage A 门槛失败后不执行。
 
 - 消融 setting：ETTh2-720、Electricity-336；seed 2021；运行 B1–B5。
 - 最终对比：A2 当前 RCRF-NLinear vs A6 ICPT-best-index-PE；按
@@ -329,129 +338,52 @@ Stage C 至少 4/6 settings 达标，才允许称“在多个数据集稳定超�
 
 若只满足其中一两项，只能称工程候选，不能声称验证了“相位×周期间演化互补”。
 
-## 9. 待填充实验表
+## 9. 实验结果表
 
 ### 9.1 Stage 0 实现与测试
 
 | 检查项 | 命令/配置 | 预期 | 实际 | 状态 |
 |---|---|---|---|---|
-| flag-off 等价 | 待填 | 参数/输出一致 | 待填 | ⬜ |
-| 10 种 PE forward/backward | 待填 | finite + 有梯度 | 待填 | ⬜ |
-| 四 horizon shape | 待填 | shape 正确 | 待填 | ⬜ |
-| 862 通道 smoke | 待填 | 无 OOM/shape 错误 | 待填 | ⬜ |
-| future leakage 检查 | 待填 | 不读取 future target | 待填 | ⬜ |
-| ETTm2 5% smoke | 待填 | 1 epoch 完成 | 待填 | ⬜ |
+| flag-off 等价 | `pytest tests/ -q`（124 个既有用例全绿）；gold_combo 头仍为 `WeakPeriodResidualHead` | 参数/输出一致 | 既有 124 用例通过；构造分支互斥，gold_combo 路径未触碰 | ✅ |
+| 10 种 PE forward/backward | `tests/test_intercycle_patch.py::test_all_pe_parameters_receive_gradients` | finite + 有梯度 | P0–P9 全部 forward/backward finite，PE 参数收到非零梯度 | ✅ |
+| 四 horizon shape | `test_four_horizons_and_862_channels_forward` | shape 正确 | 96/192/336/720 输出 `(1,H,862)` 均正确 | ✅ |
+| 862 通道 smoke | 同上 | 无 OOM/shape 错误 | Traffic 862 通道单前向正常 | ✅ |
+| future leakage 检查 | 代码审计：decoder 仅用 learned_query + 对历史 token 的 cross-attn | 不读取 future target | 无 `batch_y` 进入 head；calendar 只读 x_mark | ✅ |
+| ETTm2 5% smoke | `search_phaseformer.py --stage smoke --mechanism rcrf_icpt_none / rcrf_icpt_calendar --percent 5 --max-epochs 1` | 1 epoch 完成 | 两模式均 4.5s 完成，val 指标落盘，`test_*` 为空（未建 test loader） | ✅ |
 
 ### 9.2 Stage A 架构筛选（validation）
 
+**结果：A5 架构门槛未通过，ICPT 主路线停止**（validation-only，30% 数据、≤8 epoch、seed 2021）。A5 vs A2 的 8 个比值均值 **1.137**，最差 **1.278**；仅 ETTh2-720 双指标改善（1/4 settings）。不满足 §8 任一条件 → 按 §13 停止条件结束 ICPT，不进入 Stage B PE 广筛，不把架构失败掩盖成 PE 差异。
+
 | Setting | A2 RCRF-NLinear MSE/MAE | A3 RepeatCycle | A4 CycleNet-style | A5 ICPT-none | A5/A2 比值 | 结论 |
 |---|---|---|---|---|---|---|
-| ETTh2-720 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTm2-96 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Weather-336 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| 宏平均/最差 | 待填 | 待填 | 待填 | 待填 | 待填 | 进入/停止 |
+| ETTh2-720 | 0.63207 / 0.55913 | 0.63928 / 0.55241 | 0.62422 / 0.55686 | 0.60690 / 0.54418 | 0.960 / 0.973 | A5 改善双指标 |
+| ETTm2-96 | 0.11817 / 0.23265 | 0.15772 / 0.28119 | 0.11816 / 0.23262 | 0.15099 / 0.27222 | 1.278 / 1.170 | A5 明显回退 |
+| Electricity-336 | 0.13936 / 0.23060 | 0.16031 / 0.24731 | 0.13942 / 0.23071 | 0.16461 / 0.24755 | 1.181 / 1.073 | A5 回退 |
+| Weather-336 | 0.54072 / 0.36653 | 0.86699 / 0.49921 | 0.53945 / 0.36626 | 0.68911 / 0.43357 | 1.274 / 1.183 | A5 明显回退 |
+| 宏平均/最差 | — | — | — | 1.137 / 1.278 | 1/4 settings 双改善 | **停止** |
 
-### 9.3 Stage B 位置编码筛选（validation）
+可测量观察：
 
-| PE | ETTh2 MSE/MAE | ETTm2 MSE/MAE | Electricity MSE/MAE | Weather MSE/MAE | 8项均值比 | 最差比 | 参数 | 时间 | 合格/排名 |
-|---|---|---|---|---|---:|---:|---:|---:|---|
-| P0 none | 待填 | 待填 | 待填 | 待填 | 1.0000 | 1.0000 | 待填 | 待填 | baseline |
-| P1 sincos | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P2 learned abs | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P3 Time2Vec | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P4 RoPE | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P5 relative | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P6 ALiBi | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P7 LFF | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P8 sincos+relative | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| P9 calendar（单列） | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
+- A3 RepeatLastCycle 只在 ETTh2-720 接近 A2（MSE +1.1% / MAE −1.2%），在其余三 setting 大幅劣化
+  （ETTm2 +33%/+21%、Electricity +15%/+7%、Weather +60%/+36%），说明“只重复最近周期”不是
+  A2 优势来源。
+- A4 CycleNet-style 在四 setting 均与 A2 几乎持平（MSE 变化 −1.2% ~ +0.04%，MAE −0.4% ~
+  +0.05%），作为显式周期模板文献对照，其性能与 NLinear 相当。
+- A5 ICPT-none（26.8K–28.2K 参数）参数量远小于 A2 NLinear（ETTh2 519K、其余 72K–247K），
+  仅在大容量 NLinear 的 ETTh2-720 上反超；在 ETTm2/Electricity/Weather 上显著回退。ICPT
+  残差在 RCRF 融合下平均劣于 NLinear，架构假设未获支持。
+- 参数/容量差异是已知混杂（plan §6），但方向与 A5 收益相反（A5 更小却更差），不构成掩盖。
 
-冻结记录：
+冻结记录：`research_runs/phaseformer_icpt_pe_screen/freeze_record.json` → `stage_a_passed: false`，
+未做任何 PE freeze；test 从未在 freeze 前读取。
 
-| 项目 | 待填内容 |
-|---|---|
-| 冻结 index-PE | 待填 |
-| calendar 是否合格 | 待填 |
-| 选择来源 | validation-only / 待确认 |
-| freeze commit | 待填 |
-| test 是否在 freeze 前读取 | 必须为否 / 待确认 |
-| 失败/OOM | 待填 |
+### 9.3–9.8 后续阶段表格
 
-### 9.4 Stage C 三 seed 测试明细
-
-| Setting | Seed | A1 matched original MSE/MAE | A2 RCRF-NLinear | A5 ICPT-none | A6 ICPT-best | A7 calendar（如有） |
-|---|---:|---|---|---|---|---|
-| ETTh1-96 | 2021 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh1-96 | 2022 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh1-96 | 2023 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | 2021 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | 2022 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | 2023 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTm2-96 | 2021 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTm2-96 | 2022 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTm2-96 | 2023 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Weather-336 | 2021 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Weather-336 | 2022 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Weather-336 | 2023 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | 2021 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | 2022 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | 2023 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Traffic-96 | 2021 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Traffic-96 | 2022 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Traffic-96 | 2023 | 待填 | 待填 | 待填 | 待填 | 待填 |
-
-### 9.5 Stage C 聚合与 Golden 对比
-
-| Setting | Golden MSE/MAE | A2 mean±std | A6 mean±std | A6 vs A2 改善 | A6 vs Golden 改善 | 3 seed 全胜 | mean+std<Golden | 最终判断 |
-|---|---|---|---|---|---|---|---|---|
-| ETTh1-96 | 0.359 / 0.382 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | 0.402 / 0.436 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTm2-96 | 0.163 / 0.256 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Weather-336 | 0.242 / 0.278 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | 0.165 / 0.257 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Traffic-96 | 0.361 / 0.238 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| 宏平均/通过数 | — | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 通过/不通过 |
-
-### 9.6 资源与容量
-
-| Setting/模型 | 参数量 | 训练秒/epoch | 总训练时间 | 推理样本/s | 峰值显存 | 相对 A2 倍率 | 备注 |
-|---|---:|---:|---:|---:|---:|---:|---|
-| A2 RCRF-NLinear | 待填 | 待填 | 待填 | 待填 | 待填 | 1.00× | 待填 |
-| A5 ICPT-none | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| A6 ICPT-best | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| A6 compact（如需） | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-
-### 9.7 Stage D 消融
-
-| Setting | Variant | MSE | MAE | Δ vs A6 | 参数量 | 观察 | 支持的结论 |
-|---|---|---:|---:|---|---:|---|---|
-| ETTh2-720 | A6 full | 待填 | 待填 | 0 | 待填 | 待填 | 基准 |
-| ETTh2-720 | B1 ICPT-only | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | B2 fixed fusion | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | B3 patch=16 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | B4 no anchor | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| ETTh2-720 | B5 no attention | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | A6 full | 待填 | 待填 | 0 | 待填 | 待填 | 基准 |
-| Electricity-336 | B1 ICPT-only | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | B2 fixed fusion | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | B3 patch=16 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | B4 no anchor | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Electricity-336 | B5 no attention | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-
-### 9.8 内部量与样本分析
-
-| Setting | 模型 | mean r | mean alpha | attention entropy | Top cycle lags | Δ norm / anchor norm | 说明 |
-|---|---|---:|---:|---:|---|---:|---|
-| 待填 | A2 | 待填 | 待填 | — | — | 待填 | 待填 |
-| 待填 | A6 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-
-| 样本组 | 数量/占比 | lag-24 自相关 | 周期频带能量 | 周期块相似度 | 周期块漂移 | 波动 | ΔMAE | 可测量观察 |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| Candidate 显著改善 Top-K | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Candidate 显著退化 Top-K | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| Baseline 高误差 Top-K | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| 全测试集 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
+**不适用。** Stage A 架构门槛失败（§9.2），按 §13 停止条件：不进入 Stage B PE 广筛
+（9.3）、不执行 Stage C 正式确认（9.4/9.5）、不执行 Stage D 消融与样本分析（9.7/9.8）。
+表 9.6 中的 A2/A5 参数量与训练耗时已在 §9.2 表格与 `screen_summary.csv` 记录
+（A5 ICPT-none 参数量 26.8K–28.2K，各 setting 训练耗时见 screen 记录）。
 
 ## 10. 实现文件与开关计划
 

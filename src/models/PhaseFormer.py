@@ -21,6 +21,11 @@ from src.models.phase_adapters import (
     PeriodPositionEncodedResidualHead,
     ReliabilityCoupledResidualFusion,
 )
+from src.models.intercycle_patch import (
+    CycleNetStyleResidualHead,
+    InterCyclePatchResidualHead,
+    RepeatLastCycleResidualHead,
+)
 from src.models.phase_align import PhaseAlignment
 from src.models.phase_warp import PhaseWarping
 from src.models.phase_amp_calib import PhaseAmpCalibration
@@ -506,6 +511,7 @@ class PhaseFormer(DefaultPLModule):
         self.use_periodic_residual_pe = getattr(
             configs, "use_periodic_residual_pe", False
         )
+        self.intercycle_head_requires_marks = False
         if self.use_weak_period_residual:
             residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
             if residual_head_type == "periodic_pe":
@@ -531,6 +537,38 @@ class PhaseFormer(DefaultPLModule):
                     blend_init=getattr(
                         configs, "periodic_residual_pe_blend_init", 0.1
                     ),
+                )
+            elif residual_head_type == "intercycle":
+                self.weak_period_residual = InterCyclePatchResidualHead(
+                    seq_len=self.seq_len,
+                    pred_len=self.pred_len,
+                    period_len=getattr(configs, "intercycle_period_len", 24),
+                    d_model=getattr(configs, "intercycle_d_model", 32),
+                    num_heads=getattr(configs, "intercycle_heads", 4),
+                    ffn_dim=getattr(configs, "intercycle_ffn_dim", 64),
+                    encoder_layers=getattr(configs, "intercycle_encoder_layers", 1),
+                    decoder_layers=getattr(configs, "intercycle_decoder_layers", 1),
+                    pe_type=getattr(configs, "intercycle_pe_type", "none"),
+                    relative_buckets=getattr(
+                        configs, "intercycle_relative_buckets", 16
+                    ),
+                    lff_frequencies=getattr(configs, "intercycle_lff_frequencies", 16),
+                    use_last_cycle_anchor=getattr(
+                        configs, "intercycle_use_last_cycle_anchor", True
+                    ),
+                    use_attention=getattr(configs, "intercycle_use_attention", True),
+                    label_len=getattr(configs, "label_len", 0),
+                    dropout=getattr(configs, "intercycle_dropout", 0.0),
+                )
+                # Calendar PE reads timestamp marks already provided to the model.
+                self.intercycle_head_requires_marks = self.weak_period_residual.pe_type == "calendar"
+            elif residual_head_type == "repeat_last_cycle":
+                self.weak_period_residual = RepeatLastCycleResidualHead(
+                    self.seq_len, self.pred_len, self.period_len
+                )
+            elif residual_head_type == "cycle_net":
+                self.weak_period_residual = CycleNetStyleResidualHead(
+                    self.seq_len, self.pred_len, self.period_len
                 )
             elif residual_head_type == "channel":
                 self.weak_period_residual = ChannelWiseWeakPeriodResidualHead(
@@ -1227,7 +1265,7 @@ class PhaseFormer(DefaultPLModule):
         y_hat = y_full.permute(0, 2, 1)  # (B, pred_len, C)
 
         if self.use_weak_period_residual:
-            if self.use_periodic_residual_pe:
+            if self.use_periodic_residual_pe or self.intercycle_head_requires_marks:
                 residual_hat = self.weak_period_residual(
                     x_in, x_mark_enc=x_mark_enc, x_mark_dec=x_mark_dec
                 )
