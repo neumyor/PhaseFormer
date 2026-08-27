@@ -712,3 +712,17 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   on Weather. This validates the head/anchor diagnosis but not stable
   superiority over NLinear. Full results and the stop decision are in
   `docs/PhaseFormer_icpt_horizon_head_experiment.md`.
+
+## 2026-08-27 — Periodic-complementary residual next-stage preregistration
+
+- Pre-registered three NLinear-preserving residual directions: content-aware
+  phase-template-error memory, dual-reliability LFF routing, and an adaptive
+  12/24/48/96 multi-period bank.
+- The new plan re-evaluates both decoder and full-horizon no-PE ICPT without an
+  early architecture gate. All eight matched modes must cover ETTh1/ETTh2/
+  ETTm1/ETTm2/Weather/Electricity at lookback 720 and horizons 96/192, with
+  three seeds: 288 formal runs in total.
+- The plan discloses prior ETTh2/ETTm2 test exposure, freezes all candidates
+  before further tests, and uses RCRF+NLinear+LFF as the primary incumbent.
+  Protocol, success rules and empty result tables are in
+  `docs/PhaseFormer_periodic_residual_next_stage.md`.
