@@ -918,8 +918,9 @@ S2 与 S3 几乎持平，CVaR 保护和单调距离先验都没有改变失败�
         "environment": {
             "git_commit": git("rev-parse", "HEAD"),
             "git_branch": git("branch", "--show-current"),
-            "python": platform.python_version(), "torch": torch.__version__,
-            "cuda": torch.version.cuda,
+            "python": str(platform.python_version()),
+            "torch": str(torch.__version__),
+            "cuda": str(torch.version.cuda),
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
         },
         "audit": {
