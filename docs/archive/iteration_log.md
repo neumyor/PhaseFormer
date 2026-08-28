@@ -1088,3 +1088,23 @@
     the unified runner and preset path, but was stopped because the contended
     throughput made two full 30-epoch runs impractical.
   - No formal Traffic metric is reported from either incomplete run.
+
+## 2026-08-28 — TriAxis-Former history self-validation (stopped at Stage A)
+
+- Hypothesis: phase-slot PhaseFormer, chronological NLinear and inter-cycle ICPT
+  are complementary experts; input-only pseudo-backtests can route them without
+  dataset IDs or future leakage.
+- Implementation: one three-way phase-slot/future-cycle-factorized router,
+  uniform/structural/self-validating ablations, expert auxiliary loss and route
+  KL. Implementation commit: `e313ee4`.
+- Protocol: ETTh2/ETTm2/Weather/Electricity, 720→96, 30% training subset,
+  validation-only, seed 2021, eight epochs; 20 matched runs. All 168 tests passed.
+- Result: T2 improved both metrics on Weather and Electricity but regressed on
+  ETTh2 and ETTm2. Its eight-ratio mean/worst were 1.0005/1.0426; T0 and T1
+  also failed the preregistered freeze rules. No new test split was read.
+- Error analysis: pointwise oracle headroom was 47.80%, while deployable route
+  agreement with the actual best expert was only 34.54%–39.27%. Retain the
+  three-axis decomposition as a research lead, reject this one-cutoff proxy
+  router, and investigate rolling-origin calibration before any new formal test.
+- Evidence: `research_runs/triaxis_self_validating_v1/` (strict six-file plus
+  figures layout and validated portable ZIP).

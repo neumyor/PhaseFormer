@@ -766,3 +766,17 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   normalized/sample-varying diagnostics, all dataset presets, dry-run count and
   synthetic summarization were checked. No training/test experiment was run.
   Code commit: `d1ab49e`.
+
+## 2026-08-28 — TriAxis 自验证三专家实验在 validation 门槛停止
+
+- 实现 PhaseFormer/NLinear/旧 decoder ICPT 三个原子专家与单一历史路由器；T0 固定均匀，T1
+  使用结构统计，T2 使用历史内伪预测风险。推理路由不读取 future value、future mark 或专家预测。
+- T2 训练目标加入专家辅助损失 0.2 和 oracle 路由 KL 0.1；旧 preset flag-off state dict 不变。
+- 验证：168 项单元测试通过；ETTh2、ETTm2、Weather、Electricity 的 L720→H96、seed 2021、
+  30% train、8 epoch validation-only 共 20 个 run 完成。
+- T2 的 8 指标宏平均比值 1.0005、最差 1.0426，只在 2/4 setting 双指标改善；T0/T1 也失败。
+  按预注册规则停止，不读取 test，不更新 A1/RCRF+NLinear incumbent。
+- 三专家逐点 oracle 宏平均改善 47.80%，但实际路由命中率只有 34.54%–39.27%，说明瓶颈是
+  历史代理风险与未来专家 regret 的错配，而不是专家完全缺乏互补性。
+- 审计产物：`research_runs/triaxis_self_validating_v1/`；实现 commit `e313ee4`。原始 checkpoint
+  和训练日志只保留在被忽略的 scratch 目录，不加入版本控制。
