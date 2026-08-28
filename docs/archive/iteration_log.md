@@ -1108,3 +1108,27 @@
   router, and investigate rolling-origin calibration before any new formal test.
 - Evidence: `research_runs/triaxis_self_validating_v1/` (strict six-file plus
   figures layout and validated portable ZIP).
+
+## 2026-08-28 — TriAxis rolling-origin calibration (stopped at Stage A)
+
+- **本轮目标**：修正 v1 用一次一步伪预测外推四个未来周期的时间尺度错配，并量化 phase、
+  trajectory、cycle 三个原子专家各自的相对优势区间。
+- **候选假设**：R0 用最近四个历史截点做 1–4 周期等 lead 回测并把风险/方差作为特征；R1
+  显式施加低风险单调 prior；R2 再用未来 24 步周期级 soft oracle 训练路由。三者不读 future、
+  dataset ID 或专家未来输出，原有 preset flag-off 不变。实现 commit `d7ecc7f`。
+- **设置**：ETTh2/ETTm2/Weather/Electricity，L720→H96、P24、30% train、seed 2021、Huber、
+  最多 8 epoch、最低 validation loss checkpoint；12 个新 run，A1/I0/T2-v1 复用同协议结果。
+  174 项仓库测试和 ETTm2 GPU smoke 通过。
+- **结果**：R0/R1/R2 的 8 指标宏平均比值为 0.992243/0.999310/1.007830，最差比值为
+  1.026184/1.015926/1.042114，双指标改善为 2/4、2/4、1/4。R0 是冠军但 ETTm2 仍回退
+  MSE 2.62%、MAE 1.42%，所以三个候选都未通过冻结 gate。
+- **错误与专家分析**：全量 validation 审计覆盖 1,022,522 个 sample×channel。ETTm2 轨迹专家
+  四段均第一；ETTh2 周期间专家在 1–24 领先第二名 23.9%；Weather/Electricity 较远段更多由
+  相位专家领先。严格十分位规则得到 48 个优势区间，但滚动伪风险首选的周期赢家命中率仅
+  30.7%–41.8%；R1/R2 退化进一步表明历史风险排序尚未校准。
+- **迭代决策**：多截点等 horizon 回测作为有效诊断保留；R0 不冻结，R1/R2 淘汰。按预注册
+  规则不访问 test、不进入 Stage B/C、不改变 A1/RCRF+NLinear incumbent。可能的下一轮是带
+  A1 fallback 的可拒绝 regret 路由，必须作为新假设重新预注册。
+- **证据**：正式数值和结论在 `docs/PhaseFormer_triaxis_rolling_calibration_experiment.md`；
+  审计器为 `scripts/analyze_triaxis_rolling_calibration.py`。本地严格白名单包位于
+  `research_runs/triaxis_rolling_calibration_v2/`，大 CSV、图片、ZIP 和 checkpoint 均不提交。

@@ -780,3 +780,30 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   历史代理风险与未来专家 regret 的错配，而不是专家完全缺乏互补性。
 - 审计产物：`research_runs/triaxis_self_validating_v1/`；实现 commit `e313ee4`。原始 checkpoint
   和训练日志只保留在被忽略的 scratch 目录，不加入版本控制。
+
+## 2026-08-28 — TriAxis v2 多截点滚动校准仍在 validation 门槛停止
+
+- 修正 v1 的单截点代理错配：对最近四个历史目标周期按未来 1–4 个周期的相同 lead 做
+  rolling-origin 回测，输出三专家风险及跨 origin 方差。R0 只把证据作为特征，R1 强制低风险
+  单调先验，R2 再加周期级 soft-oracle KL。实现 commit `d7ecc7f`。
+- Stage 0：174 项仓库测试通过；新增 H96/H192 shape、严格历史因果、线性/周期回测、风险单调、
+  不确定性收缩、梯度和完整 PhaseFormer forward 测试；ETTm2 5%/1 epoch GPU smoke 通过。
+- Stage A：ETTh2/ETTm2/Weather/Electricity，L720→H96、P24、seed 2021、30% train、最多
+  8 epoch、validation-only，完成 R0/R1/R2 共 12 个新 run，并复用 A1/I0/T2-v1 配对结果。
+- R0/R1/R2 的 8 指标宏平均比值分别为 0.992243/0.999310/1.007830，最差比值分别为
+  1.026184/1.015926/1.042114；双指标改善为 2/4、2/4、1/4，全部未通过预注册 gate。
+  R0 改善 Weather 和 Electricity，也改善 ETTh2 MAE，但 ETTm2 MSE/MAE 回退 2.62%/1.42%。
+- 结论：多截点等 horizon 特征相对 T2-v1 有效，但伪风险排序不够可靠；强制风险单调和周期级
+  路由监督都使宏平均更差。按规则停止，未访问 test，A1/RCRF+NLinear incumbent 不变。
+- 三专家 validation 优势：ETTm2 的轨迹专家四个 24 步段都第一，领先第二名 10.7%–29.8%；
+  ETTh2 的周期间专家在 1–24 领先 23.9%，且高 lag-24/低形状创新区间胜率显著提高；Weather
+  和 Electricity 的较远区间更多由相位专家占优。共得到 48 个满足 n、lift 和 bootstrap CI
+  约束的优势区间，但 R0 的滚动风险首选命中率仅约 30.7%–41.8%。
+- 审计：`scripts/analyze_triaxis_rolling_calibration.py` 在 validation 上复算 A1/T2-v1/R0 指标，
+  误差均 `<1e-5`；本地 `research_runs/triaxis_rolling_calibration_v2/` 含 1,022,522 条
+  sample×channel 记录、9 个程序化去重案例、7 张中文图和已校验 ZIP。该目录被忽略，不提交
+  426 MiB 的样本 CSV 或图片；代码与数值结论写入仓库文档。
+- 关键命令：`python scripts/search_phaseformer.py ... --mechanism
+  <triaxis_rolling_features|triaxis_rolling_prior|triaxis_rolling_calibrated> --lookback 720 --horizon 96
+  --percent 30 --max-epochs 8 --seed 2021 --loss huber`；审计命令：
+  `python scripts/analyze_triaxis_rolling_calibration.py`（RTX 4090，torch 2.4.1+cu121）。
