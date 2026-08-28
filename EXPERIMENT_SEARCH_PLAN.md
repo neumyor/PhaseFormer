@@ -1,5 +1,9 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
+> 当前新增实验：三轴相位/轨迹/周期间专家与历史自验证路由，预注册协议见
+> `docs/PhaseFormer_triaxis_self_validating_experiment.md`。该实验先执行互补性和
+> validation-only 门槛；只有通过后才进入本文件要求的多数据集正式确认。
+
 ## 目标与选择规则
 
 - 覆盖 8 个数据集：ETTh1、ETTh2、ETTm1、ETTm2、Exchange、Weather、Electricity、Traffic。

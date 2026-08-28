@@ -31,6 +31,7 @@ from src.models.intercycle_patch import (
     InterCyclePatchResidualHead,
     RepeatLastCycleResidualHead,
 )
+from src.models.triaxis_fusion import TriAxisHistoryRouter
 from src.models.phase_align import PhaseAlignment
 from src.models.phase_warp import PhaseWarping
 from src.models.phase_amp_calib import PhaseAmpCalibration
@@ -505,6 +506,14 @@ class PhaseFormer(DefaultPLModule):
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
         if not self.use_residual_head:
             self.use_weak_period_residual = False
+        self.use_triaxis_fusion = getattr(configs, "use_triaxis_fusion", False)
+        if not self.use_residual_head:
+            self.use_triaxis_fusion = False
+        if self.use_triaxis_fusion and self.use_weak_period_residual:
+            raise ValueError(
+                "TriAxis owns its atomic trajectory/cycle experts and cannot be "
+                "combined with the legacy weak residual branch"
+            )
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
         )
@@ -681,6 +690,61 @@ class PhaseFormer(DefaultPLModule):
                 self.weak_period_residual_gate = nn.Parameter(
                     torch.full((1, 1, self.enc_in), float(gate_logit))
                 )
+
+        if self.use_triaxis_fusion:
+            cycle_period = getattr(configs, "triaxis_cycle_period_len", 24)
+            if cycle_period != self.period_len:
+                raise ValueError(
+                    "TriAxis phase and cycle experts must use the same period_len"
+                )
+            self.triaxis_trajectory_expert = WeakPeriodResidualHead(
+                self.seq_len, self.pred_len
+            )
+            self.triaxis_cycle_expert = InterCyclePatchResidualHead(
+                seq_len=self.seq_len,
+                pred_len=self.pred_len,
+                period_len=cycle_period,
+                d_model=getattr(configs, "triaxis_cycle_d_model", 32),
+                num_heads=getattr(configs, "triaxis_cycle_heads", 4),
+                ffn_dim=getattr(configs, "triaxis_cycle_ffn_dim", 64),
+                encoder_layers=getattr(
+                    configs, "triaxis_cycle_encoder_layers", 1
+                ),
+                decoder_layers=getattr(
+                    configs, "triaxis_cycle_decoder_layers", 1
+                ),
+                pe_type="none",
+                relative_buckets=16,
+                lff_frequencies=16,
+                use_last_cycle_anchor=True,
+                use_attention=True,
+                label_len=getattr(configs, "label_len", 0),
+                dropout=0.0,
+                prediction_head="decoder",
+                anchor_mode="last_cycle",
+            )
+            self.triaxis_router = TriAxisHistoryRouter(
+                pred_len=self.pred_len,
+                period_len=self.period_len,
+                mode=getattr(
+                    configs, "triaxis_router_mode", "self_validating"
+                ),
+                hidden=getattr(configs, "triaxis_router_hidden", 16),
+                temperature=getattr(
+                    configs, "triaxis_router_temperature", 1.0
+                ),
+            )
+            self.triaxis_expert_aux_weight = float(
+                getattr(configs, "triaxis_expert_aux_weight", 0.2)
+            )
+            self.triaxis_route_aux_weight = float(
+                getattr(configs, "triaxis_route_aux_weight", 0.1)
+            )
+            self.triaxis_oracle_temperature = float(
+                getattr(configs, "triaxis_oracle_temperature", 0.2)
+            )
+            self.triaxis_expert_outputs = None
+            self.triaxis_weights = None
 
         self.use_time_mark_adjustment = getattr(configs, "use_time_mark_adjustment", False)
         if self.use_time_mark_adjustment:
@@ -1341,6 +1405,23 @@ class PhaseFormer(DefaultPLModule):
         y_full = y_periods.reshape(B, C, -1)[..., : self.pred_len]  # (B, C, pred_len)
         y_hat = y_full.permute(0, 2, 1)  # (B, pred_len, C)
 
+        if self.use_triaxis_fusion:
+            # High-frequency damping belongs to the phase expert.  Applying it
+            # after fusion would silently alter the trajectory and cycle axes.
+            phase_hat = y_hat
+            if self.use_phase_noise_hifreq_damping:
+                phase_hat = self.phase_noise_hifreq_damping(
+                    phase_hat, phase_series
+                )
+            trajectory_hat = self.triaxis_trajectory_expert(x_in)
+            cycle_hat = self.triaxis_cycle_expert(x_in)
+            y_hat, self.triaxis_weights = self.triaxis_router(
+                phase_hat, trajectory_hat, cycle_hat, x_in
+            )
+            triaxis_experts_normalized = (
+                phase_hat, trajectory_hat, cycle_hat
+            )
+
         if self.use_weak_period_residual:
             if self.use_dual_reliability_fusion:
                 linear_hat, periodic_hat = self.weak_period_residual.forward_components(
@@ -1383,12 +1464,19 @@ class PhaseFormer(DefaultPLModule):
             )
             y_hat = y_hat + time_adjustment
 
-        if self.use_phase_noise_hifreq_damping:
+        if self.use_phase_noise_hifreq_damping and not self.use_triaxis_fusion:
             y_hat = self.phase_noise_hifreq_damping(y_hat, phase_series)
 
         # 10) De-normalization
         if self.use_revin:
             y_hat = self.revin.denormalize(y_hat, stats)
+            if self.use_triaxis_fusion:
+                self.triaxis_expert_outputs = tuple(
+                    self.revin.denormalize(expert, stats)
+                    for expert in triaxis_experts_normalized
+                )
+        elif self.use_triaxis_fusion:
+            self.triaxis_expert_outputs = triaxis_experts_normalized
 
         return y_hat, Z, y_phase_steps
 
@@ -1420,6 +1508,43 @@ class PhaseFormer(DefaultPLModule):
             target = target[:, :, self.target_var_index].unsqueeze(-1)
 
         loss = self._compute_loss(outputs, target)
+        fused_loss = loss
+
+        if self.use_triaxis_fusion:
+            experts = self.triaxis_expert_outputs
+            weights = self.triaxis_weights
+            if self.target_var_index != -1:
+                index = self.target_var_index
+                experts = tuple(x[:, :, index : index + 1] for x in experts)
+                weights = weights[:, :, index : index + 1, :]
+            expert_loss = torch.stack(
+                [self._compute_loss(x[:, -self.pred_len :, :], target) for x in experts]
+            ).mean()
+            actual_errors = torch.stack(
+                [
+                    (x[:, -self.pred_len :, :] - target).abs()
+                    for x in experts
+                ],
+                dim=-1,
+            ).detach()
+            oracle = torch.softmax(
+                -actual_errors / self.triaxis_oracle_temperature, dim=-1
+            )
+            route_loss = (
+                oracle
+                * (
+                    oracle.clamp_min(1e-8).log()
+                    - weights.clamp_min(1e-8).log()
+                )
+            ).sum(dim=-1).mean()
+            loss = (
+                loss
+                + self.triaxis_expert_aux_weight * expert_loss
+                + self.triaxis_route_aux_weight * route_loss
+            )
+            self.log("train_fused_loss", fused_loss, on_epoch=True)
+            self.log("train_expert_loss", expert_loss, on_epoch=True)
+            self.log("train_route_loss", route_loss, on_epoch=True)
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True)
         return loss

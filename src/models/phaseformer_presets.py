@@ -116,6 +116,11 @@ ABLATION_MODES = {
     "icpt_patch16",
     "icpt_no_anchor",
     "icpt_no_attention",
+    # Three atomic axes with one history-only router: phase slots, chronological
+    # trajectory, and inter-cycle evolution.
+    "triaxis_uniform",
+    "triaxis_structural",
+    "triaxis_self_validating",
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1070,6 +1075,33 @@ def get_ablation_overrides(mode):
         elif mode == "icpt_no_attention":
             overrides["intercycle_use_attention"] = False
         return overrides
+    if mode in ("triaxis_uniform", "triaxis_structural",
+                "triaxis_self_validating"):
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        router_mode = mode.removeprefix("triaxis_")
+        overrides.update(
+            scheme_name=mode,
+            use_weak_period_residual=False,
+            use_rcrf_fusion=False,
+            use_periodic_residual_pe=False,
+            use_dual_reliability_fusion=False,
+            use_triaxis_fusion=True,
+            triaxis_router_mode=router_mode,
+            triaxis_router_hidden=16,
+            triaxis_router_temperature=1.0,
+            triaxis_expert_aux_weight=0.2,
+            triaxis_route_aux_weight=(
+                0.1 if router_mode == "self_validating" else 0.0
+            ),
+            triaxis_oracle_temperature=0.2,
+            triaxis_cycle_period_len=24,
+            triaxis_cycle_d_model=32,
+            triaxis_cycle_heads=4,
+            triaxis_cycle_ffn_dim=64,
+            triaxis_cycle_encoder_layers=1,
+            triaxis_cycle_decoder_layers=1,
+        )
+        return overrides
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -1291,6 +1323,36 @@ class PhaseFormerPresetConfig:
         )
         self.intercycle_anchor_mode = hyperparams.get(
             "intercycle_anchor_mode", None
+        )
+        # TriAxis-Former: a single history-only router over three atomic experts.
+        self.use_triaxis_fusion = hyperparams.get("use_triaxis_fusion", False)
+        self.triaxis_router_mode = hyperparams.get(
+            "triaxis_router_mode", "self_validating"
+        )
+        self.triaxis_router_hidden = hyperparams.get("triaxis_router_hidden", 16)
+        self.triaxis_router_temperature = hyperparams.get(
+            "triaxis_router_temperature", 1.0
+        )
+        self.triaxis_expert_aux_weight = hyperparams.get(
+            "triaxis_expert_aux_weight", 0.2
+        )
+        self.triaxis_route_aux_weight = hyperparams.get(
+            "triaxis_route_aux_weight", 0.1
+        )
+        self.triaxis_oracle_temperature = hyperparams.get(
+            "triaxis_oracle_temperature", 0.2
+        )
+        self.triaxis_cycle_period_len = hyperparams.get(
+            "triaxis_cycle_period_len", 24
+        )
+        self.triaxis_cycle_d_model = hyperparams.get("triaxis_cycle_d_model", 32)
+        self.triaxis_cycle_heads = hyperparams.get("triaxis_cycle_heads", 4)
+        self.triaxis_cycle_ffn_dim = hyperparams.get("triaxis_cycle_ffn_dim", 64)
+        self.triaxis_cycle_encoder_layers = hyperparams.get(
+            "triaxis_cycle_encoder_layers", 1
+        )
+        self.triaxis_cycle_decoder_layers = hyperparams.get(
+            "triaxis_cycle_decoder_layers", 1
         )
         self.use_time_mark_adjustment = hyperparams.get("use_time_mark_adjustment", False)
         self.time_mark_dim = hyperparams.get("time_mark_dim", 4)
