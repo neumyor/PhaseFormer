@@ -1,9 +1,10 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 当前实验：以完整 A1 为冻结锚点、带拒绝动作和相对 A1 regret 监督的 Safe-Regret TriAxis，
-> 预注册见 `docs/PhaseFormer_safe_regret_triaxis_experiment.md`。先覆盖六数据集 H96 的四级消融，
-> 再把统一候选外推到相同六数据集 H192；24 个 validation 指标必须全部严格优于 A1/I0/R0
-> 原始包络，才允许读取新 test。上一轮 rolling calibration 结果保持不变。
+> 最近完成实验：Safe-Regret TriAxis v1，方案与结果见
+> `docs/PhaseFormer_safe_regret_triaxis_experiment.md`。六数据集 H96/H192 共 66 次
+> validation-only 运行；统一 S2 相对 A1 平均改善 0.37%，但相对 A1/I0/R0 原始包络平均退化
+> 1.05%、最差退化 5.32%，最终 gate 失败，未读取 test。该结果否定“只以 A1 为安全锚点”
+> 的当前集成主线；若继续，应直接验证多完整模型锚点，而不是继续调 S0–S3 权重。
 
 ## 目标与选择规则
 

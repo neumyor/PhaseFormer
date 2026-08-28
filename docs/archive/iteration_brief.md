@@ -40,6 +40,16 @@ H192. Validation compares every metric against the per-cell best of A1, I0 and
 R0; any regression fails promotion. No test split is accessed unless all 24
 expanded validation metric cells strictly improve.
 
+Safe-Regret TriAxis outcome (2026-08-29): all 66 preregistered validation runs
+completed on ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity at H96/H192. S2
+(`safe_triaxis_guarded`) won the H96 candidate ranking, but failed the gate:
+macro ratio 1.010499 and worst ratio 1.053162 against the per-cell A1/I0/R0
+envelope. It averaged 0.37% better than A1 alone, showing that exact A1
+fallback works, but it cannot inherit settings where I0 or R0 is stronger.
+No test split was accessed. Canonical local audit:
+`research_runs/safe_regret_triaxis_v1/`; next design must use a multi-model
+anchor or a distilled strong anchor rather than further A1-local tuning.
+
 ## Baseline Status
 
 Weather 720 -> 96 baseline is established at `research_runs/weather96_baseline_e30_seed2021/`.

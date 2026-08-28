@@ -1,7 +1,7 @@
 # Safe-Regret TriAxis：A1 锚定与可拒绝集成实验
 
-> 状态：预注册。本文在任何新结果产生前固定结构、候选、数据网格和门槛。参数选择只使用
-> validation；只有所有扩展 validation 单元都严格超过原始模型包络后，才允许读取新 test。
+> 状态：已完成，最终 validation gate 失败，未读取 test。本文的第 1–7 节为结果产生前的
+> 预注册协议；第 8 节追加实际结果，不回写原假设和门槛。
 
 ## 1. 问题与可证伪假设
 
@@ -93,3 +93,37 @@ route aux=0.1、cycle aux=0.1、mean non-regret=0.05、CVaR=0.01、correction cl
 `sample_errors.csv`、`selected_cases.npz`、`objective_error_analysis.md`、
 `objective_error_analysis.zip` 和被 Markdown 引用的 `figures/`。大 CSV、checkpoint、日志和图片
 均保持本地忽略，不加入 Git。
+
+## 8. 实际结果（2026-08-29）
+
+Stage 0 通过 182 个仓库测试、H96/H192 前向/梯度/冻结检查和 ETTm2 5%/1 epoch GPU smoke；
+候选加载 A1 时 `unexpected=0`，初始输出与 A1 最大绝对差为 0。Stage A/B 共完成 66 次
+validation-only 训练，无失败 run。
+
+### 8.1 Stage A
+
+| 候选 | H96 宏比值 | 最差比值 | 结论 |
+|---|---:|---:|---|
+| S2 guarded | 1.013521 | 1.049856 | 最优但失败 |
+| S3 monotone | 1.013539 | 1.049946 | 失败 |
+| S0 anchor | 1.013775 | 1.056246 | 失败 |
+| S1 regret | 1.014921 | 1.051123 | 失败 |
+
+按预注册规则，S2 作为诊断候选原样进入 H192；没有二次调参。
+
+### 8.2 最终 H96+H192 gate
+
+- 相对 A1 的 24 个指标宏平均比值：`0.996263`，即平均改善 `0.37%`。
+- 相对 A1/I0/R0 逐 setting、逐指标最优包络：宏平均 `1.010499`，即平均退化 `1.05%`。
+- 最差单元：Weather-H192 MSE，退化 `5.32%`。
+- 仅 ETTh2-H192、ETTm2-H96 同时改善 MSE/MAE；其余 setting 至少一个指标未超过原始最优。
+- 最终 gate 失败，Stage C 不适用；`test_accessed=false`，因此没有新的 Golden 结论。
+
+样本回放覆盖 12 个 setting、`2,208,464` 个 sample×channel。相对各 setting 最强原始模型，
+显著改善（相对 MSE ≤-10%）占 `15.36%`，显著退化（≥+10%）占 `22.04%`。门控解决了
+“不能退回 A1”的问题，却没有解决“某些 setting 的最强原始模型是 I0/R0”的问题；其训练
+目标是相对 A1 regret，而科研门槛是相对三模型包络 regret，两者错位。
+
+完整本地审计见 `research_runs/safe_regret_triaxis_v1/objective_error_analysis.md`。下一步若继续，
+应改为 `A1/I0/R0 + no-op` 的多锚点选择，或先把三个完整模型蒸馏为统一强锚点；不应继续只在
+A1 周围增加局部修正。
