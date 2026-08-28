@@ -65,7 +65,20 @@ def run_command(args, output_dir, dataset, horizon, mechanism, checkpoint=""):
         command.extend(("--init-checkpoint", checkpoint))
     print("RUN", " ".join(command), flush=True)
     if not args.dry_run:
-        subprocess.run(command, cwd=REPO_ROOT, check=True)
+        log_dir = Path(output_dir) / "driver_logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"{dataset}_h{horizon}_{mechanism}.log"
+        with log_path.open("w") as handle:
+            completed = subprocess.run(
+                command, cwd=REPO_ROOT, stdout=handle,
+                stderr=subprocess.STDOUT,
+            )
+        if completed.returncode:
+            tail = "\n".join(log_path.read_text().splitlines()[-40:])
+            raise RuntimeError(
+                f"run failed ({completed.returncode}): {log_path}\n{tail}"
+            )
+        print(f"DONE {dataset} H{horizon} {mechanism}", flush=True)
 
 
 def one_metrics(output_dir, dataset, horizon, mechanism):
