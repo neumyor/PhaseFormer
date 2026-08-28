@@ -126,6 +126,13 @@ ABLATION_MODES = {
     "triaxis_rolling_features",
     "triaxis_rolling_prior",
     "triaxis_rolling_calibrated",
+    # A1-anchored abstaining fusion.  S0 is prediction-only; S1 adds regret
+    # routing, S2 adds one-sided mean/tail non-regression, and S3 adds a
+    # monotone horizon prior (phase up, cycle down).
+    "safe_triaxis_anchor",
+    "safe_triaxis_regret",
+    "safe_triaxis_guarded",
+    "safe_triaxis_monotone",
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1123,6 +1130,50 @@ def get_ablation_overrides(mode):
             # router fallback when adding future variants.
             overrides["triaxis_router_family"] = "rolling"
         return overrides
+    if mode in (
+        "safe_triaxis_anchor",
+        "safe_triaxis_regret",
+        "safe_triaxis_guarded",
+        "safe_triaxis_monotone",
+    ):
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode,
+            use_safe_triaxis=True,
+            safe_triaxis_cycle_period_len=24,
+            safe_triaxis_cycle_d_model=32,
+            safe_triaxis_cycle_heads=4,
+            safe_triaxis_cycle_ffn_dim=64,
+            safe_triaxis_cycle_encoder_layers=1,
+            safe_triaxis_cycle_decoder_layers=1,
+            safe_triaxis_router_hidden=16,
+            safe_triaxis_rolling_origins=4,
+            safe_triaxis_trajectory_window_cycles=4,
+            safe_triaxis_rolling_recency_decay=0.5,
+            safe_triaxis_correction_clip=2.0,
+            safe_triaxis_max_accept=1.0,
+            safe_triaxis_route_aux_weight=0.0,
+            safe_triaxis_cycle_aux_weight=0.0,
+            safe_triaxis_nonreg_weight=0.0,
+            safe_triaxis_cvar_weight=0.0,
+            safe_triaxis_regret_margin=0.02,
+            safe_triaxis_oracle_temperature=0.1,
+            safe_triaxis_use_horizon_prior=False,
+            safe_triaxis_horizon_prior_init=0.05,
+        )
+        if mode != "safe_triaxis_anchor":
+            overrides.update(
+                safe_triaxis_route_aux_weight=0.1,
+                safe_triaxis_cycle_aux_weight=0.1,
+            )
+        if mode in ("safe_triaxis_guarded", "safe_triaxis_monotone"):
+            overrides.update(
+                safe_triaxis_nonreg_weight=0.05,
+                safe_triaxis_cvar_weight=0.01,
+            )
+        if mode == "safe_triaxis_monotone":
+            overrides["safe_triaxis_use_horizon_prior"] = True
+        return overrides
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
 
@@ -1395,6 +1446,69 @@ class PhaseFormerPresetConfig:
         )
         self.triaxis_cycle_decoder_layers = hyperparams.get(
             "triaxis_cycle_decoder_layers", 1
+        )
+        # Safe-Regret TriAxis: the full pretrained A1 path is a frozen no-op
+        # anchor and these settings configure only its additive extension.
+        self.use_safe_triaxis = hyperparams.get("use_safe_triaxis", False)
+        self.safe_triaxis_cycle_period_len = hyperparams.get(
+            "safe_triaxis_cycle_period_len", 24
+        )
+        self.safe_triaxis_cycle_d_model = hyperparams.get(
+            "safe_triaxis_cycle_d_model", 32
+        )
+        self.safe_triaxis_cycle_heads = hyperparams.get(
+            "safe_triaxis_cycle_heads", 4
+        )
+        self.safe_triaxis_cycle_ffn_dim = hyperparams.get(
+            "safe_triaxis_cycle_ffn_dim", 64
+        )
+        self.safe_triaxis_cycle_encoder_layers = hyperparams.get(
+            "safe_triaxis_cycle_encoder_layers", 1
+        )
+        self.safe_triaxis_cycle_decoder_layers = hyperparams.get(
+            "safe_triaxis_cycle_decoder_layers", 1
+        )
+        self.safe_triaxis_router_hidden = hyperparams.get(
+            "safe_triaxis_router_hidden", 16
+        )
+        self.safe_triaxis_rolling_origins = hyperparams.get(
+            "safe_triaxis_rolling_origins", 4
+        )
+        self.safe_triaxis_trajectory_window_cycles = hyperparams.get(
+            "safe_triaxis_trajectory_window_cycles", 4
+        )
+        self.safe_triaxis_rolling_recency_decay = hyperparams.get(
+            "safe_triaxis_rolling_recency_decay", 0.5
+        )
+        self.safe_triaxis_correction_clip = hyperparams.get(
+            "safe_triaxis_correction_clip", 2.0
+        )
+        self.safe_triaxis_max_accept = hyperparams.get(
+            "safe_triaxis_max_accept", 1.0
+        )
+        self.safe_triaxis_route_aux_weight = hyperparams.get(
+            "safe_triaxis_route_aux_weight", 0.0
+        )
+        self.safe_triaxis_cycle_aux_weight = hyperparams.get(
+            "safe_triaxis_cycle_aux_weight", 0.0
+        )
+        self.safe_triaxis_nonreg_weight = hyperparams.get(
+            "safe_triaxis_nonreg_weight", 0.0
+        )
+        self.safe_triaxis_cvar_weight = hyperparams.get(
+            "safe_triaxis_cvar_weight", 0.0
+        )
+        self.safe_triaxis_regret_margin = hyperparams.get(
+            "safe_triaxis_regret_margin", 0.02
+        )
+        self.safe_triaxis_oracle_temperature = hyperparams.get(
+            "safe_triaxis_oracle_temperature", 0.1
+        )
+        self.safe_triaxis_use_horizon_prior = hyperparams.get(
+            "safe_triaxis_use_horizon_prior", False
+        )
+        self.safe_triaxis_horizon_prior_init = hyperparams.get(
+            "safe_triaxis_horizon_prior_init", 0.05
         )
         self.use_time_mark_adjustment = hyperparams.get("use_time_mark_adjustment", False)
         self.time_mark_dim = hyperparams.get("time_mark_dim", 4)

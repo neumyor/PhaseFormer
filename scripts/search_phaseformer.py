@@ -388,6 +388,8 @@ def build_spec(args):
         "capacity": args.capacity,
         "batch_size": args.batch_size or PLANNED_BATCH_SIZE[args.dataset],
         "evaluate_test": args.evaluate_test,
+        "init_checkpoint": repo_relative(getattr(args, "init_checkpoint", ""))
+        if getattr(args, "init_checkpoint", "") else "",
         "hyperparams": base,
     }
     canonical = json.dumps(spec, sort_keys=True, separators=(",", ":"))
@@ -554,7 +556,55 @@ def execute(args):
     if hasattr(train_set, "data_stamp"):
         hp["time_mark_dim"] = int(train_set.data_stamp.shape[-1])
     model = PhaseFormer(PhaseFormerPresetConfig(exp_args, spec["lookback"], spec["horizon"], hp))
+    init_missing = []
+    init_unexpected = []
+    anchor_identity_max_abs = ""
+    if model.use_safe_triaxis:
+        if not spec["init_checkpoint"]:
+            raise ValueError("Safe-Regret candidates require --init-checkpoint")
+        init_path = Path(spec["init_checkpoint"])
+        if not init_path.is_absolute():
+            init_path = REPO_ROOT / init_path
+        if not init_path.is_file():
+            raise FileNotFoundError(f"A1 init checkpoint not found: {init_path}")
+        payload = torch.load(init_path, map_location="cpu", weights_only=False)
+        state_dict = payload.get("state_dict", payload)
+        incompat = model.load_state_dict(state_dict, strict=False)
+        init_missing = list(incompat.missing_keys)
+        init_unexpected = list(incompat.unexpected_keys)
+        unsafe_missing = [
+            key for key in init_missing if not key.startswith("safe_triaxis_")
+        ]
+        if unsafe_missing or init_unexpected:
+            raise RuntimeError(
+                "A1 checkpoint is not a strict nested subset: "
+                f"unsafe_missing={unsafe_missing}, unexpected={init_unexpected}"
+            )
+        model.eval()
+        audit_batch = next(iter(train_loader))
+        audit_x, audit_y, audit_x_mark, audit_y_mark = [
+            value[:2] if torch.is_tensor(value) else value
+            for value in audit_batch
+        ]
+        with torch.inference_mode():
+            audit_dec = model._build_decoder_input(audit_y.float())
+            audit_out, _, _ = model(
+                audit_x.float(), audit_x_mark.float(), audit_dec,
+                audit_y_mark.float(),
+            )
+        anchor_identity_max_abs = float(
+            (audit_out - model.safe_triaxis_anchor_output).abs().max()
+        )
+        if anchor_identity_max_abs != 0.0:
+            raise RuntimeError(
+                "Safe-Regret initialization is not exactly the A1 anchor: "
+                f"max_abs={anchor_identity_max_abs}"
+            )
+        model.freeze_safe_triaxis_anchor()
     parameter_count = sum(p.numel() for p in model.parameters())
+    trainable_parameter_count = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
 
     attempts_root = run_dir / "attempts"
     attempts_root.mkdir(exist_ok=True)
@@ -599,6 +649,12 @@ def execute(args):
         "epochs_requested": spec["max_epochs"], "epochs_completed": epoch_count(logger.log_dir),
         "best_val_loss": float(checkpoint.best_model_score.cpu()), **val_metrics, **test_metrics,
         "parameter_count": parameter_count, "elapsed_sec": elapsed, "peak_memory_bytes": peak,
+        "trainable_parameter_count": trainable_parameter_count,
+        "init_checkpoint": spec["init_checkpoint"],
+        "init_missing_count": len(init_missing),
+        "init_unexpected_count": len(init_unexpected),
+        "anchor_identity_max_abs": anchor_identity_max_abs,
+        "anchor_frozen": bool(getattr(model, "safe_triaxis_anchor_frozen", False)),
         "train_size": len(train_set), "val_size": len(val_set), "test_size": test_size,
         "checkpoint": repo_relative(checkpoint.best_model_path),
         "config_hash": spec["config_hash"], "completed_at": utc_now(),
@@ -641,6 +697,10 @@ def parse_args():
     p.add_argument("--num-workers", type=int, default=4)
     p.add_argument("--bad-case-limit", type=int, default=8)
     p.add_argument("--overrides", default="{}", help="JSON object applied last")
+    p.add_argument(
+        "--init-checkpoint",
+        help="Pretrained A1 Lightning checkpoint required by Safe-Regret modes",
+    )
     p.add_argument("--evaluate-test", action="store_true", help="Allowed only for frozen confirm runs")
     p.add_argument("--output-dir", default="research_runs/search_v1")
     p.add_argument("--resume", action="store_true")

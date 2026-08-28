@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,6 +35,7 @@ from src.models.intercycle_patch import (
 )
 from src.models.triaxis_fusion import (
     RollingTriAxisHistoryRouter,
+    SafeRegretTriAxisRouter,
     TriAxisHistoryRouter,
 )
 from src.models.phase_align import PhaseAlignment
@@ -510,13 +513,17 @@ class PhaseFormer(DefaultPLModule):
         if not self.use_residual_head:
             self.use_weak_period_residual = False
         self.use_triaxis_fusion = getattr(configs, "use_triaxis_fusion", False)
+        self.use_safe_triaxis = getattr(configs, "use_safe_triaxis", False)
         if not self.use_residual_head:
             self.use_triaxis_fusion = False
+            self.use_safe_triaxis = False
         if self.use_triaxis_fusion and self.use_weak_period_residual:
             raise ValueError(
                 "TriAxis owns its atomic trajectory/cycle experts and cannot be "
                 "combined with the legacy weak residual branch"
             )
+        if self.use_triaxis_fusion and self.use_safe_triaxis:
+            raise ValueError("legacy TriAxis and Safe-Regret TriAxis are exclusive")
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
         )
@@ -776,6 +783,84 @@ class PhaseFormer(DefaultPLModule):
             )
             self.triaxis_expert_outputs = None
             self.triaxis_weights = None
+
+        if self.use_safe_triaxis:
+            if not self.use_weak_period_residual or not self.use_rcrf_fusion:
+                raise ValueError(
+                    "Safe-Regret TriAxis requires the complete A1 RCRF+NLinear anchor"
+                )
+            if self.use_periodic_residual_pe or self.use_dual_reliability_fusion:
+                raise ValueError("Safe-Regret TriAxis requires the plain NLinear A1 anchor")
+            cycle_period = getattr(configs, "safe_triaxis_cycle_period_len", 24)
+            if cycle_period != self.period_len:
+                raise ValueError("Safe-Regret cycle and phase periods must match")
+            self.safe_triaxis_cycle_expert = InterCyclePatchResidualHead(
+                seq_len=self.seq_len,
+                pred_len=self.pred_len,
+                period_len=cycle_period,
+                d_model=getattr(configs, "safe_triaxis_cycle_d_model", 32),
+                num_heads=getattr(configs, "safe_triaxis_cycle_heads", 4),
+                ffn_dim=getattr(configs, "safe_triaxis_cycle_ffn_dim", 64),
+                encoder_layers=getattr(
+                    configs, "safe_triaxis_cycle_encoder_layers", 1
+                ),
+                decoder_layers=getattr(
+                    configs, "safe_triaxis_cycle_decoder_layers", 1
+                ),
+                pe_type="none",
+                relative_buckets=16,
+                lff_frequencies=16,
+                use_last_cycle_anchor=True,
+                use_attention=True,
+                label_len=getattr(configs, "label_len", 0),
+                dropout=0.0,
+                prediction_head="decoder",
+                anchor_mode="last_cycle",
+            )
+            self.safe_triaxis_router = SafeRegretTriAxisRouter(
+                pred_len=self.pred_len,
+                period_len=self.period_len,
+                hidden=getattr(configs, "safe_triaxis_router_hidden", 16),
+                origins=getattr(configs, "safe_triaxis_rolling_origins", 4),
+                trajectory_window_cycles=getattr(
+                    configs, "safe_triaxis_trajectory_window_cycles", 4
+                ),
+                recency_decay=getattr(
+                    configs, "safe_triaxis_rolling_recency_decay", 0.5
+                ),
+                correction_clip=getattr(
+                    configs, "safe_triaxis_correction_clip", 2.0
+                ),
+                max_accept=getattr(configs, "safe_triaxis_max_accept", 1.0),
+                use_horizon_prior=getattr(
+                    configs, "safe_triaxis_use_horizon_prior", False
+                ),
+                horizon_prior_init=getattr(
+                    configs, "safe_triaxis_horizon_prior_init", 0.05
+                ),
+            )
+            self.safe_triaxis_route_aux_weight = float(
+                getattr(configs, "safe_triaxis_route_aux_weight", 0.0)
+            )
+            self.safe_triaxis_cycle_aux_weight = float(
+                getattr(configs, "safe_triaxis_cycle_aux_weight", 0.0)
+            )
+            self.safe_triaxis_nonreg_weight = float(
+                getattr(configs, "safe_triaxis_nonreg_weight", 0.0)
+            )
+            self.safe_triaxis_cvar_weight = float(
+                getattr(configs, "safe_triaxis_cvar_weight", 0.0)
+            )
+            self.safe_triaxis_regret_margin = float(
+                getattr(configs, "safe_triaxis_regret_margin", 0.02)
+            )
+            self.safe_triaxis_oracle_temperature = float(
+                getattr(configs, "safe_triaxis_oracle_temperature", 0.1)
+            )
+            self.safe_triaxis_anchor_frozen = False
+            self.safe_triaxis_anchor_output = None
+            self.safe_triaxis_expert_outputs = None
+            self.safe_triaxis_weights = None
 
         self.use_time_mark_adjustment = getattr(configs, "use_time_mark_adjustment", False)
         if self.use_time_mark_adjustment:
@@ -1265,6 +1350,25 @@ class PhaseFormer(DefaultPLModule):
                     for _ in range(num_intermediate)
                 )
 
+    def freeze_safe_triaxis_anchor(self):
+        """Freeze every loaded A1 parameter and leave only safe modules trainable."""
+        if not self.use_safe_triaxis:
+            raise RuntimeError("freeze_safe_triaxis_anchor requires use_safe_triaxis")
+        for name, parameter in self.named_parameters():
+            parameter.requires_grad_(name.startswith("safe_triaxis_"))
+        self.safe_triaxis_anchor_frozen = True
+
+    def on_train_epoch_start(self):
+        # A1 is a pretrained anchor, not a jointly fine-tuned fourth expert.
+        # Keep its dropout modules in evaluation mode while the newly added
+        # cycle expert and router remain trainable.
+        if getattr(self, "safe_triaxis_anchor_frozen", False):
+            for name, module in self.named_children():
+                if not name.startswith("safe_triaxis_"):
+                    module.eval()
+            self.safe_triaxis_cycle_expert.train()
+            self.safe_triaxis_router.train()
+
     # phase rearrangement helpers
     @staticmethod
     def _to_phase_series(x_periods):
@@ -1436,6 +1540,11 @@ class PhaseFormer(DefaultPLModule):
         y_full = y_periods.reshape(B, C, -1)[..., : self.pred_len]  # (B, C, pred_len)
         y_hat = y_full.permute(0, 2, 1)  # (B, pred_len, C)
 
+        # Safe-Regret keeps the unblended phase forecast as an atomic expert,
+        # while the complete downstream A1 path remains the immutable anchor.
+        if self.use_safe_triaxis:
+            safe_phase_hat = y_hat
+
         if self.use_triaxis_fusion:
             # High-frequency damping belongs to the phase expert.  Applying it
             # after fusion would silently alter the trajectory and cycle axes.
@@ -1470,6 +1579,8 @@ class PhaseFormer(DefaultPLModule):
                     residual_hat = self.weak_period_residual(x_in)
                 if self.use_rcrf_fusion:
                     y_hat, _ = self.rcrf_fusion(y_hat, residual_hat, phase_series_raw)
+                    if self.use_safe_triaxis:
+                        safe_trajectory_hat = residual_hat
                 else:
                     if self.use_adaptive_weak_period_gate:
                         residual_gate = self.adaptive_weak_period_gate(x_in, phase_series)
@@ -1498,6 +1609,27 @@ class PhaseFormer(DefaultPLModule):
         if self.use_phase_noise_hifreq_damping and not self.use_triaxis_fusion:
             y_hat = self.phase_noise_hifreq_damping(y_hat, phase_series)
 
+        if self.use_safe_triaxis:
+            # `y_hat` is now the *complete* A1 prediction, including RCRF and
+            # every frozen output calibration.  The safe extension is applied
+            # only after that anchor has been fully constructed.
+            safe_anchor_hat = y_hat
+            if self.use_phase_noise_hifreq_damping:
+                safe_phase_hat = self.phase_noise_hifreq_damping(
+                    safe_phase_hat, phase_series
+                )
+            safe_cycle_hat = self.safe_triaxis_cycle_expert(x_in)
+            y_hat, self.safe_triaxis_weights = self.safe_triaxis_router(
+                safe_anchor_hat,
+                safe_phase_hat,
+                safe_trajectory_hat,
+                safe_cycle_hat,
+                x_in,
+            )
+            safe_experts_normalized = (
+                safe_phase_hat, safe_trajectory_hat, safe_cycle_hat
+            )
+
         # 10) De-normalization
         if self.use_revin:
             y_hat = self.revin.denormalize(y_hat, stats)
@@ -1506,8 +1638,19 @@ class PhaseFormer(DefaultPLModule):
                     self.revin.denormalize(expert, stats)
                     for expert in triaxis_experts_normalized
                 )
+            if self.use_safe_triaxis:
+                self.safe_triaxis_anchor_output = self.revin.denormalize(
+                    safe_anchor_hat, stats
+                )
+                self.safe_triaxis_expert_outputs = tuple(
+                    self.revin.denormalize(expert, stats)
+                    for expert in safe_experts_normalized
+                )
         elif self.use_triaxis_fusion:
             self.triaxis_expert_outputs = triaxis_experts_normalized
+        elif self.use_safe_triaxis:
+            self.safe_triaxis_anchor_output = safe_anchor_hat
+            self.safe_triaxis_expert_outputs = safe_experts_normalized
 
         return y_hat, Z, y_phase_steps
 
@@ -1520,6 +1663,82 @@ class PhaseFormer(DefaultPLModule):
             loss_func = "huber"
         criterion = self._get_criterion(loss_func)
         return criterion(outputs, target)
+
+    def _cyclewise_mse(self, forecast, target):
+        """Return per-sample/channel/future-cycle MSE as ``(B,C,Q)``."""
+        parts = []
+        for start in range(0, self.pred_len, self.period_len):
+            end = min(start + self.period_len, self.pred_len)
+            parts.append(
+                (forecast[:, start:end, :] - target[:, start:end, :])
+                .square()
+                .mean(dim=1)
+            )
+        return torch.stack(parts, dim=-1)
+
+    def _safe_triaxis_auxiliary_loss(self, outputs, target):
+        """Supervise abstention by regret relative to the frozen A1 anchor."""
+        anchor = self.safe_triaxis_anchor_output[:, -self.pred_len :, :]
+        experts = tuple(
+            expert[:, -self.pred_len :, :]
+            for expert in self.safe_triaxis_expert_outputs
+        )
+        if self.target_var_index != -1:
+            index = self.target_var_index
+            anchor = anchor[:, :, index : index + 1]
+            experts = tuple(x[:, :, index : index + 1] for x in experts)
+            outputs = outputs[:, :, index : index + 1]
+
+        anchor_mse = self._cyclewise_mse(anchor, target)
+        expert_mse = torch.stack(
+            [self._cyclewise_mse(expert, target) for expert in experts], dim=-1
+        )
+        relative_gain = (
+            (anchor_mse.unsqueeze(-1) - expert_mse)
+            / anchor_mse.unsqueeze(-1).clamp_min(1e-8)
+        ).detach()
+        noop_score = torch.zeros_like(relative_gain[..., :1])
+        oracle_scores = torch.cat(
+            (noop_score, relative_gain - self.safe_triaxis_regret_margin), dim=-1
+        )
+        oracle = torch.softmax(
+            oracle_scores / self.safe_triaxis_oracle_temperature, dim=-1
+        )
+        logits = self.safe_triaxis_router.last_cycle_action_logits
+        if self.target_var_index != -1:
+            logits = logits[:, self.target_var_index : self.target_var_index + 1]
+        action_ce = -(oracle * F.log_softmax(logits, dim=-1)).sum(dim=-1).mean()
+        oracle_accept = oracle[..., 1:].sum(dim=-1)
+        predicted_accept = self.safe_triaxis_router.last_cycle_accept.squeeze(-1)
+        if self.target_var_index != -1:
+            predicted_accept = predicted_accept[
+                :, self.target_var_index : self.target_var_index + 1
+            ]
+        accept_calibration = F.mse_loss(predicted_accept, oracle_accept)
+        route_loss = action_ce + accept_calibration
+
+        cycle_aux = self._compute_loss(experts[2], target)
+        candidate_mse = self._cyclewise_mse(outputs, target)
+        relative_regret = (
+            (candidate_mse - anchor_mse) / anchor_mse.clamp_min(1e-8)
+        )
+        positive_regret = F.relu(relative_regret)
+        nonreg_loss = positive_regret.mean()
+        flat = positive_regret.reshape(-1)
+        tail_count = max(1, math.ceil(0.1 * flat.numel()))
+        cvar_loss = flat.topk(tail_count).values.mean()
+        auxiliary = (
+            self.safe_triaxis_route_aux_weight * route_loss
+            + self.safe_triaxis_cycle_aux_weight * cycle_aux
+            + self.safe_triaxis_nonreg_weight * nonreg_loss
+            + self.safe_triaxis_cvar_weight * cvar_loss
+        )
+        return auxiliary, {
+            "route": route_loss,
+            "cycle": cycle_aux,
+            "nonreg": nonreg_loss,
+            "cvar": cvar_loss,
+        }
 
     def training_step(self, batch, batch_idx):
         batch_x, batch_y, batch_x_mark, batch_y_mark = batch
@@ -1592,6 +1811,22 @@ class PhaseFormer(DefaultPLModule):
             self.log("train_fused_loss", fused_loss, on_epoch=True)
             self.log("train_expert_loss", expert_loss, on_epoch=True)
             self.log("train_route_loss", route_loss, on_epoch=True)
+
+        if self.use_safe_triaxis:
+            safe_aux, safe_parts = self._safe_triaxis_auxiliary_loss(
+                outputs, target
+            )
+            loss = loss + safe_aux
+            self.log("train_fused_loss", fused_loss, on_epoch=True)
+            self.log("train_safe_route_loss", safe_parts["route"], on_epoch=True)
+            self.log("train_safe_cycle_loss", safe_parts["cycle"], on_epoch=True)
+            self.log("train_safe_nonreg_loss", safe_parts["nonreg"], on_epoch=True)
+            self.log("train_safe_cvar_loss", safe_parts["cvar"], on_epoch=True)
+            self.log(
+                "train_safe_global_accept",
+                self.safe_triaxis_router.last_global_accept,
+                on_epoch=True,
+            )
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True)
         return loss

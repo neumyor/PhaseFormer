@@ -424,3 +424,156 @@ class RollingTriAxisHistoryRouter(nn.Module):
         experts = torch.stack((phase_hat, trajectory_hat, cycle_hat), dim=-1)
         output = (experts * weights.permute(0, 2, 1, 3)).sum(dim=-1)
         return output, weights.permute(0, 2, 1, 3)
+
+
+class SafeRegretTriAxisRouter(nn.Module):
+    """A1-anchored router with an exact, learnable abstention path.
+
+    The first action is always the complete A1 prediction.  The other actions
+    are correction directions supplied by the phase, trajectory and cycle
+    experts.  ``raw_global_accept`` starts at the closed boundary, so enabling
+    this module and loading an A1 checkpoint is an exact functional identity.
+    The boundary clamp has a usable inward gradient, allowing training to open
+    the correction path only when the prediction objective supports it.
+    """
+
+    EXPERT_NAMES = RollingTriAxisHistoryRouter.EXPERT_NAMES
+
+    # Reuse the audited rolling-origin implementation without constructing the
+    # v2 router's unused projections or priors.
+    _cycle_view = RollingTriAxisHistoryRouter._cycle_view
+    _trajectory_forecast = RollingTriAxisHistoryRouter._trajectory_forecast
+    rolling_history_evidence = RollingTriAxisHistoryRouter.rolling_history_evidence
+
+    def __init__(
+        self,
+        pred_len: int,
+        period_len: int,
+        hidden: int = 16,
+        origins: int = 4,
+        trajectory_window_cycles: int = 4,
+        recency_decay: float = 0.5,
+        correction_clip: float = 2.0,
+        max_accept: float = 1.0,
+        use_horizon_prior: bool = False,
+        horizon_prior_init: float = 0.05,
+        eps: float = 1e-6,
+    ):
+        super().__init__()
+        if pred_len <= 0 or period_len <= 1:
+            raise ValueError("pred_len must be positive and period_len > 1")
+        if origins < 2 or trajectory_window_cycles < 1:
+            raise ValueError("origins must be >=2 and trajectory window positive")
+        if correction_clip <= 0 or not 0 < max_accept <= 1:
+            raise ValueError("correction_clip must be positive and max_accept in (0,1]")
+        if horizon_prior_init <= 0:
+            raise ValueError("horizon_prior_init must be positive")
+        self.pred_len = int(pred_len)
+        self.period_len = int(period_len)
+        self.num_future_cycles = math.ceil(self.pred_len / self.period_len)
+        self.origins = int(origins)
+        self.trajectory_window_cycles = int(trajectory_window_cycles)
+        self.recency_decay = float(recency_decay)
+        self.correction_clip = float(correction_clip)
+        self.max_accept = float(max_accept)
+        self.use_horizon_prior = bool(use_horizon_prior)
+        self.eps = float(eps)
+
+        # rolling mean risks (3), disagreement (3), structural evidence (3).
+        self.router = nn.Sequential(
+            nn.Linear(9, hidden), nn.GELU(), nn.Linear(hidden, 4)
+        )
+        nn.init.zeros_(self.router[-1].weight)
+        nn.init.zeros_(self.router[-1].bias)
+        self.raw_global_accept = nn.Parameter(torch.zeros(()))
+        if self.use_horizon_prior:
+            raw = math.log(math.expm1(float(horizon_prior_init)))
+            self.horizon_prior_raw = nn.Parameter(torch.tensor(raw))
+
+        self.last_weights = None
+        self.last_cycle_action_logits = None
+        self.last_cycle_accept = None
+        self.last_selector = None
+        self.last_global_accept = None
+        self.last_risks = None
+        self.last_risk_std = None
+        self.last_structural = None
+
+    def _action_logits(self, history):
+        risks, risk_std, structural = self.rolling_history_evidence(history)
+        # The decision unit is a future cycle, not an individual phase point.
+        features = torch.cat((risks, risk_std, structural), dim=-1).mean(dim=3)
+        raw = self.router(features)
+        expert_logits = raw[..., :3]
+        confidence_logit = raw[..., 3:4]
+        if self.use_horizon_prior:
+            q = torch.linspace(
+                0.0, 1.0, self.num_future_cycles,
+                device=history.device, dtype=history.dtype,
+            ).view(1, 1, -1, 1)
+            strength = F.softplus(self.horizon_prior_raw)
+            signed = history.new_tensor((1.0, 0.0, -1.0)).view(1, 1, 1, 3)
+            expert_logits = expert_logits + strength * q * signed
+        # No-op has fixed score zero. Confidence shifts all expert actions
+        # jointly, while their conditional softmax decides which correction.
+        action_logits = torch.cat(
+            (torch.zeros_like(confidence_logit), expert_logits + confidence_logit),
+            dim=-1,
+        )
+        self.last_risks = risks.detach()
+        self.last_risk_std = risk_std.detach()
+        self.last_structural = structural.detach()
+        return action_logits
+
+    def forward(
+        self, anchor_hat, phase_hat, trajectory_hat, cycle_hat, history
+    ):
+        shapes = {
+            tuple(x.shape)
+            for x in (anchor_hat, phase_hat, trajectory_hat, cycle_hat)
+        }
+        if len(shapes) != 1 or anchor_hat.ndim != 3:
+            raise ValueError("anchor and experts must share shape (B,H,C)")
+        if anchor_hat.size(1) != self.pred_len:
+            raise ValueError("forecast horizon does not match router pred_len")
+
+        cycle_logits = self._action_logits(history)  # (B,C,Q,4)
+        soft_actions = torch.softmax(cycle_logits, dim=-1)
+        selector = soft_actions[..., 1:] / soft_actions[..., 1:].sum(
+            dim=-1, keepdim=True
+        ).clamp_min(self.eps)
+        # Forward is a hard [0,max] abstention gate, while the straight-through
+        # derivative remains usable even after an early batch moves the raw
+        # scalar below zero.  This preserves exact A1 fallback without creating
+        # a permanently dead boundary.
+        hard_accept = self.raw_global_accept.detach().clamp(
+            0.0, self.max_accept
+        )
+        global_accept = self.raw_global_accept + (
+            hard_accept - self.raw_global_accept.detach()
+        )
+        cycle_accept = global_accept * (1.0 - soft_actions[..., :1])
+
+        step = torch.arange(self.pred_len, device=history.device)
+        cycle_index = torch.div(step, self.period_len, rounding_mode="floor")
+        selector_step = selector[:, :, cycle_index, :].permute(0, 2, 1, 3)
+        accept_step = cycle_accept[:, :, cycle_index, :].permute(0, 2, 1, 3)
+        experts = torch.stack((phase_hat, trajectory_hat, cycle_hat), dim=-1)
+        limit = self.correction_clip * history.std(
+            dim=1, unbiased=False
+        ).clamp_min(self.eps).unsqueeze(1).unsqueeze(-1)
+        correction_directions = (experts - anchor_hat.unsqueeze(-1)).clamp(
+            min=-limit, max=limit
+        )
+        correction = (selector_step * correction_directions).sum(dim=-1)
+        output = anchor_hat + accept_step.squeeze(-1) * correction
+        weights = torch.cat(
+            (1.0 - accept_step, accept_step * selector_step), dim=-1
+        )
+
+        self.last_weights = weights
+        self.last_cycle_action_logits = cycle_logits
+        self.last_cycle_accept = cycle_accept
+        self.last_selector = selector
+        self.last_global_accept = global_accept
+        return output, weights
