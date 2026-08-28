@@ -1,9 +1,9 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 最近实验：修正三轴 v1 单截点代理错配的多截点 rolling-origin 风险与周期级校准，结果见
-> `docs/PhaseFormer_triaxis_rolling_calibration_experiment.md`。R0 虽是修正版冠军，但在 ETTm2
-> 回退并未通过 validation-only 门槛；R1/R2 更差，实验已停止且未读取 test。三专家的优势区间
-> 已完成审计，下一轮若继续须另行预注册“可拒绝的 regret 路由”，不能直接进入本文件的正式确认。
+> 当前实验：以完整 A1 为冻结锚点、带拒绝动作和相对 A1 regret 监督的 Safe-Regret TriAxis，
+> 预注册见 `docs/PhaseFormer_safe_regret_triaxis_experiment.md`。先覆盖六数据集 H96 的四级消融，
+> 再把统一候选外推到相同六数据集 H192；24 个 validation 指标必须全部严格优于 A1/I0/R0
+> 原始包络，才允许读取新 test。上一轮 rolling calibration 结果保持不变。
 
 ## 目标与选择规则
 

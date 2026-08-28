@@ -32,6 +32,14 @@ Operational constraints:
 - For the new round, compare against a matching current-version ETT baseline before claiming any ETT improvement.
 - Candidate changes should remain in the PhaseFormer phase-modeling framework and specifically address weak-period adaptation, such as phase length sensitivity, phase/residual blending, or time-conditioned phase correction.
 
+Safe-Regret TriAxis round (2026-08-29): the user rejects an integrated model
+that cannot exceed its original components and requests actual testing on wider
+data and settings. The operational interpretation is one unified, A1-anchored
+candidate family on ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity at H96 and
+H192. Validation compares every metric against the per-cell best of A1, I0 and
+R0; any regression fails promotion. No test split is accessed unless all 24
+expanded validation metric cells strictly improve.
+
 ## Baseline Status
 
 Weather 720 -> 96 baseline is established at `research_runs/weather96_baseline_e30_seed2021/`.
