@@ -31,7 +31,10 @@ from src.models.intercycle_patch import (
     InterCyclePatchResidualHead,
     RepeatLastCycleResidualHead,
 )
-from src.models.triaxis_fusion import TriAxisHistoryRouter
+from src.models.triaxis_fusion import (
+    RollingTriAxisHistoryRouter,
+    TriAxisHistoryRouter,
+)
 from src.models.phase_align import PhaseAlignment
 from src.models.phase_warp import PhaseWarping
 from src.models.phase_amp_calib import PhaseAmpCalibration
@@ -723,17 +726,42 @@ class PhaseFormer(DefaultPLModule):
                 prediction_head="decoder",
                 anchor_mode="last_cycle",
             )
-            self.triaxis_router = TriAxisHistoryRouter(
-                pred_len=self.pred_len,
-                period_len=self.period_len,
-                mode=getattr(
-                    configs, "triaxis_router_mode", "self_validating"
-                ),
-                hidden=getattr(configs, "triaxis_router_hidden", 16),
-                temperature=getattr(
-                    configs, "triaxis_router_temperature", 1.0
-                ),
+            router_mode = getattr(
+                configs, "triaxis_router_mode", "self_validating"
             )
+            if getattr(configs, "triaxis_router_family", "single_cutoff") == "rolling":
+                self.triaxis_router = RollingTriAxisHistoryRouter(
+                    pred_len=self.pred_len,
+                    period_len=self.period_len,
+                    mode=router_mode,
+                    hidden=getattr(configs, "triaxis_router_hidden", 16),
+                    origins=getattr(configs, "triaxis_rolling_origins", 4),
+                    trajectory_window_cycles=getattr(
+                        configs, "triaxis_trajectory_window_cycles", 4
+                    ),
+                    recency_decay=getattr(
+                        configs, "triaxis_rolling_recency_decay", 0.5
+                    ),
+                    risk_prior_strength=getattr(
+                        configs, "triaxis_risk_prior_strength", 1.0
+                    ),
+                    correction_max=getattr(
+                        configs, "triaxis_router_correction_max", 0.5
+                    ),
+                    temperature=getattr(
+                        configs, "triaxis_router_temperature", 1.0
+                    ),
+                )
+            else:
+                self.triaxis_router = TriAxisHistoryRouter(
+                    pred_len=self.pred_len,
+                    period_len=self.period_len,
+                    mode=router_mode,
+                    hidden=getattr(configs, "triaxis_router_hidden", 16),
+                    temperature=getattr(
+                        configs, "triaxis_router_temperature", 1.0
+                    ),
+                )
             self.triaxis_expert_aux_weight = float(
                 getattr(configs, "triaxis_expert_aux_weight", 0.2)
             )
@@ -742,6 +770,9 @@ class PhaseFormer(DefaultPLModule):
             )
             self.triaxis_oracle_temperature = float(
                 getattr(configs, "triaxis_oracle_temperature", 0.2)
+            )
+            self.triaxis_route_target_granularity = getattr(
+                configs, "triaxis_route_target_granularity", "point"
             )
             self.triaxis_expert_outputs = None
             self.triaxis_weights = None
@@ -1527,9 +1558,25 @@ class PhaseFormer(DefaultPLModule):
                 ],
                 dim=-1,
             ).detach()
-            oracle = torch.softmax(
-                -actual_errors / self.triaxis_oracle_temperature, dim=-1
-            )
+            if self.triaxis_route_target_granularity == "cycle":
+                # The deployable router is factorized by future cycle.  Smooth
+                # the supervision to the same granularity instead of asking it
+                # to imitate a noisy pointwise winner sequence.
+                oracle_parts = []
+                for start in range(0, self.pred_len, self.period_len):
+                    end = min(start + self.period_len, self.pred_len)
+                    cycle_mse = actual_errors[:, start:end].square().mean(
+                        dim=1, keepdim=True
+                    )
+                    cycle_oracle = torch.softmax(
+                        -cycle_mse / self.triaxis_oracle_temperature, dim=-1
+                    )
+                    oracle_parts.append(cycle_oracle.expand(-1, end - start, -1, -1))
+                oracle = torch.cat(oracle_parts, dim=1)
+            else:
+                oracle = torch.softmax(
+                    -actual_errors / self.triaxis_oracle_temperature, dim=-1
+                )
             route_loss = (
                 oracle
                 * (

@@ -121,6 +121,11 @@ ABLATION_MODES = {
     "triaxis_uniform",
     "triaxis_structural",
     "triaxis_self_validating",
+    # TriAxis v2: horizon-matched multi-origin risks, explicit monotonic risk
+    # prior, and cycle-smoothed route calibration.
+    "triaxis_rolling_features",
+    "triaxis_rolling_prior",
+    "triaxis_rolling_calibrated",
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1076,9 +1081,11 @@ def get_ablation_overrides(mode):
             overrides["intercycle_use_attention"] = False
         return overrides
     if mode in ("triaxis_uniform", "triaxis_structural",
-                "triaxis_self_validating"):
+                "triaxis_self_validating", "triaxis_rolling_features",
+                "triaxis_rolling_prior", "triaxis_rolling_calibrated"):
         overrides = get_ablation_overrides("gold_combo_reliability_s2")
         router_mode = mode.removeprefix("triaxis_")
+        rolling = router_mode.startswith("rolling_")
         overrides.update(
             scheme_name=mode,
             use_weak_period_residual=False,
@@ -1091,9 +1098,19 @@ def get_ablation_overrides(mode):
             triaxis_router_temperature=1.0,
             triaxis_expert_aux_weight=0.2,
             triaxis_route_aux_weight=(
-                0.1 if router_mode == "self_validating" else 0.0
+                0.1 if router_mode in (
+                    "self_validating", "rolling_calibrated"
+                ) else 0.0
             ),
             triaxis_oracle_temperature=0.2,
+            triaxis_route_target_granularity=(
+                "cycle" if router_mode == "rolling_calibrated" else "point"
+            ),
+            triaxis_rolling_origins=4,
+            triaxis_trajectory_window_cycles=4,
+            triaxis_rolling_recency_decay=0.5,
+            triaxis_risk_prior_strength=1.0,
+            triaxis_router_correction_max=0.5,
             triaxis_cycle_period_len=24,
             triaxis_cycle_d_model=32,
             triaxis_cycle_heads=4,
@@ -1101,6 +1118,10 @@ def get_ablation_overrides(mode):
             triaxis_cycle_encoder_layers=1,
             triaxis_cycle_decoder_layers=1,
         )
+        if rolling:
+            # Explicit for the audit schema and to prevent an accidental v1
+            # router fallback when adding future variants.
+            overrides["triaxis_router_family"] = "rolling"
         return overrides
     raise ValueError(f"Unsupported ablation mode: {mode}")
 
@@ -1341,6 +1362,27 @@ class PhaseFormerPresetConfig:
         )
         self.triaxis_oracle_temperature = hyperparams.get(
             "triaxis_oracle_temperature", 0.2
+        )
+        self.triaxis_route_target_granularity = hyperparams.get(
+            "triaxis_route_target_granularity", "point"
+        )
+        self.triaxis_router_family = hyperparams.get(
+            "triaxis_router_family", "single_cutoff"
+        )
+        self.triaxis_rolling_origins = hyperparams.get(
+            "triaxis_rolling_origins", 4
+        )
+        self.triaxis_trajectory_window_cycles = hyperparams.get(
+            "triaxis_trajectory_window_cycles", 4
+        )
+        self.triaxis_rolling_recency_decay = hyperparams.get(
+            "triaxis_rolling_recency_decay", 0.5
+        )
+        self.triaxis_risk_prior_strength = hyperparams.get(
+            "triaxis_risk_prior_strength", 1.0
+        )
+        self.triaxis_router_correction_max = hyperparams.get(
+            "triaxis_router_correction_max", 0.5
         )
         self.triaxis_cycle_period_len = hyperparams.get(
             "triaxis_cycle_period_len", 24
