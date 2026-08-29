@@ -60,7 +60,12 @@ class MultiAnchorRouter(nn.Module):
             if not 1.0 / 3.0 < soft_a1_prior < 1.0:
                 raise ValueError("soft_a1_prior must be in (1/3, 1)")
             other = (1.0 - soft_a1_prior) / 2.0
-            initial = torch.tensor((soft_a1_prior, other, other)).log()
+            # Account for the routing temperature so the actual initial
+            # softmax probabilities, rather than the raw logits, equal the
+            # documented prior.
+            initial = self.temperature * torch.tensor(
+                (soft_a1_prior, other, other)
+            ).log()
         else:
             # A tied logit vector has deterministic argmax A1, so the hard
             # forward pass is bit-exactly the complete A1 forecast at init.
