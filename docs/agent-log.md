@@ -1,5 +1,15 @@
 # Agent Maintenance Log
 
+## 2026-08-29 — M3 multi-anchor independent paper draft
+
+- 新增 `docs/PhaseFormer_M3_multi_anchor_paper_draft.md`，将已完成的 M3 实验整理为可独立
+  阅读的中文论文草稿，而不是实验日志摘要。
+- 草稿包含相位—周期互补动机、完整模型多锚点定义、24%→30% 时间外影子校准、16 维
+  结构特征、周期级 soft 路由公式、训练目标、M0–M3 消融、六数据集 H96 结果、
+  1,121,992 个 sample×channel 分析、局限性和下一步正式验证要求。
+- 明确披露当前仅为 30% train、单 seed、H96 validation 机制筛选；Stage-A gate 失败，未运行
+  H192/test/Golden，不能表述为全局最优或正式 SOTA。
+
 ## 2026-08-27 — Periodic-residual next-stage 288-run formal matrix completed
 
 - 完成预注册 288-run 矩阵（12 setting × 8 mode × 3 seed；ETTh1/ETTh2/ETTm1/
