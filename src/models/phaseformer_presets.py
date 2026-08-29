@@ -149,6 +149,16 @@ ABLATION_MODES = {
     "pctf_dual_fixed",
     "pctf_dual_masked",
     "pctf_dual_regret",
+    # Output- and component-level fusion study over one shared PhaseFormer,
+    # one NLinear head, and one no-PE ICPT head.  Complete-forecast mixtures
+    # are negative controls and cannot be selected as the paper method.
+    "pctf_fusion_component_scalar",
+    "pctf_fusion_component_cycle",
+    "pctf_fusion_monotonic",
+    "pctf_fusion_mlp",
+    "pctf_fusion_phase_modulation",
+    "pctf_fusion_uniform_control",
+    "pctf_fusion_softmax_control",
 }
 
 HPTC_MODES = {
@@ -169,6 +179,16 @@ PCTF_MODES = {
     "pctf_dual_regret": dict(
         shape=True, level=True, confidence="masked_regret"
     ),
+}
+
+PCTF_FUSION_MODES = {
+    "pctf_fusion_component_scalar": "component_scalar",
+    "pctf_fusion_component_cycle": "component_cycle",
+    "pctf_fusion_monotonic": "monotonic_evidence",
+    "pctf_fusion_mlp": "mlp_evidence",
+    "pctf_fusion_phase_modulation": "phase_modulation",
+    "pctf_fusion_uniform_control": "uniform_control",
+    "pctf_fusion_softmax_control": "softmax_control",
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1105,6 +1125,35 @@ def get_ablation_overrides(mode):
             pctf_risk_clip=10.0,
         )
         return overrides
+    if mode in PCTF_FUSION_MODES:
+        # Keep A1's phase calibration stack but replace its complete-forecast
+        # RCRF with a controlled three-branch composer.  The branches and
+        # initializations are identical across modes; only fusion changes.
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode,
+            use_weak_period_residual=False,
+            use_rcrf_fusion=False,
+            use_phase_cycle_fusion=True,
+            phase_cycle_fusion_strategy=PCTF_FUSION_MODES[mode],
+            phase_cycle_fusion_d_model=32,
+            phase_cycle_fusion_heads=4,
+            phase_cycle_fusion_ffn_dim=64,
+            phase_cycle_fusion_level_gate_init=0.10,
+            phase_cycle_fusion_shape_gate_init=0.10,
+            phase_cycle_fusion_deformation_gate_init=0.05,
+            phase_cycle_fusion_masked_origins=2,
+            phase_cycle_fusion_risk_scale=1.0,
+            phase_cycle_fusion_risk_std_weight=0.5,
+            phase_cycle_fusion_confidence_floor=0.05,
+            phase_cycle_fusion_evidence_strength_init=1.0,
+            phase_cycle_fusion_mlp_hidden=16,
+            phase_cycle_fusion_mlp_correction_max=2.0,
+            phase_cycle_fusion_modulation_temperature=0.10,
+            phase_cycle_fusion_amplitude_min=0.5,
+            phase_cycle_fusion_amplitude_max=2.0,
+        )
+        return overrides
     # Inter-Cycle Patch Transformer candidates (ICPT plan).  A3/A4 swap the
     # NLinear head for simple cycle baselines; rcrf_icpt_* build the ICPT head
     # with a position encoding.  Everything else inherits the frozen RCRF stack
@@ -1490,6 +1539,62 @@ class PhaseFormerPresetConfig:
             "pctf_confidence_floor", 0.05
         )
         self.pctf_risk_clip = hyperparams.get("pctf_risk_clip", 10.0)
+        # Three-branch PCTF fusion study.  These settings are dormant unless
+        # use_phase_cycle_fusion is explicitly enabled by its isolated preset.
+        self.use_phase_cycle_fusion = hyperparams.get(
+            "use_phase_cycle_fusion", False
+        )
+        self.phase_cycle_fusion_strategy = hyperparams.get(
+            "phase_cycle_fusion_strategy", "component_cycle"
+        )
+        self.phase_cycle_fusion_d_model = hyperparams.get(
+            "phase_cycle_fusion_d_model", 32
+        )
+        self.phase_cycle_fusion_heads = hyperparams.get(
+            "phase_cycle_fusion_heads", 4
+        )
+        self.phase_cycle_fusion_ffn_dim = hyperparams.get(
+            "phase_cycle_fusion_ffn_dim", 64
+        )
+        self.phase_cycle_fusion_level_gate_init = hyperparams.get(
+            "phase_cycle_fusion_level_gate_init", 0.10
+        )
+        self.phase_cycle_fusion_shape_gate_init = hyperparams.get(
+            "phase_cycle_fusion_shape_gate_init", 0.10
+        )
+        self.phase_cycle_fusion_deformation_gate_init = hyperparams.get(
+            "phase_cycle_fusion_deformation_gate_init", 0.05
+        )
+        self.phase_cycle_fusion_masked_origins = hyperparams.get(
+            "phase_cycle_fusion_masked_origins", 2
+        )
+        self.phase_cycle_fusion_risk_scale = hyperparams.get(
+            "phase_cycle_fusion_risk_scale", 1.0
+        )
+        self.phase_cycle_fusion_risk_std_weight = hyperparams.get(
+            "phase_cycle_fusion_risk_std_weight", 0.5
+        )
+        self.phase_cycle_fusion_confidence_floor = hyperparams.get(
+            "phase_cycle_fusion_confidence_floor", 0.05
+        )
+        self.phase_cycle_fusion_evidence_strength_init = hyperparams.get(
+            "phase_cycle_fusion_evidence_strength_init", 1.0
+        )
+        self.phase_cycle_fusion_mlp_hidden = hyperparams.get(
+            "phase_cycle_fusion_mlp_hidden", 16
+        )
+        self.phase_cycle_fusion_mlp_correction_max = hyperparams.get(
+            "phase_cycle_fusion_mlp_correction_max", 2.0
+        )
+        self.phase_cycle_fusion_modulation_temperature = hyperparams.get(
+            "phase_cycle_fusion_modulation_temperature", 0.10
+        )
+        self.phase_cycle_fusion_amplitude_min = hyperparams.get(
+            "phase_cycle_fusion_amplitude_min", 0.5
+        )
+        self.phase_cycle_fusion_amplitude_max = hyperparams.get(
+            "phase_cycle_fusion_amplitude_max", 2.0
+        )
         # Inter-Cycle Patch Transformer residual head configuration (ICPT plan).
         self.intercycle_period_len = hyperparams.get("intercycle_period_len", 24)
         self.intercycle_d_model = hyperparams.get("intercycle_d_model", 32)

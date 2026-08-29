@@ -1,10 +1,17 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 当前待确认实验（尚未训练）：PCTF 相位—周期—轨迹统一模型，完整方案见
+> 当前待执行实验（代码已完成，尚未训练）：PCTF 多融合策略，见
+> `docs/PhaseFormer_pctf_fusion_strategies.md`。固定同一个 PhaseFormer/NLinear/no-PE ICPT，
+> 测试分量级标量/逐周期融合、单调历史证据、MLP 证据与相位模板调制；均匀平均和完整预测
+> Softmax 仅为不可晋级的负对照。第一阶段为六数据集 H96 的66-run validation-only矩阵，
+> 通过门槛后才允许冻结一个论文候选进入144-run三seed正式确认。
+
+> PCTF 基础实现（尚未单独训练）：相位—周期—轨迹统一模型，完整方案见
 > `docs/PhaseFormer_pctf_experiment.md`。它保留 A1 的 PhaseFormer、NLinear 与外层 RCRF，
 > 将 I0/ICPT 限制为两个可识别修正：逐周期零均值形状，以及全 horizon 均值守恒的周期间
 > 相对水平；历史 masked reconstruction 只做连续收缩，不做完整专家路由。代码与 48-run
-> validation-only 筛选、冻结后 144-run test 确认协议已写完，等待用户确认实现后再运行。
+> validation-only 筛选、冻结后 144-run test 确认协议已写完；该基础方案现作为上方多融合
+> 策略实验的 F0，不再单独启动一套重复矩阵。
 
 > 最近完成实验：Multi-Anchor Selector v1，方案与结果见
 > `docs/PhaseFormer_multi_anchor_selector_experiment.md`。M3 soft 路由在六数据集 H96 相对

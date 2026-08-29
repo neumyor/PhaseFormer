@@ -39,6 +39,7 @@ from src.models.hierarchical_trend_cycle import (
 from src.models.phase_cycle_trajectory import (
     PhaseCycleTrajectoryResidualHead,
 )
+from src.models.phase_cycle_fusion import PhaseCycleFusionComposer
 from src.models.triaxis_fusion import (
     RollingTriAxisHistoryRouter,
     SafeRegretTriAxisRouter,
@@ -518,6 +519,11 @@ class PhaseFormer(DefaultPLModule):
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
         if not self.use_residual_head:
             self.use_weak_period_residual = False
+        self.use_phase_cycle_fusion = getattr(
+            configs, "use_phase_cycle_fusion", False
+        )
+        if not self.use_residual_head:
+            self.use_phase_cycle_fusion = False
         self.use_triaxis_fusion = getattr(configs, "use_triaxis_fusion", False)
         self.use_safe_triaxis = getattr(configs, "use_safe_triaxis", False)
         if not self.use_residual_head:
@@ -530,6 +536,15 @@ class PhaseFormer(DefaultPLModule):
             )
         if self.use_triaxis_fusion and self.use_safe_triaxis:
             raise ValueError("legacy TriAxis and Safe-Regret TriAxis are exclusive")
+        if self.use_phase_cycle_fusion and (
+            self.use_weak_period_residual
+            or self.use_triaxis_fusion
+            or self.use_safe_triaxis
+        ):
+            raise ValueError(
+                "phase-cycle fusion owns its three branches and is exclusive "
+                "with weak residual and TriAxis paths"
+            )
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
         )
@@ -545,6 +560,57 @@ class PhaseFormer(DefaultPLModule):
             configs, "use_dual_reliability_fusion", False
         )
         self.intercycle_head_requires_marks = False
+        if self.use_phase_cycle_fusion:
+            self.phase_cycle_fusion = PhaseCycleFusionComposer(
+                self.seq_len,
+                self.pred_len,
+                self.period_len,
+                strategy=getattr(
+                    configs, "phase_cycle_fusion_strategy", "component_cycle"
+                ),
+                d_model=getattr(configs, "phase_cycle_fusion_d_model", 32),
+                num_heads=getattr(configs, "phase_cycle_fusion_heads", 4),
+                ffn_dim=getattr(configs, "phase_cycle_fusion_ffn_dim", 64),
+                level_gate_init=getattr(
+                    configs, "phase_cycle_fusion_level_gate_init", 0.10
+                ),
+                shape_gate_init=getattr(
+                    configs, "phase_cycle_fusion_shape_gate_init", 0.10
+                ),
+                deformation_gate_init=getattr(
+                    configs, "phase_cycle_fusion_deformation_gate_init", 0.05
+                ),
+                masked_origins=getattr(
+                    configs, "phase_cycle_fusion_masked_origins", 2
+                ),
+                risk_scale=getattr(
+                    configs, "phase_cycle_fusion_risk_scale", 1.0
+                ),
+                risk_std_weight=getattr(
+                    configs, "phase_cycle_fusion_risk_std_weight", 0.5
+                ),
+                confidence_floor=getattr(
+                    configs, "phase_cycle_fusion_confidence_floor", 0.05
+                ),
+                evidence_strength_init=getattr(
+                    configs, "phase_cycle_fusion_evidence_strength_init", 1.0
+                ),
+                mlp_hidden=getattr(
+                    configs, "phase_cycle_fusion_mlp_hidden", 16
+                ),
+                mlp_correction_max=getattr(
+                    configs, "phase_cycle_fusion_mlp_correction_max", 2.0
+                ),
+                modulation_temperature=getattr(
+                    configs, "phase_cycle_fusion_modulation_temperature", 0.10
+                ),
+                amplitude_min=getattr(
+                    configs, "phase_cycle_fusion_amplitude_min", 0.5
+                ),
+                amplitude_max=getattr(
+                    configs, "phase_cycle_fusion_amplitude_max", 2.0
+                ),
+            )
         if self.use_weak_period_residual:
             residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
             if self.use_dual_reliability_fusion and not self.use_rcrf_fusion:
@@ -1625,6 +1691,18 @@ class PhaseFormer(DefaultPLModule):
                 phase_hat, trajectory_hat, cycle_hat
             )
 
+        if self.use_phase_cycle_fusion:
+            # High-frequency damping is a phase-path calibration.  Apply it to
+            # the phase component before composition so it cannot destroy the
+            # composer's mean/shape identifiability after fusion.
+            if self.use_phase_noise_hifreq_damping:
+                y_hat = self.phase_noise_hifreq_damping(
+                    y_hat, phase_series
+                )
+            y_hat = self.phase_cycle_fusion(
+                y_hat, x_in, phase_series_raw
+            )
+
         if self.use_weak_period_residual:
             if self.use_dual_reliability_fusion:
                 linear_hat, periodic_hat = self.weak_period_residual.forward_components(
@@ -1669,7 +1747,11 @@ class PhaseFormer(DefaultPLModule):
             )
             y_hat = y_hat + time_adjustment
 
-        if self.use_phase_noise_hifreq_damping and not self.use_triaxis_fusion:
+        if (
+            self.use_phase_noise_hifreq_damping
+            and not self.use_triaxis_fusion
+            and not self.use_phase_cycle_fusion
+        ):
             y_hat = self.phase_noise_hifreq_damping(y_hat, phase_series)
 
         if self.use_safe_triaxis:

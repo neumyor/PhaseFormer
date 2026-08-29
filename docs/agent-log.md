@@ -909,3 +909,19 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 完整计划和空结果表在 `docs/PhaseFormer_pctf_experiment.md`。本轮只完成实现、结构测试与
   dry-run 校验；全仓 208 tests 和 187 subtests 通过。没有启动训练或读取新 test 结果，等待
   用户确认公式和实验范围。
+
+## 2026-08-29 — PCTF 多融合策略代码与实验协议
+
+- 固定一个 PhaseFormer、一个 NLinear 和一个 no-PE ICPT，实现分量标量/逐周期融合、单调
+  历史证据、证据 MLP、相位模板调制七个新 preset；完整预测均匀平均和 Softmax 仅为不可晋级
+  负对照，不是论文候选。
+- F1/F2 将预测正交分为 horizon 绝对均值、周期间零均值水平和周期内零均值形状；NLinear
+  独占绝对均值。F3 以24个可微 circular shift、受限幅度和零均值形变让 ICPT 调制 PhaseFormer
+  模板。A1 高频校准对新模型改为融合前只处理相位分量，旧 preset 路径不变。
+- 实验 runner 预注册六数据集 H96、A1/A2/I0+八融合策略的66-run validation-only筛选；论文
+  候选还必须优于两个负对照包络，才可冻结进入H96/H192、三seed、144-run正式确认。
+- 验证：223 tests和229 subtests通过；七策略有限值forward/backward、结构约束、单调方向、
+  严格历史因果、共享初始化、负对照不可晋级、test泄漏拒绝及66/144 dry-run均通过。ETTm2-H96
+  参数量为96,063–96,335，对比A1的72,905。没有启动训练或读取新的test结果。
+- 方案、公式、命令及空结果表：`docs/PhaseFormer_pctf_fusion_strategies.md`；runner：
+  `scripts/run_pctf_fusion_strategies.py`。
