@@ -817,3 +817,24 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   <triaxis_rolling_features|triaxis_rolling_prior|triaxis_rolling_calibrated> --lookback 720 --horizon 96
   --percent 30 --max-epochs 8 --seed 2021 --loss huber`；审计命令：
   `python scripts/analyze_triaxis_rolling_calibration.py`（RTX 4090，torch 2.4.1+cu121）。
+
+## 2026-08-29 — M3 相对原始 PhaseFormer 的成功/失败样本审计
+
+- 在查看配对预测前固定判据：sample×channel 相对 MSE ≤-10% 且 MAE 同时下降为成功，
+  相对 MSE ≥+10% 且 MAE 同时上升为失败；案例按绝对 MSE 差排序，并以 96 个窗口去重。
+- 补跑 ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity 的同协议 original：L720/H96、
+  30% train、8 epoch、seed 2021、Huber、validation only。该 matched rerun 只用于协议内
+  诊断，不替代 Golden。
+- M3 在六个 validation setting 的 MSE/MAE 均低于 original；MSE 相对变化为 -40.62%、
+  -36.41%、-19.52%、-13.24%、-8.04%、-5.32%。块长 96、1000 次 block bootstrap 的
+  MSE 区间均低于 0，但 M3 已经由同一 validation 选择，不能解释为独立测试显著性。
+- 回放 1,121,992 个样本×通道，成功 38.00%、失败 15.29%。强周期+近期漂移组的六数据集
+  宏平均 MSE 为 -14.35%、成功率 60.27%，但“其他”组也为 -13.12%；全部输入特征的成功/
+  失败宏平均 |SMD|≤0.095，未形成可靠逐样本适用域。
+- 事后未来水平迁移 SMD 为 -0.199、未来 lag-24 相关为 +0.106，提示未预见状态切换和稀疏
+  假周期是失败边界，但不能做因果解释。论文加入三张中文图和六个程序化极端案例；图片共约
+  636 KiB，大型 CSV/checkpoint 留在忽略目录。
+- 代码与协议：`scripts/analyze_m3_vs_original.py`、
+  `docs/PhaseFormer_M3_vs_original_analysis_protocol.md`；本地严格审计：
+  `research_runs/m3_vs_original_phaseformer_v1/`。回放聚合指标与日志最大绝对差
+  `1.21e-5`（阈值 `2e-5`），test 字段均为空。
