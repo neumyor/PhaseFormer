@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-08-29 — 论文方法约束：停止多完整模型 ensemble 路线
+
+- 用户明确纠正“整合”的含义：需要把 A1/I0/R0 的设计思想在一个模型中有机结合，而不是
+  训练、冻结三个完整模型后在预测层做路由。指标提升不能凌驾于方法逻辑、创新性和可发表性。
+- M3 从论文候选降级为诊断性 ensemble 上界、互补性证据或潜在蒸馏教师；不再继续优化
+  shadow/full anchor、OOF stacking 或三 checkpoint 路由，也不得把其结果包装成统一模型贡献。
+- 后续正式候选必须共享一套 PhaseFormer 相位主干，端到端联合全 horizon 轨迹校正、周期间
+  关系和历史可靠度调节；允许轻量结构分支，但推理时只能加载一个模型，并必须报告相对最强
+  单模型的参数量、FLOPs、延迟及逐组件消融。
+- 该约束已写入 `EXPERIMENT_SEARCH_PLAN.md` 的“不可违反的论文架构约束”，并在 M3 草稿
+  开头显著标为历史诊断方案，防止后续轮次再次把 ensemble 当作目标方法。
+
 ## 2026-08-29 — M3 multi-anchor independent paper draft
 
 - 新增 `docs/PhaseFormer_M3_multi_anchor_paper_draft.md`，将已完成的 M3 实验整理为可独立

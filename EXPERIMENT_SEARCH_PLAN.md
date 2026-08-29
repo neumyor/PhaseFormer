@@ -2,11 +2,26 @@
 
 > 最近完成实验：Multi-Anchor Selector v1，方案与结果见
 > `docs/PhaseFormer_multi_anchor_selector_experiment.md`。M3 soft 路由在六数据集 H96 相对
-> A1/I0/R0 逐指标包络平均改善 0.79%，10/12 指标改善；但 ETTh1-MAE、ETTm1-MAE 未改善，
-> Stage-A 严格 gate 失败，故未运行 H192/test。hard 路由均不如 soft；若继续，应优先验证
-> 多折 rolling-origin OOF 和 shadow→full 权重校准，而不是增加专家或强化 argmax。
+> A1/I0/R0 逐指标包络平均改善 0.79%，但它依赖三个独立训练并冻结的完整模型。根据论文方法
+> 约束，M3 自 2026-08-29 起只作为诊断性 ensemble 上界和互补性证据，**不再是候选论文主
+> 方法，也不继续沿 OOF/stacking 路线优化**。下一阶段必须把三种设计思想整合进一个共享
+> PhaseFormer，而不是融合三个模型的最终预测。
 
 ## 目标与选择规则
+
+### 不可违反的论文架构约束
+
+- “整合三个方法”是整合其机制与归纳偏置，不是把 A1、I0、R0 三个完整 checkpoint 做
+  routing、stacking、averaging 或 mixture-of-models。
+- 正式候选必须是一个端到端训练的统一模型：共享一套 PhaseFormer 相位表示，在同一网络中
+  有机结合全 horizon 轨迹校正、周期间关系建模和历史自验证/可靠度调节。
+- 允许轻量模块或结构化分支，但不得重复三套完整 PhaseFormer 主干；推理不能要求加载三个
+  独立模型。参数量、FLOPs 和延迟必须与最强单模型一起报告。
+- 机制关系必须能由统一目标解释：相位主干给出周期内坐标，轨迹模块校正跨周期水平演化，
+  周期模块建模周期间形状变化，历史可靠度只负责调节这些共享表征中的校正强度。
+- 必须用逐组件消融验证每一机制的独立作用及组合增益；如果完整模型的收益只能由多 checkpoint
+  误差抵消解释，则该方案不能作为论文主方法。
+- M3 可继续用于估计互补性上界、选择困难度和蒸馏教师，但其指标不得包装成统一模型创新。
 
 - 覆盖 8 个数据集：ETTh1、ETTh2、ETTm1、ETTm2、Exchange、Weather、Electricity、Traffic。
 - 每个数据集覆盖 horizon 96、192、336、720，共 32 个任务，lookback 固定为 720。
