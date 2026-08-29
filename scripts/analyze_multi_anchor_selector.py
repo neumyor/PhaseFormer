@@ -206,7 +206,7 @@ def load_candidate(candidate_info, batch_size):
     return model, dataset, loader, exp_args
 
 
-def push_case(heap, score, serial, case, limit=32):
+def push_case(heap, score, serial, case, limit=256):
     item = (float(score), int(serial), case)
     if len(heap) < limit:
         heapq.heappush(heap, item)
@@ -485,7 +485,7 @@ def select_cases(pools, top_k=5):
             )
             chosen = []
             for case in options:
-                if duplicate(case, selected + chosen):
+                if duplicate(case, chosen):
                     continue
                 chosen.append(case)
                 if len(chosen) == top_k:
