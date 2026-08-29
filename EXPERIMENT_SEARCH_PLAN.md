@@ -1,5 +1,11 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
+> 当前待确认实验（尚未训练）：PCTF 相位—周期—轨迹统一模型，完整方案见
+> `docs/PhaseFormer_pctf_experiment.md`。它保留 A1 的 PhaseFormer、NLinear 与外层 RCRF，
+> 将 I0/ICPT 限制为两个可识别修正：逐周期零均值形状，以及全 horizon 均值守恒的周期间
+> 相对水平；历史 masked reconstruction 只做连续收缩，不做完整专家路由。代码与 48-run
+> validation-only 筛选、冻结后 144-run test 确认协议已写完，等待用户确认实现后再运行。
+
 > 最近完成实验：Multi-Anchor Selector v1，方案与结果见
 > `docs/PhaseFormer_multi_anchor_selector_experiment.md`。M3 soft 路由在六数据集 H96 相对
 > A1/I0/R0 逐指标包络平均改善 0.79%，但它依赖三个独立训练并冻结的完整模型。根据论文方法

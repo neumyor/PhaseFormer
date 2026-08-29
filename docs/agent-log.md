@@ -893,3 +893,19 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `docs/PhaseFormer_M3_vs_original_analysis_protocol.md`；本地严格审计：
   `research_runs/m3_vs_original_phaseformer_v1/`。回放聚合指标与日志最大绝对差
   `1.21e-5`（阈值 `2e-5`），test 字段均为空。
+
+## 2026-08-29 — PCTF 相位—周期—轨迹统一模型实现（等待实验确认）
+
+- 根据正式 test 中 A1/A2 的轨迹稳定性、I0 的跨周期优势与 ETTh2 最坏回退，以及 HPTC 的
+  validation 失败边界，实现单 checkpoint 的 PCTF；未采用三个完整模型 routing/ensemble。
+- NLinear 预测完整轨迹；no-PE ICPT 仅贡献 `ICPT-NLinear` 的逐周期零均值形状，以及全
+  horizon 均值守恒的周期间相对水平。两个修正相互正交，per-cycle gate 后再次投影，确保
+  实际输出仍由 NLinear 独占 horizon-wide 绝对水平。
+- 提供 shape-only、level-only、dual-fixed、masked-absolute、masked-regret 五个 preset；
+  masked evidence 用最近两个严格历史伪起点，只连续收缩修正，不做专家选择或置信度反传。
+- 预注册六数据集 H96 validation-only 48-run 筛选；只有通过 A2 平均/覆盖/最坏回退和三参考
+  模型包络门槛后，才允许冻结冠军进入 H96/H192、三 seed、144-run 正式 test。汇总器检测到
+  validation 结果中存在 test 数值会拒绝继续。
+- 完整计划和空结果表在 `docs/PhaseFormer_pctf_experiment.md`。本轮只完成实现、结构测试与
+  dry-run 校验；全仓 208 tests 和 187 subtests 通过。没有启动训练或读取新 test 结果，等待
+  用户确认公式和实验范围。

@@ -36,6 +36,9 @@ from src.models.intercycle_patch import (
 from src.models.hierarchical_trend_cycle import (
     HierarchicalTrendCycleResidualHead,
 )
+from src.models.phase_cycle_trajectory import (
+    PhaseCycleTrajectoryResidualHead,
+)
 from src.models.triaxis_fusion import (
     RollingTriAxisHistoryRouter,
     SafeRegretTriAxisRouter,
@@ -670,6 +673,41 @@ class PhaseFormer(DefaultPLModule):
                     confidence_floor=getattr(
                         configs, "hptc_confidence_floor", 0.05
                     ),
+                )
+            elif residual_head_type == "phase_cycle_trajectory":
+                self.weak_period_residual = PhaseCycleTrajectoryResidualHead(
+                    self.seq_len,
+                    self.pred_len,
+                    self.period_len,
+                    d_model=getattr(configs, "pctf_d_model", 32),
+                    num_heads=getattr(configs, "pctf_heads", 4),
+                    ffn_dim=getattr(configs, "pctf_ffn_dim", 64),
+                    shape_gate_init=getattr(
+                        configs, "pctf_shape_gate_init", 0.10
+                    ),
+                    level_gate_init=getattr(
+                        configs, "pctf_level_gate_init", 0.10
+                    ),
+                    use_shape_correction=getattr(
+                        configs, "pctf_use_shape_correction", True
+                    ),
+                    use_level_correction=getattr(
+                        configs, "pctf_use_level_correction", True
+                    ),
+                    confidence_mode=getattr(
+                        configs, "pctf_confidence_mode", "fixed"
+                    ),
+                    masked_origins=getattr(
+                        configs, "pctf_masked_origins", 2
+                    ),
+                    risk_scale=getattr(configs, "pctf_risk_scale", 1.0),
+                    risk_std_weight=getattr(
+                        configs, "pctf_risk_std_weight", 0.5
+                    ),
+                    confidence_floor=getattr(
+                        configs, "pctf_confidence_floor", 0.05
+                    ),
+                    risk_clip=getattr(configs, "pctf_risk_clip", 10.0),
                 )
             elif residual_head_type == "channel":
                 self.weak_period_residual = ChannelWiseWeakPeriodResidualHead(

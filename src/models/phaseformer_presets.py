@@ -140,6 +140,15 @@ ABLATION_MODES = {
     "hptc_rolling_b25",
     "hptc_rolling_b50",
     "hptc_rolling_b25_r05",
+    # Phase--Cycle--Trajectory Fusion (PCTF): one PhaseFormer checkpoint whose
+    # residual path is an NLinear trajectory plus identifiable ICPT cycle
+    # corrections.  These modes ablate the correction subspace and the
+    # history-only confidence rule; none routes among complete forecasts.
+    "pctf_shape_fixed",
+    "pctf_level_fixed",
+    "pctf_dual_fixed",
+    "pctf_dual_masked",
+    "pctf_dual_regret",
 }
 
 HPTC_MODES = {
@@ -148,6 +157,18 @@ HPTC_MODES = {
     "hptc_rolling_b25": dict(beta=0.25, rolling=True, risk_scale=1.0),
     "hptc_rolling_b50": dict(beta=0.50, rolling=True, risk_scale=1.0),
     "hptc_rolling_b25_r05": dict(beta=0.25, rolling=True, risk_scale=0.5),
+}
+
+PCTF_MODES = {
+    "pctf_shape_fixed": dict(shape=True, level=False, confidence="fixed"),
+    "pctf_level_fixed": dict(shape=False, level=True, confidence="fixed"),
+    "pctf_dual_fixed": dict(shape=True, level=True, confidence="fixed"),
+    "pctf_dual_masked": dict(
+        shape=True, level=True, confidence="masked_absolute"
+    ),
+    "pctf_dual_regret": dict(
+        shape=True, level=True, confidence="masked_regret"
+    ),
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1060,6 +1081,30 @@ def get_ablation_overrides(mode):
             hptc_confidence_floor=0.05,
         )
         return overrides
+    if mode in PCTF_MODES:
+        # A1 remains intact: the shared phase trunk and outer RCRF formula are
+        # unchanged.  Only its NLinear residual generator is expanded with
+        # orthogonal, mean-conserving ICPT corrections.
+        config = PCTF_MODES[mode]
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode,
+            weak_period_residual_head_type="phase_cycle_trajectory",
+            pctf_d_model=32,
+            pctf_heads=4,
+            pctf_ffn_dim=64,
+            pctf_shape_gate_init=0.10,
+            pctf_level_gate_init=0.10,
+            pctf_use_shape_correction=config["shape"],
+            pctf_use_level_correction=config["level"],
+            pctf_confidence_mode=config["confidence"],
+            pctf_masked_origins=2,
+            pctf_risk_scale=1.0,
+            pctf_risk_std_weight=0.5,
+            pctf_confidence_floor=0.05,
+            pctf_risk_clip=10.0,
+        )
+        return overrides
     # Inter-Cycle Patch Transformer candidates (ICPT plan).  A3/A4 swap the
     # NLinear head for simple cycle baselines; rcrf_icpt_* build the ICPT head
     # with a position encoding.  Everything else inherits the frozen RCRF stack
@@ -1415,6 +1460,36 @@ class PhaseFormerPresetConfig:
         self.hptc_risk_scale = hyperparams.get("hptc_risk_scale", 1.0)
         self.hptc_risk_std_weight = hyperparams.get("hptc_risk_std_weight", 1.0)
         self.hptc_confidence_floor = hyperparams.get("hptc_confidence_floor", 0.05)
+        # PCTF unified residual: NLinear owns the complete trajectory and ICPT
+        # may only add within-cycle shape and horizon-mean-conserving cycle
+        # level corrections.  History-only evidence can shrink either update.
+        self.pctf_d_model = hyperparams.get("pctf_d_model", 32)
+        self.pctf_heads = hyperparams.get("pctf_heads", 4)
+        self.pctf_ffn_dim = hyperparams.get("pctf_ffn_dim", 64)
+        self.pctf_shape_gate_init = hyperparams.get(
+            "pctf_shape_gate_init", 0.10
+        )
+        self.pctf_level_gate_init = hyperparams.get(
+            "pctf_level_gate_init", 0.10
+        )
+        self.pctf_use_shape_correction = hyperparams.get(
+            "pctf_use_shape_correction", True
+        )
+        self.pctf_use_level_correction = hyperparams.get(
+            "pctf_use_level_correction", True
+        )
+        self.pctf_confidence_mode = hyperparams.get(
+            "pctf_confidence_mode", "fixed"
+        )
+        self.pctf_masked_origins = hyperparams.get("pctf_masked_origins", 2)
+        self.pctf_risk_scale = hyperparams.get("pctf_risk_scale", 1.0)
+        self.pctf_risk_std_weight = hyperparams.get(
+            "pctf_risk_std_weight", 0.5
+        )
+        self.pctf_confidence_floor = hyperparams.get(
+            "pctf_confidence_floor", 0.05
+        )
+        self.pctf_risk_clip = hyperparams.get("pctf_risk_clip", 10.0)
         # Inter-Cycle Patch Transformer residual head configuration (ICPT plan).
         self.intercycle_period_len = hyperparams.get("intercycle_period_len", 24)
         self.intercycle_d_model = hyperparams.get("intercycle_d_model", 32)
