@@ -1,10 +1,17 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 当前待执行实验（代码已完成，尚未训练）：PCTF 多融合策略，见
-> `docs/PhaseFormer_pctf_fusion_strategies.md`。固定同一个 PhaseFormer/NLinear/no-PE ICPT，
-> 测试分量级标量/逐周期融合、单调历史证据、MLP 证据与相位模板调制；均匀平均和完整预测
-> Softmax 仅为不可晋级的负对照。第一阶段为六数据集 H96 的66-run validation-only矩阵，
-> 通过门槛后才允许冻结一个论文候选进入144-run三seed正式确认。
+> 当前待执行实验（代码已完成，尚未训练）：A2 锚定式 PCTF v2，见
+> `docs/PhaseFormer_pctf_anchor_fusion_retest.md`。v1 在六数据集 H96 的66-run validation-only
+> 筛选中没有候选晋级；其主要问题是删除 NLinear 周期内形状且候选空间不能还原 A2，同时
+> shape 证据与实际被替换的参考分支错配。v2 完整保留 A2（RCRF+LFF-NLinear）为端到端可训练
+> 锚点，只加入有界、零初始化的 ICPT 周期间水平/周期内形状创新；修正为匹配参考对象、逐未来
+> 周期的因果证据，并解耦 phase period 与 ICPT cycle period。预注册48-run period选择、
+> 132-run H96/H192 strategy筛选；只有通过门槛才进入144-run三seed正式确认。全部命令强制
+> CUDA，汇总器拒绝混合设备和任何选择阶段 test 字段。
+
+> 已结束实验：PCTF 多融合策略 v1，方案与失败结果见
+> `docs/PhaseFormer_pctf_fusion_strategies.md`。F0 与 A2 宏平均近似持平但仅1/6数据集双指标改善，
+> F1/F2/F3 宏平均退化约2.5%–3.3%，未启动正式 test；不再沿原组件替换公式继续搜索 gate。
 
 > PCTF 基础实现（尚未单独训练）：相位—周期—轨迹统一模型，完整方案见
 > `docs/PhaseFormer_pctf_experiment.md`。它保留 A1 的 PhaseFormer、NLinear 与外层 RCRF，

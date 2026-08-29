@@ -1,6 +1,7 @@
 # PCTF 多融合策略实验计划
 
-> 状态：模型、preset、实验 runner 与定向测试已完成；尚未启动训练或读取新的 test。
+> 状态：v1 validation-only 筛选已完成且没有候选晋级；该融合定义已被
+> `PhaseFormer_pctf_anchor_fusion_retest.md` 的 A2 锚定式 v2 取代，不再继续调参。
 > 实验编号：`pctf_fusion_v1`。
 
 ## 1. 实验问题
@@ -214,8 +215,10 @@ ETTm2-H96 的参数量审计：A1为72,905；F0及F1/F2a/F3/C0/C1为96,063–96,
 
 ## 10. 第一阶段筛选结果（2026-08-29）
 
-已在提权 CUDA 环境完成六数据集、H96、30%训练数据、seed=2021、最多8轮的 validation-only
-筛选（66个 runs）；`test_mae/test_mse` 均为空，未读取 test。汇总文件为
+已完成六数据集、H96、30%训练数据、seed=2021、最多8轮的 validation-only 筛选（66个
+runs）；`test_mae/test_mse` 均为空，未读取 test。事后环境审计发现其中55次记录 CUDA、
+11次记录 CPU，并非完全同设备矩阵；该问题不足以解释 F1–F3 的大幅退化，但使 F0 的
+亚千分位差异不能作为可靠提升结论。汇总文件为
 `research_runs/pctf_fusion_v1/screen_summary.csv`，决策文件为
 `research_runs/pctf_fusion_v1/screen_decision.json`。
 

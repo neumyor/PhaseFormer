@@ -925,3 +925,29 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   参数量为96,063–96,335，对比A1的72,905。没有启动训练或读取新的test结果。
 - 方案、公式、命令及空结果表：`docs/PhaseFormer_pctf_fusion_strategies.md`；runner：
   `scripts/run_pctf_fusion_strategies.py`。
+
+## 2026-08-29 — PCTF v1 失败诊断与 A2 锚定式 v2 修复
+
+- v1 的66-run validation 结果表明 F1/F2/F3 相对 A2 宏平均退化约2.5%–3.3%。代码诊断确认
+  旧分量公式删除 NLinear 周期内形状，任何 gate 都不能还原 A2；F2 又用 ICPT-vs-NLinear
+  shape regret 控制 ICPT-vs-PhaseFormer shape，证据对象不匹配。checkpoint 审计显示大多数
+  gate 仍接近初值；环境审计另发现55次 CUDA、11次 CPU，F0 的亚千分位差异不可作提升结论。
+- 新增单 checkpoint、端到端 `AnchoredPhaseCycleFusionComposer`：完整保留 A2 的 PhaseFormer、
+  LFF-NLinear、RCRF 和输出校准，只添加 `L_C-L_T` 与 `S_C-S_P` 两个正交创新。系数使用
+  有界 tanh 且严格零初始化，因此同 seed 候选的全部 A2 state tensor 和初始输出逐点等于
+  独立 A2；不是多 checkpoint ensemble，也不冻结锚点。
+- 修复历史证据：多个严格因果、horizon-matched rolling origins 分别比较 ICPT-vs-phase
+  template 的 shape 和 ICPT-vs-LFF trajectory 的 level，保留有符号 log regret，并输出逐未来
+  周期置信度。PhaseFormer period 固定24，ICPT period 独立；period96 会因果截取720输入的
+  最近672步完整周期。
+- 零校正首批没有 ICPT 主损失梯度，因此加入只训练 ICPT 的 shape/level 组件辅助损失；
+  validation 和 checkpoint 仍只按最终预测选择。新增 scalar/cycle、单调证据、证据 MLP、
+  phase modulation 五个论文候选及 shape-only/level-only 消融。
+- 新 runner 预注册48-run period选择、132-run H96/H192 strategy筛选和通过门槛后的144-run
+  三seed test；训练命令强制 CUDA，汇总器拒绝混合硬件/软件、选择阶段 test 泄漏、非零 A2
+  identity、重复或缺失矩阵。
+- 验证：全仓 `241 passed`，另有 `250 subtests passed`；七种策略完整 forward、A2 exact
+  identity、period24/48/96、正交/均值约束、严格因果、辅助梯度、48/132/144 dry-run 和合成
+  汇总均通过。仅运行代码测试与 dry-run，未启动训练或读取新 validation/test。
+- 完整计划与空表：`docs/PhaseFormer_pctf_anchor_fusion_retest.md`；runner：
+  `scripts/run_pctf_anchor_fusion_retest.py`。
