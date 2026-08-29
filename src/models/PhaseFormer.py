@@ -40,6 +40,9 @@ from src.models.phase_cycle_trajectory import (
     PhaseCycleTrajectoryResidualHead,
 )
 from src.models.phase_cycle_fusion import PhaseCycleFusionComposer
+from src.models.anchored_phase_cycle_fusion import (
+    AnchoredPhaseCycleFusionComposer,
+)
 from src.models.triaxis_fusion import (
     RollingTriAxisHistoryRouter,
     SafeRegretTriAxisRouter,
@@ -522,8 +525,12 @@ class PhaseFormer(DefaultPLModule):
         self.use_phase_cycle_fusion = getattr(
             configs, "use_phase_cycle_fusion", False
         )
+        self.use_anchored_phase_cycle_fusion = getattr(
+            configs, "use_anchored_phase_cycle_fusion", False
+        )
         if not self.use_residual_head:
             self.use_phase_cycle_fusion = False
+            self.use_anchored_phase_cycle_fusion = False
         self.use_triaxis_fusion = getattr(configs, "use_triaxis_fusion", False)
         self.use_safe_triaxis = getattr(configs, "use_safe_triaxis", False)
         if not self.use_residual_head:
@@ -540,10 +547,17 @@ class PhaseFormer(DefaultPLModule):
             self.use_weak_period_residual
             or self.use_triaxis_fusion
             or self.use_safe_triaxis
+            or self.use_anchored_phase_cycle_fusion
         ):
             raise ValueError(
                 "phase-cycle fusion owns its three branches and is exclusive "
                 "with weak residual and TriAxis paths"
+            )
+        if self.use_anchored_phase_cycle_fusion and (
+            self.use_triaxis_fusion or self.use_safe_triaxis
+        ):
+            raise ValueError(
+                "A2-anchored phase-cycle fusion is exclusive with TriAxis paths"
             )
         self.use_adaptive_weak_period_gate = getattr(
             configs, "use_adaptive_weak_period_gate", False
@@ -611,6 +625,75 @@ class PhaseFormer(DefaultPLModule):
                     configs, "phase_cycle_fusion_amplitude_max", 2.0
                 ),
             )
+        if self.use_anchored_phase_cycle_fusion:
+            if not self.use_weak_period_residual or not self.use_rcrf_fusion:
+                raise ValueError(
+                    "anchored phase-cycle fusion requires the complete RCRF "
+                    "residual anchor"
+                )
+            if not self.use_periodic_residual_pe:
+                raise ValueError(
+                    "anchored phase-cycle fusion requires the A2 periodic-PE "
+                    "trajectory branch"
+                )
+            if getattr(configs, "periodic_residual_pe_type", None) != "lff":
+                raise ValueError(
+                    "anchored phase-cycle fusion is defined relative to the "
+                    "rcrf_pe_lff A2 anchor"
+                )
+            self.anchored_phase_cycle_fusion = AnchoredPhaseCycleFusionComposer(
+                self.seq_len,
+                self.pred_len,
+                cycle_period_len=getattr(
+                    configs, "anchored_pctf_cycle_period_len", self.period_len
+                ),
+                strategy=getattr(
+                    configs, "anchored_pctf_strategy", "component_cycle"
+                ),
+                d_model=getattr(configs, "anchored_pctf_d_model", 32),
+                num_heads=getattr(configs, "anchored_pctf_heads", 4),
+                ffn_dim=getattr(configs, "anchored_pctf_ffn_dim", 64),
+                correction_max=getattr(
+                    configs, "anchored_pctf_correction_max", 0.25
+                ),
+                deformation_max=getattr(
+                    configs, "anchored_pctf_deformation_max", 0.10
+                ),
+                masked_origins=getattr(
+                    configs, "anchored_pctf_masked_origins", 3
+                ),
+                risk_scale=getattr(configs, "anchored_pctf_risk_scale", 1.0),
+                risk_std_weight=getattr(
+                    configs, "anchored_pctf_risk_std_weight", 0.5
+                ),
+                confidence_floor=getattr(
+                    configs, "anchored_pctf_confidence_floor", 0.05
+                ),
+                risk_clip=getattr(configs, "anchored_pctf_risk_clip", 6.0),
+                mlp_hidden=getattr(configs, "anchored_pctf_mlp_hidden", 16),
+                modulation_temperature=getattr(
+                    configs, "anchored_pctf_modulation_temperature", 0.25
+                ),
+                amplitude_min=getattr(
+                    configs, "anchored_pctf_amplitude_min", 0.5
+                ),
+                amplitude_max=getattr(
+                    configs, "anchored_pctf_amplitude_max", 2.0
+                ),
+            )
+            self.anchored_pctf_shape_aux_weight = float(getattr(
+                configs, "anchored_pctf_shape_aux_weight", 0.05
+            ))
+            self.anchored_pctf_level_aux_weight = float(getattr(
+                configs, "anchored_pctf_level_aux_weight", 0.05
+            ))
+            if (
+                self.anchored_pctf_shape_aux_weight < 0
+                or self.anchored_pctf_level_aux_weight < 0
+            ):
+                raise ValueError("anchored PCTF auxiliary weights must be non-negative")
+            self.anchored_pctf_anchor_output = None
+            self.anchored_pctf_cycle_output = None
         if self.use_weak_period_residual:
             residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
             if self.use_dual_reliability_fusion and not self.use_rcrf_fusion:
@@ -1669,6 +1752,14 @@ class PhaseFormer(DefaultPLModule):
         y_full = y_periods.reshape(B, C, -1)[..., : self.pred_len]  # (B, C, pred_len)
         y_hat = y_full.permute(0, 2, 1)  # (B, pred_len, C)
 
+        anchored_phase_hat = None
+        anchored_trajectory_hat = None
+        anchored_anchor_hat = None
+        if self.use_anchored_phase_cycle_fusion:
+            # Retain the calibrated phase expert.  The complete A2 anchor is
+            # constructed by the ordinary downstream residual/RCRF path first.
+            anchored_phase_hat = y_hat
+
         # Safe-Regret keeps the unblended phase forecast as an atomic expert,
         # while the complete downstream A1 path remains the immutable anchor.
         if self.use_safe_triaxis:
@@ -1719,6 +1810,8 @@ class PhaseFormer(DefaultPLModule):
                 else:
                     residual_hat = self.weak_period_residual(x_in)
                 if self.use_rcrf_fusion:
+                    if self.use_anchored_phase_cycle_fusion:
+                        anchored_trajectory_hat = residual_hat
                     y_hat, _ = self.rcrf_fusion(y_hat, residual_hat, phase_series_raw)
                     if self.use_safe_triaxis:
                         safe_trajectory_hat = residual_hat
@@ -1753,6 +1846,13 @@ class PhaseFormer(DefaultPLModule):
             and not self.use_phase_cycle_fusion
         ):
             y_hat = self.phase_noise_hifreq_damping(y_hat, phase_series)
+            if self.use_anchored_phase_cycle_fusion:
+                anchored_phase_hat = self.phase_noise_hifreq_damping(
+                    anchored_phase_hat, phase_series
+                )
+                anchored_trajectory_hat = self.phase_noise_hifreq_damping(
+                    anchored_trajectory_hat, phase_series
+                )
 
         if self.use_safe_triaxis:
             # `y_hat` is now the *complete* A1 prediction, including RCRF and
@@ -1775,6 +1875,20 @@ class PhaseFormer(DefaultPLModule):
                 safe_phase_hat, safe_trajectory_hat, safe_cycle_hat
             )
 
+        if self.use_anchored_phase_cycle_fusion:
+            # The incumbent remains a complete, trainable subgraph.  ICPT only
+            # contributes bounded orthogonal innovations, all exactly zero at
+            # initialization, after every A2 output calibration has run.
+            anchored_anchor_hat = y_hat
+            y_hat = self.anchored_phase_cycle_fusion(
+                anchored_anchor_hat,
+                anchored_phase_hat,
+                anchored_trajectory_hat,
+                x_in,
+                phase_series_raw,
+                trajectory_predictor=self.weak_period_residual,
+            )
+
         # 10) De-normalization
         if self.use_revin:
             y_hat = self.revin.denormalize(y_hat, stats)
@@ -1791,11 +1905,23 @@ class PhaseFormer(DefaultPLModule):
                     self.revin.denormalize(expert, stats)
                     for expert in safe_experts_normalized
                 )
+            if self.use_anchored_phase_cycle_fusion:
+                self.anchored_pctf_anchor_output = self.revin.denormalize(
+                    anchored_anchor_hat, stats
+                )
+                self.anchored_pctf_cycle_output = self.revin.denormalize(
+                    self.anchored_phase_cycle_fusion.cycle_for_auxiliary, stats
+                )
         elif self.use_triaxis_fusion:
             self.triaxis_expert_outputs = triaxis_experts_normalized
         elif self.use_safe_triaxis:
             self.safe_triaxis_anchor_output = safe_anchor_hat
             self.safe_triaxis_expert_outputs = safe_experts_normalized
+        elif self.use_anchored_phase_cycle_fusion:
+            self.anchored_pctf_anchor_output = anchored_anchor_hat
+            self.anchored_pctf_cycle_output = (
+                self.anchored_phase_cycle_fusion.cycle_for_auxiliary
+            )
 
         return y_hat, Z, y_phase_steps
 
@@ -1885,6 +2011,33 @@ class PhaseFormer(DefaultPLModule):
             "cvar": cvar_loss,
         }
 
+    def _anchored_pctf_auxiliary_loss(self, target):
+        """Train ICPT in its admitted level/shape subspaces from step zero.
+
+        The output correction is exactly zero initialized, so without this
+        component supervision ICPT receives no main-loss gradient on the first
+        optimizer step.  The auxiliary objective supervises only the internal
+        cycle head; validation and checkpoint selection still use the fused
+        forecast loss alone.
+        """
+        cycle = self.anchored_pctf_cycle_output[:, -self.pred_len :, :]
+        if self.target_var_index != -1:
+            index = self.target_var_index
+            cycle = cycle[:, :, index : index + 1]
+        cycle_level, cycle_shape = (
+            self.anchored_phase_cycle_fusion.decompose_forecast(cycle)
+        )
+        target_level, target_shape = (
+            self.anchored_phase_cycle_fusion.decompose_forecast(target)
+        )
+        shape_loss = self._compute_loss(cycle_shape, target_shape)
+        level_loss = self._compute_loss(cycle_level, target_level)
+        auxiliary = (
+            self.anchored_pctf_shape_aux_weight * shape_loss
+            + self.anchored_pctf_level_aux_weight * level_loss
+        )
+        return auxiliary, shape_loss, level_loss
+
     def training_step(self, batch, batch_idx):
         batch_x, batch_y, batch_x_mark, batch_y_mark = batch
         batch_x = batch_x.float()
@@ -1972,6 +2125,15 @@ class PhaseFormer(DefaultPLModule):
                 self.safe_triaxis_router.last_global_accept,
                 on_epoch=True,
             )
+
+        if self.use_anchored_phase_cycle_fusion:
+            anchored_aux, shape_aux, level_aux = (
+                self._anchored_pctf_auxiliary_loss(target)
+            )
+            loss = loss + anchored_aux
+            self.log("train_fused_loss", fused_loss, on_epoch=True)
+            self.log("train_pctf_shape_aux_loss", shape_aux, on_epoch=True)
+            self.log("train_pctf_level_aux_loss", level_aux, on_epoch=True)
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True)
         return loss

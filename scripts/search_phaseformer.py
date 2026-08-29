@@ -363,6 +363,10 @@ def build_spec(args):
     # The experiment seed is explicit; do not inherit legacy per-task seeds.
     base["seed"] = args.seed
     base["period_len"] = args.period
+    cycle_period = getattr(args, "cycle_period", None)
+    require_cuda = bool(getattr(args, "require_cuda", False))
+    if cycle_period is not None:
+        base["anchored_pctf_cycle_period_len"] = cycle_period
     base["scheme_name"] = args.mechanism
     base["train_epochs"] = args.max_epochs
     base["loss_func"] = args.loss
@@ -373,13 +377,18 @@ def build_spec(args):
         apply_compact(base)
     base.update(overrides)
     spec = {
-        "protocol_version": "search-plan-v1",
+        "protocol_version": (
+            "search-plan-v2"
+            if cycle_period is not None or require_cuda
+            else "search-plan-v1"
+        ),
         "stage": args.stage,
         "dataset": args.dataset,
         "horizon": args.horizon,
         "lookback": args.lookback,
         "mechanism": args.mechanism,
         "period": args.period,
+        "cycle_period": base.get("anchored_pctf_cycle_period_len", ""),
         "percent": args.percent,
         "max_epochs": args.max_epochs,
         "seed": args.seed,
@@ -388,6 +397,7 @@ def build_spec(args):
         "capacity": args.capacity,
         "batch_size": args.batch_size or PLANNED_BATCH_SIZE[args.dataset],
         "evaluate_test": args.evaluate_test,
+        "require_cuda": require_cuda,
         "init_checkpoint": repo_relative(getattr(args, "init_checkpoint", ""))
         if getattr(args, "init_checkpoint", "") else "",
         "hyperparams": base,
@@ -399,9 +409,10 @@ def build_spec(args):
 
 def run_id(spec):
     lr = spec["hyperparams"]["learning_rate"]
+    cycle = f"_cp{spec['cycle_period']}" if spec["cycle_period"] != "" else ""
     return (
         f"{spec['stage']}_{spec['dataset'].lower()}_h{spec['horizon']}_"
-        f"{spec['mechanism']}_p{spec['period']}_{spec['capacity']}_"
+        f"{spec['mechanism']}_p{spec['period']}{cycle}_{spec['capacity']}_"
         f"{spec['loss']}_lr{lr:.6g}_pct{spec['percent']}_e{spec['max_epochs']}_"
         f"s{spec['seed']}_{spec['config_hash']}"
     )
@@ -524,6 +535,10 @@ def epoch_count(logger_dir):
 
 def execute(args):
     spec = build_spec(args)
+    if spec["require_cuda"] and not torch.cuda.is_available():
+        raise RuntimeError(
+            "this experiment requires CUDA; refusing a mixed CPU/GPU matrix"
+        )
     rid = run_id(spec)
     run_dir = Path(args.output_dir) / "runs" / rid
     complete = run_dir / "metrics.csv"
@@ -601,6 +616,27 @@ def execute(args):
                 f"max_abs={anchor_identity_max_abs}"
             )
         model.freeze_safe_triaxis_anchor()
+    elif model.use_anchored_phase_cycle_fusion:
+        model.eval()
+        audit_batch = next(iter(train_loader))
+        audit_x, audit_y, audit_x_mark, audit_y_mark = [
+            value[:2] if torch.is_tensor(value) else value
+            for value in audit_batch
+        ]
+        with torch.inference_mode():
+            audit_dec = model._build_decoder_input(audit_y.float())
+            audit_out, _, _ = model(
+                audit_x.float(), audit_x_mark.float(), audit_dec,
+                audit_y_mark.float(),
+            )
+        anchor_identity_max_abs = float(
+            (audit_out - model.anchored_pctf_anchor_output).abs().max()
+        )
+        if anchor_identity_max_abs != 0.0:
+            raise RuntimeError(
+                "anchored PCTF initialization is not exactly A2: "
+                f"max_abs={anchor_identity_max_abs}"
+            )
     parameter_count = sum(p.numel() for p in model.parameters())
     trainable_parameter_count = sum(
         p.numel() for p in model.parameters() if p.requires_grad
@@ -646,7 +682,8 @@ def execute(args):
     row = {
         "run_id": rid, "protocol_version": spec["protocol_version"], "stage": spec["stage"],
         "dataset": spec["dataset"], "lookback": spec["lookback"], "horizon": spec["horizon"],
-        "mechanism": spec["mechanism"], "period": spec["period"], "capacity": spec["capacity"],
+        "mechanism": spec["mechanism"], "period": spec["period"],
+        "cycle_period": spec["cycle_period"], "capacity": spec["capacity"],
         "loss": spec["loss"], "learning_rate": hp["learning_rate"], "lr_multiplier": spec["lr_multiplier"],
         "percent": spec["percent"], "seed": spec["seed"], "batch_size": spec["batch_size"],
         "epochs_requested": spec["max_epochs"], "epochs_completed": epoch_count(logger.log_dir),
@@ -658,6 +695,9 @@ def execute(args):
         "init_unexpected_count": len(init_unexpected),
         "anchor_identity_max_abs": anchor_identity_max_abs,
         "anchor_frozen": bool(getattr(model, "safe_triaxis_anchor_frozen", False)),
+        "required_cuda": spec["require_cuda"],
+        "device_type": "cuda" if torch.cuda.is_available() else "cpu",
+        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "",
         "train_size": len(train_set), "val_size": len(val_set), "test_size": test_size,
         "checkpoint": repo_relative(checkpoint.best_model_path),
         "config_hash": spec["config_hash"], "completed_at": utc_now(),
@@ -688,6 +728,10 @@ def parse_args():
         choices=list(MECHANISMS) + ["latest", "best_nonresidual"] + sorted(ABLATION_MODES),
     )
     p.add_argument("--period", type=int, default=24)
+    p.add_argument(
+        "--cycle-period", type=int,
+        help="ICPT cycle period; independent of the PhaseFormer phase period",
+    )
     p.add_argument("--lookback", type=int, default=720)
     p.add_argument("--percent", type=int, default=100)
     p.add_argument("--max-epochs", type=int, default=30)
@@ -705,6 +749,10 @@ def parse_args():
         help="Pretrained A1 Lightning checkpoint required by Safe-Regret modes",
     )
     p.add_argument("--evaluate-test", action="store_true", help="Allowed only for frozen confirm runs")
+    p.add_argument(
+        "--require-cuda", action="store_true",
+        help="Fail instead of silently falling back to CPU",
+    )
     p.add_argument("--output-dir", default="research_runs/search_v1")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--progress", action="store_true")

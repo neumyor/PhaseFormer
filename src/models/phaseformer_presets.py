@@ -159,6 +159,15 @@ ABLATION_MODES = {
     "pctf_fusion_phase_modulation",
     "pctf_fusion_uniform_control",
     "pctf_fusion_softmax_control",
+    # PCTF v2: every candidate retains the complete A2 RCRF+LFF forecast and
+    # adds only zero-initialized, bounded ICPT component innovations.
+    "pctf_anchor_component_scalar",
+    "pctf_anchor_component_cycle",
+    "pctf_anchor_shape_only",
+    "pctf_anchor_level_only",
+    "pctf_anchor_monotonic",
+    "pctf_anchor_mlp",
+    "pctf_anchor_phase_modulation",
 }
 
 HPTC_MODES = {
@@ -189,6 +198,16 @@ PCTF_FUSION_MODES = {
     "pctf_fusion_phase_modulation": "phase_modulation",
     "pctf_fusion_uniform_control": "uniform_control",
     "pctf_fusion_softmax_control": "softmax_control",
+}
+
+PCTF_ANCHORED_MODES = {
+    "pctf_anchor_component_scalar": "component_scalar",
+    "pctf_anchor_component_cycle": "component_cycle",
+    "pctf_anchor_shape_only": "shape_only",
+    "pctf_anchor_level_only": "level_only",
+    "pctf_anchor_monotonic": "monotonic_evidence",
+    "pctf_anchor_mlp": "mlp_evidence",
+    "pctf_anchor_phase_modulation": "phase_modulation",
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1154,6 +1173,37 @@ def get_ablation_overrides(mode):
             phase_cycle_fusion_amplitude_max=2.0,
         )
         return overrides
+    if mode in PCTF_ANCHORED_MODES:
+        # Exact A2 nesting: the full LFF trajectory branch, RCRF gate and phase
+        # calibration stack remain intact.  The additional no-PE ICPT head is
+        # RNG-isolated and its bounded correction is exactly zero initialized.
+        strategy = PCTF_ANCHORED_MODES[mode]
+        overrides = get_ablation_overrides("rcrf_pe_lff")
+        shape_enabled = strategy != "level_only"
+        level_enabled = strategy not in ("shape_only", "phase_modulation")
+        overrides.update(
+            scheme_name=mode,
+            use_anchored_phase_cycle_fusion=True,
+            anchored_pctf_strategy=strategy,
+            anchored_pctf_cycle_period_len=24,
+            anchored_pctf_d_model=32,
+            anchored_pctf_heads=4,
+            anchored_pctf_ffn_dim=64,
+            anchored_pctf_correction_max=0.25,
+            anchored_pctf_deformation_max=0.10,
+            anchored_pctf_masked_origins=3,
+            anchored_pctf_risk_scale=1.0,
+            anchored_pctf_risk_std_weight=0.5,
+            anchored_pctf_confidence_floor=0.05,
+            anchored_pctf_risk_clip=6.0,
+            anchored_pctf_mlp_hidden=16,
+            anchored_pctf_modulation_temperature=0.25,
+            anchored_pctf_amplitude_min=0.5,
+            anchored_pctf_amplitude_max=2.0,
+            anchored_pctf_shape_aux_weight=0.05 if shape_enabled else 0.0,
+            anchored_pctf_level_aux_weight=0.05 if level_enabled else 0.0,
+        )
+        return overrides
     # Inter-Cycle Patch Transformer candidates (ICPT plan).  A3/A4 swap the
     # NLinear head for simple cycle baselines; rcrf_icpt_* build the ICPT head
     # with a position encoding.  Everything else inherits the frozen RCRF stack
@@ -1594,6 +1644,59 @@ class PhaseFormerPresetConfig:
         )
         self.phase_cycle_fusion_amplitude_max = hyperparams.get(
             "phase_cycle_fusion_amplitude_max", 2.0
+        )
+        # A2-anchored PCTF v2.  These fields are dormant unless the dedicated
+        # flag is enabled by an anchored preset.
+        self.use_anchored_phase_cycle_fusion = hyperparams.get(
+            "use_anchored_phase_cycle_fusion", False
+        )
+        self.anchored_pctf_strategy = hyperparams.get(
+            "anchored_pctf_strategy", "component_cycle"
+        )
+        self.anchored_pctf_cycle_period_len = hyperparams.get(
+            "anchored_pctf_cycle_period_len", 24
+        )
+        self.anchored_pctf_d_model = hyperparams.get("anchored_pctf_d_model", 32)
+        self.anchored_pctf_heads = hyperparams.get("anchored_pctf_heads", 4)
+        self.anchored_pctf_ffn_dim = hyperparams.get("anchored_pctf_ffn_dim", 64)
+        self.anchored_pctf_correction_max = hyperparams.get(
+            "anchored_pctf_correction_max", 0.25
+        )
+        self.anchored_pctf_deformation_max = hyperparams.get(
+            "anchored_pctf_deformation_max", 0.10
+        )
+        self.anchored_pctf_masked_origins = hyperparams.get(
+            "anchored_pctf_masked_origins", 3
+        )
+        self.anchored_pctf_risk_scale = hyperparams.get(
+            "anchored_pctf_risk_scale", 1.0
+        )
+        self.anchored_pctf_risk_std_weight = hyperparams.get(
+            "anchored_pctf_risk_std_weight", 0.5
+        )
+        self.anchored_pctf_confidence_floor = hyperparams.get(
+            "anchored_pctf_confidence_floor", 0.05
+        )
+        self.anchored_pctf_risk_clip = hyperparams.get(
+            "anchored_pctf_risk_clip", 6.0
+        )
+        self.anchored_pctf_mlp_hidden = hyperparams.get(
+            "anchored_pctf_mlp_hidden", 16
+        )
+        self.anchored_pctf_modulation_temperature = hyperparams.get(
+            "anchored_pctf_modulation_temperature", 0.25
+        )
+        self.anchored_pctf_amplitude_min = hyperparams.get(
+            "anchored_pctf_amplitude_min", 0.5
+        )
+        self.anchored_pctf_amplitude_max = hyperparams.get(
+            "anchored_pctf_amplitude_max", 2.0
+        )
+        self.anchored_pctf_shape_aux_weight = hyperparams.get(
+            "anchored_pctf_shape_aux_weight", 0.05
+        )
+        self.anchored_pctf_level_aux_weight = hyperparams.get(
+            "anchored_pctf_level_aux_weight", 0.05
         )
         # Inter-Cycle Patch Transformer residual head configuration (ICPT plan).
         self.intercycle_period_len = hyperparams.get("intercycle_period_len", 24)
