@@ -617,7 +617,10 @@ def execute(args):
         logger=logger,
         patience=int(hp.get("patience", 8)),
         checkpoint_dir=str(attempt_dir / "checkpoints"),
-        accelerator="gpu",
+        # Use CUDA when the installed PyTorch build exposes it, otherwise
+        # fall back to CPU so the experiment protocol remains runnable in
+        # environments with a GPU driver but CPU-only PyTorch.
+        accelerator="auto",
         progress=args.progress,
     )
     if torch.cuda.is_available():
