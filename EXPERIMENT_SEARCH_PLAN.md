@@ -1,10 +1,10 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 当前实验：Multi-Anchor Selector v1，预注册见
-> `docs/PhaseFormer_multi_anchor_selector_experiment.md`。它冻结 A1/I0/R0 三个完整模型，用
-> 24% 影子锚点在训练时间轴 24%–30% 段产生 out-of-fold 路由监督，再按样本×通道×未来周期
-> 选择完整锚点。先做 ETTh1/ETTm2/Weather-H96 pilot，通过后补齐六数据集 H96/H192；最终
-> 仍要求 24 个 validation 指标全部严格超过原始包络，失败则不读取 test。
+> 最近完成实验：Multi-Anchor Selector v1，方案与结果见
+> `docs/PhaseFormer_multi_anchor_selector_experiment.md`。M3 soft 路由在六数据集 H96 相对
+> A1/I0/R0 逐指标包络平均改善 0.79%，10/12 指标改善；但 ETTh1-MAE、ETTm1-MAE 未改善，
+> Stage-A 严格 gate 失败，故未运行 H192/test。hard 路由均不如 soft；若继续，应优先验证
+> 多折 rolling-origin OOF 和 shadow→full 权重校准，而不是增加专家或强化 argmax。
 
 ## 目标与选择规则
 

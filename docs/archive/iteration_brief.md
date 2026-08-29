@@ -59,6 +59,15 @@ with the frozen 30%-trained anchors. Pilot covers ETTh1/ETTm2/Weather H96;
 promotion covers all six datasets at H96/H192. Test remains inaccessible until
 every validation metric beats the original-model envelope.
 
+Multi-Anchor Selector result (2026-08-29): the M3 structural-soft router won
+with a six-dataset H96 macro envelope ratio of 0.992072 (0.79% average gain),
+improving 10/12 metrics. ETTh1 MAE (+0.58%) and ETTm1 MAE (+0.01%) still
+regressed, so the preregistered Stage-A gate failed and H192/test were not run.
+All hard variants were worse than M3. Validation replay covered 1,121,992
+sample-channel pairs; the evidence favors convex forecast error cancellation,
+not reliable hard expert identification. Canonical local audit:
+`research_runs/multi_anchor_selector_v1/`.
+
 ## Baseline Status
 
 Weather 720 -> 96 baseline is established at `research_runs/weather96_baseline_e30_seed2021/`.

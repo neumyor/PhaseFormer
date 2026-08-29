@@ -1157,3 +1157,17 @@
 - **网格与门槛**：先做 ETTh1/ETTm2/Weather-H96 pilot；信号通过后覆盖六数据集 H96/H192。
   最终 24 个 MSE/MAE 比值须全部 <1 且 macro≤0.995，才允许 test。
 - **详细预注册**：`docs/PhaseFormer_multi_anchor_selector_experiment.md`。
+
+## 2026-08-29 — Multi-Anchor Selector v1（Stage-A gate 失败）
+
+- **执行**：Stage 0 为 190 项单测 + ETTm2 4%→5% smoke；正式执行 18 个 24% 影子锚点、
+  复用 18 个 30% 正式锚点，并训练六数据集 H96 的 24 个路由候选，共 60 个 formal run。
+- **排名**：M3 structural-soft 宏比值 0.992072、最差 1.005759；M0/M2/M1 分别为
+  1.000881/1.003836/1.005283。hard 路由均未超过原始包络。
+- **逐指标 gate**：M3 平均改善 0.79%，10/12 指标改善；ETTh1-MAE +0.58%、
+  ETTm1-MAE +0.01%，严格 gate 失败，按预注册未运行 H192/test。
+- **样本分析**：1,121,992 个 validation sample×channel；显著改善 14.24%、显著退化
+  10.19%。ETT 权重主要落在 A1，Weather 较均匀，Electricity 偏 R0；soft 权重与真实周期
+  oracle 仍不匹配，收益更像凸组合误差抵消而非准确 hard 选择。
+- **证据**：`docs/PhaseFormer_multi_anchor_selector_experiment.md`；本地严格审计目录
+  `research_runs/multi_anchor_selector_v1/`，含逐 setting 共 90 个程序化案例和白名单 ZIP。
