@@ -33,6 +33,9 @@ from src.models.intercycle_patch import (
     InterCyclePatchResidualHead,
     RepeatLastCycleResidualHead,
 )
+from src.models.hierarchical_trend_cycle import (
+    HierarchicalTrendCycleResidualHead,
+)
 from src.models.triaxis_fusion import (
     RollingTriAxisHistoryRouter,
     SafeRegretTriAxisRouter,
@@ -644,6 +647,28 @@ class PhaseFormer(DefaultPLModule):
                     ),
                     max_correction=getattr(
                         configs, "multiperiod_residual_max_correction", 0.5
+                    ),
+                )
+            elif residual_head_type == "hierarchical_trend_cycle":
+                self.weak_period_residual = HierarchicalTrendCycleResidualHead(
+                    self.seq_len,
+                    self.pred_len,
+                    self.period_len,
+                    d_model=getattr(configs, "hptc_d_model", 32),
+                    num_heads=getattr(configs, "hptc_heads", 4),
+                    ffn_dim=getattr(configs, "hptc_ffn_dim", 64),
+                    beta_init=getattr(configs, "hptc_beta_init", 0.25),
+                    use_rolling_confidence=getattr(
+                        configs, "hptc_use_rolling_confidence", True
+                    ),
+                    rolling_origins=getattr(configs, "hptc_rolling_origins", 4),
+                    recency_decay=getattr(configs, "hptc_recency_decay", 0.5),
+                    risk_scale=getattr(configs, "hptc_risk_scale", 1.0),
+                    risk_std_weight=getattr(
+                        configs, "hptc_risk_std_weight", 1.0
+                    ),
+                    confidence_floor=getattr(
+                        configs, "hptc_confidence_floor", 0.05
                     ),
                 )
             elif residual_head_type == "channel":

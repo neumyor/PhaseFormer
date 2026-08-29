@@ -6,6 +6,10 @@
 > 约束，M3 自 2026-08-29 起只作为诊断性 ensemble 上界和互补性证据，**不再是候选论文主
 > 方法，也不继续沿 OOF/stacking 路线优化**。下一阶段必须把三种设计思想整合进一个共享
 > PhaseFormer，而不是融合三个模型的最终预测。
+>
+> 当前活动实验：HPTC 单模型正交趋势—周期修正，预注册见
+> `docs/PhaseFormer_hptc_unified_experiment.md`。在结果冻结前只运行 validation-only H96
+> 调参；是否扩展 H192 由文档中的固定 gate 决定。
 
 ## 目标与选择规则
 

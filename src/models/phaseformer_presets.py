@@ -133,6 +133,21 @@ ABLATION_MODES = {
     "safe_triaxis_regret",
     "safe_triaxis_guarded",
     "safe_triaxis_monotone",
+    # Hierarchical Phase--Trend--Cycle: one shared PhaseFormer and one
+    # orthogonally factorized residual, never multiple full checkpoints.
+    "hptc_fixed_b10",
+    "hptc_rolling_b10",
+    "hptc_rolling_b25",
+    "hptc_rolling_b50",
+    "hptc_rolling_b25_r05",
+}
+
+HPTC_MODES = {
+    "hptc_fixed_b10": dict(beta=0.10, rolling=False, risk_scale=1.0),
+    "hptc_rolling_b10": dict(beta=0.10, rolling=True, risk_scale=1.0),
+    "hptc_rolling_b25": dict(beta=0.25, rolling=True, risk_scale=1.0),
+    "hptc_rolling_b50": dict(beta=0.50, rolling=True, risk_scale=1.0),
+    "hptc_rolling_b25_r05": dict(beta=0.25, rolling=True, risk_scale=0.5),
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1024,6 +1039,27 @@ def get_ablation_overrides(mode):
                 multiperiod_residual_max_correction=0.5,
             )
         return overrides
+    if mode in HPTC_MODES:
+        # Keep the complete A1 phase stack and RCRF outer fusion. Only the
+        # residual generator changes into an identifiable trajectory plus
+        # zero-mean cycle-shape factorization.
+        config = HPTC_MODES[mode]
+        overrides = get_ablation_overrides("gold_combo_reliability_s2")
+        overrides.update(
+            scheme_name=mode,
+            weak_period_residual_head_type="hierarchical_trend_cycle",
+            hptc_d_model=32,
+            hptc_heads=4,
+            hptc_ffn_dim=64,
+            hptc_beta_init=config["beta"],
+            hptc_use_rolling_confidence=config["rolling"],
+            hptc_rolling_origins=4,
+            hptc_recency_decay=0.5,
+            hptc_risk_scale=config["risk_scale"],
+            hptc_risk_std_weight=1.0,
+            hptc_confidence_floor=0.05,
+        )
+        return overrides
     # Inter-Cycle Patch Transformer candidates (ICPT plan).  A3/A4 swap the
     # NLinear head for simple cycle baselines; rcrf_icpt_* build the ICPT head
     # with a position encoding.  Everything else inherits the frozen RCRF stack
@@ -1365,6 +1401,20 @@ class PhaseFormerPresetConfig:
         self.multiperiod_residual_max_correction = hyperparams.get(
             "multiperiod_residual_max_correction", 0.5
         )
+        # HPTC unified residual: NLinear owns cycle-level trajectory; ICPT owns
+        # zero-mean shape; rolling history only shrinks the shape update.
+        self.hptc_d_model = hyperparams.get("hptc_d_model", 32)
+        self.hptc_heads = hyperparams.get("hptc_heads", 4)
+        self.hptc_ffn_dim = hyperparams.get("hptc_ffn_dim", 64)
+        self.hptc_beta_init = hyperparams.get("hptc_beta_init", 0.25)
+        self.hptc_use_rolling_confidence = hyperparams.get(
+            "hptc_use_rolling_confidence", True
+        )
+        self.hptc_rolling_origins = hyperparams.get("hptc_rolling_origins", 4)
+        self.hptc_recency_decay = hyperparams.get("hptc_recency_decay", 0.5)
+        self.hptc_risk_scale = hyperparams.get("hptc_risk_scale", 1.0)
+        self.hptc_risk_std_weight = hyperparams.get("hptc_risk_std_weight", 1.0)
+        self.hptc_confidence_floor = hyperparams.get("hptc_confidence_floor", 0.05)
         # Inter-Cycle Patch Transformer residual head configuration (ICPT plan).
         self.intercycle_period_len = hyperparams.get("intercycle_period_len", 24)
         self.intercycle_d_model = hyperparams.get("intercycle_d_model", 32)

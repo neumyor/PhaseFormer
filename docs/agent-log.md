@@ -1,5 +1,19 @@
 # Agent Maintenance Log
 
+## 2026-08-29 — HPTC 单 checkpoint 有机整合：实现与预注册
+
+- 基于既有 A1/I0/R0/M3 结果提出 HPTC：共享 PhaseFormer 负责相位，NLinear 独占未来周期
+  水平/轨迹，ICPT 只建模逐周期零均值形状，rolling history evidence 只连续收缩形状修正，
+  不选择完整专家。最终仍由 RCRF 做相位可靠度融合。
+- 新增 `HierarchicalTrendCycleResidualHead` 与五个只改变 `β`/risk scale 的预注册配置；全模型
+  端到端训练且只生成一个 checkpoint。ICPT 构造使用 forked RNG，保证 paired seed 下共享
+  PhaseFormer 主干与 A1 逐参数同初始化。
+- 预注册六数据集 L720/H96、30% train、8 epoch、seed 2021、Huber validation-only 搜索；
+  H192 是否执行由固定 gate 决定，计划见 `docs/PhaseFormer_hptc_unified_experiment.md`。
+- 验证：196 项仓库测试通过；四个 horizon 前向、零均值正交约束、三组件梯度、rolling 样本
+  响应和单 checkpoint preset 均通过。ETTm2 5%/1 epoch GPU smoke 完成，96,066 参数、
+  peak 393.4 MiB、test 字段为空。
+
 ## 2026-08-29 — 论文方法约束：停止多完整模型 ensemble 路线
 
 - 用户明确纠正“整合”的含义：需要把 A1/I0/R0 的设计思想在一个模型中有机结合，而不是
