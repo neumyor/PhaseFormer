@@ -951,3 +951,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   汇总均通过。仅运行代码测试与 dry-run，未启动训练或读取新 validation/test。
 - 完整计划与空表：`docs/PhaseFormer_pctf_anchor_fusion_retest.md`；runner：
   `scripts/run_pctf_anchor_fusion_retest.py`。
+## 2026-08-30 — 执行 PCTF v2 复测（阶段性）
+
+- Stage P 完成 48/48 个 validation-only runs，冻结周期：ETTh1/ETTh2=48，ETTm1=48，ETTm2=96，Weather=24，Electricity=12。
+- Stage S 完成 111/132 个 validation-only runs；因长任务会话产生孤儿进程并触发 CUDA OOM/落盘竞态，剩余矩阵未闭合。
+- 未执行 Stage F，未读取 test；不能据此声明候选优于 A2 或 Golden。
+- 结果说明：[docs/PhaseFormer_pctf_anchor_fusion_results.md](PhaseFormer_pctf_anchor_fusion_results.md)。
