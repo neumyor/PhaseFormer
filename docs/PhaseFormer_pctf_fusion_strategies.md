@@ -211,3 +211,24 @@ scratch 输出为 `research_runs/pctf_fusion_v1/`；checkpoint 和训练日志�
 ETTm2-H96 的参数量审计：A1为72,905；F0及F1/F2a/F3/C0/C1为96,063–96,075，F2b为
 96,335。除F2b的小型 MLP 外，各融合策略的参数量几乎完全相同；F3虽然不增加明显参数，但
 24次 circular alignment 会增加运行时间，必须在真实实验中单独报告。
+
+## 10. 第一阶段筛选结果（2026-08-29）
+
+已在提权 CUDA 环境完成六数据集、H96、30%训练数据、seed=2021、最多8轮的 validation-only
+筛选（66个 runs）；`test_mae/test_mse` 均为空，未读取 test。汇总文件为
+`research_runs/pctf_fusion_v1/screen_summary.csv`，决策文件为
+`research_runs/pctf_fusion_v1/screen_decision.json`。
+
+| candidate | 相对 A2 宏平均 MSE | 相对 A2 宏平均 MAE | 双指标改善数据集数 | 最差 MSE 比值 | 是否通过 |
+|---|---:|---:|---:|---:|---|
+| F0 `pctf_dual_fixed` | 0.9995 | 0.9989 | 1/6 | 1.0161 | 否 |
+| F1a component-scalar | 1.0332 | 1.0273 | 0/6 | 1.1173 | 否 |
+| F1b component-cycle | 1.0331 | 1.0272 | 0/6 | 1.1176 | 否 |
+| F2a monotonic | 1.0292 | 1.0246 | 0/6 | 1.0821 | 否 |
+| F2b MLP | 1.0310 | 1.0259 | 0/6 | 1.1135 | 否 |
+| F3 phase-modulation | 1.0326 | 1.0258 | 0/6 | 1.1305 | 否 |
+
+因此本阶段没有候选满足晋级门槛，按预注册规则不启动144个正式 test runs。相对嵌套对照中，
+F2a/F1b 的宏 MSE 比值 0.9965、F2b/F1b 为 0.9980，但绝对水平仍明显落后 A2；这说明
+门控形式本身略有帮助，却没有抵消当前组件职责划分带来的损失。下一步应先修正 F0/F1 的
+组件分解或训练目标，再重新进行 validation 筛选，而不是基于 test 选择策略。
