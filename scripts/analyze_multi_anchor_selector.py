@@ -206,7 +206,7 @@ def load_candidate(candidate_info, batch_size):
     return model, dataset, loader, exp_args
 
 
-def push_case(heap, score, serial, case, limit=256):
+def push_case(heap, score, serial, case, limit=2048):
     item = (float(score), int(serial), case)
     if len(heap) < limit:
         heapq.heappush(heap, item)
