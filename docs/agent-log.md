@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-08-29 — 导出正式 test 前五模型的公平比较
+
+- 新增 `docs/PhaseFormer_top5_test_models.md`。只使用周期互补实验中同协议的 288-run 正式
+  矩阵：L720、H96/H192、full-train、三 seed、best-validation checkpoint、一次 test。
+- 按 12 setting、24 个 test 指标相对 A2 的宏平均比选择 I0、D1、D2、A2、A1；在开头逐
+  setting 给出 MSE/MAE 均值并标出五模型最优，随后简述每个模型的结构、优势和失败边界。
+- 明确排除 validation-only 的 HPTC/TriAxis 与不符合单模型论文约束的 M3，避免不公平混排；
+  同时披露历史 test 暴露和当前只覆盖六数据集 H96/H192，不能解释为完全盲测的最终排名。
+- 同步澄清活动计划中的 incumbent 口径：HPTC-H4 只在 validation 上相对 A1 配对，正式三 seed
+  test 的统一模型 incumbent 仍是 A2（RCRF+NLinear+LFF）。
+
 ## 2026-08-29 — HPTC H96 调参与样本审计：未通过扩展门槛
 
 - 完成 H0–H4 在 ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity 的 30 个 validation-only
