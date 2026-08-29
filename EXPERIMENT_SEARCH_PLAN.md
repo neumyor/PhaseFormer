@@ -7,9 +7,11 @@
 > 方法，也不继续沿 OOF/stacking 路线优化**。下一阶段必须把三种设计思想整合进一个共享
 > PhaseFormer，而不是融合三个模型的最终预测。
 >
-> 当前活动实验：HPTC 单模型正交趋势—周期修正，预注册见
-> `docs/PhaseFormer_hptc_unified_experiment.md`。在结果冻结前只运行 validation-only H96
-> 调参；是否扩展 H192 由文档中的固定 gate 决定。
+> 最近完成的统一模型实验：HPTC 单模型正交趋势—周期修正，计划与结果见
+> `docs/PhaseFormer_hptc_unified_experiment.md`。H4 在六数据集 H96 相对 A1 的 12 指标宏平均
+> 改善 0.29%，但仅 3/6 数据集双指标改善，未通过预注册 gate，因此未运行 H192/test，A1
+> 仍是统一单模型 incumbent。下一轮证据锚点是：保留轨迹/形状可识别分工，但放松严格零均值
+> 为受约束周期级低频残差，并用模块自身的历史重建不确定性替换线性外推 risk。
 
 ## 目标与选择规则
 

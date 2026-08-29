@@ -1,5 +1,23 @@
 # Agent Maintenance Log
 
+## 2026-08-29 — HPTC H96 调参与样本审计：未通过扩展门槛
+
+- 完成 H0–H4 在 ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity 的 30 个 validation-only
+  run：L720→H96、P24、30% train、8 epoch、seed 2021、Huber；所有 test 字段为空。
+- H4（beta init 0.25、rolling risk scale 0.5）最好，相对 A1 的 12 指标宏平均比值 0.997098、
+  最差 1.003407，在 ETTh1/ETTm2/Electricity 双指标改善。但双改善只有 3/6，预注册 gate
+  失败，未运行 H192；H4 相对 A1/I0/R0 逐指标包络仍平均退化 1.47%。
+- 回放六数据集 1,121,992 个样本×通道，显著改善/退化占比 13.38%/8.31%。Electricity 四段
+  horizon 均改善；Weather 的退化组却获得比改善组更低的 rolling risk，表明代理置信失配；
+  ETTm1 和远期 ETT 出现正负修正抵消。
+- `scripts/analyze_hptc_unified.py` 生成严格审计目录 `research_runs/hptc_unified_v1/`，包含
+  90 个程序化去重案例、7 张中文图和字节校验 ZIP；回放指标最大差 3.05e-6。float32 周期均值
+  残差最大 2.15e-6，高于预注册 1e-6 阈值，已明确记录为数值检查未通过。
+- H4 平均 95,964 参数（A1 为 72,803，+31.8%），配对 GPU 前向耗时约为 A1 的
+  2.06–2.78 倍。大型 CSV、图片、ZIP、checkpoint 均留在 `.gitignore` 下，不提交。
+- 决策：淘汰 HPTC v1；后续若继续，优先测试受守恒约束的低频周期水平残差，以及 ICPT 自身
+  masked reconstruction uncertainty，禁止回到多完整模型 ensemble。
+
 ## 2026-08-29 — HPTC 单 checkpoint 有机整合：实现与预注册
 
 - 基于既有 A1/I0/R0/M3 结果提出 HPTC：共享 PhaseFormer 负责相位，NLinear 独占未来周期
