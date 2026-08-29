@@ -1,10 +1,10 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 最近完成实验：Safe-Regret TriAxis v1，方案与结果见
-> `docs/PhaseFormer_safe_regret_triaxis_experiment.md`。六数据集 H96/H192 共 66 次
-> validation-only 运行；统一 S2 相对 A1 平均改善 0.37%，但相对 A1/I0/R0 原始包络平均退化
-> 1.05%、最差退化 5.32%，最终 gate 失败，未读取 test。该结果否定“只以 A1 为安全锚点”
-> 的当前集成主线；若继续，应直接验证多完整模型锚点，而不是继续调 S0–S3 权重。
+> 当前实验：Multi-Anchor Selector v1，预注册见
+> `docs/PhaseFormer_multi_anchor_selector_experiment.md`。它冻结 A1/I0/R0 三个完整模型，用
+> 24% 影子锚点在训练时间轴 24%–30% 段产生 out-of-fold 路由监督，再按样本×通道×未来周期
+> 选择完整锚点。先做 ETTh1/ETTm2/Weather-H96 pilot，通过后补齐六数据集 H96/H192；最终
+> 仍要求 24 个 validation 指标全部严格超过原始包络，失败则不读取 test。
 
 ## 目标与选择规则
 

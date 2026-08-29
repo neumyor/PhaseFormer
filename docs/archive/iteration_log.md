@@ -1132,3 +1132,28 @@
 - **证据**：正式数值和结论在 `docs/PhaseFormer_triaxis_rolling_calibration_experiment.md`；
   审计器为 `scripts/analyze_triaxis_rolling_calibration.py`。本地严格白名单包位于
   `research_runs/triaxis_rolling_calibration_v2/`，大 CSV、图片、ZIP 和 checkpoint 均不提交。
+
+## 2026-08-29 — Safe-Regret TriAxis v1（最终 gate 失败）
+
+- **目标**：以完整 A1 为精确 fallback，检验可拒绝的相对 A1 regret 修正能否稳定超过
+  A1/I0/R0 原始包络。
+- **设置**：六数据集 H96/H192，L720、30% train、8 epoch、seed 2021、validation-only；
+  Stage A 四候选 42 run，Stage B 冻结 S2 后 24 run。
+- **结果**：S2 相对 A1 的 24 指标宏平均比值 0.996263，但相对原始包络为 1.010499，最差
+  1.053162；仅 ETTh2-H192、ETTm2-H96 双指标改善。最终 gate 失败，未读取 test。
+- **错误分析**：2,208,464 个 sample×channel 中，显著改善 15.36%，显著退化 22.04%。观察到
+  S2 能保护 A1，却不能继承 I0/R0 已经更强的 setting；“相对 A1 regret”与“相对原始包络
+  regret”目标错位。
+- **证据**：`docs/PhaseFormer_safe_regret_triaxis_experiment.md` 与本地严格审计目录
+  `research_runs/safe_regret_triaxis_v1/`。
+
+## 2026-08-29 — Multi-Anchor Selector v1（预注册）
+
+- **目标**：验证 A1/I0/R0 三个完整模型作为可选锚点，是否能修复单 A1 fallback 的结构缺陷。
+- **机制**：M0 全局硬选择；M1 历史/预测描述符条件硬选择；M2 加相对三锚点 oracle 的均值
+  regret 与 CVaR；M3 为 soft 混合消融。硬选择前向逐周期严格复制一个完整锚点。
+- **无泄漏校准**：A1/I0/R0 影子模型仅训练前 24%，路由只在时间轴 24%–30% 的未见目标上
+  训练；验证时换回冻结的 30% 正式锚点。候选不读取 dataset ID 或 future truth。
+- **网格与门槛**：先做 ETTh1/ETTm2/Weather-H96 pilot；信号通过后覆盖六数据集 H96/H192。
+  最终 24 个 MSE/MAE 比值须全部 <1 且 macro≤0.995，才允许 test。
+- **详细预注册**：`docs/PhaseFormer_multi_anchor_selector_experiment.md`。

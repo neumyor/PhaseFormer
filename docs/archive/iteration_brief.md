@@ -50,6 +50,15 @@ No test split was accessed. Canonical local audit:
 `research_runs/safe_regret_triaxis_v1/`; next design must use a multi-model
 anchor or a distilled strong anchor rather than further A1-local tuning.
 
+Multi-Anchor Selector round (2026-08-29): the user asks to continue with the
+multi-anchor alternative. The new unified mechanism treats complete A1, I0 and
+R0 forecasts as actions. To avoid training a stacker on targets already seen by
+its anchors, 24%-trained shadow anchors produce forecasts on the disjoint
+24%-30% temporal calibration segment; the learned router is then evaluated
+with the frozen 30%-trained anchors. Pilot covers ETTh1/ETTm2/Weather H96;
+promotion covers all six datasets at H96/H192. Test remains inaccessible until
+every validation metric beats the original-model envelope.
+
 ## Baseline Status
 
 Weather 720 -> 96 baseline is established at `research_runs/weather96_baseline_e30_seed2021/`.
