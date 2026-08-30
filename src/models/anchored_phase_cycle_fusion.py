@@ -56,6 +56,9 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         modulation_temperature: float = 0.25,
         amplitude_min: float = 0.5,
         amplitude_max: float = 2.0,
+        detach_references: bool = False,
+        level_mode: str = "horizon_centered",
+        global_level_max: float = 0.05,
         eps: float = 1e-6,
     ):
         super().__init__()
@@ -82,6 +85,12 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
             raise ValueError("invalid MLP or modulation parameters")
         if not 0 < amplitude_min <= amplitude_max:
             raise ValueError("invalid amplitude range")
+        if level_mode not in ("horizon_centered", "history_referenced"):
+            raise ValueError(f"unsupported anchored level mode: {level_mode}")
+        if not 0 < global_level_max <= correction_max:
+            raise ValueError(
+                "global_level_max must be positive and no larger than correction_max"
+            )
 
         self.seq_len = int(seq_len)
         self.pred_len = int(pred_len)
@@ -110,6 +119,9 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         self.modulation_temperature = float(modulation_temperature)
         self.amplitude_min = float(amplitude_min)
         self.amplitude_max = float(amplitude_max)
+        self.detach_references = bool(detach_references)
+        self.level_mode = str(level_mode)
+        self.global_level_max = float(global_level_max)
         self.eps = float(eps)
 
         # ICPT construction is RNG-isolated so adding this composer cannot
@@ -159,10 +171,15 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         self.last_trajectory = None
         self.last_cycle = None
         self.cycle_for_auxiliary = None
+        self.level_correction_for_auxiliary = None
+        self.shape_correction_for_auxiliary = None
+        self.level_coefficient_for_auxiliary = None
+        self.shape_coefficient_for_auxiliary = None
         self.last_output = None
         self.last_level_correction = None
         self.last_shape_correction = None
         self.last_level_update = None
+        self.last_global_level_update = None
         self.last_shape_update = None
         self.last_level_coefficient = None
         self.last_shape_coefficient = None
@@ -214,6 +231,25 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         cycles = self._cycles(forecast)
         _, level, shape = self._decompose(cycles)
         return level.expand_as(cycles).reshape_as(forecast), shape.reshape_as(forecast)
+
+    def decompose_residual_target(self, residual: torch.Tensor):
+        """Project an anchor residual into the admitted level/shape spaces.
+
+        The legacy level space removes the horizon-wide mean.  The repaired
+        space keeps cycle means so a one-cycle forecast still has a learnable,
+        tightly bounded level correction.
+        """
+        cycles = self._cycles(residual)
+        cycle_mean = cycles.mean(dim=2, keepdim=True)
+        shape = cycles - cycle_mean
+        if self.level_mode == "horizon_centered":
+            level = cycle_mean - cycle_mean.mean(dim=1, keepdim=True)
+        else:
+            level = cycle_mean
+        return (
+            level.expand_as(cycles).reshape_as(residual),
+            shape.reshape_as(residual),
+        )
 
     def _phase_reliability(self, phase_series: torch.Tensor):
         if phase_series.ndim != 4:
@@ -381,6 +417,9 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
             cycle_cycles = self._cycles(cycle)
             _, trajectory_level, _ = self._decompose(trajectory_cycles)
             _, cycle_level, cycle_shape = self._decompose(cycle_cycles)
+            if self.level_mode == "history_referenced":
+                trajectory_level = trajectory_cycles.mean(dim=2, keepdim=True)
+                cycle_level = cycle_cycles.mean(dim=2, keepdim=True)
             _, _, phase_shape = self._decompose(phase_cycles)
 
             def mean_abs(value):
@@ -513,27 +552,75 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
             )
             level_correction = torch.zeros_like(anchor_cycles)
             shape_correction = shape_update
+            self.level_correction_for_auxiliary = level_correction.reshape_as(anchor)
+            self.shape_correction_for_auxiliary = shape_correction.reshape_as(anchor)
+            self.level_coefficient_for_auxiliary = zeros
+            self.shape_coefficient_for_auxiliary = zeros
+            global_level_update = torch.zeros_like(level_update)
         else:
-            _, trajectory_level, _ = self._decompose(trajectory_cycles)
+            _, trajectory_level, _ = self._decompose(
+                trajectory_cycles
+            )
             _, cycle_level, cycle_shape = self._decompose(cycle_cycles)
             _, _, phase_shape = self._decompose(phase_cycles)
-            level_correction = cycle_level - trajectory_level
+            if self.detach_references:
+                trajectory_level = trajectory_level.detach()
+                phase_shape = phase_shape.detach()
+            if self.level_mode == "history_referenced":
+                # Direct cycle-mean disagreement remains meaningful when the
+                # forecast contains only one future cycle.  Its global part is
+                # admitted through a much smaller trust region below.
+                level_correction = (
+                    cycle_cycles.mean(dim=2, keepdim=True)
+                    - trajectory_cycles.mean(dim=2, keepdim=True).detach()
+                    if self.detach_references
+                    else cycle_cycles.mean(dim=2, keepdim=True)
+                    - trajectory_cycles.mean(dim=2, keepdim=True)
+                )
+            else:
+                level_correction = cycle_level - trajectory_level
             shape_correction = cycle_shape - phase_shape
             level_coefficient, shape_coefficient = self._component_coefficients(
                 anchor, phase, trajectory, cycle, history, phase_reliability,
                 shape_confidence, level_confidence,
             )
-            level_update = (
-                self._coefficient_to_cycles(level_coefficient)
-                * level_correction
-            ).expand_as(anchor_cycles)
-            # Per-cycle coefficients can reintroduce a global offset.  Project
-            # the actual gated update back into the horizon-zero-mean subspace.
-            level_update = level_update - level_update.mean(dim=(1, 2), keepdim=True)
+            level_scale = self._coefficient_to_cycles(level_coefficient)
+            if self.level_mode == "history_referenced":
+                global_level = level_correction.mean(dim=1, keepdim=True)
+                relative_level = level_correction - global_level
+                level_update = (level_scale * relative_level).expand_as(
+                    anchor_cycles
+                )
+                level_update = level_update - level_update.mean(
+                    dim=(1, 2), keepdim=True
+                )
+                global_scale = level_coefficient.mean(dim=-1, keepdim=True)
+                global_scale = (
+                    global_scale * self.global_level_max / self.correction_max
+                ).permute(0, 2, 1).unsqueeze(2)
+                global_level_update = (
+                    global_scale * global_level
+                ).expand_as(anchor_cycles)
+                level_update = level_update + global_level_update
+            else:
+                level_update = (level_scale * level_correction).expand_as(
+                    anchor_cycles
+                )
+                # Per-cycle coefficients can reintroduce a global offset.
+                level_update = level_update - level_update.mean(
+                    dim=(1, 2), keepdim=True
+                )
+                global_level_update = torch.zeros_like(level_update)
             shape_update = (
                 self._coefficient_to_cycles(shape_coefficient)
                 * shape_correction
             )
+            self.level_correction_for_auxiliary = level_correction.expand_as(
+                anchor_cycles
+            ).reshape_as(anchor)
+            self.shape_correction_for_auxiliary = shape_correction.reshape_as(anchor)
+            self.level_coefficient_for_auxiliary = level_coefficient
+            self.shape_coefficient_for_auxiliary = shape_coefficient
             self.last_level_coefficient = level_coefficient.detach()
             self.last_shape_coefficient = shape_coefficient.detach()
 
@@ -552,6 +639,9 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
             ).reshape_as(anchor).detach()
             self.last_shape_correction = shape_correction.reshape_as(anchor).detach()
             self.last_level_update = level_update.reshape_as(anchor).detach()
+            self.last_global_level_update = global_level_update.reshape_as(
+                anchor
+            ).detach()
             self.last_shape_update = shape_update.reshape_as(anchor).detach()
             self.last_level_confidence = level_confidence.detach()
             self.last_shape_confidence = shape_confidence.detach()

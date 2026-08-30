@@ -74,6 +74,36 @@ class AnchoredPhaseCycleFusionComposerTests(unittest.TestCase):
             float(model.last_shape_coefficient.abs().max()), 0.25
         )
 
+    def test_explicit_legacy_defaults_preserve_nonzero_outputs(self):
+        values = self._inputs()
+        implicit = _composer("mlp_evidence")
+        explicit = AnchoredPhaseCycleFusionComposer(
+            seq_len=120,
+            pred_len=48,
+            cycle_period_len=24,
+            strategy="mlp_evidence",
+            d_model=8,
+            num_heads=1,
+            ffn_dim=16,
+            masked_origins=2,
+            detach_references=False,
+            level_mode="horizon_centered",
+            global_level_max=0.05,
+        )
+        explicit.load_state_dict(implicit.state_dict())
+        with torch.no_grad():
+            for model in (implicit, explicit):
+                model.level_raw.fill_(0.2)
+                model.shape_raw.fill_(-0.3)
+                model.gate_mlp[-1].bias.copy_(torch.tensor([0.1, -0.1]))
+        implicit_output = implicit(
+            *values[:-1], trajectory_predictor=values[-1]
+        )
+        explicit_output = explicit(
+            *values[:-1], trajectory_predictor=values[-1]
+        )
+        self.assertTrue(torch.equal(implicit_output, explicit_output))
+
     def test_horizon_matched_contexts_are_strictly_causal(self):
         model = _composer("monotonic_evidence")
         history = torch.arange(5.0).view(1, 5, 1, 1).expand(1, 5, 24, 1)
@@ -118,6 +148,79 @@ class AnchoredPhaseCycleFusionComposerTests(unittest.TestCase):
         # coefficient moves; the owning model supplies component auxiliaries.
         cycle_grad = model.cycle.out_proj.weight.grad
         self.assertTrue(cycle_grad is None or float(cycle_grad.abs().sum()) == 0.0)
+
+    def test_history_referenced_level_repairs_the_one_cycle_null_space(self):
+        values = self._inputs(seq_len=720, pred_len=96)
+        legacy = AnchoredPhaseCycleFusionComposer(
+            seq_len=720,
+            pred_len=96,
+            cycle_period_len=96,
+            strategy="component_cycle",
+            d_model=8,
+            num_heads=1,
+            ffn_dim=16,
+            level_mode="horizon_centered",
+        )
+        repaired = AnchoredPhaseCycleFusionComposer(
+            seq_len=720,
+            pred_len=96,
+            cycle_period_len=96,
+            strategy="component_cycle",
+            d_model=8,
+            num_heads=1,
+            ffn_dim=16,
+            level_mode="history_referenced",
+            global_level_max=0.05,
+        )
+        repaired.load_state_dict(legacy.state_dict())
+        with torch.no_grad():
+            legacy.level_raw.fill_(0.4)
+            legacy.shape_raw.zero_()
+            repaired.level_raw.fill_(0.4)
+            repaired.shape_raw.zero_()
+        legacy_output = legacy(
+            *values[:-1], trajectory_predictor=values[-1]
+        )
+        repaired_output = repaired(
+            *values[:-1], trajectory_predictor=values[-1]
+        )
+        self.assertTrue(torch.equal(legacy_output, values[0]))
+        self.assertGreater(float((repaired_output - values[0]).abs().sum()), 0.0)
+        self.assertGreater(
+            float(repaired.last_global_level_update.abs().sum()), 0.0
+        )
+        self.assertLessEqual(
+            float(repaired.last_level_coefficient.abs().max()), 0.25
+        )
+
+    def test_detached_references_do_not_receive_correction_gradients(self):
+        anchor, phase, trajectory, history, phase_series, predictor = self._inputs()
+        model = AnchoredPhaseCycleFusionComposer(
+            seq_len=120,
+            pred_len=48,
+            cycle_period_len=24,
+            strategy="component_cycle",
+            d_model=8,
+            num_heads=1,
+            ffn_dim=16,
+            detach_references=True,
+            level_mode="history_referenced",
+        )
+        phase.requires_grad_(True)
+        trajectory.requires_grad_(True)
+        with torch.no_grad():
+            model.level_raw.fill_(0.4)
+            model.shape_raw.fill_(0.4)
+        output = model(
+            anchor, phase, trajectory, history, phase_series,
+            trajectory_predictor=predictor,
+        )
+        output.square().mean().backward()
+        self.assertIsNone(phase.grad)
+        self.assertIsNone(trajectory.grad)
+        self.assertGreater(
+            float(model.cycle.out_proj.weight.grad.abs().sum()), 0.0
+        )
 
 
 class AnchoredPhaseCycleFusionPresetTests(unittest.TestCase):
@@ -190,6 +293,53 @@ class AnchoredPhaseCycleFusionPresetTests(unittest.TestCase):
         self.assertGreater(float(gradient.abs().sum()), 0.0)
         self.assertTrue(torch.isfinite(shape_loss))
         self.assertTrue(torch.isfinite(level_loss))
+
+    def test_residual_and_marginal_auxiliaries_reach_icpt_and_gate(self):
+        model = self._model(
+            "pctf_anchor_repair_joint_marginal", cycle_period=96
+        ).train()
+        x = torch.randn(2, 720, 7)
+        target = torch.randn(2, 96, 7)
+        model(x)
+        auxiliary, _, _ = model._anchored_pctf_auxiliary_loss(target)
+        auxiliary.backward()
+        cycle_gradient = (
+            model.anchored_phase_cycle_fusion.cycle.out_proj.weight.grad
+        )
+        gate_gradient = (
+            model.anchored_phase_cycle_fusion.gate_mlp[-1].weight.grad
+        )
+        self.assertIsNotNone(cycle_gradient)
+        self.assertGreater(float(cycle_gradient.abs().sum()), 0.0)
+        self.assertIsNotNone(gate_gradient)
+        self.assertGreater(float(gate_gradient.abs().sum()), 0.0)
+        self.assertGreater(
+            float(model.anchored_pctf_last_gate_aux_loss.detach()), 0.0
+        )
+
+    def test_freeze_and_joint_lr_controls_have_the_intended_scope(self):
+        frozen = self._model("pctf_anchor_diag_frozen_residual")
+        frozen.freeze_anchored_pctf_anchor()
+        trainable = [
+            name for name, parameter in frozen.named_parameters()
+            if parameter.requires_grad
+        ]
+        self.assertTrue(trainable)
+        self.assertTrue(all(
+            name.startswith("anchored_phase_cycle_fusion.")
+            for name in trainable
+        ))
+
+        joint = self._model("pctf_anchor_repair_joint_residual")
+        optimizer = joint.configure_optimizers()
+        self.assertIsInstance(optimizer, torch.optim.Adam)
+        self.assertEqual(len(optimizer.param_groups), 2)
+        learning_rates = sorted(group["lr"] for group in optimizer.param_groups)
+        base = float(joint.args.training_args.learning_rate)
+        torch.testing.assert_close(
+            torch.tensor(learning_rates),
+            torch.tensor([base * 0.1, base]),
+        )
 
     def test_h192_complete_forward(self):
         model = self._model(

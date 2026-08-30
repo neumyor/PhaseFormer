@@ -680,6 +680,15 @@ class PhaseFormer(DefaultPLModule):
                 amplitude_max=getattr(
                     configs, "anchored_pctf_amplitude_max", 2.0
                 ),
+                detach_references=getattr(
+                    configs, "anchored_pctf_detach_references", False
+                ),
+                level_mode=getattr(
+                    configs, "anchored_pctf_level_mode", "horizon_centered"
+                ),
+                global_level_max=getattr(
+                    configs, "anchored_pctf_global_level_max", 0.05
+                ),
             )
             self.anchored_pctf_shape_aux_weight = float(getattr(
                 configs, "anchored_pctf_shape_aux_weight", 0.05
@@ -692,8 +701,34 @@ class PhaseFormer(DefaultPLModule):
                 or self.anchored_pctf_level_aux_weight < 0
             ):
                 raise ValueError("anchored PCTF auxiliary weights must be non-negative")
+            self.anchored_pctf_aux_target = str(getattr(
+                configs, "anchored_pctf_aux_target", "absolute"
+            ))
+            if self.anchored_pctf_aux_target not in ("absolute", "residual"):
+                raise ValueError("anchored PCTF auxiliary target is invalid")
+            self.anchored_pctf_anchor_loss_weight = float(getattr(
+                configs, "anchored_pctf_anchor_loss_weight", 0.0
+            ))
+            self.anchored_pctf_gate_aux_weight = float(getattr(
+                configs, "anchored_pctf_gate_aux_weight", 0.0
+            ))
+            self.anchored_pctf_freeze_anchor = bool(getattr(
+                configs, "anchored_pctf_freeze_anchor", False
+            ))
+            self.anchored_pctf_anchor_lr_scale = float(getattr(
+                configs, "anchored_pctf_anchor_lr_scale", 1.0
+            ))
+            if (
+                self.anchored_pctf_anchor_loss_weight < 0
+                or self.anchored_pctf_gate_aux_weight < 0
+                or not 0.0 <= self.anchored_pctf_anchor_lr_scale <= 1.0
+            ):
+                raise ValueError("invalid anchored PCTF optimization settings")
             self.anchored_pctf_anchor_output = None
             self.anchored_pctf_cycle_output = None
+            self.anchored_pctf_level_correction_output = None
+            self.anchored_pctf_shape_correction_output = None
+            self.anchored_pctf_last_gate_aux_loss = None
         if self.use_weak_period_residual:
             residual_head_type = getattr(configs, "weak_period_residual_head_type", "shared")
             if self.use_dual_reliability_fusion and not self.use_rcrf_fusion:
@@ -1912,6 +1947,16 @@ class PhaseFormer(DefaultPLModule):
                 self.anchored_pctf_cycle_output = self.revin.denormalize(
                     self.anchored_phase_cycle_fusion.cycle_for_auxiliary, stats
                 )
+                # Corrections are additive, so de-normalization applies only
+                # the per-sample scale and must not add the input mean.
+                self.anchored_pctf_level_correction_output = (
+                    self.anchored_phase_cycle_fusion
+                    .level_correction_for_auxiliary * stats[1]
+                )
+                self.anchored_pctf_shape_correction_output = (
+                    self.anchored_phase_cycle_fusion
+                    .shape_correction_for_auxiliary * stats[1]
+                )
         elif self.use_triaxis_fusion:
             self.triaxis_expert_outputs = triaxis_experts_normalized
         elif self.use_safe_triaxis:
@@ -1921,6 +1966,12 @@ class PhaseFormer(DefaultPLModule):
             self.anchored_pctf_anchor_output = anchored_anchor_hat
             self.anchored_pctf_cycle_output = (
                 self.anchored_phase_cycle_fusion.cycle_for_auxiliary
+            )
+            self.anchored_pctf_level_correction_output = (
+                self.anchored_phase_cycle_fusion.level_correction_for_auxiliary
+            )
+            self.anchored_pctf_shape_correction_output = (
+                self.anchored_phase_cycle_fusion.shape_correction_for_auxiliary
             )
 
         return y_hat, Z, y_phase_steps
@@ -2020,22 +2071,91 @@ class PhaseFormer(DefaultPLModule):
         cycle head; validation and checkpoint selection still use the fused
         forecast loss alone.
         """
-        cycle = self.anchored_pctf_cycle_output[:, -self.pred_len :, :]
-        if self.target_var_index != -1:
-            index = self.target_var_index
-            cycle = cycle[:, :, index : index + 1]
-        cycle_level, cycle_shape = (
-            self.anchored_phase_cycle_fusion.decompose_forecast(cycle)
-        )
-        target_level, target_shape = (
-            self.anchored_phase_cycle_fusion.decompose_forecast(target)
-        )
-        shape_loss = self._compute_loss(cycle_shape, target_shape)
-        level_loss = self._compute_loss(cycle_level, target_level)
+        index = self.target_var_index
+        if self.anchored_pctf_aux_target == "absolute":
+            cycle = self.anchored_pctf_cycle_output[:, -self.pred_len :, :]
+            if index != -1:
+                cycle = cycle[:, :, index : index + 1]
+            predicted_level, predicted_shape = (
+                self.anchored_phase_cycle_fusion.decompose_forecast(cycle)
+            )
+            target_level, target_shape = (
+                self.anchored_phase_cycle_fusion.decompose_forecast(target)
+            )
+        else:
+            anchor = self.anchored_pctf_anchor_output[:, -self.pred_len :, :]
+            predicted_level = self.anchored_pctf_level_correction_output
+            predicted_shape = self.anchored_pctf_shape_correction_output
+            if index != -1:
+                anchor = anchor[:, :, index : index + 1]
+                predicted_level = predicted_level[:, :, index : index + 1]
+                predicted_shape = predicted_shape[:, :, index : index + 1]
+            residual = target - anchor.detach()
+            target_level, target_shape = (
+                self.anchored_phase_cycle_fusion.decompose_residual_target(
+                    residual
+                )
+            )
+        shape_loss = self._compute_loss(predicted_shape, target_shape.detach())
+        level_loss = self._compute_loss(predicted_level, target_level.detach())
         auxiliary = (
             self.anchored_pctf_shape_aux_weight * shape_loss
             + self.anchored_pctf_level_aux_weight * level_loss
         )
+        gate_loss = auxiliary.new_zeros(())
+        if self.anchored_pctf_gate_aux_weight > 0:
+            level_correction = self.anchored_phase_cycle_fusion._cycles(
+                predicted_level
+            )
+            shape_correction = self.anchored_phase_cycle_fusion._cycles(
+                predicted_shape
+            )
+            level_target = self.anchored_phase_cycle_fusion._cycles(
+                target_level
+            )
+            shape_target = self.anchored_phase_cycle_fusion._cycles(
+                target_shape
+            )
+
+            def oracle_coefficient(correction, component_target):
+                numerator = (
+                    correction.detach() * component_target.detach()
+                ).sum(dim=2)
+                denominator = correction.detach().square().sum(
+                    dim=2
+                ).clamp_min(self.anchored_phase_cycle_fusion.eps)
+                return (numerator / denominator).clamp(
+                    -self.anchored_phase_cycle_fusion.correction_max,
+                    self.anchored_phase_cycle_fusion.correction_max,
+                ).permute(0, 2, 1)
+
+            predicted_level_coefficient = (
+                self.anchored_phase_cycle_fusion
+                .level_coefficient_for_auxiliary
+            )
+            predicted_shape_coefficient = (
+                self.anchored_phase_cycle_fusion
+                .shape_coefficient_for_auxiliary
+            )
+            if index != -1:
+                predicted_level_coefficient = predicted_level_coefficient[
+                    :, index : index + 1
+                ]
+                predicted_shape_coefficient = predicted_shape_coefficient[
+                    :, index : index + 1
+                ]
+            gate_loss = 0.5 * (
+                F.smooth_l1_loss(
+                    predicted_level_coefficient,
+                    oracle_coefficient(level_correction, level_target),
+                )
+                + F.smooth_l1_loss(
+                    predicted_shape_coefficient,
+                    oracle_coefficient(shape_correction, shape_target),
+                )
+            )
+            auxiliary = auxiliary + self.anchored_pctf_gate_aux_weight * gate_loss
+        self.anchored_pctf_last_gate_aux_loss = gate_loss
         return auxiliary, shape_loss, level_loss
 
     def training_step(self, batch, batch_idx):
@@ -2131,12 +2251,69 @@ class PhaseFormer(DefaultPLModule):
                 self._anchored_pctf_auxiliary_loss(target)
             )
             loss = loss + anchored_aux
+            anchor = self.anchored_pctf_anchor_output[:, -self.pred_len :, :]
+            if self.target_var_index != -1:
+                index = self.target_var_index
+                anchor = anchor[:, :, index : index + 1]
+            anchor_loss = self._compute_loss(anchor, target)
+            loss = loss + self.anchored_pctf_anchor_loss_weight * anchor_loss
             self.log("train_fused_loss", fused_loss, on_epoch=True)
             self.log("train_pctf_shape_aux_loss", shape_aux, on_epoch=True)
             self.log("train_pctf_level_aux_loss", level_aux, on_epoch=True)
+            self.log("train_pctf_anchor_loss", anchor_loss, on_epoch=True)
+            self.log(
+                "train_pctf_gate_aux_loss",
+                self.anchored_pctf_last_gate_aux_loss,
+                on_epoch=True,
+            )
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True)
         return loss
+
+    def freeze_anchored_pctf_anchor(self):
+        """Freeze every parameter except the single ICPT/fusion composer.
+
+        This is a causal diagnostic for anchor drift, not a multi-checkpoint
+        inference path.  The resulting checkpoint still contains one model.
+        """
+        if not self.use_anchored_phase_cycle_fusion:
+            raise RuntimeError("anchor freezing requires anchored PCTF")
+        for name, parameter in self.named_parameters():
+            parameter.requires_grad_(
+                name.startswith("anchored_phase_cycle_fusion.")
+            )
+
+    def configure_optimizers(self):
+        if (
+            not self.use_anchored_phase_cycle_fusion
+            or self.anchored_pctf_anchor_lr_scale == 1.0
+        ):
+            return super().configure_optimizers()
+        base_lr = float(self.args.training_args.learning_rate)
+        composer = []
+        anchor = []
+        for name, parameter in self.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            if name.startswith("anchored_phase_cycle_fusion."):
+                composer.append(parameter)
+            else:
+                anchor.append(parameter)
+        groups = [{"params": composer, "lr": base_lr}]
+        if anchor:
+            groups.append({
+                "params": anchor,
+                "lr": base_lr * self.anchored_pctf_anchor_lr_scale,
+            })
+        optimizer = torch.optim.Adam(groups, lr=base_lr)
+        if self.args.training_args.lr_schedule_config.type == "cos":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=self.args.training_args.lr_schedule_config.tmax,
+                eta_min=1e-8,
+            )
+            return [optimizer], [scheduler]
+        return optimizer
 
     def validation_step(self, batch, batch_idx):
         batch_x, batch_y, batch_x_mark, batch_y_mark = batch

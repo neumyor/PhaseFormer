@@ -459,6 +459,12 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
     abs_sum = 0.0
     sq_sum = 0.0
     count = 0
+    anchor_abs_sum = 0.0
+    anchor_sq_sum = 0.0
+    update_sq_sum = 0.0
+    attribution_count = 0
+    confidence_moments = [0.0] * 5  # x, y, x2, y2, xy
+    coefficient_moments = [0.0] * 5
     heap = []
     serial = 0
     names = variable_names(model.args) if bad_case_limit else []
@@ -470,10 +476,51 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
             out, _, _ = model(batch_x.float(), batch_x_mark.float(), dec, batch_y_mark.float())
             pred = out[:, -pred_len:, :]
             true = batch_y.float()[:, -pred_len:, :]
+            if model.target_var_index != -1:
+                true = true[:, :, model.target_var_index : model.target_var_index + 1]
             err = pred - true
             abs_sum += torch.abs(err).sum().item()
             sq_sum += torch.square(err).sum().item()
             count += err.numel()
+            if model.use_anchored_phase_cycle_fusion:
+                anchor = model.anchored_pctf_anchor_output[:, -pred_len:, :]
+                if model.target_var_index != -1:
+                    anchor = anchor[
+                        :, :, model.target_var_index : model.target_var_index + 1
+                    ]
+                anchor_err = anchor - true
+                update = pred - anchor
+                anchor_abs_sum += anchor_err.abs().sum().item()
+                anchor_sq_sum += anchor_err.square().sum().item()
+                update_sq_sum += update.square().sum().item()
+                regret = (
+                    anchor_err.square().mean(dim=1)
+                    - err.square().mean(dim=1)
+                ).reshape(-1)
+                composer = model.anchored_phase_cycle_fusion
+                confidence = 0.5 * (
+                    composer.last_level_confidence
+                    + composer.last_shape_confidence
+                ).mean(dim=-1)
+                coefficient = 0.5 * (
+                    composer.last_level_coefficient.abs()
+                    + composer.last_shape_coefficient.abs()
+                ).mean(dim=-1)
+                if model.target_var_index != -1:
+                    index = model.target_var_index
+                    confidence = confidence[:, index : index + 1]
+                    coefficient = coefficient[:, index : index + 1]
+
+                def add_moments(moments, value):
+                    moments[0] += value.sum().item()
+                    moments[1] += regret.sum().item()
+                    moments[2] += value.square().sum().item()
+                    moments[3] += regret.square().sum().item()
+                    moments[4] += (value * regret).sum().item()
+
+                add_moments(confidence_moments, confidence.reshape(-1))
+                add_moments(coefficient_moments, coefficient.reshape(-1))
+                attribution_count += regret.numel()
             if bad_case_limit:
                 pair_mse = torch.square(err).mean(dim=1).detach().cpu()
                 for b in range(pair_mse.shape[0]):
@@ -491,6 +538,31 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
                         elif item[0] > heap[0][0]:
                             heapq.heapreplace(heap, item)
     result = {f"{split}_mae": abs_sum / count, f"{split}_mse": sq_sum / count}
+    if model.use_anchored_phase_cycle_fusion:
+        def correlation(values):
+            sx, sy, sx2, sy2, sxy = values
+            numerator = attribution_count * sxy - sx * sy
+            denominator = (
+                (attribution_count * sx2 - sx * sx)
+                * (attribution_count * sy2 - sy * sy)
+            )
+            return numerator / max(denominator, 0.0) ** 0.5 if denominator > 0 else 0.0
+
+        anchor_mse = anchor_sq_sum / count
+        anchor_mae = anchor_abs_sum / count
+        result.update({
+            f"{split}_anchor_mae": anchor_mae,
+            f"{split}_anchor_mse": anchor_mse,
+            f"{split}_mse_ratio_vs_internal_anchor": (
+                result[f"{split}_mse"] / anchor_mse
+            ),
+            f"{split}_mae_ratio_vs_internal_anchor": (
+                result[f"{split}_mae"] / anchor_mae
+            ),
+            f"{split}_update_rms": (update_sq_sum / count) ** 0.5,
+            f"{split}_confidence_regret_corr": correlation(confidence_moments),
+            f"{split}_coefficient_regret_corr": correlation(coefficient_moments),
+        })
     if bad_case_limit:
         bad_dir = Path(run_dir) / "bad_cases"
         pred_dir = Path(run_dir) / "predictions"
@@ -617,6 +689,31 @@ def execute(args):
             )
         model.freeze_safe_triaxis_anchor()
     elif model.use_anchored_phase_cycle_fusion:
+        if spec["init_checkpoint"]:
+            init_path = Path(spec["init_checkpoint"])
+            if not init_path.is_absolute():
+                init_path = REPO_ROOT / init_path
+            if not init_path.is_file():
+                raise FileNotFoundError(f"A2 init checkpoint not found: {init_path}")
+            payload = torch.load(init_path, map_location="cpu", weights_only=False)
+            state_dict = payload.get("state_dict", payload)
+            incompat = model.load_state_dict(state_dict, strict=False)
+            init_missing = list(incompat.missing_keys)
+            init_unexpected = list(incompat.unexpected_keys)
+            unsafe_missing = [
+                key for key in init_missing
+                if not key.startswith("anchored_phase_cycle_fusion.")
+            ]
+            if unsafe_missing or init_unexpected:
+                raise RuntimeError(
+                    "A2 checkpoint is not a strict nested subset: "
+                    f"unsafe_missing={unsafe_missing}, "
+                    f"unexpected={init_unexpected}"
+                )
+        elif model.anchored_pctf_freeze_anchor:
+            raise ValueError(
+                "frozen anchored PCTF diagnostics require --init-checkpoint"
+            )
         model.eval()
         audit_batch = next(iter(train_loader))
         audit_x, audit_y, audit_x_mark, audit_y_mark = [
@@ -637,6 +734,17 @@ def execute(args):
                 "anchored PCTF initialization is not exactly A2: "
                 f"max_abs={anchor_identity_max_abs}"
             )
+        if model.anchored_pctf_freeze_anchor:
+            model.freeze_anchored_pctf_anchor()
+    elif spec["init_checkpoint"]:
+        init_path = Path(spec["init_checkpoint"])
+        if not init_path.is_absolute():
+            init_path = REPO_ROOT / init_path
+        if not init_path.is_file():
+            raise FileNotFoundError(f"init checkpoint not found: {init_path}")
+        payload = torch.load(init_path, map_location="cpu", weights_only=False)
+        state_dict = payload.get("state_dict", payload)
+        model.load_state_dict(state_dict, strict=True)
     parameter_count = sum(p.numel() for p in model.parameters())
     trainable_parameter_count = sum(
         p.numel() for p in model.parameters() if p.requires_grad
@@ -694,7 +802,13 @@ def execute(args):
         "init_missing_count": len(init_missing),
         "init_unexpected_count": len(init_unexpected),
         "anchor_identity_max_abs": anchor_identity_max_abs,
-        "anchor_frozen": bool(getattr(model, "safe_triaxis_anchor_frozen", False)),
+        "anchor_frozen": bool(
+            getattr(model, "safe_triaxis_anchor_frozen", False)
+            or (
+                model.use_anchored_phase_cycle_fusion
+                and model.anchored_pctf_freeze_anchor
+            )
+        ),
         "required_cuda": spec["require_cuda"],
         "device_type": "cuda" if torch.cuda.is_available() else "cpu",
         "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "",
@@ -721,7 +835,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", required=True, choices=list(PLANNED_BATCH_SIZE))
     p.add_argument("--horizon", required=True, type=int, choices=[96, 192, 336, 720])
-    p.add_argument("--stage", required=True, choices=["smoke", "baseline", "period_screen", "mechanism_screen_1", "mechanism_screen_2", "mechanism_full8", "hp_low", "hp_mid", "finalist", "confirm"])
+    p.add_argument("--stage", required=True, choices=["smoke", "baseline", "period_screen", "mechanism_screen_1", "mechanism_screen_2", "mechanism_full8", "anchor_attribution", "hp_low", "hp_mid", "finalist", "confirm"])
     p.add_argument(
         "--mechanism",
         default="original",

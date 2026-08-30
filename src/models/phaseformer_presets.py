@@ -168,6 +168,13 @@ ABLATION_MODES = {
     "pctf_anchor_monotonic",
     "pctf_anchor_mlp",
     "pctf_anchor_phase_modulation",
+    # PCTF v3 causal-attribution and repaired-training variants.  Frozen
+    # presets diagnose anchor drift; the joint presets remain the paper path.
+    "pctf_anchor_diag_frozen_absolute",
+    "pctf_anchor_diag_frozen_residual",
+    "pctf_anchor_repair_joint_residual",
+    "pctf_anchor_repair_joint_marginal",
+    "pctf_anchor_repair_full",
 }
 
 HPTC_MODES = {
@@ -208,6 +215,45 @@ PCTF_ANCHORED_MODES = {
     "pctf_anchor_monotonic": "monotonic_evidence",
     "pctf_anchor_mlp": "mlp_evidence",
     "pctf_anchor_phase_modulation": "phase_modulation",
+    "pctf_anchor_diag_frozen_absolute": "mlp_evidence",
+    "pctf_anchor_diag_frozen_residual": "mlp_evidence",
+    "pctf_anchor_repair_joint_residual": "mlp_evidence",
+    "pctf_anchor_repair_joint_marginal": "mlp_evidence",
+    "pctf_anchor_repair_full": "mlp_evidence",
+}
+
+PCTF_ANCHOR_REPAIR_CONFIGS = {
+    "pctf_anchor_diag_frozen_absolute": dict(
+        anchored_pctf_freeze_anchor=True,
+        anchored_pctf_aux_target="absolute",
+    ),
+    "pctf_anchor_diag_frozen_residual": dict(
+        anchored_pctf_freeze_anchor=True,
+        anchored_pctf_aux_target="residual",
+        anchored_pctf_detach_references=True,
+    ),
+    "pctf_anchor_repair_joint_residual": dict(
+        anchored_pctf_aux_target="residual",
+        anchored_pctf_detach_references=True,
+        anchored_pctf_anchor_loss_weight=1.0,
+        anchored_pctf_anchor_lr_scale=0.1,
+    ),
+    "pctf_anchor_repair_joint_marginal": dict(
+        anchored_pctf_aux_target="residual",
+        anchored_pctf_detach_references=True,
+        anchored_pctf_anchor_loss_weight=1.0,
+        anchored_pctf_anchor_lr_scale=0.1,
+        anchored_pctf_gate_aux_weight=0.05,
+    ),
+    "pctf_anchor_repair_full": dict(
+        anchored_pctf_aux_target="residual",
+        anchored_pctf_detach_references=True,
+        anchored_pctf_anchor_loss_weight=1.0,
+        anchored_pctf_anchor_lr_scale=0.1,
+        anchored_pctf_gate_aux_weight=0.05,
+        anchored_pctf_level_mode="history_referenced",
+        anchored_pctf_global_level_max=0.05,
+    ),
 }
 
 PERIODIC_RESIDUAL_PE_MODES = {
@@ -1202,7 +1248,16 @@ def get_ablation_overrides(mode):
             anchored_pctf_amplitude_max=2.0,
             anchored_pctf_shape_aux_weight=0.05 if shape_enabled else 0.0,
             anchored_pctf_level_aux_weight=0.05 if level_enabled else 0.0,
+            anchored_pctf_aux_target="absolute",
+            anchored_pctf_anchor_loss_weight=0.0,
+            anchored_pctf_gate_aux_weight=0.0,
+            anchored_pctf_freeze_anchor=False,
+            anchored_pctf_anchor_lr_scale=1.0,
+            anchored_pctf_detach_references=False,
+            anchored_pctf_level_mode="horizon_centered",
+            anchored_pctf_global_level_max=0.05,
         )
+        overrides.update(PCTF_ANCHOR_REPAIR_CONFIGS.get(mode, {}))
         return overrides
     # Inter-Cycle Patch Transformer candidates (ICPT plan).  A3/A4 swap the
     # NLinear head for simple cycle baselines; rcrf_icpt_* build the ICPT head
@@ -1697,6 +1752,30 @@ class PhaseFormerPresetConfig:
         )
         self.anchored_pctf_level_aux_weight = hyperparams.get(
             "anchored_pctf_level_aux_weight", 0.05
+        )
+        self.anchored_pctf_aux_target = hyperparams.get(
+            "anchored_pctf_aux_target", "absolute"
+        )
+        self.anchored_pctf_anchor_loss_weight = hyperparams.get(
+            "anchored_pctf_anchor_loss_weight", 0.0
+        )
+        self.anchored_pctf_gate_aux_weight = hyperparams.get(
+            "anchored_pctf_gate_aux_weight", 0.0
+        )
+        self.anchored_pctf_freeze_anchor = hyperparams.get(
+            "anchored_pctf_freeze_anchor", False
+        )
+        self.anchored_pctf_anchor_lr_scale = hyperparams.get(
+            "anchored_pctf_anchor_lr_scale", 1.0
+        )
+        self.anchored_pctf_detach_references = hyperparams.get(
+            "anchored_pctf_detach_references", False
+        )
+        self.anchored_pctf_level_mode = hyperparams.get(
+            "anchored_pctf_level_mode", "horizon_centered"
+        )
+        self.anchored_pctf_global_level_max = hyperparams.get(
+            "anchored_pctf_global_level_max", 0.05
         )
         # Inter-Cycle Patch Transformer residual head configuration (ICPT plan).
         self.intercycle_period_len = hyperparams.get("intercycle_period_len", 24)
