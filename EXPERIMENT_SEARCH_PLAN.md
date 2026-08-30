@@ -1,9 +1,11 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 当前正式实验（用户已授权读取 test）：冻结 `pctf_anchor_repair_full`，先在 ETTh2/ETTm2 的
-> L720→H96/H192 上与 A2 做 full-train、三 seed、best-validation checkpoint 的正式 test 配对，
-> 并列出固定 Golden。共12个 matched A2 + 12个候选；候选从对应 A2 checkpoint 初始化，额外
-> 训练成本和缺少 continued-A2 控制将显式披露。协议及待填表见
+> 最近完成正式实验：冻结的 `pctf_anchor_repair_full` 在 ETTh2/ETTm2 的 L720→H96/H192 上与
+> A2 完成 full-train、三 seed、best-validation checkpoint 的 24-run test 配对。候选相对 A2
+> 宏平均降低 0.772% MSE、0.507% MAE，3/4 setting 双指标改善，最坏单指标回退 0.203%，通过
+> 预注册的两数据集局部替换门槛；严格稳定低于 Golden 为 4/4，A2 为 2/4。候选包含额外微调，
+> 且其结构修正相对内部微调 A2 仅贡献约 0.174% MSE、0.278% MAE，尚缺 continued-A2 等预算
+> 对照，不能把全部收益归因于 ICPT。结果与 test 暴露边界见
 > `docs/PhaseFormer_pctf_anchor_formal_etts.md`。
 
 > 已完成实验：PCTF v3 锚点漂移因果归因与修复，见

@@ -1004,3 +1004,17 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   初始化12个候选；全部最多30 epoch、Huber、best-validation checkpoint、强制 CUDA。
 - 预注册局部门槛、额外微调成本和后续 test-set selection 边界记录在
   `docs/PhaseFormer_pctf_anchor_formal_etts.md`；提交代码后再启动正式实验。
+
+## 2026-08-30 — PCTF Full Repair 正式 test 完成
+
+- 在实验冻结提交 `c8b61c4` 上完成 ETTh2/ETTm2、L720→H96/H192、三 seed 的 12 个 A2 与
+  12 个 Full Repair 正式 test；全部为同一 RTX 4090/CUDA/软件环境，候选均从同 setting/seed
+  的 A2 best-validation checkpoint 精确初始化。
+- Full Repair 相对 A2 宏平均降低 0.772% MSE、0.507% MAE，3/4 setting 双指标改善，最坏为
+  ETTm2-H192 MSE 回退 0.203%；通过预注册的两数据集局部替换门槛。严格稳定低于 Golden 的
+  setting 数为候选 4/4、A2 2/4。
+- 归因审计显示，候选内部继续训练后的 A2 相对原始 A2 平均改善约 0.599% MSE、0.230% MAE；
+  ICPT 融合相对内部 A2 再改善约 0.174% MSE、0.278% MAE。结果证明完整流程有效，但额外训练
+  与结构贡献尚未由 continued-A2 等预算对照完全分离。
+- 完整结果、成本和 test-set selection 边界见
+  `docs/PhaseFormer_pctf_anchor_formal_etts.md`。
