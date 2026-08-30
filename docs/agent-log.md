@@ -995,3 +995,12 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   容差，以覆盖浮点归约误差。
 - 详细分析见 `docs/PhaseFormer_pctf_anchor_attribution_results.md`。候选宏观收益约 0.64%，但
   最差设置退化约 1.25%，未通过预正式门槛，未读取 test 指标。
+
+## 2026-08-30 — 预注册 PCTF ETTh2/ETTm2 正式 test
+
+- 用户明确授权将 validation 冻结的 `pctf_anchor_repair_full` 与 A2 在 ETTh2/ETTm2、L720、
+  H96/H192 上进行 full-train、三 seed test，并与固定 Golden 同表比较。
+- 新增 `scripts/run_pctf_anchor_formal_etts.py`：先训练12个 matched A2，再由对应 checkpoint
+  初始化12个候选；全部最多30 epoch、Huber、best-validation checkpoint、强制 CUDA。
+- 预注册局部门槛、额外微调成本和后续 test-set selection 边界记录在
+  `docs/PhaseFormer_pctf_anchor_formal_etts.md`；提交代码后再启动正式实验。

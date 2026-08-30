@@ -1,6 +1,12 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 当前待执行实验（代码已完成，尚未训练）：PCTF v3 锚点漂移因果归因与修复，见
+> 当前正式实验（用户已授权读取 test）：冻结 `pctf_anchor_repair_full`，先在 ETTh2/ETTm2 的
+> L720→H96/H192 上与 A2 做 full-train、三 seed、best-validation checkpoint 的正式 test 配对，
+> 并列出固定 Golden。共12个 matched A2 + 12个候选；候选从对应 A2 checkpoint 初始化，额外
+> 训练成本和缺少 continued-A2 控制将显式披露。协议及待填表见
+> `docs/PhaseFormer_pctf_anchor_formal_etts.md`。
+
+> 已完成实验：PCTF v3 锚点漂移因果归因与修复，见
 > `docs/PhaseFormer_pctf_anchor_attribution_plan.md`。上一轮 v2 最佳 `pctf_anchor_mlp` 仍相对
 > A2 宏平均退化 0.113%，但代码审计无法区分锚点联合训练漂移、ICPT 辅助目标错配、gate 缺少
 > 边际收益监督和 `H=period` 的 level 零空间。v3 用同 setting/seed 的 A2 checkpoint 做严格
