@@ -957,3 +957,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - Stage S 完成 111/132 个 validation-only runs；因长任务会话产生孤儿进程并触发 CUDA OOM/落盘竞态，剩余矩阵未闭合。
 - 未执行 Stage F，未读取 test；不能据此声明候选优于 A2 或 Golden。
 - 结果说明：[docs/PhaseFormer_pctf_anchor_fusion_results.md](PhaseFormer_pctf_anchor_fusion_results.md)。
+## 2026-08-30 — 完成 PCTF v2 Stage S 复测
+
+- Stage S 已完成 132/132 个 validation-only runs；环境统一为 RTX 4090、PyTorch 2.7.1+cu126、CUDA 12.6、Lightning 2.6.5。
+- 所有论文候选均未通过联合门槛。最佳为 `pctf_anchor_mlp`：宏平均/A2=1.001131，4/12 个 setting 双指标改善，最差比=1.021385，参考包络比=1.007364。
+- MLP 相对 component-cycle 的嵌套对照为 0.999924，9/12 个 setting 双指标改善，但最差比=1.010829，仍不稳定。
+- 按预注册协议阻断 Stage F；没有读取 test。详情见 `docs/PhaseFormer_pctf_anchor_fusion_results.md`。
