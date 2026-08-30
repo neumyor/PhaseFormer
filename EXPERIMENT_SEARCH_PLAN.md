@@ -1,13 +1,22 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
-> 当前待执行实验（代码已完成，尚未训练）：A2 锚定式 PCTF v2，见
+> 当前待执行实验（代码已完成，尚未训练）：PCTF v3 锚点漂移因果归因与修复，见
+> `docs/PhaseFormer_pctf_anchor_attribution_plan.md`。上一轮 v2 最佳 `pctf_anchor_mlp` 仍相对
+> A2 宏平均退化 0.113%，但代码审计无法区分锚点联合训练漂移、ICPT 辅助目标错配、gate 缺少
+> 边际收益监督和 `H=period` 的 level 零空间。v3 用同 setting/seed 的 A2 checkpoint 做严格
+> 配对，依次测试 frozen-anchor、残差监督、锚点 0.1× LR + anchor loss、边际系数监督和单周期
+> level 修复。计划 12 个 matched A2 + 72 个候选，全部 validation-only；本轮只写代码和计划，
+> 没有启动训练或读取 test。
+
+> 已完成实验：A2 锚定式 PCTF v2，计划见
 > `docs/PhaseFormer_pctf_anchor_fusion_retest.md`。v1 在六数据集 H96 的66-run validation-only
 > 筛选中没有候选晋级；其主要问题是删除 NLinear 周期内形状且候选空间不能还原 A2，同时
 > shape 证据与实际被替换的参考分支错配。v2 完整保留 A2（RCRF+LFF-NLinear）为端到端可训练
 > 锚点，只加入有界、零初始化的 ICPT 周期间水平/周期内形状创新；修正为匹配参考对象、逐未来
-> 周期的因果证据，并解耦 phase period 与 ICPT cycle period。预注册48-run period选择、
-> 132-run H96/H192 strategy筛选；只有通过门槛才进入144-run三seed正式确认。全部命令强制
-> CUDA，汇总器拒绝混合设备和任何选择阶段 test 字段。
+> 周期的因果证据，并解耦 phase period 与 ICPT cycle period。48-run period选择与132-run
+> H96/H192 strategy筛选均已完成；最佳 MLP evidence 宏平均/A2=1.001131、4/12 双指标改善、
+> 最差比=1.021385，未通过门槛，故没有启动144-run正式确认或读取 test。结果见
+> `docs/PhaseFormer_pctf_anchor_fusion_results.md`。
 
 > 已结束实验：PCTF 多融合策略 v1，方案与失败结果见
 > `docs/PhaseFormer_pctf_fusion_strategies.md`。F0 与 A2 宏平均近似持平但仅1/6数据集双指标改善，

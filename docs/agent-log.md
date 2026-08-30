@@ -963,3 +963,17 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 所有论文候选均未通过联合门槛。最佳为 `pctf_anchor_mlp`：宏平均/A2=1.001131，4/12 个 setting 双指标改善，最差比=1.021385，参考包络比=1.007364。
 - MLP 相对 component-cycle 的嵌套对照为 0.999924，9/12 个 setting 双指标改善，但最差比=1.010829，仍不稳定。
 - 按预注册协议阻断 Stage F；没有读取 test。详情见 `docs/PhaseFormer_pctf_anchor_fusion_results.md`。
+
+## 2026-08-30 — PCTF v3 锚点漂移归因与修复代码（未运行实验）
+
+- 将上一轮失败拆成四个可证伪来源：联合训练导致内部 A2 漂移、ICPT 绝对目标与增量职责错配、
+  evidence gate 缺少边际收益监督、`H=period` 时 horizon-centered level 恒为零。
+- 新增五个诊断/修复 preset：冻结锚点绝对目标、冻结锚点残差目标、锚点安全联合残差、边际
+  gate 监督和完整单周期 level 修复。论文候选仍是单 checkpoint 的端到端联合模型；冻结模式
+  仅用于归因，不作为 ensemble 或最终方法。
+- `scripts/search_phaseformer.py` 支持从 matched A2 checkpoint 严格子集初始化、按需冻结锚点，
+  并记录内部 anchor 误差、fused/anchor 比、修正 RMS 与 gate/真实收益相关性。
+- 新增 `scripts/run_pctf_anchor_attribution.py`：6 settings×2 seeds 的12个 A2 与72个候选，强制
+  CUDA、validation-only，汇总时拒绝 test 泄漏、环境混用、缺失/重复和初始锚点不一致。
+- 计划、公式、判据和待填表见 `docs/PhaseFormer_pctf_anchor_attribution_plan.md`。本轮按用户要求
+  没有启动训练或读取新 validation/test；只执行语法检查、dry-run 和单元测试。
