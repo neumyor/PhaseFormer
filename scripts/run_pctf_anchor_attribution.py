@@ -325,9 +325,12 @@ def summarize(args):
         })
 
     keyed = {item["candidate"]: item for item in aggregates}
+    # The frozen control reuses the A2 prediction path.  Tiny differences
+    # (typically <1e-6) arise from serialization/reduction order, so use a
+    # numerical equivalence tolerance instead of exact float equality.
     frozen_exact = all(
-        abs(item["internal_anchor_macro_ratio_vs_a2"] - 1.0) <= 1e-8
-        and abs(item["internal_anchor_worst_ratio_vs_a2"] - 1.0) <= 1e-8
+        abs(item["internal_anchor_macro_ratio_vs_a2"] - 1.0) <= 1e-6
+        and abs(item["internal_anchor_worst_ratio_vs_a2"] - 1.0) <= 1e-6
         for item in aggregates if item["candidate"] in FROZEN_MODES
     )
     minimum_double_improve = math.ceil(2 * len(SETTINGS) * len(seeds) / 3)

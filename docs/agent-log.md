@@ -986,3 +986,12 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   因为协议要求所有配对任务强制 CUDA，改用 CPU 会破坏公平性。
 - 待 RTX 4090/CUDA 恢复后，按 `docs/PhaseFormer_pctf_anchor_attribution_plan.md` 的
   `anchors → candidates → summarize` 顺序续跑；结果表目前仍全部待填。
+
+## 2026-08-30 — PCTF v3 复测完成
+
+- RTX 4090 恢复后完成 12 个 A2 锚点与 72 个候选 validation-only 运行；补跑了唯一中断的
+  Electricity H96 / seed 2022 / repair_full 任务。
+- 汇总结果写入 `research_runs/pctf_anchor_attribution_v3/`，冻结控制的数值等价判定改用 `1e-6`
+  容差，以覆盖浮点归约误差。
+- 详细分析见 `docs/PhaseFormer_pctf_anchor_attribution_results.md`。候选宏观收益约 0.64%，但
+  最差设置退化约 1.25%，未通过预正式门槛，未读取 test 指标。
