@@ -977,3 +977,12 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   CUDA、validation-only，汇总时拒绝 test 泄漏、环境混用、缺失/重复和初始锚点不一致。
 - 计划、公式、判据和待填表见 `docs/PhaseFormer_pctf_anchor_attribution_plan.md`。本轮按用户要求
   没有启动训练或读取新 validation/test；只执行语法检查、dry-run 和单元测试。
+
+## 2026-08-30 — PCTF v3 实验启动受 GPU 不可用阻塞
+
+- 按计划尝试启动 v3 validation-only 矩阵前，沙盒与提权环境的 `nvidia-smi` 均无法取得设备：
+  前者为 driver communication failure，后者为 `No devices were found`。
+- `research_runs/pctf_anchor_attribution_v3/` 尚不存在，没有任何部分结果可整理；未改用 CPU，
+  因为协议要求所有配对任务强制 CUDA，改用 CPU 会破坏公平性。
+- 待 RTX 4090/CUDA 恢复后，按 `docs/PhaseFormer_pctf_anchor_attribution_plan.md` 的
+  `anchors → candidates → summarize` 顺序续跑；结果表目前仍全部待填。
