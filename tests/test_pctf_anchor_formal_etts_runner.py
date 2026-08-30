@@ -99,6 +99,8 @@ class PctfAnchorFormalEttsRunnerTests(unittest.TestCase):
                             "mechanism": RUNNER.CANDIDATE,
                             "test_mse": golden_mse * 0.98,
                             "test_mae": golden_mae * 0.98,
+                            "test_anchor_mse": golden_mse * 0.985,
+                            "test_anchor_mae": golden_mae * 0.985,
                             "anchor_identity_max_abs": 0.0,
                         },
                     )
@@ -113,6 +115,17 @@ class PctfAnchorFormalEttsRunnerTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
             self.assertEqual(len(rows), 8)
             self.assertTrue(all(row["golden_mse"] for row in rows))
+            candidate_rows = [
+                row for row in rows if row["model"] == RUNNER.CANDIDATE
+            ]
+            self.assertTrue(all(
+                float(row["total_training_elapsed_sec_mean"]) == 2.0
+                for row in candidate_rows
+            ))
+            self.assertTrue(all(
+                float(row["mse_ratio_vs_internal_anchor"]) < 1.0
+                for row in candidate_rows
+            ))
 
 
 if __name__ == "__main__":

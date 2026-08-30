@@ -226,6 +226,14 @@ def summarize(args):
                     f"candidate is not exact A2 at initialization: {(dataset, horizon, seed)}"
                 )
             for mechanism, row in ((INCUMBENT, a2), (CANDIDATE, candidate)):
+                internal_anchor_mse = (
+                    _float(row, "test_mse") if mechanism == INCUMBENT
+                    else _float(row, "test_anchor_mse")
+                )
+                internal_anchor_mae = (
+                    _float(row, "test_mae") if mechanism == INCUMBENT
+                    else _float(row, "test_anchor_mae")
+                )
                 details.append({
                     "dataset": dataset,
                     "horizon": horizon,
@@ -233,6 +241,8 @@ def summarize(args):
                     "model": mechanism,
                     "test_mse": _float(row, "test_mse"),
                     "test_mae": _float(row, "test_mae"),
+                    "internal_anchor_test_mse": internal_anchor_mse,
+                    "internal_anchor_test_mae": internal_anchor_mae,
                     "val_mse": _float(row, "val_mse"),
                     "val_mae": _float(row, "val_mae"),
                     "epochs_completed": int(float(row["epochs_completed"])),
@@ -255,8 +265,28 @@ def summarize(args):
             ]
             mses = [item["test_mse"] for item in group]
             maes = [item["test_mae"] for item in group]
+            internal_anchor_mses = [
+                item["internal_anchor_test_mse"] for item in group
+            ]
+            internal_anchor_maes = [
+                item["internal_anchor_test_mae"] for item in group
+            ]
             mse_mean, mse_std = _mean_std(mses)
             mae_mean, mae_std = _mean_std(maes)
+            stage_elapsed = statistics.mean(
+                group_item["elapsed_sec"] for group_item in group
+            )
+            upstream_a2_elapsed = 0.0
+            if mechanism == CANDIDATE:
+                upstream_group = [
+                    detail for detail in details
+                    if detail["dataset"] == dataset
+                    and detail["horizon"] == horizon
+                    and detail["model"] == INCUMBENT
+                ]
+                upstream_a2_elapsed = statistics.mean(
+                    group_item["elapsed_sec"] for group_item in upstream_group
+                )
             item = {
                 "dataset": dataset,
                 "horizon": horizon,
@@ -267,6 +297,18 @@ def summarize(args):
                 "test_mse_std": mse_std,
                 "test_mae_mean": mae_mean,
                 "test_mae_std": mae_std,
+                "internal_anchor_test_mse_mean": statistics.mean(
+                    internal_anchor_mses
+                ),
+                "internal_anchor_test_mae_mean": statistics.mean(
+                    internal_anchor_maes
+                ),
+                "mse_ratio_vs_internal_anchor": (
+                    mse_mean / statistics.mean(internal_anchor_mses)
+                ),
+                "mae_ratio_vs_internal_anchor": (
+                    mae_mean / statistics.mean(internal_anchor_maes)
+                ),
                 "mse_improvement_vs_golden_pct": 100 * (golden_mse - mse_mean) / golden_mse,
                 "mae_improvement_vs_golden_pct": 100 * (golden_mae - mae_mean) / golden_mae,
                 "stable_below_golden": (
@@ -275,8 +317,11 @@ def summarize(args):
                     and mse_mean + mse_std < golden_mse
                     and mae_mean + mae_std < golden_mae
                 ),
-                "elapsed_sec_mean": statistics.mean(
-                    item["elapsed_sec"] for item in group
+                "elapsed_sec_mean": stage_elapsed,
+                "stage_elapsed_sec_mean": stage_elapsed,
+                "upstream_a2_elapsed_sec_mean": upstream_a2_elapsed,
+                "total_training_elapsed_sec_mean": (
+                    stage_elapsed + upstream_a2_elapsed
                 ),
                 "peak_memory_bytes_max": max(
                     item["peak_memory_bytes"] for item in group
