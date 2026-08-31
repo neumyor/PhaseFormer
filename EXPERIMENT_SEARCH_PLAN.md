@@ -193,3 +193,6 @@
   correction scale 为 1。若失败，停止且不读取 test；若通过，才执行四 setting×三 seed 的
   matched A2/candidate 正式 test。完整协议与结果见
   `docs/PhaseFormer_pctf_single_stage_training.md`。
+- 复测已完成：`decoupled_protected` 综合比值 0.99908、3/8 双改善、最坏比值 1.00537，未过
+  门槛；正式 test 阶段取消。单阶段候选训练时间约为 A2 的 1.90 倍，低于两阶段的
+  2.77–3.45 倍，但证据不足以替换两阶段 Full Repair。

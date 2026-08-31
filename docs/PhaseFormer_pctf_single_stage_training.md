@@ -118,5 +118,44 @@ checkpoint 各读取一次 test。正式局部替换门槛与上一轮一致：�
 .venv/bin/python scripts/run_pctf_single_stage_training.py --stage formal-summarize
 ```
 
-输出目录为 `research_runs/pctf_single_stage_training_v1/`。第一轮筛选已经完成，追加的
-`decoupled_protected` 结果待填；原始逐 run 指标保留在该 ignored 目录中，不提交 checkpoint。
+第一轮与解耦复测输出分别位于 `research_runs/pctf_single_stage_training_v1/` 和
+`research_runs/pctf_single_stage_training_decoupled_v1/`。逐 run 指标保留在这些 ignored
+目录中，不提交 checkpoint；复测未过门槛，所以上述正式确认命令没有执行。
+
+## 梯度解耦复测结果
+
+复测在提交 `5bf0534`、同一 RTX 4090/软件环境完成，8 个 matched A2 与 8 个候选均来自随机
+初始化且只调用一次训练；所有 `test_mse/test_mae` 字段为空。
+
+| policy | MSE/A2 | MAE/A2 | 联合比 | 最差比 | 双改善 | 内部A2/A2 | fused/内部A2 | 结论 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| decoupled_protected | 0.99914 | 0.99902 | 0.99908 | 1.00537 | 3/8 | 1.00066 | 0.99842 | 未过门槛，不进 test |
+
+| setting | MSE/A2 | MAE/A2 | 内部A2/A2（联合） | fused/内部A2（联合） |
+|---|---:|---:|---:|---:|
+| ETTh2-H96 | 0.99837 | 0.99832 | 0.99946 | 0.99889 |
+| ETTh2-H192 | 1.00340 | 1.00148 | 1.00542 | 0.99703 |
+| ETTm2-H96 | 0.99349 | 0.99529 | 0.99523 | 0.99915 |
+| ETTm2-H192 | 1.00132 | 1.00101 | 1.00255 | 0.99862 |
+
+解耦使内部 A2/A2 从 `uniform_protected` 的 1.00142 降至 1.00066，并使融合相对内部 A2
+在 8/8 行改善 MAE、7/8 行改善 MSE；因此“融合损失干扰主干”的归因得到支持。但候选仍仅
+3/8 双指标优于 matched A2：其 best-fused checkpoint 与独立 A2 的 best-anchor epoch 不总是
+重合，ETTh2-H192 的内部锚点联合退化 0.54%，虽然融合修正追回约 0.30%，仍不足以填平差距。
+这说明硬解耦修复了梯度职责，却没有解决两个子目标收敛时间不同和单 checkpoint 选择的问题。
+
+候选平均训练 22.98 秒，matched A2 为 12.13 秒，即单阶段成本约为 A2 的 1.90 倍；历史两阶段
+流程为 A2 的 2.77–3.45 倍，因此单阶段节省约 32%–45% 的总训练时间，但目前以稳定精度为代价。
+
+## 决策：单阶段最好如何训练
+
+在必须一次训练时，当前最合理的配置是 `decoupled_protected`：A2 与 ICPT/融合器都从 epoch 0
+训练且使用 1.0× LR；前向始终输出 `A2 + bounded ICPT correction`；A2 只接受权重 1.0 的
+anchor loss，fused loss 与 level/shape/gate 辅助损失只训练 ICPT/融合器；不使用 correction
+warm-up，并按 fused validation loss 选择唯一 checkpoint。它比低 LR、无保护或 warm-up 更能
+保持锚点，同时成本最低且职责清楚。
+
+但这只是“被迫单阶段时的首选训练法”，不能替换当前两阶段 Full Repair：它未达到 0.2% 平均
+改善和 6/8 稳定性门槛，所以未运行正式 test，也不能声明相对 Golden 有新提升。下一轮若继续，
+应预注册研究单 checkpoint 的多目标选择或使两条优化轨迹同步收敛，而不是继续扫描 anchor loss
+权重；任何新策略仍须先过 validation 门槛才读取 test。

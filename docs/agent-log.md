@@ -1042,3 +1042,15 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   ICPT/融合器，A2 仅由权重 1.0 的 anchor loss 更新。新增配置、runner 策略与梯度作用域测试；
   targeted 测试 21 passed / 31 subtests。为保证同 commit 配对，独立重跑 8 个 A2 和 8 个候选，
   再按原门槛决策；runner 的 `--policies` 参数用于限定该可复现复测，不改变模型配置。
+
+## 2026-08-31 — PCTF 单阶段梯度解耦复测完成
+
+- 在提交 `5bf0534`、RTX 4090 上完成独立目录中的 8 个 matched A2 与 8 个
+  `decoupled_protected` validation-only 任务；汇总确认 test 指标未读取。
+- 候选 MSE/A2=0.99914、MAE/A2=0.99902、联合比=0.99908、最坏比=1.00537、3/8 双改善，
+  未通过原门槛，按协议不启动正式 test。内部 A2/A2=1.00066，fused/内部A2=0.99842；融合
+  修正本身 8/8 改善 MAE、7/8 改善 MSE，但 best-fused 与 best-anchor epoch 不同步仍造成回退。
+- 单阶段平均训练 22.98 秒，为 matched A2 的 1.90 倍；比历史两阶段 2.77–3.45 倍节省约
+  32%–45%，但稳定精度不足。若强制一次训练，保留梯度解耦+1.0× LR+1.0 anchor loss 作为
+  当前最合理配方；当前正式最佳仍是两阶段 Full Repair。完整表见
+  `docs/PhaseFormer_pctf_single_stage_training.md`。
