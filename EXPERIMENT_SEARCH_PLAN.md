@@ -187,7 +187,8 @@
   48 个 validation-only 候选；六种 LR/anchor loss/warm-up 策略均未通过统一门槛。
 - 证据显示统一 LR 下 fused loss 会损害内部 A2，而 correction warm-up 常选择尚未完整开启
   修正的 checkpoint。据此只追加 8 个 `decoupled_protected` 验证任务：前向联合，反向将 fused
-  loss 与 A2 解耦，A2 仅由 matched anchor loss 训练；不新增 checkpoint 或训练阶段。
+  loss 与 A2 解耦，A2 仅由 matched anchor loss 训练；不新增 checkpoint 或训练阶段。为避免
+  跨 commit 比较，在独立目录同步重跑 8 个 matched A2，共 16 个任务。
 - 追加候选继续沿用原门槛：综合比值 `<0.998`、至少 6/8 双指标改善、最坏比值 `≤1.01`、
   correction scale 为 1。若失败，停止且不读取 test；若通过，才执行四 setting×三 seed 的
   matched A2/candidate 正式 test。完整协议与结果见

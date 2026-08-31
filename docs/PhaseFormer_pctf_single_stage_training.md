@@ -64,6 +64,24 @@ ICPT/融合器，A2 仅由权重 1.0 的独立 anchor loss 更新。其 A2 LR �
 warm-up。该设计应在保留 ICPT 学习信号的同时，使内部 A2 接近 matched A2。追加 8 个候选后
 按原门槛统一重算；若仍失败，停止且不读取 test。
 
+为避免跨 commit 比较，复测在独立输出目录重跑同 commit 的 8 个 matched A2，只选择 8 个
+`decoupled_protected` 候选：
+
+```bash
+.venv/bin/python scripts/run_pctf_single_stage_training.py \
+  --stage screen-baselines \
+  --output-root research_runs/pctf_single_stage_training_decoupled_v1 \
+  --policies decoupled_protected
+.venv/bin/python scripts/run_pctf_single_stage_training.py \
+  --stage screen-candidates \
+  --output-root research_runs/pctf_single_stage_training_decoupled_v1 \
+  --policies decoupled_protected
+.venv/bin/python scripts/run_pctf_single_stage_training.py \
+  --stage screen-summarize \
+  --output-root research_runs/pctf_single_stage_training_decoupled_v1 \
+  --policies decoupled_protected
+```
+
 共享训练策略只有同时满足以下条件才冻结进入正式 test：16 个 MSE/MAE 比值宏平均 `<0.998`，
 8 个 setting×seed 中至少 6 个双指标改善，最差比值 `≤1.01`，且入选 checkpoint 的 correction
 scale 已达到 1。若无策略通过，不读取新 test，而是根据内部锚点/A2 和 fused/内部锚点比值判断

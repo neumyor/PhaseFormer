@@ -1040,4 +1040,5 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   但 fused loss 同时把锚点拉离独立 A2。warm-up 多次选中 correction scale<1 的 checkpoint。
 - 据此实现 `decoupled_protected`：同一次前向和训练中，融合预测数值不变，fused loss 只更新
   ICPT/融合器，A2 仅由权重 1.0 的 anchor loss 更新。新增配置、runner 策略与梯度作用域测试；
-  targeted 测试 21 passed / 31 subtests。提交后只补跑 8 个 validation 任务，再按原门槛决策。
+  targeted 测试 21 passed / 31 subtests。为保证同 commit 配对，独立重跑 8 个 A2 和 8 个候选，
+  再按原门槛决策；runner 的 `--policies` 参数用于限定该可复现复测，不改变模型配置。
