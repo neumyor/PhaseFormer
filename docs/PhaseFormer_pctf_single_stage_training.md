@@ -27,7 +27,7 @@ warm-up 比例是 checkpoint 中的持久状态；历史 checkpoint 缺少该字
 
 固定 L720、PhaseFormer period 24、ETTh2 ICPT period 48、ETTm2 ICPT period 96，使用官方完整
 训练划分、Huber、最多 30 epoch、best-validation checkpoint。筛选覆盖 ETTh2/ETTm2 的
-H96/H192 和 seeds 2021/2022，共 8 个 matched A2 与 48 个单阶段候选；不读取 test。
+H96/H192 和 seeds 2021/2022。第一轮包含 8 个 matched A2 与 48 个单阶段候选；不读取 test。
 
 | policy | A2 LR | A2 loss | correction warm-up | 作用 |
 |---|---:|---:|---:|---|
@@ -37,6 +37,32 @@ H96/H192 和 seeds 2021/2022，共 8 个 matched A2 与 48 个单阶段候选；
 | `uniform_protected` | 1.0× | 1.0 | 0 | 完整保护锚点 |
 | `warm5_mild` | 1.0× | 0.25 | 5 | 轻保护+平滑启用修正 |
 | `warm5_protected` | 1.0× | 1.0 | 5 | 强保护+平滑启用修正 |
+
+### 第一轮结果与归因
+
+第一轮在提交 `7cb64cc`、RTX 4090、PyTorch 2.7.1+cu126、Lightning 2.6.5 上完成。以下均为
+validation-only，`联合比` 是 8 个 setting×seed 上 16 个 MSE/MAE 比值的宏平均：
+
+| policy | MSE/A2 | MAE/A2 | 联合比 | 最差比 | 双改善 | 内部A2/A2 | fused/内部A2 | 结论 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| legacy_safe | 0.99950 | 0.99800 | 0.99875 | 1.01355 | 5/8 | 1.00078 | 0.99797 | 平均最好但尾部失败 |
+| uniform_unprotected | 1.00000 | 0.99977 | 0.99988 | 1.00660 | 3/8 | 1.00358 | 0.99631 | 主干明显被拉偏 |
+| uniform_mild | 0.99982 | 0.99975 | 0.99979 | 1.00628 | 3/8 | 1.00283 | 0.99696 | 保护不足 |
+| uniform_protected | 0.99947 | 0.99891 | 0.99919 | 1.00476 | 3/8 | 1.00142 | 0.99777 | 统一LR中最好，仍未过门槛 |
+| warm5_mild | 0.99980 | 0.99942 | 0.99961 | 1.00508 | 3/8 | 1.00148 | 0.99814 | 最佳点未完整启用修正 |
+| warm5_protected | 0.99947 | 0.99911 | 0.99929 | 1.00467 | 3/8 | 1.00118 | 0.99812 | 最佳点未完整启用修正 |
+
+六种策略均未通过预设门槛。0.1× LR 使候选平均训练 37.8 秒，1.0× 策略约 22–25 秒，证明
+预训练式低 LR 不适合从零训练；但统一 LR 下内部 A2 仍比 matched A2 差 0.12%–0.36%，而
+融合相对这个受损锚点通常改善，说明主要矛盾是 fused loss 和 anchor loss 对同一 A2 参数的
+梯度干扰。warm-up 多次选择 correction scale 为 0、0.25 或 0.75 的 checkpoint，也说明只延迟
+开启修正没有解决职责冲突。
+
+据此追加一个验证集上的因果复测 `decoupled_protected`，不是事后扩大参数网格：前向计算和
+部署模型完全不变，仍在一次 `Trainer.fit` 中同时训练全部模块；反向时 fused loss 只更新
+ICPT/融合器，A2 仅由权重 1.0 的独立 anchor loss 更新。其 A2 LR 为 1.0×、无 correction
+warm-up。该设计应在保留 ICPT 学习信号的同时，使内部 A2 接近 matched A2。追加 8 个候选后
+按原门槛统一重算；若仍失败，停止且不读取 test。
 
 共享训练策略只有同时满足以下条件才冻结进入正式 test：16 个 MSE/MAE 比值宏平均 `<0.998`，
 8 个 setting×seed 中至少 6 个双指标改善，最差比值 `≤1.01`，且入选 checkpoint 的 correction
@@ -74,14 +100,5 @@ checkpoint 各读取一次 test。正式局部替换门槛与上一轮一致：�
 .venv/bin/python scripts/run_pctf_single_stage_training.py --stage formal-summarize
 ```
 
-输出目录为 `research_runs/pctf_single_stage_training_v1/`。当前只完成协议、代码、单元测试和
-GPU smoke test，尚未启动筛选，以下表格待运行后填写。
-
-| policy | MSE/A2 | MAE/A2 | 联合比 | 最差比 | 双改善 | 内部A2/A2 | fused/内部A2 | 结论 |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| legacy_safe | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| uniform_unprotected | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| uniform_mild | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| uniform_protected | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| warm5_mild | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
-| warm5_protected | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 | 待填 |
+输出目录为 `research_runs/pctf_single_stage_training_v1/`。第一轮筛选已经完成，追加的
+`decoupled_protected` 结果待填；原始逐 run 指标保留在该 ignored 目录中，不提交 checkpoint。

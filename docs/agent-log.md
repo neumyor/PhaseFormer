@@ -1030,3 +1030,14 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - GPU smoke test 已在 RTX 4090 上通过：单次训练无初始化 checkpoint，epoch 0 correction
   scale=0，内部 A2 与最终输出严格一致；未读取 test。协议和待填表见
   `docs/PhaseFormer_pctf_single_stage_training.md`。
+
+## 2026-08-31 — PCTF 单阶段第一轮筛选与梯度解耦复测
+
+- 在提交 `7cb64cc`、RTX 4090 上完成 8 个 matched A2 和 48 个 candidate 的 validation-only
+  筛选；输出位于 ignored 目录 `research_runs/pctf_single_stage_training_v1/`，未读取 test。
+- 六种策略全部未过门槛。`legacy_safe` 联合比 0.99875 但最坏退化 1.36%；统一 LR 中最好的
+  `uniform_protected` 联合比 0.99919、内部 A2/A2 为 1.00142，说明修正能够改善内部锚点，
+  但 fused loss 同时把锚点拉离独立 A2。warm-up 多次选中 correction scale<1 的 checkpoint。
+- 据此实现 `decoupled_protected`：同一次前向和训练中，融合预测数值不变，fused loss 只更新
+  ICPT/融合器，A2 仅由权重 1.0 的 anchor loss 更新。新增配置、runner 策略与梯度作用域测试；
+  targeted 测试 21 passed / 31 subtests。提交后只补跑 8 个 validation 任务，再按原门槛决策。

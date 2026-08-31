@@ -178,3 +178,17 @@
   - 连续两级增加预算后排名反转且无稳定优势；
   - OOM/外部 GPU 占用连续阻塞时保留队列，不降低公平性协议。
 - 所有代码、搜索配置、实验记录和 preset 更新按 `MANAGE_RULES.md` 分粒度提交；失败、OOM、超时和被淘汰候选同样写入追加式迭代日志。
+
+## 当前局部实验：PCTF 单阶段训练（2026-08-31）
+
+- 固定 `pctf_anchor_repair_full` 结构，仅研究如何从随机初始化用一次 `Trainer.fit` 训练三分支，
+  避免 A2 预训练和第二阶段联合微调。
+- 第一轮在 ETTh2/ETTm2、L720→H96/H192、seeds 2021/2022 上完成 8 个 matched A2 和
+  48 个 validation-only 候选；六种 LR/anchor loss/warm-up 策略均未通过统一门槛。
+- 证据显示统一 LR 下 fused loss 会损害内部 A2，而 correction warm-up 常选择尚未完整开启
+  修正的 checkpoint。据此只追加 8 个 `decoupled_protected` 验证任务：前向联合，反向将 fused
+  loss 与 A2 解耦，A2 仅由 matched anchor loss 训练；不新增 checkpoint 或训练阶段。
+- 追加候选继续沿用原门槛：综合比值 `<0.998`、至少 6/8 双指标改善、最坏比值 `≤1.01`、
+  correction scale 为 1。若失败，停止且不读取 test；若通过，才执行四 setting×三 seed 的
+  matched A2/candidate 正式 test。完整协议与结果见
+  `docs/PhaseFormer_pctf_single_stage_training.md`。
