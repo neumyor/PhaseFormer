@@ -123,6 +123,10 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         self.level_mode = str(level_mode)
         self.global_level_max = float(global_level_max)
         self.eps = float(eps)
+        # A persistent scale lets one-stage training warm the correction in
+        # gradually while preserving the exact value used by a selected
+        # checkpoint at inference.  The default keeps historical behaviour.
+        self.register_buffer("correction_scale", torch.ones(()))
 
         # ICPT construction is RNG-isolated so adding this composer cannot
         # perturb the paired initialization of the complete A2 anchor.
@@ -197,6 +201,27 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         self.last_update_horizon_mean_max = None
         self.last_shape_cycle_mean_max = None
         self.last_projection_inner_product_max = None
+
+    def set_correction_scale(self, value: float):
+        """Set the deployed ICPT correction scale in ``[0, 1]``."""
+        value = float(value)
+        if not 0.0 <= value <= 1.0:
+            raise ValueError("correction scale must be in [0, 1]")
+        self.correction_scale.fill_(value)
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys,
+        unexpected_keys, error_msgs,
+    ):
+        # Checkpoints predating one-stage warm-up have no scale buffer and are
+        # semantically equivalent to the historical full-strength value 1.
+        key = prefix + "correction_scale"
+        if key not in state_dict:
+            state_dict[key] = self.correction_scale.new_ones(())
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys,
+            unexpected_keys, error_msgs,
+        )
 
     def _history_tail(self, history: torch.Tensor) -> torch.Tensor:
         if history.ndim != 3 or history.size(1) != self.seq_len:
@@ -624,6 +649,9 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
             self.last_level_coefficient = level_coefficient.detach()
             self.last_shape_coefficient = shape_coefficient.detach()
 
+        level_update = self.correction_scale * level_update
+        global_level_update = self.correction_scale * global_level_update
+        shape_update = self.correction_scale * shape_update
         output_cycles = anchor_cycles + level_update + shape_update
         output = output_cycles.reshape_as(anchor)
         with torch.no_grad():

@@ -1253,6 +1253,7 @@ def get_ablation_overrides(mode):
             anchored_pctf_gate_aux_weight=0.0,
             anchored_pctf_freeze_anchor=False,
             anchored_pctf_anchor_lr_scale=1.0,
+            anchored_pctf_correction_warmup_epochs=0,
             anchored_pctf_detach_references=False,
             anchored_pctf_level_mode="horizon_centered",
             anchored_pctf_global_level_max=0.05,
@@ -1767,6 +1768,9 @@ class PhaseFormerPresetConfig:
         )
         self.anchored_pctf_anchor_lr_scale = hyperparams.get(
             "anchored_pctf_anchor_lr_scale", 1.0
+        )
+        self.anchored_pctf_correction_warmup_epochs = hyperparams.get(
+            "anchored_pctf_correction_warmup_epochs", 0
         )
         self.anchored_pctf_detach_references = hyperparams.get(
             "anchored_pctf_detach_references", False

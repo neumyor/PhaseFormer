@@ -809,6 +809,10 @@ def execute(args):
                 and model.anchored_pctf_freeze_anchor
             )
         ),
+        "final_correction_scale": (
+            float(model.anchored_phase_cycle_fusion.correction_scale)
+            if model.use_anchored_phase_cycle_fusion else ""
+        ),
         "required_cuda": spec["require_cuda"],
         "device_type": "cuda" if torch.cuda.is_available() else "cpu",
         "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "",

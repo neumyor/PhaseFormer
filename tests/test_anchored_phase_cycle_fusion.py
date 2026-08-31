@@ -74,6 +74,44 @@ class AnchoredPhaseCycleFusionComposerTests(unittest.TestCase):
             float(model.last_shape_coefficient.abs().max()), 0.25
         )
 
+    def test_runtime_scale_warms_correction_without_changing_components(self):
+        anchor, phase, trajectory, history, phase_series, predictor = self._inputs()
+        model = _composer("component_cycle")
+        with torch.no_grad():
+            model.level_raw.fill_(0.4)
+            model.shape_raw.fill_(-0.3)
+        model.set_correction_scale(1.0)
+        full = model(
+            anchor, phase, trajectory, history, phase_series,
+            trajectory_predictor=predictor,
+        )
+        full_level_correction = model.level_correction_for_auxiliary.clone()
+        full_shape_correction = model.shape_correction_for_auxiliary.clone()
+        model.set_correction_scale(0.0)
+        closed = model(
+            anchor, phase, trajectory, history, phase_series,
+            trajectory_predictor=predictor,
+        )
+        self.assertTrue(torch.equal(closed, anchor))
+        torch.testing.assert_close(
+            model.level_correction_for_auxiliary, full_level_correction
+        )
+        torch.testing.assert_close(
+            model.shape_correction_for_auxiliary, full_shape_correction
+        )
+        self.assertGreater(float((full - anchor).abs().sum()), 0.0)
+
+    def test_legacy_state_without_runtime_scale_loads_as_full_strength(self):
+        model = _composer("component_cycle")
+        state = {
+            key: value for key, value in model.state_dict().items()
+            if key != "correction_scale"
+        }
+        restored = _composer("component_cycle")
+        restored.set_correction_scale(0.0)
+        restored.load_state_dict(state, strict=True)
+        self.assertEqual(float(restored.correction_scale), 1.0)
+
     def test_explicit_legacy_defaults_preserve_nonzero_outputs(self):
         values = self._inputs()
         implicit = _composer("mlp_evidence")
@@ -339,6 +377,21 @@ class AnchoredPhaseCycleFusionPresetTests(unittest.TestCase):
         torch.testing.assert_close(
             torch.tensor(learning_rates),
             torch.tensor([base * 0.1, base]),
+        )
+
+    def test_one_stage_correction_warmup_is_checkpoint_state(self):
+        hp = build_hyperparams("ETTm2", 96, "pctf_anchor_repair_full")
+        hp["anchored_pctf_correction_warmup_epochs"] = 5
+        args = make_exp_args("ETTm2", 720, 96, hp, batch_size=2)
+        model = PhaseFormer(PhaseFormerPresetConfig(args, 720, 96, hp))
+        self.assertEqual(float(model.anchored_phase_cycle_fusion.correction_scale), 0.0)
+        model._set_anchored_pctf_correction_epoch(2)
+        self.assertEqual(float(model.anchored_phase_cycle_fusion.correction_scale), 0.5)
+        state = model.state_dict()
+        restored = PhaseFormer(PhaseFormerPresetConfig(args, 720, 96, hp))
+        restored.load_state_dict(state, strict=True)
+        self.assertEqual(
+            float(restored.anchored_phase_cycle_fusion.correction_scale), 0.5
         )
 
     def test_h192_complete_forward(self):

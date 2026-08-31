@@ -718,12 +718,18 @@ class PhaseFormer(DefaultPLModule):
             self.anchored_pctf_anchor_lr_scale = float(getattr(
                 configs, "anchored_pctf_anchor_lr_scale", 1.0
             ))
+            self.anchored_pctf_correction_warmup_epochs = int(getattr(
+                configs, "anchored_pctf_correction_warmup_epochs", 0
+            ))
             if (
                 self.anchored_pctf_anchor_loss_weight < 0
                 or self.anchored_pctf_gate_aux_weight < 0
                 or not 0.0 <= self.anchored_pctf_anchor_lr_scale <= 1.0
+                or self.anchored_pctf_correction_warmup_epochs < 0
             ):
                 raise ValueError("invalid anchored PCTF optimization settings")
+            if self.anchored_pctf_correction_warmup_epochs:
+                self.anchored_phase_cycle_fusion.set_correction_scale(0.0)
             self.anchored_pctf_anchor_output = None
             self.anchored_pctf_cycle_output = None
             self.anchored_pctf_level_correction_output = None
@@ -2269,6 +2275,26 @@ class PhaseFormer(DefaultPLModule):
 
         self.log("train_loss", loss, on_epoch=True, prog_bar=True)
         return loss
+
+    def _set_anchored_pctf_correction_epoch(self, epoch):
+        if not self.use_anchored_phase_cycle_fusion:
+            return None
+        epochs = self.anchored_pctf_correction_warmup_epochs
+        if not epochs:
+            return None
+        if epochs == 1:
+            scale = 1.0
+        else:
+            scale = min(float(epoch) / float(epochs - 1), 1.0)
+        self.anchored_phase_cycle_fusion.set_correction_scale(scale)
+        return scale
+
+    def on_train_epoch_start(self):
+        """Advance the optional single-stage ICPT correction curriculum."""
+        scale = self._set_anchored_pctf_correction_epoch(self.current_epoch)
+        if scale is None:
+            return
+        self.log("train_pctf_correction_scale", scale, on_epoch=True)
 
     def freeze_anchored_pctf_anchor(self):
         """Freeze every parameter except the single ICPT/fusion composer.
