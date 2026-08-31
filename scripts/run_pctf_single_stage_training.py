@@ -69,6 +69,19 @@ def _parse_seeds(value):
     return result
 
 
+def _selected_policies(args):
+    value = getattr(args, "policies", "")
+    if not value:
+        return tuple(POLICIES)
+    selected = tuple(item.strip() for item in value.split(",") if item.strip())
+    unknown = sorted(set(selected).difference(POLICIES))
+    if unknown:
+        raise ValueError(f"unknown policies: {', '.join(unknown)}")
+    if not selected:
+        raise ValueError("at least one policy is required")
+    return selected
+
+
 def _write_csv(path, rows):
     if not rows:
         raise ValueError("cannot write an empty CSV")
@@ -164,7 +177,7 @@ def screen_candidate_commands(args):
             args, dataset, horizon, seed, CANDIDATE, root / policy,
             policy=policy,
         )
-        for policy in POLICIES
+        for policy in _selected_policies(args)
         for dataset, horizon in SETTINGS
         for seed in _parse_seeds(args.screen_seeds)
     ]
@@ -210,7 +223,7 @@ def summarize_screen(args):
     )
     details = []
     aggregates = []
-    for policy in POLICIES:
+    for policy in _selected_policies(args):
         candidates, candidate_environment = _collect(
             root / "screen" / "candidates" / policy,
             CANDIDATE, seeds, require_test=False,
@@ -482,6 +495,10 @@ def main():
     parser.add_argument("--screen-seeds", default=",".join(map(str, SCREEN_SEEDS)))
     parser.add_argument("--formal-seeds", default=",".join(map(str, FORMAL_SEEDS)))
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT)
+    parser.add_argument(
+        "--policies", default="",
+        help="optional comma-separated subset for an evidence-driven follow-up",
+    )
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--progress", action="store_true")
     args = parser.parse_args()

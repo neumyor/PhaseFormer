@@ -20,6 +20,7 @@ class PctfSingleStageTrainingRunnerTests(unittest.TestCase):
         return SimpleNamespace(
             output_root=str(root), screen_seeds="2021,2022",
             formal_seeds="2021,2022,2023", num_workers=0, progress=False,
+            policies="",
         )
 
     def test_screen_is_one_stage_validation_only_and_complete(self):
@@ -39,6 +40,22 @@ class PctfSingleStageTrainingRunnerTests(unittest.TestCase):
             for command in candidates
         }
         self.assertEqual(len(override_values), len(RUNNER.POLICIES))
+
+        args.policies = "decoupled_protected"
+        followup = RUNNER.screen_candidate_commands(args)
+        self.assertEqual(len(followup), 8)
+        self.assertTrue(all(
+            json.loads(command[command.index("--overrides") + 1])[
+                "anchored_pctf_decouple_anchor_gradient"
+            ]
+            for command in followup
+        ))
+
+    def test_unknown_policy_is_rejected(self):
+        args = self._args()
+        args.policies = "not_a_policy"
+        with self.assertRaisesRegex(ValueError, "unknown policies"):
+            RUNNER.screen_candidate_commands(args)
 
     @staticmethod
     def _write_result(path, row):
