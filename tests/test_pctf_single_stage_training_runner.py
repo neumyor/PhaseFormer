@@ -27,7 +27,7 @@ class PctfSingleStageTrainingRunnerTests(unittest.TestCase):
         baselines = RUNNER.screen_baseline_commands(args)
         candidates = RUNNER.screen_candidate_commands(args)
         self.assertEqual(len(baselines), 8)
-        self.assertEqual(len(candidates), 48)
+        self.assertEqual(len(candidates), 56)
         for command in baselines + candidates:
             self.assertNotIn("--init-checkpoint", command)
             self.assertNotIn("--evaluate-test", command)

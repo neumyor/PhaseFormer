@@ -721,6 +721,9 @@ class PhaseFormer(DefaultPLModule):
             self.anchored_pctf_correction_warmup_epochs = int(getattr(
                 configs, "anchored_pctf_correction_warmup_epochs", 0
             ))
+            self.anchored_pctf_decouple_anchor_gradient = bool(getattr(
+                configs, "anchored_pctf_decouple_anchor_gradient", False
+            ))
             if (
                 self.anchored_pctf_anchor_loss_weight < 0
                 or self.anchored_pctf_gate_aux_weight < 0
@@ -2177,6 +2180,23 @@ class PhaseFormer(DefaultPLModule):
 
         outputs = outputs[:, -self.pred_len :, :]
         target = batch_y[:, -self.pred_len :, :]
+
+        if (
+            self.use_anchored_phase_cycle_fusion
+            and self.anchored_pctf_decouple_anchor_gradient
+        ):
+            # Numerically this remains the same fused forecast.  Autograd,
+            # however, sends the fused objective only through the ICPT/fusion
+            # correction.  The incumbent A2 subgraph is trained exclusively by
+            # its matched anchor objective below, avoiding reciprocal gradient
+            # interference while retaining a single end-to-end fit call.
+            anchor_for_gradient = self.anchored_pctf_anchor_output[
+                :, -self.pred_len :, :
+            ]
+            outputs = (
+                outputs - anchor_for_gradient
+                + anchor_for_gradient.detach()
+            )
 
         if self.target_var_index != -1:
             target = target[:, :, self.target_var_index].unsqueeze(-1)

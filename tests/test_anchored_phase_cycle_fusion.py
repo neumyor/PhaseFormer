@@ -394,6 +394,38 @@ class AnchoredPhaseCycleFusionPresetTests(unittest.TestCase):
             float(restored.anchored_phase_cycle_fusion.correction_scale), 0.5
         )
 
+    def test_one_stage_decoupling_preserves_forward_and_separates_gradients(self):
+        hp = build_hyperparams("ETTm2", 96, "pctf_anchor_repair_full")
+        hp.update(
+            anchored_pctf_anchor_loss_weight=0.0,
+            anchored_pctf_decouple_anchor_gradient=True,
+        )
+        args = make_exp_args("ETTm2", 720, 96, hp, batch_size=2)
+        model = PhaseFormer(PhaseFormerPresetConfig(args, 720, 96, hp)).train()
+        batch = (
+            torch.randn(2, 720, 7),
+            torch.randn(2, 96, 7),
+            torch.zeros(2, 720, 4),
+            torch.zeros(2, 96, 4),
+        )
+        loss = model.training_step(batch, 0)
+        loss.backward()
+        composer_gradient = model.anchored_phase_cycle_fusion.cycle.out_proj.weight.grad
+        anchor_gradient = model.predictor.decoder.weight.grad
+        self.assertIsNotNone(composer_gradient)
+        self.assertGreater(float(composer_gradient.abs().sum()), 0.0)
+        self.assertTrue(
+            anchor_gradient is None or float(anchor_gradient.abs().sum()) == 0.0
+        )
+
+        model.zero_grad(set_to_none=True)
+        model.anchored_pctf_anchor_loss_weight = 1.0
+        loss = model.training_step(batch, 0)
+        loss.backward()
+        anchor_gradient = model.predictor.decoder.weight.grad
+        self.assertIsNotNone(anchor_gradient)
+        self.assertGreater(float(anchor_gradient.abs().sum()), 0.0)
+
     def test_h192_complete_forward(self):
         model = self._model(
             "pctf_anchor_phase_modulation", horizon=192, cycle_period=48

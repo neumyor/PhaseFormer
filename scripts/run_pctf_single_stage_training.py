@@ -39,16 +39,21 @@ SCREEN_SEEDS = (2021, 2022)
 FORMAL_SEEDS = (2021, 2022, 2023)
 DEFAULT_OUTPUT_ROOT = "research_runs/pctf_single_stage_training_v1"
 
-# The first four rows isolate anchor LR and protection.  The final two test a
+# The first four rows isolate anchor LR and protection.  The next two test a
 # within-run correction curriculum; ICPT still trains from epoch zero through
-# its residual component and marginal-coefficient auxiliary objectives.
+# its residual component and marginal-coefficient auxiliary objectives.  The
+# final row is an evidence-driven follow-up: the forward graph stays fused, but
+# the fused objective cannot perturb A2, which receives its own matched loss.
 POLICIES = {
-    "legacy_safe": dict(anchor_lr=0.1, anchor_loss=1.0, warmup=0),
-    "uniform_unprotected": dict(anchor_lr=1.0, anchor_loss=0.0, warmup=0),
-    "uniform_mild": dict(anchor_lr=1.0, anchor_loss=0.25, warmup=0),
-    "uniform_protected": dict(anchor_lr=1.0, anchor_loss=1.0, warmup=0),
-    "warm5_mild": dict(anchor_lr=1.0, anchor_loss=0.25, warmup=5),
-    "warm5_protected": dict(anchor_lr=1.0, anchor_loss=1.0, warmup=5),
+    "legacy_safe": dict(anchor_lr=0.1, anchor_loss=1.0, warmup=0, decouple=False),
+    "uniform_unprotected": dict(anchor_lr=1.0, anchor_loss=0.0, warmup=0, decouple=False),
+    "uniform_mild": dict(anchor_lr=1.0, anchor_loss=0.25, warmup=0, decouple=False),
+    "uniform_protected": dict(anchor_lr=1.0, anchor_loss=1.0, warmup=0, decouple=False),
+    "warm5_mild": dict(anchor_lr=1.0, anchor_loss=0.25, warmup=5, decouple=False),
+    "warm5_protected": dict(anchor_lr=1.0, anchor_loss=1.0, warmup=5, decouple=False),
+    "decoupled_protected": dict(
+        anchor_lr=1.0, anchor_loss=1.0, warmup=0, decouple=True
+    ),
 }
 
 
@@ -133,6 +138,7 @@ def _command(
             "anchored_pctf_anchor_lr_scale": config["anchor_lr"],
             "anchored_pctf_anchor_loss_weight": config["anchor_loss"],
             "anchored_pctf_correction_warmup_epochs": config["warmup"],
+            "anchored_pctf_decouple_anchor_gradient": config["decouple"],
         }
         command.extend(("--overrides", json.dumps(overrides, sort_keys=True)))
     if evaluate_test:
@@ -265,6 +271,7 @@ def summarize_screen(args):
             "anchor_lr_scale": POLICIES[policy]["anchor_lr"],
             "anchor_loss_weight": POLICIES[policy]["anchor_loss"],
             "correction_warmup_epochs": POLICIES[policy]["warmup"],
+            "decouple_anchor_gradient": POLICIES[policy]["decouple"],
             "mse_macro_ratio_vs_a2": statistics.mean(mse_ratios),
             "mae_macro_ratio_vs_a2": statistics.mean(mae_ratios),
             "combined_macro_ratio_vs_a2": combined,
