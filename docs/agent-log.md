@@ -1018,3 +1018,15 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   与结构贡献尚未由 continued-A2 等预算对照完全分离。
 - 完整结果、成本和 test-set selection 边界见
   `docs/PhaseFormer_pctf_anchor_formal_etts.md`。
+
+## 2026-08-31 — 预注册 PCTF 单阶段联合训练
+
+- 用户要求取消“A2 预训练→Full Repair 微调”的两阶段流程。结构保持不变，新增 checkpoint
+  持久化 correction warm-up：所有分支从 epoch 0 同时训练，只有 ICPT 对最终输出的影响在前
+  5 epoch 从 0 平滑升至 1；不加载中间 A2 checkpoint。
+- 预注册六个训练策略，分离 A2 主干 0.1×/1.0× 学习率、0/0.25/1.0 锚点保护损失和 warm-up。
+  先运行 ETTh2/ETTm2、H96/H192、两 seed 的56-run validation-only 筛选；通过门槛后才运行
+  24-run 三 seed 正式 test。
+- GPU smoke test 已在 RTX 4090 上通过：单次训练无初始化 checkpoint，epoch 0 correction
+  scale=0，内部 A2 与最终输出严格一致；未读取 test。协议和待填表见
+  `docs/PhaseFormer_pctf_single_stage_training.md`。

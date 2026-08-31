@@ -1,5 +1,11 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
+> 当前实验：保持 PCTF Full Repair 三分支结构不变，测试从随机初始化开始的一次性联合训练，
+> 以消除 A2 预训练+微调的额外训练阶段。先在 ETTh2/ETTm2、L720→H96/H192、两 seed、完整
+> 训练划分上 validation-only 筛选统一学习率、A2 保护损失和 5-epoch correction warm-up；只有
+> 共享策略通过预注册门槛才进行三 seed 正式 test。计划见
+> `docs/PhaseFormer_pctf_single_stage_training.md`。
+
 > 最近完成正式实验：冻结的 `pctf_anchor_repair_full` 在 ETTh2/ETTm2 的 L720→H96/H192 上与
 > A2 完成 full-train、三 seed、best-validation checkpoint 的 24-run test 配对。候选相对 A2
 > 宏平均降低 0.772% MSE、0.507% MAE，3/4 setting 双指标改善，最坏单指标回退 0.203%，通过
