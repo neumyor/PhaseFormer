@@ -99,9 +99,36 @@ Stage B（7 数据集 × H96/H336 × 4 档，30% train、8 epoch、seed 2021，�
 
 表中 C 列为 H96/H336 的 `mse/mae/mse/mae`；M/S/W 列为四个比值相对 C 的均值。
 
-Stage C（7 冻结组合 × 4 horizon × seeds 2021/2022，100% train，validation-only）正在运行，
-输出同目录 `research_runs/pctf_strict_t28_global_golden_v1/`。对非 C 档数据集补跑同协议 C 参照，
-以便计算 16 个 MSE/MAE 比值相对 C 的回退检查；任一比值 >1.005 即回退到 C。
+## Stage C 确认结果与主研究者决策（2026-09-01）
+
+Stage C 对 ETTh1/ETTh2/ETTm1/ETTm2/Weather 五个数据集完成（7 冻结组合 × 4 horizon ×
+seeds 2021/2022，100% train，validation-only）。Electricity 与 Traffic 的 Stage C 由主研究者
+指令跳过：Electricity 直接确认 M（不执行回退检查），Traffic 保持 Stage B 的 C。
+
+已执行数据集的 16 比值回退检查（任一 frozen/C 比值 >1.005 回退到 C）：
+
+| 数据集 | 冻结档位 | worst 比值 | 触发 cell | 结论 |
+|---|---|---:|---|---|
+| ETTh1 | W | 1.0074 | mse@H336·s2021 | **回退到 C** |
+| ETTh2 | W | 1.0068 | mse@H720·s2022 | **回退到 C** |
+| ETTm1 | W | 1.0018 | 无 | 保持 W |
+| ETTm2 | M | 1.0055 | mse@H720·s2021 | **回退到 C** |
+| Weather | S | 1.0047 | 无 | 保持 S |
+
+三个触发回退的数据集各仅有一个 MSE cell 略超 1.005（超 0.05%–0.74%），其余 15 个比值均低于
+阈值、16 比值均值均在 1.0 附近；但按预注册规则严格回退到保守档 C。最终冻结档位：
+
+| 数据集 | cycle | 档位 |
+|---|---|---:|---|
+| ETTh1 | 48 | C |
+| ETTh2 | 48 | C |
+| ETTm1 | 48 | W |
+| ETTm2 | 24 | C |
+| Weather | 24 | S |
+| Electricity | 12 | M（主研究者确认） |
+| Traffic | 12 | C |
+
+Stage D（28 setting × 3 seed，full train + test）已据此启动。
 
 ## 可复现执行与参数治理
 

@@ -219,6 +219,13 @@ def main():
     }
     commands = generators[args.stage](args)
 
+    # --dry-run must never launch anything, including the GPU launcher below.
+    if args.dry_run:
+        print(f"commands={len(commands)}")
+        for command in commands:
+            print("  " + " ".join(command))
+        return 0
+
     if not args.gpus:
         return _run(commands, args.dry_run)
 
