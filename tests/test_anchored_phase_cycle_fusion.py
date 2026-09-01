@@ -394,6 +394,17 @@ class AnchoredPhaseCycleFusionPresetTests(unittest.TestCase):
             float(restored.anchored_phase_cycle_fusion.correction_scale), 0.5
         )
 
+    def test_strict_t28_preset_freezes_full_single_stage_recipe(self):
+        hp = build_hyperparams("ETTm2", 192, "pctf_anchor_repair_strict_t28")
+        self.assertEqual(hp["anchored_pctf_correction_max"], 0.60)
+        self.assertEqual(hp["anchored_pctf_deformation_max"], 0.24)
+        self.assertEqual(hp["anchored_pctf_global_level_max"], 0.12)
+        self.assertEqual(hp["anchored_pctf_anchor_lr_scale"], 1.0)
+        self.assertEqual(hp["anchored_pctf_composer_lr_scale"], 1.0)
+        self.assertTrue(hp["anchored_pctf_decouple_anchor_gradient"])
+        self.assertTrue(hp["anchored_pctf_detach_composer_inputs"])
+        self.assertEqual(hp["anchored_pctf_correction_warmup_epochs"], 0)
+
     def test_one_stage_decoupling_preserves_forward_and_separates_gradients(self):
         hp = build_hyperparams("ETTm2", 96, "pctf_anchor_repair_full")
         hp.update(

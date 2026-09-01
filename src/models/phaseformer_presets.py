@@ -175,6 +175,8 @@ ABLATION_MODES = {
     "pctf_anchor_repair_joint_residual",
     "pctf_anchor_repair_joint_marginal",
     "pctf_anchor_repair_full",
+    # Strict one-stage version selected from the H192 T28 trust-region screen.
+    "pctf_anchor_repair_strict_t28",
 }
 
 HPTC_MODES = {
@@ -220,6 +222,7 @@ PCTF_ANCHORED_MODES = {
     "pctf_anchor_repair_joint_residual": "mlp_evidence",
     "pctf_anchor_repair_joint_marginal": "mlp_evidence",
     "pctf_anchor_repair_full": "mlp_evidence",
+    "pctf_anchor_repair_strict_t28": "mlp_evidence",
 }
 
 PCTF_ANCHOR_REPAIR_CONFIGS = {
@@ -257,6 +260,21 @@ PCTF_ANCHOR_REPAIR_CONFIGS = {
         anchored_pctf_correction_max=0.60,
         anchored_pctf_deformation_max=0.24,
         anchored_pctf_global_level_max=0.12,
+    ),
+    "pctf_anchor_repair_strict_t28": dict(
+        anchored_pctf_aux_target="residual",
+        anchored_pctf_detach_references=True,
+        anchored_pctf_anchor_loss_weight=1.0,
+        anchored_pctf_anchor_lr_scale=1.0,
+        anchored_pctf_composer_lr_scale=1.0,
+        anchored_pctf_gate_aux_weight=0.05,
+        anchored_pctf_level_mode="history_referenced",
+        anchored_pctf_correction_max=0.60,
+        anchored_pctf_deformation_max=0.24,
+        anchored_pctf_global_level_max=0.12,
+        anchored_pctf_decouple_anchor_gradient=True,
+        anchored_pctf_detach_composer_inputs=True,
+        anchored_pctf_correction_warmup_epochs=0,
     ),
 }
 

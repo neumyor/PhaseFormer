@@ -1,5 +1,22 @@
 # Agent Maintenance Log
 
+## 2026-09-01 — Strict-T28 全数据集 Golden 计划与周期探测
+
+- 新增 `pctf_anchor_repair_strict_t28` preset，将 T28 的完整单阶段训练约束与 trust region 一并冻结：
+  A2-derived composer 输入 stop-gradient、anchor/fusion 梯度解耦、anchor/composer LR 均为 1、无
+  correction warm-up，边界为 `0.60/0.24/0.12`。这避免把仅更新边界的 two-stage Full Repair
+  preset 误当成 T28。
+- 新增 `docs/PhaseFormer_strict_t28_global_golden_plan.md`：先按数据集冻结 cycle period 与四档
+  trust region（C/M/S/W），再做跨 horizon validation 确认，最后在 28 个有 Golden 的 task 做 3-seed
+  test；同一数据集不按 horizon 选不同机制或参数。
+- 完成 ETTm2 的 30%/8 epoch/seed 2021 CUDA validation-only 周期探测。cycle 48 在 H96/H336 的四项
+  原始指标均略优于 24，但相对联合分数只差 0.087%，低于预注册 0.2% 阈值，故按复杂度 tie-break
+  冻结 ETTm2 `cycle_period=24`。Traffic H96/cycle12 因外部 CUDA 进程占用约 19.1 GiB 后 OOM，未计入
+  结果，待 GPU 空闲后补跑。
+- 验证：`.venv/bin/python -m py_compile src/models/phaseformer_presets.py`；
+  `.venv/bin/python -m pytest tests/test_anchored_phase_cycle_fusion.py -k strict_t28_preset -q`（1 passed）；
+  ETTm2 H336/cycle48 的 30%/1 epoch CUDA smoke 产生有限 validation 指标且不读取 test。
+
 ## 2026-09-01 — T28 trust-region 参数冻结
 
 - 用户完成 50 策略 H192 validation-only 搜索后提供结果：T28 `trust_060` 为联合宏平均最佳（相对
