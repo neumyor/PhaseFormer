@@ -130,6 +130,22 @@ seeds 2021/2022，100% train，validation-only）。Electricity 与 Traffic 的 
 
 Stage D（28 setting × 3 seed，full train + test）已据此启动。
 
+## Stage D 结果与任务变更（2026-09-01）
+
+Stage D 在 ETT 四件套 + Weather（60/84 runs，20 settings × 3 seeds）完成后，
+Electricity/Traffic 的剩余 run 由主研究者指令取消。已完成的 20 个 setting 相对 Golden：
+ETTh2/ETTm2（均 C 档，test 曾被历史 two-stage 实验暴露）稳定双指标超越 6/8 项，
+ETTh1（C 档）、ETTm1（W 档）、Weather（S 档）均未超越。原始部分总表见本次会话汇报。
+
+随后任务变更为：**Weather 专项大范围参数搜索**（`pctf_anchor_repair_strict_t28`，
+1 seed，H96 与 H192 的 MSE/MAE 均需比 Golden 好 ≥0.5%）。搜索驱动
+`scripts/search_weather_t28.py`，输出 `research_runs/pctf_weather_search_v1/`。
+层次：Layer 1 协议主扫描（LR×epochs×loss，tier=X）→ Layer 2 机制极值
+（tier×gate，再补 warmup/lr_scale）→ Layer 3 精修与最终确认（LR 局部/lookback/
+锚定-融合器平衡）。每个候选直接 `--stage confirm --evaluate-test`，test 指标为唯一
+比较来源。总墙钟预算约 9 小时。目标：H96 MSE≤0.1473 且 MAE≤0.1940；H192
+MSE≤0.1920 且 MAE≤0.2358。
+
 ## 可复现执行与参数治理
 
 所有筛选通过 `scripts/search_phaseformer.py` 执行，必须添加 `--require-cuda`，且不添加 `--test`；
