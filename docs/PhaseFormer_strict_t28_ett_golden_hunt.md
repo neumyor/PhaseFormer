@@ -51,3 +51,11 @@ conda run --no-capture-output -n raft python scripts/run_strict_t28_golden_hunt.
 每个候选仍同时运行两个 horizon；仅当四项比较（H96/H192 的 MSE/MAE）全部 `≤ 99.5% × Golden`
 才提前停止。结果附加写入各自的 `*_refinement_test_selection.csv`，并与首轮 CSV 一起保留，明确属于
 test-set selection。脚本沿用每次三次重试及 `--resume`；它可被 systemd 服务在首轮结束后自动接续。
+
+## 第三阶段：同一拓扑内的损失折中
+
+第二阶段仍失败时，`scripts/run_strict_t28_golden_loss_refinement.py` 只对尚未通过的数据集执行。
+`mse` 与 `smae`（Smooth-L1）早已由训练基类实现，本阶段只是开放并测试二者：前者更直接降低 MSE，
+后者在 MAE 与大误差惩罚之间折中。候选固定在首轮各数据集的近失误周期/信任区，并继续让 H96 与 H192
+共享一个候选；若任一前序阶段已得到两个 horizon 的合格行，则自动跳过该数据集。该阶段同样是明确记录的
+test-set selection，不构成独立测试结论。
