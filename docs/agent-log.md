@@ -1,5 +1,14 @@
 # Agent Maintenance Log
 
+## 2026-09-01 — ETTh1 Strict-T28 重调参预注册
+
+- 用户认为 T28-W 可能不适合 ETTh1，并要求调参以尝试超过 Golden。新增
+  `docs/PhaseFormer_strict_t28_etth1_retune.md`：固定模型结构，按数据集而非 horizon 共同筛选
+  cycle=24/48、C/M/S/W trust region 与 Huber/MAE（16 个配置）。先运行 32 个 validation-only
+  低成本任务，再以 8 个全数据 validation 任务冻结唯一候选，最后才做 6 个用户授权的 test。
+- 已知 A2 自身在 ETTh1 H96/H192 也弱于 Golden，因此本轮把损失函数纳入搜索；不承诺该小空间一定
+  能达到 Golden。任何 Stage C 后按 test 改参的行为必须披露为 test-set selection。
+
 ## 2026-09-01 — 用户指定 Strict-T28 ETTh1 正式 test：未超过 Golden
 
 - 用户明确要求对 strict 单阶段 T28 做 ETTh1 test，故在尚未完成全数据集 trust-region 筛选前，固定
