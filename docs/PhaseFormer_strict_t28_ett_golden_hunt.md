@@ -18,11 +18,20 @@
 test，seed 固定为 2021。脚本把每项 test 与 Golden 的差和是否达到 0.5% 门槛写入紧凑 CSV。每条失败
 命令自动重试最多 3 次；底层 `--resume` 保证中断后不会重复训练已完成实验，CSV 以配置 key 去重。
 
-示例：
+运行环境与持久化执行：
+
+- 本机规定的 `py310` 环境不存在；经实际验证，等价的 conda `raft` 环境可识别 RTX 4090（PyTorch
+  2.4.1 + CUDA 12.1、Lightning 2.5.6），因此本轮使用它而非无法在普通会话中识别 CUDA 的 `.venv`。
+- 搜索由用户级 systemd transient service 承载。服务采用 `Restart=on-failure`、20 秒重启间隔；脚本本身
+  每个子命令最多重试三次，底层 `--resume` 复用已完成 run。因而终端会话结束、单个训练子进程失败或机器的
+  短暂服务波动都不会丢失已写入的选择轨迹。
+- 状态只低频读取 `systemctl --user status phaseformer-strict-t28-golden-hunt` 和以下 CSV，避免轮询训练日志。
+
+前台复现实例：
 
 ```bash
-.venv/bin/python scripts/run_strict_t28_golden_hunt.py --dataset ETTh1
-.venv/bin/python scripts/run_strict_t28_golden_hunt.py --dataset ETTm1
+conda run --no-capture-output -n raft python scripts/run_strict_t28_golden_hunt.py --dataset ETTh1
+conda run --no-capture-output -n raft python scripts/run_strict_t28_golden_hunt.py --dataset ETTm1
 ```
 
 初始空间分别为 48/72 个配置（每个配置有两个 horizon）。达到两个 horizon 的双指标阈值后，停止该
