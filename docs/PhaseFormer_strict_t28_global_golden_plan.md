@@ -104,3 +104,11 @@ ETTm2 cycle=24**。这个决定只使用 validation，并将同时用于该数�
 loss、容量、辅助权重、seed 与训练协议不随数据集改变。这样可以检验“周期尺度和修正幅度是否随
 数据生成频率不同”这一假设，而不是以大量数据集专属旋钮追逐指标。每次冻结均需在本文件写入
 validation 分数、tie-break 及失败/OOM 状态，随后才允许进入下一阶段。
+
+## 用户指定的 ETTh1 test（计划外的冻结配置评估）
+
+用户要求在参数尚未完成全数据集 Stage B 前直接读取 ETTh1 test。因此对预先固定的
+`cycle_period=48` 与 W/T28 档位执行 H96/H192、三 seed、full-train test；这不是参数选择，结果
+也不用于回调该数据集的档位。H96/H192 的均值分别为 `0.366890 / 0.395406` 与
+`0.400422 / 0.415671`（MSE / MAE），相对 Golden 均为双指标退化。完整逐 seed 表和 test exposure
+披露见 `docs/PhaseFormer_strict_t28_etth1_test.md`。

@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-09-01 — 用户指定 Strict-T28 ETTh1 正式 test：未超过 Golden
+
+- 用户明确要求对 strict 单阶段 T28 做 ETTh1 test，故在尚未完成全数据集 trust-region 筛选前，固定
+  `cycle_period=48`、W/T28 边界 `0.60/0.24/0.12`，运行 H96/H192 × seeds 2021/2022/2023 的六个
+  full-train、best-validation checkpoint、single-test job。所有任务在 RTX 4090 CUDA 上完成。
+- H96：`0.366890±0.002813 MSE / 0.395406±0.001830 MAE`，相对 Golden `+2.198% / +3.510%`；
+  H192：`0.400422±0.002279 / 0.415671±0.001225`，相对 Golden `+0.862% / +2.889%`。均为退化，
+  三个 seed 无一双指标胜出。
+- 这次 test 由用户要求直接读取，不构成参数选择；以后若按其数值修改 ETTh1 配置，必须披露为
+  test-set selection。结果与逐 seed 明细写入 `docs/PhaseFormer_strict_t28_etth1_test.md`；临时
+  checkpoint 和 metrics 留在 gitignore 的 `research_runs/pctf_strict_t28_etth1_formal_v1/`。
+
 ## 2026-09-01 — Strict-T28 全数据集 Golden 计划与周期探测
 
 - 新增 `pctf_anchor_repair_strict_t28` preset，将 T28 的完整单阶段训练约束与 trust region 一并冻结：
