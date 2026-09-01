@@ -1,5 +1,14 @@
 # Agent Maintenance Log
 
+## 2026-09-01 — ETTh1/ETTm1 单 seed Golden 定向搜索自动化
+
+- 用户将目标扩展为 ETTh1、ETTm1 的 H96/H192 均至少超过 Golden 0.5%，允许使用极端参数且只用
+  seed=2021。新增 `scripts/run_strict_t28_golden_hunt.py` 与
+  `docs/PhaseFormer_strict_t28_ett_golden_hunt.md`。
+- runner 以 test-set selection 方式搜索 cycle、off/C/W/X trust region、Huber/MAE 与 0.3/1/3 LR；
+  每条命令最多自动重试三次，`--resume` 复用已完成运行，结果 CSV 以完整配置 key 去重。不得把该
+  搜索的冠军称为盲测结果。
+
 ## 2026-09-01 — ETTh1 Strict-T28 重调参预注册
 
 - 用户认为 T28-W 可能不适合 ETTh1，并要求调参以尝试超过 Golden。新增
