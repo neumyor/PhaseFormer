@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ten-configuration H192 validation screen for strict one-stage PCTF.
+"""Fifty-configuration H192 validation screen for strict one-stage PCTF.
 
 The reference is the already completed two-stage Full Repair matrix.  This
 script deliberately never passes ``--evaluate-test``: every one of the ten
@@ -21,41 +21,97 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_ROOT = REPO_ROOT / "research_runs/pctf_anchor_formal_etts_v1"
-OUTPUT_ROOT = "research_runs/pctf_single_stage_h192_tuning_v1"
+OUTPUT_ROOT = "research_runs/pctf_single_stage_h192_tuning_v2"
 MECHANISM = "pctf_anchor_repair_full"
 SETTINGS = (("ETTh2", 192, 48), ("ETTm2", 192, 96))
 SEEDS = (2021, 2022)
 
-# The first row is the strict-gradient repair itself.  The next three isolate
-# ICPT/composer optimization speed; the following three isolate supervision;
-# the last three search the correction trust region and available convergence
-# time.  All rows preserve one random-init Trainer.fit and the same A2 anchor.
-POLICIES = {
-    "T0_strict_base": dict(),
-    "T1_composer_lr_half": dict(anchored_pctf_composer_lr_scale=0.5),
-    "T2_composer_lr_1p5": dict(anchored_pctf_composer_lr_scale=1.5),
-    "T3_composer_lr_2p0": dict(anchored_pctf_composer_lr_scale=2.0),
-    "T4_aux_low": dict(
-        anchored_pctf_shape_aux_weight=0.025,
-        anchored_pctf_level_aux_weight=0.025,
-    ),
-    "T5_aux_high": dict(
-        anchored_pctf_shape_aux_weight=0.10,
-        anchored_pctf_level_aux_weight=0.10,
-    ),
-    "T6_gate_high": dict(anchored_pctf_gate_aux_weight=0.10),
-    "T7_narrow_trust_region": dict(
-        anchored_pctf_correction_max=0.15,
-        anchored_pctf_deformation_max=0.06,
-        anchored_pctf_global_level_max=0.03,
-    ),
-    "T8_wide_trust_region": dict(
-        anchored_pctf_correction_max=0.35,
-        anchored_pctf_deformation_max=0.14,
-        anchored_pctf_global_level_max=0.07,
-    ),
-    "T9_long_budget": dict(max_epochs=45),
-}
+def _policies():
+    """Return exactly fifty pre-registered, interpretable configurations."""
+    values = {"T00_strict_base": dict()}
+
+    def add(prefix, rows):
+        for suffix, overrides in rows:
+            name = f"T{len(values):02d}_{prefix}_{suffix}"
+            if name in values:
+                raise AssertionError(f"duplicate policy {name}")
+            values[name] = overrides
+
+    # One-factor scans: correction optimization, component supervision and
+    # trust-region size.  The ranges are centered on the prior T0 default.
+    add("composer_lr", [
+        ("025", dict(anchored_pctf_composer_lr_scale=0.25)),
+        ("040", dict(anchored_pctf_composer_lr_scale=0.40)),
+        ("060", dict(anchored_pctf_composer_lr_scale=0.60)),
+        ("080", dict(anchored_pctf_composer_lr_scale=0.80)),
+        ("120", dict(anchored_pctf_composer_lr_scale=1.20)),
+        ("150", dict(anchored_pctf_composer_lr_scale=1.50)),
+        ("200", dict(anchored_pctf_composer_lr_scale=2.00)),
+        ("250", dict(anchored_pctf_composer_lr_scale=2.50)),
+    ])
+    add("equal_aux", [
+        ("000", dict(anchored_pctf_shape_aux_weight=0.0, anchored_pctf_level_aux_weight=0.0)),
+        ("010", dict(anchored_pctf_shape_aux_weight=0.01, anchored_pctf_level_aux_weight=0.01)),
+        ("025", dict(anchored_pctf_shape_aux_weight=0.025, anchored_pctf_level_aux_weight=0.025)),
+        ("075", dict(anchored_pctf_shape_aux_weight=0.075, anchored_pctf_level_aux_weight=0.075)),
+        ("100", dict(anchored_pctf_shape_aux_weight=0.10, anchored_pctf_level_aux_weight=0.10)),
+        ("150", dict(anchored_pctf_shape_aux_weight=0.15, anchored_pctf_level_aux_weight=0.15)),
+        ("200", dict(anchored_pctf_shape_aux_weight=0.20, anchored_pctf_level_aux_weight=0.20)),
+    ])
+    add("gate_aux", [
+        ("000", dict(anchored_pctf_gate_aux_weight=0.0)),
+        ("010", dict(anchored_pctf_gate_aux_weight=0.01)),
+        ("025", dict(anchored_pctf_gate_aux_weight=0.025)),
+        ("075", dict(anchored_pctf_gate_aux_weight=0.075)),
+        ("100", dict(anchored_pctf_gate_aux_weight=0.10)),
+        ("150", dict(anchored_pctf_gate_aux_weight=0.15)),
+    ])
+    add("trust", [
+        ("010", dict(anchored_pctf_correction_max=0.10, anchored_pctf_deformation_max=0.04, anchored_pctf_global_level_max=0.02)),
+        ("015", dict(anchored_pctf_correction_max=0.15, anchored_pctf_deformation_max=0.06, anchored_pctf_global_level_max=0.03)),
+        ("020", dict(anchored_pctf_correction_max=0.20, anchored_pctf_deformation_max=0.08, anchored_pctf_global_level_max=0.04)),
+        ("030", dict(anchored_pctf_correction_max=0.30, anchored_pctf_deformation_max=0.12, anchored_pctf_global_level_max=0.06)),
+        ("035", dict(anchored_pctf_correction_max=0.35, anchored_pctf_deformation_max=0.14, anchored_pctf_global_level_max=0.07)),
+        ("045", dict(anchored_pctf_correction_max=0.45, anchored_pctf_deformation_max=0.18, anchored_pctf_global_level_max=0.09)),
+        ("060", dict(anchored_pctf_correction_max=0.60, anchored_pctf_deformation_max=0.24, anchored_pctf_global_level_max=0.12)),
+    ])
+    # Shape and cycle-level residuals are identifiable subspaces; asymmetry
+    # tests whether the longer H192 error is dominated by one of them.
+    add("asymmetric_aux", [
+        ("shape100", dict(anchored_pctf_shape_aux_weight=0.10, anchored_pctf_level_aux_weight=0.05)),
+        ("shape025", dict(anchored_pctf_shape_aux_weight=0.025, anchored_pctf_level_aux_weight=0.05)),
+        ("level100", dict(anchored_pctf_shape_aux_weight=0.05, anchored_pctf_level_aux_weight=0.10)),
+        ("level025", dict(anchored_pctf_shape_aux_weight=0.05, anchored_pctf_level_aux_weight=0.025)),
+        ("shape100_level025", dict(anchored_pctf_shape_aux_weight=0.10, anchored_pctf_level_aux_weight=0.025)),
+        ("shape025_level100", dict(anchored_pctf_shape_aux_weight=0.025, anchored_pctf_level_aux_weight=0.10)),
+    ])
+    # These combinations are fixed before execution, rather than chosen after
+    # observing the preceding one-factor rows.
+    add("joint", [
+        ("lr060_aux100", dict(anchored_pctf_composer_lr_scale=0.60, anchored_pctf_shape_aux_weight=0.10, anchored_pctf_level_aux_weight=0.10)),
+        ("lr150_aux100", dict(anchored_pctf_composer_lr_scale=1.50, anchored_pctf_shape_aux_weight=0.10, anchored_pctf_level_aux_weight=0.10)),
+        ("lr060_narrow", dict(anchored_pctf_composer_lr_scale=0.60, anchored_pctf_correction_max=0.15, anchored_pctf_deformation_max=0.06, anchored_pctf_global_level_max=0.03)),
+        ("lr150_narrow", dict(anchored_pctf_composer_lr_scale=1.50, anchored_pctf_correction_max=0.15, anchored_pctf_deformation_max=0.06, anchored_pctf_global_level_max=0.03)),
+        ("lr060_gate100", dict(anchored_pctf_composer_lr_scale=0.60, anchored_pctf_gate_aux_weight=0.10)),
+        ("lr150_gate100", dict(anchored_pctf_composer_lr_scale=1.50, anchored_pctf_gate_aux_weight=0.10)),
+        ("wide_lr060_aux100", dict(anchored_pctf_composer_lr_scale=0.60, anchored_pctf_shape_aux_weight=0.10, anchored_pctf_level_aux_weight=0.10, anchored_pctf_correction_max=0.35, anchored_pctf_deformation_max=0.14, anchored_pctf_global_level_max=0.07)),
+        ("wide_lr150_aux100", dict(anchored_pctf_composer_lr_scale=1.50, anchored_pctf_shape_aux_weight=0.10, anchored_pctf_level_aux_weight=0.10, anchored_pctf_correction_max=0.35, anchored_pctf_deformation_max=0.14, anchored_pctf_global_level_max=0.07)),
+        ("narrow_lr060_gate100", dict(anchored_pctf_composer_lr_scale=0.60, anchored_pctf_gate_aux_weight=0.10, anchored_pctf_correction_max=0.15, anchored_pctf_deformation_max=0.06, anchored_pctf_global_level_max=0.03)),
+    ])
+    add("convergence", [
+        ("e36", dict(max_epochs=36)),
+        ("e45", dict(max_epochs=45)),
+        ("e60", dict(max_epochs=60)),
+        ("e45_p12", dict(max_epochs=45, patience=12)),
+        ("e60_p16", dict(max_epochs=60, patience=16)),
+        ("warm3", dict(anchored_pctf_correction_warmup_epochs=3)),
+    ])
+    if len(values) != 50:
+        raise AssertionError(f"expected 50 policies, got {len(values)}")
+    return values
+
+
+POLICIES = _policies()
 
 STRICT_DEFAULTS = dict(
     anchored_pctf_anchor_lr_scale=1.0,
@@ -113,27 +169,32 @@ def _reference():
     return result
 
 
-def _command(args, policy, dataset, horizon, cycle_period, seed):
+def _command(args, policy, dataset, horizon, cycle_period, seed, *, smoke=False):
     values = dict(STRICT_DEFAULTS)
     policy_values = dict(POLICIES[policy])
-    max_epochs = int(policy_values.pop("max_epochs", args.max_epochs))
+    max_epochs = 1 if smoke else int(policy_values.pop("max_epochs", args.max_epochs))
     values.update(policy_values)
     command = [
         sys.executable, "scripts/search_phaseformer.py",
         "--dataset", dataset,
         "--horizon", str(horizon),
-        "--stage", "single-stage-h192-tune",
+        "--stage", "finalist",
         "--mechanism", MECHANISM,
         "--period", "24",
         "--lookback", "720",
         "--cycle-period", str(cycle_period),
-        "--percent", "100",
+        # ETT H192 with batch size 256 has no complete batch at 5% train.
+        # Thirty percent remains a cheap smoke while guaranteeing the audit
+        # batch and one real optimizer step exist for both ETT frequencies.
+        "--percent", "30" if smoke else "100",
         "--max-epochs", str(max_epochs),
         "--seed", str(seed),
         "--loss", "huber",
         "--num-workers", str(args.num_workers),
         "--bad-case-limit", "0",
-        "--output-dir", str(_root(args) / "candidates" / policy),
+        "--output-dir", str(
+            _root(args) / ("smoke" if smoke else "candidates") / policy
+        ),
         "--overrides", json.dumps(values, sort_keys=True),
         "--require-cuda", "--resume",
     ]
@@ -151,6 +212,17 @@ def commands(args):
     ]
 
 
+def smoke_commands(args):
+    # T00 validates the default strict graph, while the last policy exercises
+    # the one-stage curriculum.  Both period geometries are covered.
+    smoke_policies = (next(iter(POLICIES)), tuple(POLICIES)[-1])
+    return [
+        _command(args, policy, dataset, horizon, cycle, 2021, smoke=True)
+        for policy in smoke_policies
+        for dataset, horizon, cycle in SETTINGS
+    ]
+
+
 def _collect_policy(args, policy):
     expected = {
         (dataset, horizon, seed)
@@ -160,6 +232,10 @@ def _collect_policy(args, policy):
     run_root = _root(args) / "candidates" / policy / "runs"
     for path in run_root.glob("*/metrics.csv"):
         row = _read_one(path)
+        # A prior smoke may exist in the same root.  It is evidence for the
+        # launch path, never an admissible full-train tuning observation.
+        if int(row.get("percent", -1)) != 100:
+            continue
         key = (row["dataset"], int(row["horizon"]), int(row["seed"]))
         if key not in expected:
             continue
@@ -235,7 +311,7 @@ def summarize(args):
     _write_csv(root / "tuning_details.csv", details)
     _write_csv(root / "tuning_summary.csv", summary)
     (root / "tuning_decision.json").write_text(json.dumps({
-        "protocol": "pctf-single-stage-strict-h192-ten-policy-v1",
+        "protocol": "pctf-single-stage-strict-h192-fifty-policy-v2",
         "selection_source": "validation_only",
         "test_metrics_read": False,
         "reference": "two-stage Full Repair, frozen formal_details.csv validation fields",
@@ -252,7 +328,7 @@ def summarize(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stage", choices=("dry", "run", "summarize"), required=True)
+    parser.add_argument("--stage", choices=("dry", "smoke", "run", "summarize"), required=True)
     parser.add_argument("--output-root", default=OUTPUT_ROOT)
     parser.add_argument("--max-epochs", type=int, default=30)
     parser.add_argument("--num-workers", type=int, default=0)
@@ -260,11 +336,11 @@ def main():
     args = parser.parse_args()
     if args.stage == "summarize":
         return summarize(args)
-    planned = commands(args)
+    planned = smoke_commands(args) if args.stage == "smoke" else commands(args)
     print(f"commands={len(planned)}")
     for command in planned:
         print(shlex.join(command))
-    if args.stage == "run":
+    if args.stage in ("smoke", "run"):
         for index, command in enumerate(planned, 1):
             print(f"RUN {index}/{len(planned)}")
             subprocess.run(command, cwd=REPO_ROOT, check=True)

@@ -1,5 +1,18 @@
 # Agent Maintenance Log
 
+## 2026-09-01 — 单阶段 PCTF H192 调参扩展与 smoke
+
+- 将严格单阶段 PCTF 的 H192 搜索从 10 个扩展为 50 个预注册策略：composer 学习率、shape/level/gate
+  辅助监督、修正 trust region、非对称子空间监督、固定组合与收敛预算；正式矩阵为 ETTh2/ETTm2 ×
+  seeds 2021/2022，共 200 个 full-train、validation-only 任务。
+- 修复 runner 使用不存在 stage 的问题，改为训练入口支持的 `finalist`；新增 smoke 专用目录并让正式
+  汇总只接受 `percent=100` 记录，避免 smoke 与正式训练重复 key。
+- 严格梯度隔离新增 `anchored_pctf_detach_composer_inputs`：融合器读取 A2-derived 输入的 detached
+  数值，A2 只接受 anchor loss；composer 支持独立学习率比例。单元测试验证无 composer→A2 梯度路径。
+- 完成 4 个 RTX 4090 CUDA smoke（T00/T49 × ETTh2/ETTm2，30% train、1 epoch、无 test）；5%
+  初始 smoke 因 ETTh2 不足一个 batch 失败，已修复为 30%。完整计划和命令见
+  `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`。
+
 ## 2026-08-29 — 导出正式 test 前五模型的公平比较
 
 - 新增 `docs/PhaseFormer_top5_test_models.md`。只使用周期互补实验中同协议的 288-run 正式

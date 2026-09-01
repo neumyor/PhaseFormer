@@ -1,10 +1,11 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
 > 当前实验：保持 PCTF Full Repair 三分支结构不变，测试从随机初始化开始的一次性联合训练，
-> 以消除 A2 预训练+微调的额外训练阶段。先在 ETTh2/ETTm2、L720→H96/H192、两 seed、完整
-> 训练划分上 validation-only 筛选统一学习率、A2 保护损失和 5-epoch correction warm-up；只有
-> 共享策略通过预注册门槛才进行三 seed 正式 test。计划见
-> `docs/PhaseFormer_pctf_single_stage_training.md`。
+> 以消除 A2 预训练+微调的额外训练阶段。单阶段初筛没有通过 A2 替换门槛后，已定位并修复
+> composer 经 A2 特征回传的隐藏梯度路径；当前以 strict PCTF 在 ETTh2/ETTm2、L720→H192、两
+> seed、full-train 上执行 50 个 validation-only 调参策略，并以 frozen two-stage Full Repair
+> validation 指标为直接参照。计划、命令和 smoke 见
+> `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`；不读取新的 test，除非唯一冠军先通过预注册 gate。
 
 > 最近完成正式实验：冻结的 `pctf_anchor_repair_full` 在 ETTh2/ETTm2 的 L720→H96/H192 上与
 > A2 完成 full-train、三 seed、best-validation checkpoint 的 24-run test 配对。候选相对 A2
@@ -179,7 +180,7 @@
   - OOM/外部 GPU 占用连续阻塞时保留队列，不降低公平性协议。
 - 所有代码、搜索配置、实验记录和 preset 更新按 `MANAGE_RULES.md` 分粒度提交；失败、OOM、超时和被淘汰候选同样写入追加式迭代日志。
 
-## 当前局部实验：PCTF 单阶段训练（2026-08-31）
+## 当前局部实验：PCTF 单阶段训练（2026-08-31 至今）
 
 - 固定 `pctf_anchor_repair_full` 结构，仅研究如何从随机初始化用一次 `Trainer.fit` 训练三分支，
   避免 A2 预训练和第二阶段联合微调。
@@ -196,3 +197,9 @@
 - 复测已完成：`decoupled_protected` 综合比值 0.99908、3/8 双改善、最坏比值 1.00537，未过
   门槛；正式 test 阶段取消。单阶段候选训练时间约为 A2 的 1.90 倍，低于两阶段的
   2.77–3.45 倍，但证据不足以替换两阶段 Full Repair。
+- 后续 H192 修订：原 `decoupled_protected` 仅把 fused 输出梯度从 A2 主输出中抵消；composer
+  仍可能经 anchor/phase/trajectory 特征回传。strict 版本 detach 全部 A2-derived composer 输入，
+  并加入独立 composer LR。预注册 50 个策略（200 个 full-train validation-only jobs），直接相对
+  frozen two-stage Full Repair 的逐 seed validation 指标，目标联合宏平均至少改善 0.5%、最坏比值
+  不高于 1.005。入口及结果表为 `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`；完成 4 个 CUDA
+  smoke，未启动正式矩阵，未读取新 test。
