@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-09-01 — T28 trust-region 参数冻结
+
+- 用户完成 50 策略 H192 validation-only 搜索后提供结果：T28 `trust_060` 为联合宏平均最佳（相对
+  two-stage Full Repair 为 1.0019，T00 为 1.0022），但最差配对仍为 1.0078，未达到预注册的
+  `≤0.995`/`≤1.005` 门槛，未读取新的 test。
+- 将 `pctf_anchor_repair_full` 默认 correction trust region 更新为 T28：
+  `anchored_pctf_correction_max=0.60`、`anchored_pctf_deformation_max=0.24`、
+  `anchored_pctf_global_level_max=0.12`。其余 Full Repair 默认训练参数保持不变。
+- 搜索 runner 显式保留旧 T00 的 `0.25/0.10/0.05`，保证已完成的 T00–T49 比较可复现，不受新默认
+  参数影响。详表写入 `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`。
+
 ## 2026-09-01 — 单阶段 PCTF H192 调参扩展与 smoke
 
 - 将严格单阶段 PCTF 的 H192 搜索从 10 个扩展为 50 个预注册策略：composer 学习率、shape/level/gate

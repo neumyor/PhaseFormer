@@ -2,10 +2,10 @@
 
 > 当前实验：保持 PCTF Full Repair 三分支结构不变，测试从随机初始化开始的一次性联合训练，
 > 以消除 A2 预训练+微调的额外训练阶段。单阶段初筛没有通过 A2 替换门槛后，已定位并修复
-> composer 经 A2 特征回传的隐藏梯度路径；当前以 strict PCTF 在 ETTh2/ETTm2、L720→H192、两
-> seed、full-train 上执行 50 个 validation-only 调参策略，并以 frozen two-stage Full Repair
-> validation 指标为直接参照。计划、命令和 smoke 见
-> `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`；不读取新的 test，除非唯一冠军先通过预注册 gate。
+> composer 经 A2 特征回传的隐藏梯度路径；50 个 strict PCTF H192 validation-only 策略已完成，
+> 最佳 T28 将 correction/deformation/global-level 边界更新为 `0.60/0.24/0.12`，但联合比值仍为
+> 1.0019，未达到相对 two-stage Full Repair 改善 0.5% 的门槛。完整表见
+> `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`；未读取新的 test。
 
 > 最近完成正式实验：冻结的 `pctf_anchor_repair_full` 在 ETTh2/ETTm2 的 L720→H96/H192 上与
 > A2 完成 full-train、三 seed、best-validation checkpoint 的 24-run test 配对。候选相对 A2
@@ -201,5 +201,7 @@
   仍可能经 anchor/phase/trajectory 特征回传。strict 版本 detach 全部 A2-derived composer 输入，
   并加入独立 composer LR。预注册 50 个策略（200 个 full-train validation-only jobs），直接相对
   frozen two-stage Full Repair 的逐 seed validation 指标，目标联合宏平均至少改善 0.5%、最坏比值
-  不高于 1.005。入口及结果表为 `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`；完成 4 个 CUDA
-  smoke，未启动正式矩阵，未读取新 test。
+  不高于 1.005。50 策略完整矩阵已完成：T28（`trust_060`）为最佳，联合比值 1.0019、最差 1.0078，
+  仍不达标，未读取新 test。默认 `pctf_anchor_repair_full` 的 trust-region 参数更新为
+  `correction/deformation/global-level = 0.60/0.24/0.12`；入口和完整表为
+  `docs/PhaseFormer_pctf_single_stage_h192_tuning.md`。

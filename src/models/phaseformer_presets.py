@@ -252,7 +252,11 @@ PCTF_ANCHOR_REPAIR_CONFIGS = {
         anchored_pctf_anchor_lr_scale=0.1,
         anchored_pctf_gate_aux_weight=0.05,
         anchored_pctf_level_mode="history_referenced",
-        anchored_pctf_global_level_max=0.05,
+        # Selected by the strict single-stage H192 T28 trust-region screen.
+        # These are correction bounds, not a per-dataset routing policy.
+        anchored_pctf_correction_max=0.60,
+        anchored_pctf_deformation_max=0.24,
+        anchored_pctf_global_level_max=0.12,
     ),
 }
 

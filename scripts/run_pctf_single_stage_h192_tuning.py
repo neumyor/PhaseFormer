@@ -114,6 +114,12 @@ def _policies():
 POLICIES = _policies()
 
 STRICT_DEFAULTS = dict(
+    # Keep the T00--T49 comparison frozen to the pre-selection trust region.
+    # The production pctf_anchor_repair_full preset is updated separately to
+    # T28's 0.60/0.24/0.12 values.
+    anchored_pctf_correction_max=0.25,
+    anchored_pctf_deformation_max=0.10,
+    anchored_pctf_global_level_max=0.05,
     anchored_pctf_anchor_lr_scale=1.0,
     anchored_pctf_composer_lr_scale=1.0,
     anchored_pctf_anchor_loss_weight=1.0,
