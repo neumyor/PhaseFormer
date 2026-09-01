@@ -36,3 +36,18 @@ conda run --no-capture-output -n raft python scripts/run_strict_t28_golden_hunt.
 
 初始空间分别为 48/72 个配置（每个配置有两个 horizon）。达到两个 horizon 的双指标阈值后，停止该
 数据集的后续搜索；若搜索空间耗尽仍无通过项，如实报告失败，不使用未记录的手调参数。
+
+## 第二阶段：由首轮近失误驱动的精修
+
+若首轮不能通过门槛，才执行 `scripts/run_strict_t28_golden_refinement.py`。它保持相同的
+“完整 A2 预测为锚点 + 两个受限周期修正”拓扑、同一 seed、同一个 dataset 内跨 H96/H192 的共享配置，
+不引入 horizon 路由。第二阶段的候选来自首轮的实际近失误，而非事后逐 horizon 拟合：
+
+- **ETTh1**：X 信任区在 H96 已有 `−1.783%` MSE、`+0.365%` MAE 的近失误，因此只测试更长训练、
+  相邻低学习率、极端 U 信任区、锚点损失/学习率平衡、较弱辅助损失与共享 `cycle=48`。
+- **ETTm1**：W 信任区的 H96 为 `−0.091%` MSE、`−1.257%` MAE，故测试更低的相邻学习率、较长训练、
+  X/U 信任区、锚点与辅助损失平衡，以及共享 `cycle=48/96`。
+
+每个候选仍同时运行两个 horizon；仅当四项比较（H96/H192 的 MSE/MAE）全部 `≤ 99.5% × Golden`
+才提前停止。结果附加写入各自的 `*_refinement_test_selection.csv`，并与首轮 CSV 一起保留，明确属于
+test-set selection。脚本沿用每次三次重试及 `--resume`；它可被 systemd 服务在首轮结束后自动接续。
