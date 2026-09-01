@@ -1102,6 +1102,13 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   scale=0，内部 A2 与最终输出严格一致；未读取 test。协议和待填表见
   `docs/PhaseFormer_pctf_single_stage_training.md`。
 
+## 2026-09-01 — Strict T28 Golden 搜索验收覆盖修复
+
+- `scripts/verify_strict_t28_golden_goal.py` 现纳入校准精修 ledger；因此四阶段任一候选都必须以同一
+  dataset 内共享配置同时通过 H96/H192 的 MSE、MAE 四项门槛，才可报告目标达成。
+- 同步补充 `docs/PhaseFormer_strict_t28_ett_golden_hunt.md` 的第四阶段定义和验收规则；已使用
+  conda `raft` Python 完成 `py_compile` 与 `git diff --check`，未读取训练中实验的新结果。
+
 ## 2026-08-31 — PCTF 单阶段第一轮筛选与梯度解耦复测
 
 - 在提交 `7cb64cc`、RTX 4090 上完成 8 个 matched A2 和 48 个 candidate 的 validation-only

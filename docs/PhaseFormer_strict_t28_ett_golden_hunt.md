@@ -59,3 +59,14 @@ test-set selection。脚本沿用每次三次重试及 `--resume`；它可被 sy
 后者在 MAE 与大误差惩罚之间折中。候选固定在首轮各数据集的近失误周期/信任区，并继续让 H96 与 H192
 共享一个候选；若任一前序阶段已得到两个 horizon 的合格行，则自动跳过该数据集。该阶段同样是明确记录的
 test-set selection，不构成独立测试结论。
+
+## 第四阶段：校准部件精修
+
+若前三阶段仍没有合格候选，`scripts/run_strict_t28_golden_calibration_refinement.py` 在不改变
+“A2 预测为锚点 + 两个受限周期修正”的主拓扑下，逐一移除或软化可能造成跨 horizon 校准冲突的部件：
+高频校正、全局 level、uncertainty gate，以及相位校准的输入形式。其目的不是增加分支或按 horizon
+选择模型，而是检验 H96 改善而 H192 MAE 回退是否由过强的修正校准造成。每个候选依旧在同一数据集同时
+执行 H96、H192，并保留同一 seed=2021、同一 Golden 的四指标 `≤99.5%` 门槛和重试/恢复策略。
+
+最终验收由 `scripts/verify_strict_t28_golden_goal.py` 读取首轮、参数、损失和校准四类 ledger；它只接受
+同一数据集内**同一个候选**同时通过 H96/H192 的 MSE 与 MAE，禁止跨候选或跨 horizon 拼接最优项。

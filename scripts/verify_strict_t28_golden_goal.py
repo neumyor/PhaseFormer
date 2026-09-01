@@ -46,6 +46,7 @@ def main():
             ("broad", f"{dataset.lower()}_test_selection.csv"),
             ("parameter", f"{dataset.lower()}_refinement_test_selection.csv"),
             ("loss", f"{dataset.lower()}_loss_refinement_test_selection.csv"),
+            ("calibration", f"{dataset.lower()}_calibration_refinement_test_selection.csv"),
         )
         for source, name in names:
             for key, values in load(root / name, source).items():
