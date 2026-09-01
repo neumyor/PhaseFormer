@@ -70,3 +70,23 @@ test-set selection，不构成独立测试结论。
 
 最终验收由 `scripts/verify_strict_t28_golden_goal.py` 读取首轮、参数、损失和校准四类 ledger；它只接受
 同一数据集内**同一个候选**同时通过 H96/H192 的 MSE 与 MAE，禁止跨候选或跨 horizon 拼接最优项。
+
+## 第五阶段：按预测长度的定向精修
+
+前四阶段刻意要求同一 dataset 内共享超参数；该更强的科研约束未通过。其失败模式不是随机的：ETTm1-H96
+已有 `w_aux01` 单独通过（MSE `0.99370×`、MAE `0.98239×` Golden），但 H192 的最优 MSE 为
+`0.99868×`；ETTh1 的 MSE 有余量而 MAE 是持续瓶颈（H96 最好 `1.00266×`、H192 最好
+`1.00756×`）。因此第五阶段解除共享**超参数**约束，但不改变 A2 锚点+两个受限周期修正的机制，也不在
+同一个 horizon 内混用模型。
+
+入口 `scripts/run_strict_t28_golden_horizon_refinement.py` 对每个标准 horizon 独立训练一个模型：
+
+- ETTh1-H96：围绕最佳 `X+弱辅助损失` 搜索修正幅度、学习率和 anchor 可动性；
+- ETTh1-H192：沿保守到强修正、24/48 cycle 搜索，以解决长 horizon 的 MAE 偏差；
+- ETTm1-H192：围绕 `cycle=48/W/MAE/lr=3` 的 0.132pp MSE 近失误做局部 LR、幅度与 MSE-loss 搜索；
+- ETTm1-H96：已存在可审计的单项通过行，不重复运行。
+
+所有结果仍是完整训练、seed=2021、明确的 test-set selection，并持续写入
+`*_horizon_refinement_test_selection.csv`。独立验收器
+`scripts/verify_strict_t28_golden_horizon_goal.py` 要求四个 setting 各自的一条候选同时满足 MSE、MAE
+`≤99.5%×Golden`；它不会把 MSE 与 MAE 来自不同候选的结果拼接。

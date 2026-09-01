@@ -1109,6 +1109,17 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 同步补充 `docs/PhaseFormer_strict_t28_ett_golden_hunt.md` 的第四阶段定义和验收规则；已使用
   conda `raft` Python 完成 `py_compile` 与 `git diff --check`，未读取训练中实验的新结果。
 
+## 2026-09-02 — Strict T28 horizon 定向精修
+
+- 共享配置的 broad、参数、loss、校准四阶段已穷尽，严格共享验收未通过。汇总显示明确的 horizon 分化：
+  ETTm1-H96 已有单项通过，而 H192 的最佳 MSE 仅差 0.132pp；ETTh1 两 horizon 的主要瓶颈均为 MAE。
+- 新增可恢复的 `scripts/run_strict_t28_golden_horizon_refinement.py` 和独立四-setting 验收器。它只解除
+  “同一超参数同时覆盖 H96/H192”的附加约束，不改变 strict-T28 拓扑，并将每项完整训练/test 选择轨迹写入
+  单一 horizon ledger。计划与 test-set-selection 边界已写入
+  `docs/PhaseFormer_strict_t28_ett_golden_hunt.md`。
+- 已在 conda `raft` 下完成两个脚本的 `py_compile`、三组非空 dry-run、空网格短路与 diff 检查；尚未启动
+  第五阶段训练。
+
 ## 2026-08-31 — PCTF 单阶段第一轮筛选与梯度解耦复测
 
 - 在提交 `7cb64cc`、RTX 4090 上完成 8 个 matched A2 和 48 个 candidate 的 validation-only
