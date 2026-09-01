@@ -426,6 +426,31 @@ class AnchoredPhaseCycleFusionPresetTests(unittest.TestCase):
         self.assertIsNotNone(anchor_gradient)
         self.assertGreater(float(anchor_gradient.abs().sum()), 0.0)
 
+    def test_strict_one_stage_decoupling_blocks_all_composer_to_anchor_paths(self):
+        hp = build_hyperparams("ETTm2", 96, "pctf_anchor_repair_full")
+        hp.update(
+            anchored_pctf_anchor_loss_weight=0.0,
+            anchored_pctf_decouple_anchor_gradient=True,
+            anchored_pctf_detach_composer_inputs=True,
+        )
+        args = make_exp_args("ETTm2", 720, 96, hp, batch_size=2)
+        model = PhaseFormer(PhaseFormerPresetConfig(args, 720, 96, hp)).train()
+        batch = (
+            torch.randn(2, 720, 7),
+            torch.randn(2, 96, 7),
+            torch.zeros(2, 720, 4),
+            torch.zeros(2, 96, 4),
+        )
+        model.training_step(batch, 0).backward()
+        for name, parameter in model.named_parameters():
+            if name.startswith("anchored_phase_cycle_fusion."):
+                continue
+            gradient = parameter.grad
+            self.assertTrue(
+                gradient is None or float(gradient.abs().sum()) == 0.0,
+                msg=f"unexpected composer-to-anchor gradient on {name}",
+            )
+
     def test_h192_complete_forward(self):
         model = self._model(
             "pctf_anchor_phase_modulation", horizon=192, cycle_period=48

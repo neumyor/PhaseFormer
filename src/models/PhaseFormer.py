@@ -718,16 +718,23 @@ class PhaseFormer(DefaultPLModule):
             self.anchored_pctf_anchor_lr_scale = float(getattr(
                 configs, "anchored_pctf_anchor_lr_scale", 1.0
             ))
+            self.anchored_pctf_composer_lr_scale = float(getattr(
+                configs, "anchored_pctf_composer_lr_scale", 1.0
+            ))
             self.anchored_pctf_correction_warmup_epochs = int(getattr(
                 configs, "anchored_pctf_correction_warmup_epochs", 0
             ))
             self.anchored_pctf_decouple_anchor_gradient = bool(getattr(
                 configs, "anchored_pctf_decouple_anchor_gradient", False
             ))
+            self.anchored_pctf_detach_composer_inputs = bool(getattr(
+                configs, "anchored_pctf_detach_composer_inputs", False
+            ))
             if (
                 self.anchored_pctf_anchor_loss_weight < 0
                 or self.anchored_pctf_gate_aux_weight < 0
                 or not 0.0 <= self.anchored_pctf_anchor_lr_scale <= 1.0
+                or self.anchored_pctf_composer_lr_scale <= 0.0
                 or self.anchored_pctf_correction_warmup_epochs < 0
             ):
                 raise ValueError("invalid anchored PCTF optimization settings")
@@ -1924,12 +1931,27 @@ class PhaseFormer(DefaultPLModule):
             # contributes bounded orthogonal innovations, all exactly zero at
             # initialization, after every A2 output calibration has run.
             anchored_anchor_hat = y_hat
+            # In the strict single-stage setting the A2 anchor is optimized
+            # exclusively through its own loss.  Detaching *all* A2-derived
+            # composer inputs is necessary: detaching only the final additive
+            # anchor leaves a gradient path through the correction features.
+            # The composer still sees the same numerical values and remains a
+            # fully trainable correction of the current A2 forecast.
+            composer_anchor = anchored_anchor_hat
+            composer_phase = anchored_phase_hat
+            composer_trajectory = anchored_trajectory_hat
+            composer_phase_series = phase_series_raw
+            if self.anchored_pctf_detach_composer_inputs:
+                composer_anchor = composer_anchor.detach()
+                composer_phase = composer_phase.detach()
+                composer_trajectory = composer_trajectory.detach()
+                composer_phase_series = composer_phase_series.detach()
             y_hat = self.anchored_phase_cycle_fusion(
-                anchored_anchor_hat,
-                anchored_phase_hat,
-                anchored_trajectory_hat,
+                composer_anchor,
+                composer_phase,
+                composer_trajectory,
                 x_in,
-                phase_series_raw,
+                composer_phase_series,
                 trajectory_predictor=self.weak_period_residual,
             )
 
@@ -2332,7 +2354,10 @@ class PhaseFormer(DefaultPLModule):
     def configure_optimizers(self):
         if (
             not self.use_anchored_phase_cycle_fusion
-            or self.anchored_pctf_anchor_lr_scale == 1.0
+            or (
+                self.anchored_pctf_anchor_lr_scale == 1.0
+                and self.anchored_pctf_composer_lr_scale == 1.0
+            )
         ):
             return super().configure_optimizers()
         base_lr = float(self.args.training_args.learning_rate)
@@ -2345,7 +2370,10 @@ class PhaseFormer(DefaultPLModule):
                 composer.append(parameter)
             else:
                 anchor.append(parameter)
-        groups = [{"params": composer, "lr": base_lr}]
+        groups = [{
+            "params": composer,
+            "lr": base_lr * self.anchored_pctf_composer_lr_scale,
+        }]
         if anchor:
             groups.append({
                 "params": anchor,
