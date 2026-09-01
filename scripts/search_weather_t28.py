@@ -38,9 +38,9 @@ TIERS = {
 
 
 def tier_overrides(tier, gate=0.05, warmup=0, anchor_scale=1.0,
-                   composer_scale=1.0):
+                   composer_scale=1.0, anchor_loss_weight=None):
     c, d, g = TIERS[tier]
-    return {
+    ov = {
         "anchored_pctf_correction_max": c,
         "anchored_pctf_deformation_max": d,
         "anchored_pctf_global_level_max": g,
@@ -49,6 +49,9 @@ def tier_overrides(tier, gate=0.05, warmup=0, anchor_scale=1.0,
         "anchored_pctf_anchor_lr_scale": anchor_scale,
         "anchored_pctf_composer_lr_scale": composer_scale,
     }
+    if anchor_loss_weight is not None:
+        ov["anchored_pctf_anchor_loss_weight"] = anchor_loss_weight
+    return ov
 
 
 def cmd(num_workers, **kw):
@@ -65,7 +68,8 @@ def cmd(num_workers, **kw):
             tier_overrides(kw["tier"], kw.get("gate", 0.05),
                            kw.get("warmup", 0),
                            kw.get("anchor_scale", 1.0),
-                           kw.get("composer_scale", 1.0)),
+                           kw.get("composer_scale", 1.0),
+                           kw.get("anchor_loss_weight")),
             sort_keys=True),
     }
     command = [sys.executable, "scripts/search_phaseformer.py"]
