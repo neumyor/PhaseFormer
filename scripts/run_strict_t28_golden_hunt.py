@@ -24,6 +24,10 @@ GOLDEN = {
     "ETTh1": {96: (0.359, 0.382), 192: (0.397, 0.404)},
     "ETTm1": {96: (0.293, 0.344), 192: (0.323, 0.361)},
 }
+SUMMARY_FIELDS = (
+    "dataset", "horizon", "cycle", "profile", "loss", "lr_multiplier",
+    "mse", "mae", "delta_mse_pct", "delta_mae_pct", "passes_half_percent", "run_id",
+)
 
 # Deliberately span near-off through a large trust region.  The latter is a
 # user-authorized stress test, not a claim that it is a general prior.
@@ -102,6 +106,14 @@ def main():
     output = ROOT / args.output_dir
     output.mkdir(parents=True, exist_ok=True)
     summary = output / f"{args.dataset.lower()}_test_selection.csv"
+    # A terminal interruption can occur between creation and the first flush.
+    # Repair that single-file edge case before DictReader sees an invalid header.
+    if summary.exists():
+        lines = summary.read_text().splitlines()
+        header = ",".join(SUMMARY_FIELDS)
+        data = [line for line in lines if line and line != header]
+        if not lines or lines[0] != header:
+            summary.write_text(header + "\n" + "\n".join(data) + ("\n" if data else ""))
     new_file = not summary.exists()
     recorded = set()
     if not new_file:
@@ -110,9 +122,7 @@ def main():
                 recorded.add(tuple(row[k] for k in (
                     "dataset", "horizon", "cycle", "profile", "loss", "lr_multiplier")))
     with summary.open("a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=(
-            "dataset", "horizon", "cycle", "profile", "loss", "lr_multiplier",
-            "mse", "mae", "delta_mse_pct", "delta_mae_pct", "passes_half_percent", "run_id"))
+        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS)
         if new_file:
             writer.writeheader()
         done = 0
