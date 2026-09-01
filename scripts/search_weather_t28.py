@@ -105,6 +105,54 @@ def layer1(num_workers):
     return out
 
 
+def layer2(num_workers):
+    """Mechanism extreme scan at H96-best base (mae, lr=0.002, ep30, lookback 720).
+
+    tier x gate factorial: 4 tiers x 2 gates x 2 horizons = 16 runs.
+    Tier X gate=0.05 is the Layer-1 base and serves as the factorial origin.
+    """
+    out = []
+    for tier in ("W", "X", "Y", "Z"):
+        for gate in (0.0, 0.05):
+            for h in HORIZONS:
+                out.append(cmd(num_workers, horizon=h, lr=0.002, epochs=30,
+                               loss="mae", tier=tier, gate=gate))
+    return out
+
+
+def layer3(num_workers):
+    """Refinement at Layer-2 best base (mae, ep30, tier W, gate 0.0, lookback 720).
+
+    Since tier x gate proved flat and lr is the dominant lever, probe:
+      lr local sweep {0.0018, 0.0022, 0.0025} x 2H        = 6 runs
+      lookback {512} x 2H                                  = 2 runs
+      warmup {5} x 2H                                      = 2 runs
+      anchor_scale {0.5, 2.0} x 2H                         = 4 runs
+      composer_scale {0.5, 2.0} x 2H                       = 4 runs
+    Total 18 runs (batch 2 = last 8, run after the first 10 by --resume).
+    """
+    out = []
+    for lr in (0.0018, 0.0022, 0.0025):
+        for h in HORIZONS:
+            out.append(cmd(num_workers, horizon=h, lr=lr, epochs=30,
+                           loss="mae", tier="W", gate=0.0))
+    for h in HORIZONS:
+        out.append(cmd(num_workers, horizon=h, lr=0.002, epochs=30,
+                       loss="mae", tier="W", gate=0.0, lookback=512))
+    for h in HORIZONS:
+        out.append(cmd(num_workers, horizon=h, lr=0.002, epochs=30,
+                       loss="mae", tier="W", gate=0.0, warmup=5))
+    for ascale in (0.5, 2.0):
+        for h in HORIZONS:
+            out.append(cmd(num_workers, horizon=h, lr=0.002, epochs=30,
+                           loss="mae", tier="W", gate=0.0, anchor_scale=ascale))
+    for cscale in (0.5, 2.0):
+        for h in HORIZONS:
+            out.append(cmd(num_workers, horizon=h, lr=0.002, epochs=30,
+                           loss="mae", tier="W", gate=0.0, composer_scale=cscale))
+    return out
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--layer", type=int, required=True, choices=(1, 2, 3))
@@ -115,8 +163,10 @@ def main():
 
     if args.layer == 1:
         commands = layer1(args.num_workers)
-    else:
-        raise SystemExit("layers 2/3 configs are filled after layer 1 results")
+    elif args.layer == 2:
+        commands = layer2(args.num_workers)
+    elif args.layer == 3:
+        commands = layer3(args.num_workers)
 
     if args.dry_run:
         print(f"commands={len(commands)}")
