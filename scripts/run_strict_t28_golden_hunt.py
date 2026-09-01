@@ -39,10 +39,17 @@ def candidate_grid(dataset: str):
     cycles = (24, 48) if dataset == "ETTh1" else (24, 48, 96)
     # Keep the first pass bounded: objective/lr are likely to change the A2
     # anchor, while the four profiles test the ICPT correction amplitude.
+    # Start with the best observed ETTh1 family (MAE + W) and its aggressive
+    # LR perturbations, so interrupted runs spend budget on the most plausible
+    # candidates before broadening to controls/extreme regions.
+    profiles = ("w", "x", "off", "c")
+    losses = ("mae", "huber")
+    lrs = (3.0, 0.3, 1.0)
     for cycle in cycles:
-        for profile, bounds in PROFILES.items():
-            for loss in ("huber", "mae"):
-                for lr in (0.3, 1.0, 3.0):
+        for profile in profiles:
+            bounds = PROFILES[profile]
+            for loss in losses:
+                for lr in lrs:
                     yield cycle, profile, bounds, loss, lr
 
 
