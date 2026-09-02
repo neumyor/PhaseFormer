@@ -1,9 +1,19 @@
 # PhaseFormer 输入成分 H1/H3/H4 因果消融实验计划
 
-> 状态：提取器、Track R/Track F、配对 CI 与 RCRF 反事实重组已经实现并完成受限 smoke；正式矩阵
-> 已启动后暂停，等待优先阶段复核。工程 smoke 曾读取 ETTm2-H96 的最多128个 test窗口，仅用于链路
-> 校验，未用于选择公式、模型或参数；下列表格仍为空表，不能据此形成效果结论。正式矩阵恢复后不得
-> 修改公式与门槛。
+> 状态：提取器、Track R/Track F、配对 CI 与 RCRF 反事实重组已经实现并完成受限 smoke。v1.1
+> （2026-09-02）已恢复正式矩阵，正分批并行执行 D0（h192×seed2021）的 240 个 validation-only
+> Track R（断点可恢复；控制与产物目录见 §7.3），D0 完成后接审计 → Track F → retrained test →
+> D0 汇总。工程 smoke 曾读取 ETTm2-H96 的最多128个 test窗口，仅用于链路校验，未用于选择公式、
+> 模型或参数；下列表格仍为空表，不能据此形成效果结论。自 D0 在 Stage 3a-F 首次读取 test 起公式
+> 与门槛冻结（§14），此后不再修改。
+>
+> 修订（执行顺序 v1.1，2026-09-02）：正式执行改为“决策范围优先”。`horizon=192, seed=2021`
+> （记 D0，8 数据集 × 3 模型 × 10 输入条件）不再是“只读 validation 的前置通过”，而是完整走完
+> Track R(validation) → 审计 → Track F → retrained test → 汇总，先形成 h192×seed2021 下的完整
+> 单 seed 结论；其余 horizon×seed 作为扩展范围 D1，在 D0 结论形成后按完全相同的冻结协议补跑并入
+> 三 seed 宏平均。本修订只改变执行顺序与结论汇报层级，不改任何提取公式、模型、超参、QC 阈值或
+> 判定门槛。D0 在 Stage 3a-F 首次读取 test —— 自该刻起全部公式与门槛即冻结（§14）；D1 不得对
+> 已冻结项做任何修改（否则需新版本并披露 D0 的 test-set exposure）。
 
 ## 1. 研究问题
 
@@ -37,9 +47,15 @@ calibration 和 high-frequency damping，无法把差异归因到 RCRF。
 - lookback 固定为 720，horizon 为 96/192/336/720。
 - `period_len=24`，因此每个输入窗口恰好包含 `K=30` 个周期。
 - seeds：2021、2022、2023。
-- **优先阶段**：先固定单个 seed `2021`、`horizon=192`，覆盖全部 8 个数据集、3 个模型和
-  10 个输入条件（共 240 个 Track R 训练任务）；该阶段只使用 validation，不读取 test。优先阶段
-  通过后，才按相同协议扩展到其余 horizon 和 seed。
+- **决策范围 D0（优先）**：先固定单个 seed `2021`、`horizon=192`，覆盖全部 8 个数据集、3 个模型
+  和 10 个输入条件（Track R 共 240 个训练任务）。D0 是自足决策范围：Track R(validation) →
+  validation 审计 → Track F（24 个 full 锚点 × 10 输入）→ retrained test（216 个非 full
+  checkpoint）→ D0 汇总，形成 h192×seed2021 下的完整结论。由于仅 seed=2021，D0 结论为
+  **单 seed 判定**（moving-block CI 仍按预测起点时间序列计算，故可行），并在汇报中显式标注
+  single-seed provisional，最终分级以 D1 三 seed 宏平均为准。
+- **扩展范围 D1**：D0 结论形成后，按与 D0 完全相同的冻结协议扩展到 `horizon∈{96,336,720} ×
+  seed=2021` 与 `全部 horizon × seed∈{2022,2023}`，得到完整 2880 个 Track R、288 个 full
+  锚点与 2592 个 retrained test，用于三 seed 宏平均与最终分级（含对 D0 单 seed 结论的复查）。
 - full-train；按最低 validation loss 选择 checkpoint；冻结配置后每个 checkpoint×input-condition
   组合只评估一次 test，期间权重不更新。
 - 七个有论文 Golden 的数据集同时报告 Golden 与 matched comparison；Exchange 只报告 matched
@@ -289,11 +305,22 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
 3. **Stage 2：validation rehearsal**。在 ETTm2-96、ETTh2-720、Weather-96 上用完整训练集和
    seed 2021 对每个假设跑通四输入×三模型；只读 validation，用于发现训练/资源错误，不据此修改
    提取公式。
-4. **Stage 3a：正式优先矩阵**。冻结代码和配置后，先运行8数据集×`horizon=192`×单 seed
-   `2021`；完成 validation 审计后才进入 Stage 3b。
-5. **Stage 3b：正式完整矩阵**。优先阶段通过后，扩展到8数据集×4 horizon×3 seed。
-6. **Stage 4：一次性 test 与机制分析**。每个 checkpoint×input-condition 只评估一次 test；
-   test 后不得回头修改 H1/H3/H4。任何后续版本使用新 experiment ID 并披露 test-set selection。
+4. **Stage 3a：D0 Track R（决策范围训练）**。冻结代码和配置后，先运行 8 数据集 × `horizon=192`
+   × 单 seed `2021`（240 个 validation-only Track R 任务）；完成后按 §6/§7.3 做 validation
+   审计（完整性、无泄漏、健康度），审计通过才进入 Stage 3a-F。
+5. **Stage 3a-F：D0 test 与机制分析**。对 D0 的 24 个 `none/full` 锚点 checkpoint 执行 Track F
+   （每个×10 输入 = 240 次评估，其中 24 次 `none/full` 同时作为 Track R 基线），再对 D0 的 216
+   个非 full checkpoint 执行单次 matched-input retrained test；随后运行 D0 汇总，填 §13.0 的
+   D0 表并给出 **h192×seed2021 单 seed 结论（provisional）**。注意：此即 D0 首次读取 test ——
+   读取后本计划全部公式与门槛即冻结（§14）。
+6. **Stage 3b：D1 Track R（扩展范围训练）**。D0 结论形成后，扩展到其余
+   `horizon{96,336,720}×seed2021` 与 `全部 horizon×seed{2022,2023}`（合计 2640 个
+   validation-only Track R 任务），与 D0 的 240 个 run 构成完整 2880；先做 validation 审计。
+7. **Stage 3b-F：D1 test 与全矩阵汇总**。对全部 288 个 full 锚点执行 Track F、对 2592 个非
+   full checkpoint 执行 retrained test，运行全矩阵汇总，得到三 seed × 四 horizon 的宏平均与
+   最终分级，并把 D0 单 seed 结论并入三 seed 复查。每个 checkpoint×input-condition 组合只评估
+   一次 test、期间权重不更新；test 后不得回头修改 H1/H3/H4，任何后续版本使用新 experiment ID
+   并披露 test-set selection。
 
 三个假设共享 `full` run。唯一输入条件数为 `1 + 3 hypotheses × 3 interventions = 10`，所以
 Track R 正式训练规模为：
@@ -307,6 +334,11 @@ Track F 对288个 full checkpoint 评估10种输入，其中288个 `none/full` �
 checkpoint×input-condition test。正式启动前必须记录 GPU、单 run 时间与预计总成本；可按数据集
 分批调度，但不能缩减某个模型或干预造成不平衡矩阵。
 
+按决策范围拆分，test 唯一单元为：**D0（h192×seed2021）= 24 锚点 full + 24×9 Track F 干预 +
+24×9 retrained = 456**；**D1（其余）= 264 锚点 full + 264×9 ×2 干预/retrained = 5016**；
+456 + 5016 = 5472。两个范围先后各自先完成 validation-only Track R 与审计、再读取本范围的
+test；D1 必须复用与 D0 完全相同的冻结提取、模型与 runner（含 checkpoint 哈希审计）。
+
 ### 7.3 复现命令
 
 validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才执行）：
@@ -316,10 +348,12 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
   --datasets ETTm2 --horizons 96 --seeds 2021 --max-epochs 30 --allow-cpu
 ```
 
-正式 Track R 训练严格 validation-only，完整默认矩阵生成2880条唯一训练命令，三个假设共享
-`none/full`；默认向每条命令传递 `--require-cuda`：
+正式 Track R 训练严格 validation-only，完整默认矩阵生成 2880 条唯一训练命令，三个假设共享
+`none/full`；默认向每条命令传递 `--require-cuda`。
 
-正式启动时必须先执行优先阶段；它是完整矩阵的可恢复前缀，不是独立调参实验：
+D0（h192×seed2021）共 `8×3×10=240` 个 Track R 训练任务，是 D1 全矩阵（§7.2 Stage 3b）的前缀
+而不是独立调参实验；代码默认启用 `--priority-first`，即使直接执行完整矩阵也会先调度
+`horizon=192, seed=2021`。D0 Track R（validation-only）：
 
 ```bash
 python scripts/run_input_component_ablation.py \
@@ -328,9 +362,46 @@ python scripts/run_input_component_ablation.py \
   --execute --resume
 ```
 
-优先阶段共 `8×3×10=240` 个 Track R 训练任务。代码默认启用 `--priority-first`，因此即使直接
-执行完整矩阵，也会先调度 `horizon=192, seed=2021`；只有明确需要旧顺序时才使用
-`--no-priority-first`。
+D0 Track R validation 审计通过后，进入 D0 下游（命令入口需按范围参数化，见下方实现说明）：
+
+D0 Track F —— 只对 D0 的 24 个 `none/full` 锚点：
+
+```bash
+python scripts/run_input_component_frozen_matrix.py \
+  --track-r-dir research_runs/input_components_h134_scratch \
+  --output-dir research_runs/input_components_h134_frozen_d0 \
+  --horizons 192 --seeds 2021 --expected-count 24 --execute
+```
+
+D0 retrained test —— 只对 D0 的 216 个非 full checkpoint：
+
+```bash
+python scripts/run_input_component_retrained_test_matrix.py \
+  --track-r-dir research_runs/input_components_h134_scratch \
+  --output-dir research_runs/input_components_h134_retrained_test_d0 \
+  --horizons 192 --seeds 2021 --expected-count 216 --execute
+```
+
+D0 汇总 —— 输出单 seed h192 表与 provisional 结论（§13.0）：
+
+```bash
+python scripts/summarize_input_component_ablation.py \
+  research_runs/input_components_h134_frozen_d0 \
+  research_runs/input_components_h134_retrained_test_d0 \
+  --scope horizons=192,seeds=2021 --output /path/to/result_summary_d0.csv
+```
+
+> 实现说明（必做项，须在 D0 Track R 收尾前落地）：当前 `run_input_component_frozen_matrix.py`、
+> `run_input_component_retrained_test_matrix.py` 与 `summarize_input_component_ablation.py` 按
+> 全矩阵（288 / 2592 / 全 2880）设计。决策范围优先要求三者为 `--horizons/--seeds`（或等价
+> `--scope d0|all`）过滤：`expected-count` 由范围推导（D0 = 24 锚点 / 216 retrained；全矩阵 =
+> 288 / 2592），retrained 入口在范围子集上仍须先确认该范围内 validation Track R 完整、且源目录
+> 尚未含该范围内任何 test 指标。D0 下游产物写入独立目录（`*_d0`），避免与 D1 全矩阵产物混用；
+> D1 收尾再写全矩阵目录。
+
+D1 / 全矩阵 Track R（D0 结论形成后执行，对应 §7.2 Stage 3b）：余下
+`horizon∈{96,336,720} × seed2021` 与全部 horizon × `seed∈{2022,2023}` 共 2640 个
+validation-only 训练任务，与 D0 的 240 个合并成完整 2880：
 
 ```bash
 python scripts/run_input_component_ablation.py \
@@ -338,7 +409,8 @@ python scripts/run_input_component_ablation.py \
   --execute --resume
 ```
 
-单 checkpoint 的 Track F：
+D1 Track R 完成后先做 validation 审计（§6），通过才进入 D1 下游 Track F。任意单 checkpoint 的
+Track F（D0/D1 通用）：
 
 ```bash
 python scripts/evaluate_input_component_checkpoint.py \
@@ -347,7 +419,7 @@ python scripts/evaluate_input_component_checkpoint.py \
   --output-dir /path/to/frozen_eval --require-cuda
 ```
 
-完整 Track F 在确认 Track R 有 288 个唯一 `none/full` checkpoint 后执行：
+D1 完整 Track F —— 在确认 Track R 已有全部 288 个唯一 `none/full` checkpoint 后执行：
 
 ```bash
 python scripts/run_input_component_frozen_matrix.py \
@@ -356,8 +428,8 @@ python scripts/run_input_component_frozen_matrix.py \
   --expected-count 288 --execute
 ```
 
-随后只评估2592个 retrained 非 full checkpoint；该入口会先确认源目录具有完整2880个条件且尚未
-包含任何 test 指标：
+D1 retrained test —— 随后只评估 2592 个 retrained 非 full checkpoint；该入口会先确认源目录
+具有完整 2880 个条件且尚未包含任何 test 指标：
 
 ```bash
 python scripts/run_input_component_retrained_test_matrix.py \
@@ -367,7 +439,7 @@ python scripts/run_input_component_retrained_test_matrix.py \
 ```
 
 其中 `--max-samples` 和训练入口的 `--max-eval-samples` 只允许 smoke，正式结果必须保持默认值 0。
-汇总命令会拒绝缺条件、重复条件或 frozen 条件混用不同 checkpoint：
+D1 全矩阵汇总命令会拒绝缺条件、重复条件或 frozen 条件混用不同 checkpoint：
 
 ```bash
 .venv/bin/python scripts/summarize_input_component_ablation.py \
@@ -409,6 +481,9 @@ dataset×horizon 等权，不能按测试窗口数加权，让 Traffic/Electrici
 - setting 宏平均再对32个 setting 做分层 bootstrap；同时报告7个 Golden setting 家族与 Exchange
   的结果，不能只报告总体平均。
 - 当前自动汇总不执行多重检验；主判定使用预注册效应门槛及原始 CI，不报告未经实现的 Holm 结果。
+- **D0（h192×seed2021）provisional 语义**：D0 阶段只有单 seed，CI 仍是同一 moving-block
+  bootstrap 规则，但不得声称跨 seed 稳定；D0 表格一律标 `provisional (seed2021 only)`。只有 D1
+  三 seed 全矩阵汇总才能按本节正常规则给出最终分级。
 
 ### 8.3 判定规则
 
@@ -434,6 +509,11 @@ setting 级“PhaseFormer 对 A 等效不敏感”要求 M0 的 `minus_A` MSE �
 
 “Strong”不要求增强模型的 full 指标一定超过论文 Golden；本实验研究输入利用机制。任何性能提升
 声明仍必须另外对固定 Golden 报告。
+
+**D0（h192×seed2021）结论分级**：D0 阶段先按同一预注册门槛与分级表给出单 seed 判定，在 §13.0
+记录为 `provisional (seed2021 only)`，并标明每个数据集家族在 D0 是否已有足够样本、哪些需等 D1
+补足。D0 的任何 Strong/Partial 不得表述为跨 seed 稳健，须经 §7.2 Stage 3b-F 三 seed 复查确认后
+才写入 §13.7 最终结论。
 
 ## 9. PhaseFormer residual probe（可选、当前未自动化）
 
@@ -510,6 +590,22 @@ delta_mse,delta_mae,interaction_mse,interaction_mae,component_energy,qc_status,s
 
 ## 13. 空结果表
 
+### 13.0 D0（h192×seed2021）决策范围表（provisional）
+
+- 该范围 = 24 个 `none/full` 锚点 Track F（每个×10 输入，其中 24 次 `none/full` 兼作 Track R
+  基线）+ 24 锚点的 9 项干预 + 216 个 retrained test，合计 456 个唯一 test 单元（§7.2）。D0 首次
+  读取 test 发生在 Stage 3a-F，自该刻起公式与门槛冻结（§14）。
+- D0 明细直接复用 §13.2/§13.3/§13.4 的表结构，但行只填 `horizon=192, seed=2021` 且每格加注
+  `[D0/provisional]`；CI 仍为单 seed moving-block bootstrap（§8.2），不因样本更少而放宽容差，
+  也不把单 seed 表现升级为跨 seed 结论。
+- D0 汇总结论（逐 H、逐数据集家族）：
+
+| H | M0 equiv (D0) | M1 dep (D0) | M2 dep (D0) | Interaction (D0) | families covered in D0 | provisional grade |
+|---|---|---|---|---|---|---|
+| H1 | — | — | — | — | — | — |
+| H3 | — | — | — | — | — | — |
+| H4 | — | — | — | — | — | — |
+
 ### 13.1 提取质量
 
 | Hypothesis | Dataset | Variant | Reconstruction max err | Last-point max err | Target-stat reduction | Energy ratio | Invalid windows | QC |
@@ -571,3 +667,7 @@ delta_mse,delta_mae,interaction_mse,interaction_mae,component_energy,qc_status,s
 - 若 smoke 或 Stage 2 显示输入 hash 不一致、test 被提前访问、QC 失败或融合无法重构，立即停止，
   修复后重新冻结 experiment ID；不能带缺陷进入正式矩阵。
 - test 一旦读取，本计划的公式和门槛即冻结。后续任何改动必须新建版本并披露测试集暴露。
+- **D0 优先使冻结时刻提前**：按 §7.2 Stage 3a-F，首次 test 读取出现在 D0（h192×seed2021）完成
+  时，早于 D1 全矩阵。因此自 D0 test 读取起，提取公式、效应/等效门槛与 Track F/retrained/汇总
+  逻辑即冻结；D1 不得为适配 D0 单 seed 结果调整任何门槛，只能报告三 seed 复查对 provisional
+  结论的确认或推翻。

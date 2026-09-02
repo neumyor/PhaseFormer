@@ -1262,3 +1262,26 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `--no-priority-first`。
 - 校验：三个脚本的 `--help`、优先阶段命令计数、Python 编译检查和 `git diff --check` 通过；
   尚未恢复实验，也未形成效果结论。
+
+## 2026-09-02 — 实验文档修订为“决策范围优先”（v1.1）并恢复 D0 Track R
+
+- 按用户要求把 `docs/PhaseFormer_input_component_H1_H3_H4_plan.md` 从“优先阶段只读
+  validation 前置”改为“决策范围优先（v1.1）”：`horizon=192, seed=2021`（记 D0，8 数据集 × 3
+  模型 × 10 输入条件 = 240 个 Track R）先完整走完 Track R(validation) → validation 审计 →
+  Track F（24 个 full 锚点 ×10）→ retrained test（216 非 full）→ D0 汇总，先形成单 seed
+  h192 结论（provisional）；其余 horizon×seed 作为 D1（2640 个 Track R）在 D0 结论形成后按
+  相同冻结协议补跑并入三 seed 宏平均。test 唯一单元 456（D0）+ 5016（D1）= 5472。
+- 主要修改文件：`docs/PhaseFormer_input_component_H1_H3_H4_plan.md`（状态块、§2.1、§7.2
+  Stage 3a/3a-F/3b/3b-F、§7.3 D0/D1 命令与“实现说明”、§8.2/§8.3 provisional 语义、新增
+  §13.0 D0 表、§14 D0 优先冻结说明）。本修订不改任何提取公式、模型、超参、QC 阈值或判定门槛。
+- 实验恢复：并行分阶段启动器 `scripts/run_input_components_parallel.py`
+  （`--gpus 2,3 --jobs-per-gpu 4 --max-stage 3`，supervisor PID 记录于
+  `research_runs/input_components_h134_control/parallel_supervisor.pid`）在 GPU2/3 恢复 D0
+  Track R；产物目录（gitignored）：`research_runs/input_components_h134_scratch/runs/*/metrics.csv`、
+  控制目录 `research_runs/input_components_h134_control/`（done.tsv、supervisor.json、jobs/）。
+- 校验：D0 范围 validation 审计（无 test 泄漏、config_hash 无重复、健康度正常）已覆盖已完成
+  run；只读，不形成效果结论。尚未读取 test。
+- 已知后续（必做项，须在 D0 Track R 收尾前落地，见文档 §7.3“实现说明”）：为
+  `run_input_component_frozen_matrix.py`、`run_input_component_retrained_test_matrix.py` 与
+  `summarize_input_component_ablation.py` 增加 `--horizons/--seeds`（或 `--scope d0|all`）
+  范围过滤，`expected-count` 由范围推导，D0 下游产物写独立 `*_d0` 目录。
