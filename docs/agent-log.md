@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-09-02 — 预注册 PhaseFormer 输入成分 H1/H3/H4 消融
+
+- 新增 `docs/PhaseFormer_input_component_H1_H3_H4_plan.md`，冻结 H1 同相位残差、H3 近期漂移、
+  H4 相位漂移的提取公式，以及 `full/half_A/minus_A/sham` 四输入定义。
+- 计划比较 `original`、`weak_residual`、`rcrf_nlinear_plain`，同时包含从头重训与固定 checkpoint
+  干预、PhaseFormer residual probe、RCRF 分支/gate 反事实拆解、block bootstrap、程序化 bad-case
+  选择和严格 QC。正式完整矩阵计划覆盖8数据集×4 horizon×3 seed；三个假设共享 full run。
+- `EXPERIMENT_SEARCH_PLAN.md` 顶部已将本实验登记为当前用户指定任务。专项文档中的结果表全部
+  留空；本次没有实现提取器、运行训练或读取 test。
+- 文档验证：`git diff --check` 通过；已复核 H1/H3 的精确重构与末值保持定义、H4 小数 shift
+  估计/能量审计、2880-run 计数及最终白名单产物结构相互一致。
+
 ## 2026-09-02 — 新增纯 RCRF + NLinear 因果消融机制
 
 - 新增 `rcrf_nlinear_plain` preset：原始 PhaseFormer 相位主干 + `WeakPeriodResidualHead`

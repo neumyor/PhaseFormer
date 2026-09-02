@@ -123,6 +123,12 @@
      （登记表读写）。
   3. 选择轨迹核验：`verify_strict_t28_golden_goal.py` 等 `verify_*` 脚本。
 
+## 输入成分利用诊断（计划中）
+
+- [`PhaseFormer_input_component_H1_H3_H4_plan.md`](PhaseFormer_input_component_H1_H3_H4_plan.md)
+  预注册原始 PhaseFormer、`weak_residual` 与 `rcrf_nlinear_plain` 对 H1 同相位残差、H3 近期漂移、
+  H4 相位漂移的四输入消融。当前仅有实验设计与空结果表，尚未实现或运行，不属于性能结论。
+
 ## 登记表/结果文档的变更纪律
 
 - `PhaseFormer_gold_standard.md` 只由固定论文参照更新；候选结果不写入。

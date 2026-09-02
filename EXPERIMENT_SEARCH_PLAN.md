@@ -1,5 +1,11 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
+> 当前用户指定实验：PhaseFormer 输入成分 H1/H3/H4 因果消融，预注册方案见
+> `docs/PhaseFormer_input_component_H1_H3_H4_plan.md`。比较 `original`、`weak_residual`、
+> `rcrf_nlinear_plain` 在 `full/half_A/minus_A/sham` 输入上的重训与固定-checkpoint效应；当前仅完成
+> 计划和空结果表，尚未实现提取器、启动训练或读取本实验 test。正式执行以该专项计划的冻结公式、
+> QC、2880-run 完整矩阵和审计产物约束为准。
+
 > 当前实验：保持 PCTF Full Repair 三分支结构不变，测试从随机初始化开始的一次性联合训练，
 > 以消除 A2 预训练+微调的额外训练阶段。单阶段初筛没有通过 A2 替换门槛后，已定位并修复
 > composer 经 A2 特征回传的隐藏梯度路径；50 个 strict PCTF H192 validation-only 策略已完成，
