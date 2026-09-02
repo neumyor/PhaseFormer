@@ -2,7 +2,12 @@ import unittest
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
+
+from scripts.evaluate_input_component_checkpoint import (
+    evaluate_rcrf_counterfactuals,
+    moving_block_effect_interval,
+)
 
 from src.dataset.input_component_ablation import (
     InputComponentConfig,
@@ -91,12 +96,27 @@ class InputComponentTests(unittest.TestCase):
         np.testing.assert_allclose(minus[-1], x[-1], atol=1e-7)
         np.testing.assert_allclose(sham[-1], x[-1], atol=1e-6)
 
+    def test_h3_near_zero_component_is_not_numerically_amplified(self):
+        phase = np.arange(24)
+        template = np.sin(2 * np.pi * phase / 24)[:, None]
+        x = np.tile(template, (30, 1)).astype(np.float64)
+        x += np.linspace(0.0, 1e-9, len(x))[:, None]
+        sham, _ = self.transform("h3", "sham", x)
+        self.assertTrue(np.isfinite(sham).all())
+        self.assertLess(float(np.max(np.abs(sham - x))), 1e-8)
+
     def test_fractional_shift_preserves_real_energy(self):
         rng = np.random.default_rng(4)
         x = rng.normal(size=(24, 3))
         shifted = _fractional_circular_shift(x, 2.35)
         self.assertTrue(np.isrealobj(shifted))
         np.testing.assert_allclose(np.sum(x * x, axis=0), np.sum(shifted * shifted, axis=0), rtol=1e-12, atol=1e-12)
+
+    def test_h4_nyquist_mode_is_held_fixed_by_definition(self):
+        nyquist = ((-1.0) ** np.arange(24))[:, None]
+        shifted = _fractional_circular_shift(nyquist, 3.0)
+        np.testing.assert_allclose(shifted, nyquist, atol=1e-12)
+        self.assertFalse(np.allclose(shifted, np.roll(nyquist, 3, axis=0)))
 
     def test_h4_recovers_known_phase_drift_and_keeps_last_cycle(self):
         period = 24
@@ -105,7 +125,7 @@ class InputComponentTests(unittest.TestCase):
             np.sin(2 * np.pi * phase / period)
             + 0.35 * np.cos(4 * np.pi * phase / period + 0.3)
         )[:, None]
-        physical_shifts = np.asarray([-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0])
+        physical_shifts = np.asarray([-3.0, -2.5, -1.0, 0.0, 1.5, 2.0, 3.0])
         cycles = np.stack(
             [_fractional_circular_shift(template, shift) for shift in physical_shifts]
         )
@@ -114,6 +134,7 @@ class InputComponentTests(unittest.TestCase):
         self.assertTrue(metadata["identifiable"][0])
         estimated = metadata["phase_shift"][:, 0]
         np.testing.assert_allclose(estimated, physical_shifts, atol=0.35)
+        self.assertLessEqual(float(np.mean(np.abs(estimated - physical_shifts))), 0.25)
         np.testing.assert_allclose(
             minus[-period:], x[-period:], atol=2e-6,
         )
@@ -164,6 +185,39 @@ class InputComponentTests(unittest.TestCase):
         )
         torch.testing.assert_close(output, reconstructed, rtol=2e-5, atol=2e-5)
         self.assertEqual(tuple(model.last_rcrf_reliability.shape), (2, 7))
+
+    def test_moving_block_ci_supports_mae_and_relative_effects(self):
+        full = np.linspace(1.0, 2.0, 500)
+        variant = full * 1.1
+        absolute = moving_block_effect_interval(
+            full, variant, 96, 7, 500, relative=False
+        )
+        relative = moving_block_effect_interval(
+            full, variant, 96, 7, 500, relative=True
+        )
+        self.assertLess(absolute[0], absolute[1])
+        np.testing.assert_allclose(relative, (0.1, 0.1), atol=1e-12)
+
+    def test_rcrf_four_counterfactual_recompositions_run(self):
+        hp = build_hyperparams("ETTm2", 96, "rcrf_nlinear_plain")
+        hp.update(latent_dim=4, phase_encoder_hidden=4, predictor_hidden=4, layers=1, phase_attn_heads=1)
+        args = make_exp_args("ETTm2", 720, 96, hp, batch_size=2)
+        model = PhaseFormer(PhaseFormerPresetConfig(args, 720, 96, hp)).eval()
+        full_x = torch.randn(2, 720, 7)
+        variant_x = full_x + 0.01 * torch.randn_like(full_x)
+        y = torch.randn(2, 96, 7)
+        x_mark = torch.zeros(2, 720, 5)
+        y_mark = torch.zeros(2, 96, 5)
+        full_loader = DataLoader(TensorDataset(full_x, y, x_mark, y_mark), batch_size=2)
+        variant_loader = DataLoader(TensorDataset(variant_x, y, x_mark, y_mark), batch_size=2)
+        result = evaluate_rcrf_counterfactuals(model, full_loader, variant_loader, 96)
+        self.assertLess(result["fused_reconstruction_max_abs"], 2e-5)
+        for label in (
+            "branches_variant_gate_full", "gate_variant_branches_full",
+            "phase_variant", "nlinear_variant",
+        ):
+            self.assertIn(f"cf_{label}_mse", result)
+            self.assertIn(f"cf_{label}_mae", result)
 
 
 if __name__ == "__main__":

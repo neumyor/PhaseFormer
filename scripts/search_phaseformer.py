@@ -928,7 +928,10 @@ def parse_args():
         "--init-checkpoint",
         help="Pretrained A1 Lightning checkpoint required by Safe-Regret modes",
     )
-    p.add_argument("--evaluate-test", action="store_true", help="Allowed only for frozen confirm runs")
+    p.add_argument(
+        "--evaluate-test", action="store_true",
+        help="Allowed only for legacy frozen confirm runs; input-component test is separate",
+    )
     p.add_argument(
         "--require-cuda", action="store_true",
         help="Fail instead of silently falling back to CPU",
@@ -937,10 +940,10 @@ def parse_args():
     p.add_argument("--resume", action="store_true")
     p.add_argument("--progress", action="store_true")
     args = p.parse_args()
-    if args.evaluate_test and args.stage not in ("confirm", "input_components"):
-        p.error("--evaluate-test is restricted to confirm or preregistered input-component runs")
-    if args.max_eval_samples and args.stage not in ("smoke", "input_components"):
-        p.error("--max-eval-samples is a smoke-only diagnostic and cannot be used here")
+    if args.evaluate_test and args.stage != "confirm":
+        p.error("--evaluate-test is restricted to legacy frozen confirm runs")
+    if args.max_eval_samples and args.stage != "smoke":
+        p.error("--max-eval-samples requires --stage smoke")
     return args
 
 

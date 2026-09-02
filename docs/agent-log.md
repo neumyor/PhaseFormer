@@ -1221,3 +1221,20 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 所有 smoke 产物位于 `/tmp`，不是正式 benchmark，不支持任何 H1/H3/H4 有效性结论。当前 `.venv`
   的 PyTorch 为 CPU build（尽管机器存在 RTX 4090）；正式 2880-run 矩阵前必须切换 CUDA 环境并
   记录单 run 成本，且 `--max-eval-samples/--max-samples` 必须保持默认 0。
+
+## 2026-09-02 — H1/H3/H4 正式测试分离、CI 与 RCRF 反事实补全
+
+- 按复核结论保留 H3 极小非零分量和 H4 固定 Nyquist 的实现，只把实验文档修正为真实算法边界；
+  文档现明确披露此前32-window test smoke、Nyquist 约定及 residual probe/样本报告未自动化。
+- Track R 训练入口改为严格 validation-only；新增独立的 retrained checkpoint test 与2592-run
+  非 full 矩阵驱动。288个共享 `none/full` 结果由 Track F 一次生成并复用，避免重复读取同一
+  checkpoint×input-condition。
+- fixed/retrained 两条轨道均保存逐 origin MSE 与 MAE；汇总器计算 MSE/MAE 的绝对及相对效应
+  moving-block CI，并联合审计 frozen/retrain 两轨、每轨288个 setting 和每 setting 10个条件。
+- `rcrf_nlinear_plain` 的固定权重评估已流式实现四类反事实：variant branches+full gate、variant
+  gate+full branches、phase-only variant、NLinear-only variant；每个条件强制 fused 重建误差
+  `<2e-5`，不保存全量巨大分支张量。
+- 正式入口默认要求 CUDA、完整 checkpoint 数量、100% train、零样本上限、源训练结果无 test；
+  smoke/CPU/不完整汇总必须显式 opt-in，已有结果默认拒绝覆盖。ETTm2-H96 的128-window RCRF
+  smoke 验证四类反事实最大重建误差不超过 `4.77e-7`，MSE/MAE 相对 CI 均成功生成；该结果不用于
+  效果结论。完整测试为280 passed、262 subtests passed。

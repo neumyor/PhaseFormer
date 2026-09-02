@@ -39,8 +39,8 @@ def main():
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
-        "--evaluate-test", action="store_true",
-        help="Use only for the preregistered final matrix; rehearsal stays validation-only",
+        "--allow-cpu", action="store_true",
+        help="Explicitly allow CPU; formal runs require CUDA by default",
     )
     args = parser.parse_args()
 
@@ -76,8 +76,8 @@ def main():
             "--num-workers", str(args.num_workers),
             "--output-dir", args.output_dir,
         ]
-        if args.evaluate_test:
-            command.append("--evaluate-test")
+        if not args.allow_cpu:
+            command.append("--require-cuda")
         if args.resume:
             command.append("--resume")
         print(shlex.join(command), flush=True)

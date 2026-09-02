@@ -4,10 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.evaluate_input_component_checkpoint import moving_block_effect_interval
 
 
 EXPECTED = {("none", "full")} | {
@@ -21,20 +28,52 @@ def read_inputs(paths):
     files = []
     for raw in paths:
         path = Path(raw)
-        files.extend(path.rglob("frozen_metrics.csv") if path.is_dir() else [path])
+        if path.is_dir():
+            files.extend(path.rglob("frozen_metrics.csv"))
+            files.extend(path.rglob("retrained_metrics.csv"))
+        else:
+            files.append(path)
     if not files:
         raise FileNotFoundError("no result CSV files found")
-    frames = [pd.read_csv(path).assign(source_file=str(path)) for path in files]
+    frames = []
+    for path in files:
+        current = pd.read_csv(path).assign(source_file=str(path))
+        if "model" not in current and "mechanism" in current:
+            current["model"] = current["mechanism"]
+        if "input_hypothesis" not in current and "hypothesis" in current:
+            current = current.rename(
+                columns={"hypothesis": "input_hypothesis", "variant": "input_variant"}
+            )
+        if "track" not in current:
+            current["track"] = (
+                "frozen" if path.name == "frozen_metrics.csv" else "retrain"
+            )
+        frames.append(current)
     frame = pd.concat(frames, ignore_index=True)
-    if "model" not in frame and "mechanism" in frame:
-        frame["model"] = frame["mechanism"]
-    if "hypothesis" in frame:
-        frame = frame.rename(columns={"hypothesis": "input_hypothesis", "variant": "input_variant"})
-    required = {"dataset", "horizon", "seed", "model", "input_hypothesis", "input_variant", "test_mse"}
+    required = {
+        "dataset", "horizon", "seed", "model", "track", "input_hypothesis",
+        "input_variant", "test_mse", "test_mae",
+    }
     missing = required - set(frame)
     if missing:
         raise ValueError(f"missing columns: {sorted(missing)}")
     return frame
+
+
+def sample_values(row, metric):
+    source = Path(row.source_file)
+    if row.track == "frozen" or source.name == "frozen_metrics.csv":
+        archive = source.parent / "paired_sample_errors.npz"
+        key = f"{row.input_hypothesis}_{row.input_variant}__{metric}"
+    else:
+        archive = source.parent / "sample_errors.npz"
+        key = metric
+    if not archive.is_file():
+        raise FileNotFoundError(f"missing paired sample errors: {archive}")
+    with np.load(archive) as values:
+        if key not in values:
+            raise KeyError(f"missing {key} in {archive}")
+        return values[key].astype(np.float64, copy=True)
 
 
 def main():
@@ -42,15 +81,44 @@ def main():
     parser.add_argument("inputs", nargs="+")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--allow-incomplete", action="store_true")
+    parser.add_argument("--allow-smoke", action="store_true")
+    parser.add_argument("--expected-settings-per-track", type=int, default=288)
     parser.add_argument("--bootstrap-replicates", type=int, default=2000)
     args = parser.parse_args()
     frame = read_inputs(args.inputs)
-    keys = ["dataset", "horizon", "seed", "model"]
+    if not args.allow_smoke:
+        if "evaluation_scope" not in frame or (frame.evaluation_scope != "formal").any():
+            raise ValueError("formal summary refuses smoke or unlabelled evaluation rows")
+        if "max_samples" in frame and frame.max_samples.fillna(0).astype(int).ne(0).any():
+            raise ValueError("formal summary refuses partial --max-samples results")
+    keys = ["dataset", "horizon", "seed", "model", "track"]
     duplicates = frame.duplicated(keys + ["input_hypothesis", "input_variant"], keep=False)
     if duplicates.any():
         raise ValueError("duplicate condition rows detected; do not average repeated/test-selected runs silently")
 
+    # The single none/full evaluation belongs to both tracks.  Reuse the
+    # frozen row as Track R's baseline instead of reading test twice.
+    if (frame.track == "retrain").any():
+        retrain_settings = frame[frame.track == "retrain"][
+            ["dataset", "horizon", "seed", "model"]
+        ].drop_duplicates()
+        shared_full = frame[
+            (frame.track == "frozen")
+            & (frame.input_hypothesis == "none")
+            & (frame.input_variant == "full")
+        ].merge(
+            retrain_settings,
+            on=["dataset", "horizon", "seed", "model"],
+            how="inner",
+        )
+        if len(shared_full) != len(retrain_settings):
+            raise ValueError("every retrained setting requires its frozen none/full baseline")
+        shared_full["track"] = "retrain"
+        frame = pd.concat([frame, shared_full], ignore_index=True)
+
     if not args.allow_incomplete:
+        if set(frame.track) != {"frozen", "retrain"}:
+            raise ValueError("formal summary requires both frozen and retrain tracks")
         for setting, group in frame.groupby(keys, dropna=False):
             found = set(zip(group.input_hypothesis, group.input_variant))
             if found != EXPECTED:
@@ -58,31 +126,78 @@ def main():
                     f"incomplete condition matrix for {setting}: missing={sorted(EXPECTED-found)} "
                     f"extra={sorted(found-EXPECTED)}"
                 )
-            if "checkpoint_sha256" in group and group.checkpoint_sha256.nunique() != 1:
+            if (
+                setting[-1] == "frozen"
+                and "checkpoint_sha256" in group
+                and group.checkpoint_sha256.nunique() != 1
+            ):
                 raise ValueError(f"frozen conditions use different checkpoints for {setting}")
+        setting_counts = (
+            frame[["dataset", "horizon", "seed", "model", "track"]]
+            .drop_duplicates()
+            .groupby("track")
+            .size()
+        )
+        if (setting_counts != args.expected_settings_per_track).any():
+            raise ValueError(
+                "formal summary setting counts differ from "
+                f"{args.expected_settings_per_track}: {setting_counts.to_dict()}"
+            )
 
     full = (
         frame[(frame.input_hypothesis == "none") & (frame.input_variant == "full")]
-        [keys + ["test_mse"]]
-        .rename(columns={"test_mse": "full_mse"})
+        [keys + ["test_mse", "test_mae"]]
+        .rename(columns={"test_mse": "full_mse", "test_mae": "full_mae"})
     )
     result = frame.merge(full, on=keys, how="left", validate="many_to_one")
     result["delta_mse"] = result.test_mse - result.full_mse
     result["relative_delta_mse"] = result.test_mse / result.full_mse - 1.0
+    result["delta_mae"] = result.test_mae - result.full_mae
+    result["relative_delta_mae"] = result.test_mae / result.full_mae - 1.0
+
+    for metric in ("mse", "mae"):
+        for effect in ("absolute", "relative"):
+            for bound in ("low", "high"):
+                column = f"{metric}_{effect}_effect_ci_{bound}"
+                if column not in result:
+                    result[column] = np.nan
+    for setting, group in result.groupby(keys, dropna=False):
+        full_row = group[
+            (group.input_hypothesis == "none") & (group.input_variant == "full")
+        ].iloc[0]
+        for index, row in group.iterrows():
+            for metric in ("mse", "mae"):
+                full_values = sample_values(full_row, metric)
+                variant_values = sample_values(row, metric)
+                for relative in (False, True):
+                    low, high = moving_block_effect_interval(
+                        full_values, variant_values,
+                        block_length=int(row.horizon),
+                        seed=9102,
+                        replicates=args.bootstrap_replicates,
+                        relative=relative,
+                    )
+                    effect = "relative" if relative else "absolute"
+                    result.loc[index, f"{metric}_{effect}_effect_ci_low"] = low
+                    result.loc[index, f"{metric}_{effect}_effect_ci_high"] = high
 
     sham = (
         result[result.input_variant == "sham"]
-        [keys + ["input_hypothesis", "delta_mse"]]
-        .rename(columns={"delta_mse": "sham_delta_mse"})
+        [keys + ["input_hypothesis", "delta_mse", "delta_mae"]]
+        .rename(columns={"delta_mse": "sham_delta_mse", "delta_mae": "sham_delta_mae"})
     )
     result = result.merge(
         sham, on=keys + ["input_hypothesis"], how="left", validate="many_to_one"
     )
     result["sham_adjusted_delta_mse"] = result.delta_mse - result.sham_delta_mse
+    result["sham_adjusted_delta_mae"] = result.delta_mae - result.sham_delta_mae
     sham_relative = (
         result[result.input_variant == "sham"]
-        [keys + ["input_hypothesis", "relative_delta_mse"]]
-        .rename(columns={"relative_delta_mse": "sham_relative_delta_mse"})
+        [keys + ["input_hypothesis", "relative_delta_mse", "relative_delta_mae"]]
+        .rename(columns={
+            "relative_delta_mse": "sham_relative_delta_mse",
+            "relative_delta_mae": "sham_relative_delta_mae",
+        })
     )
     result = result.merge(
         sham_relative,
@@ -93,21 +208,27 @@ def main():
     result["sham_adjusted_relative_mse"] = (
         result.relative_delta_mse - result.sham_relative_delta_mse
     )
+    result["sham_adjusted_relative_mae"] = (
+        result.relative_delta_mae - result.sham_relative_delta_mae
+    )
 
     original = (
         result[result.model == "original"]
         [[
-            "dataset", "horizon", "seed", "input_hypothesis", "input_variant",
+            "dataset", "horizon", "seed", "track", "input_hypothesis", "input_variant",
             "sham_adjusted_delta_mse", "sham_adjusted_relative_mse",
+            "sham_adjusted_delta_mae", "sham_adjusted_relative_mae",
         ]]
         .rename(columns={
             "sham_adjusted_delta_mse": "original_adjusted_delta_mse",
             "sham_adjusted_relative_mse": "original_adjusted_relative_mse",
+            "sham_adjusted_delta_mae": "original_adjusted_delta_mae",
+            "sham_adjusted_relative_mae": "original_adjusted_relative_mae",
         })
     )
     result = result.merge(
         original,
-        on=["dataset", "horizon", "seed", "input_hypothesis", "input_variant"],
+        on=["dataset", "horizon", "seed", "track", "input_hypothesis", "input_variant"],
         how="left",
         validate="many_to_one",
     )
@@ -116,6 +237,12 @@ def main():
     )
     result["interaction_relative_mse_vs_original"] = (
         result.sham_adjusted_relative_mse - result.original_adjusted_relative_mse
+    )
+    result["interaction_mae_vs_original"] = (
+        result.sham_adjusted_delta_mae - result.original_adjusted_delta_mae
+    )
+    result["interaction_relative_mae_vs_original"] = (
+        result.sham_adjusted_relative_mae - result.original_adjusted_relative_mae
     )
     result["qc_status"] = "ok"
     if "input_endpoint_max_abs" in result:
@@ -137,8 +264,11 @@ def main():
         "relative_delta_mse",
         "sham_adjusted_relative_mse",
         "interaction_relative_mse_vs_original",
+        "relative_delta_mae",
+        "sham_adjusted_relative_mae",
+        "interaction_relative_mae_vs_original",
     ]
-    grouping = ["model", "input_hypothesis", "input_variant"]
+    grouping = ["track", "model", "input_hypothesis", "input_variant"]
     for group_key, group in result.groupby(grouping, dropna=False):
         clusters = list(group.groupby(["dataset", "horizon"], dropna=False))
         row = dict(zip(grouping, group_key))
@@ -152,9 +282,9 @@ def main():
                 for _ in range(args.bootstrap_replicates):
                     selected = rng.integers(0, len(clusters), size=len(clusters))
                     sampled = pd.concat([clusters[index][1] for index in selected])
-                    sample_values = sampled[measure].dropna().to_numpy(dtype=float)
-                    if len(sample_values):
-                        estimates.append(sample_values.mean())
+                    sampled_measure_values = sampled[measure].dropna().to_numpy(dtype=float)
+                    if len(sampled_measure_values):
+                        estimates.append(sampled_measure_values.mean())
             if estimates:
                 row[f"{measure}_ci_low"], row[f"{measure}_ci_high"] = np.quantile(
                     estimates, [0.025, 0.975]

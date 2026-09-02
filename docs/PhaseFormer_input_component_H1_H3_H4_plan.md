@@ -1,7 +1,8 @@
 # PhaseFormer 输入成分 H1/H3/H4 因果消融实验计划
 
-> 状态：预注册草案，尚未实现提取器、启动训练或读取本实验 test。下列表格均为空表；任何修改
-> 提取公式、阈值、数据范围或判定标准的行为都必须发生在正式 test 之前并留下记录。
+> 状态：提取器、Track R/Track F、配对 CI 与 RCRF 反事实重组已经实现并完成受限 smoke；尚未
+> 启动正式矩阵。工程 smoke 曾读取 ETTm2-H96 的最多128个 test窗口，仅用于链路校验，未用于选择公式、
+> 模型或参数；下列表格仍为空表，不能据此形成效果结论。正式矩阵开始后不得修改公式与门槛。
 
 ## 1. 研究问题
 
@@ -24,7 +25,8 @@ M2 不使用 `gold_combo_reliability_s2`，因为后者同时启用 uncertainty 
 calibration 和 high-frequency damping，无法把差异归因到 RCRF。
 
 本实验不把“未达到统计显著”解释为“PhaseFormer 没利用 A”。“未利用”必须由等效性检验支持；
-“A 有用”必须同时由删除效应、剂量响应、matched disturbance 和 held-out residual probe 支持。
+“A 有用”必须同时由删除效应、剂量响应和 matched disturbance 支持；residual probe 保留为可选的
+增强诊断，不作为当前主判定的必要条件。
 
 ## 2. 共同数据与无泄漏约束
 
@@ -34,7 +36,8 @@ calibration 和 high-frequency damping，无法把差异归因到 RCRF。
 - lookback 固定为 720，horizon 为 96/192/336/720。
 - `period_len=24`，因此每个输入窗口恰好包含 `K=30` 个周期。
 - seeds：2021、2022、2023。
-- full-train；按最低 validation loss 选择 checkpoint；冻结配置后每个 checkpoint 只读一次 test。
+- full-train；按最低 validation loss 选择 checkpoint；冻结配置后每个 checkpoint×input-condition
+  组合只评估一次 test，期间权重不更新。
 - 七个有论文 Golden 的数据集同时报告 Golden 与 matched comparison；Exchange 只报告 matched
   comparison，不补造 Golden。
 
@@ -60,8 +63,8 @@ calibration 和 high-frequency damping，无法把差异归因到 RCRF。
 
 `sham` 不是“保证无影响”的安慰剂；它用于估计一般平滑、重排、插值和分布漂移本身的影响。
 所有需要随机重排的操作使用独立于训练 seed 的固定 `intervention_seed=9102`，并由
-`dataset/split/window_start/channel/hypothesis` 派生确定性子 seed，使三个模型看到逐元素相同的
-干预输入。
+`dataset/split/window_start/hypothesis` 派生确定性子 seed，使三个模型看到逐元素相同的干预输入。
+同一窗口所有通道共享置换，所以子 seed 故意不含 channel。
 
 除 H4 的几何变换外，主分析都强制：
 
@@ -157,8 +160,8 @@ A_sham    = A_rev * rms(A) / max(rms(A_rev), eps)
 sham      = B + A_sham
 ```
 
-若 `rms(A)<1e-8`，该窗口四种输入均退化为 `full`，并在质量表记录为 `near_zero_component`，不得
-通过除以极小量制造伪干预。
+实现不对 `rms(A)<1e-8` 做硬回退：这种 A 的删除改变量本身低于数据精度相关尺度，不影响主实验；
+`sham` 的 RMS 匹配仅在候选 RMS 大于 `1e-12` 时缩放，否则候选置零，避免除以极小量制造伪干预。
 
 ### 4.3 提取质量检查
 
@@ -221,9 +224,11 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
 
 ### 5.4 Fourier 实值约束
 
-小数循环位移对 `rfft` 系数乘单位模相位。偶数周期下 Nyquist 系数没有共轭伙伴，为保证输出严格
-为实数，该系数保持不变；其余频点只改变相位。因此均值与每周期 L2 能量保持，避免 H4 携带额外
-的振幅删减。
+小数循环位移对 `rfft` 系数乘单位模相位。偶数周期下 Nyquist 系数没有共轭伙伴，为同时保证输出
+严格为实数且保持 L2 能量，该系数保持不变；其余频点只改变相位。因而本实验的 `Shift` 是
+“除 Nyquist 模式外的 Fourier circular shift”：对含 Nyquist 能量的信号，奇数整数 shift 不等同于
+逐元素 `roll`，这是主动保留能量的约定，不影响相位估计使用的整数 `roll`。QC 单独报告 Nyquist
+能量占比；若该占比不可忽略，H4 只能解释为低于 Nyquist 的相位漂移。
 
 ## 6. 实现前必须通过的测试
 
@@ -251,6 +256,9 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
   moving-block bootstrap 和 RCRF 分支诊断；
 - `scripts/run_input_component_frozen_matrix.py`：从 Track R 的 `none/full` 结果发现并审计唯一
   checkpoint，生成/执行完整 Track F；
+- `scripts/run_input_component_retrained_test_matrix.py`：审计完整 validation-only Track R 后，只对
+  2592 个非 full checkpoint 做一次匹配输入 test；共享 full 结果直接复用 Track F；
+- `scripts/evaluate_input_component_retrained_checkpoint.py`：单个 retrained checkpoint 的只读 test；
 - `scripts/summarize_input_component_ablation.py`：矩阵完整性、重复行、checkpoint hash 审计，
   sham-adjusted 删除效应和相对 original 的 interaction 汇总。
 
@@ -278,7 +286,7 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
    seed 2021 对每个假设跑通四输入×三模型；只读 validation，用于发现训练/资源错误，不据此修改
    提取公式。
 4. **Stage 3：正式完整矩阵**。冻结代码和配置后，运行8数据集×4 horizon×3 seed。
-5. **Stage 4：一次性 test 与机制/样本分析**。每个 best-validation checkpoint 只读一次 test；
+5. **Stage 4：一次性 test 与机制分析**。每个 checkpoint×input-condition 只评估一次 test；
    test 后不得回头修改 H1/H3/H4。任何后续版本使用新 experiment ID 并披露 test-set selection。
 
 三个假设共享 `full` run。唯一输入条件数为 `1 + 3 hypotheses × 3 interventions = 10`，所以
@@ -288,8 +296,10 @@ Track R 正式训练规模为：
 10 input conditions × 3 models × 32 settings × 3 seeds = 2880 training runs
 ```
 
-Track F 复用 288 个 full checkpoint，增加 `288 × 9 = 2592` 次无训练评估。正式启动前必须记录
-GPU、单 run 时间与预计总成本；可按数据集分批调度，但不能缩减某个模型或干预造成不平衡矩阵。
+Track F 对288个 full checkpoint 评估10种输入，其中288个 `none/full` 同时作为 Track R 基线，
+其余为 `288×9=2592` 次干预评估。Track R 再评估2592个非 full checkpoint，因此共有5472个唯一
+checkpoint×input-condition test。正式启动前必须记录 GPU、单 run 时间与预计总成本；可按数据集
+分批调度，但不能缩减某个模型或干预造成不平衡矩阵。
 
 ### 7.3 复现命令
 
@@ -297,11 +307,17 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
 
 ```bash
 .venv/bin/python scripts/run_input_component_ablation.py \
-  --datasets ETTm2 --horizons 96 --seeds 2021 --max-epochs 30
+  --datasets ETTm2 --horizons 96 --seeds 2021 --max-epochs 30 --allow-cpu
 ```
 
-正式 Track R 在代码/配置冻结后显式加入 `--evaluate-test --execute`；不传 `--evaluate-test` 时绝不
-构造 test loader。完整默认矩阵打印 2880 条唯一训练命令，三个假设共享 `none/full`。
+正式 Track R 训练严格 validation-only，完整默认矩阵生成2880条唯一训练命令，三个假设共享
+`none/full`；默认向每条命令传递 `--require-cuda`：
+
+```bash
+.venv/bin/python scripts/run_input_component_ablation.py \
+  --output-dir research_runs/input_components_h134_scratch \
+  --execute --resume
+```
 
 单 checkpoint 的 Track F：
 
@@ -309,7 +325,7 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
 .venv/bin/python scripts/evaluate_input_component_checkpoint.py \
   --dataset ETTm2 --horizon 96 --model rcrf_nlinear_plain \
   --checkpoint /path/to/full/best.ckpt \
-  --output-dir /path/to/frozen_eval
+  --output-dir /path/to/frozen_eval --require-cuda
 ```
 
 完整 Track F 在确认 Track R 有 288 个唯一 `none/full` checkpoint 后执行：
@@ -321,13 +337,29 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
   --expected-count 288 --execute
 ```
 
+随后只评估2592个 retrained 非 full checkpoint；该入口会先确认源目录具有完整2880个条件且尚未
+包含任何 test 指标：
+
+```bash
+.venv/bin/python scripts/run_input_component_retrained_test_matrix.py \
+  --track-r-dir research_runs/input_components_h134_scratch \
+  --output-dir research_runs/input_components_h134_retrained_test \
+  --expected-count 2592 --execute
+```
+
 其中 `--max-samples` 和训练入口的 `--max-eval-samples` 只允许 smoke，正式结果必须保持默认值 0。
 汇总命令会拒绝缺条件、重复条件或 frozen 条件混用不同 checkpoint：
 
 ```bash
 .venv/bin/python scripts/summarize_input_component_ablation.py \
-  /path/to/results --output /path/to/result_summary.csv
+  research_runs/input_components_h134_frozen \
+  research_runs/input_components_h134_retrained_test \
+  --output /path/to/result_summary.csv
 ```
+
+所有正式矩阵入口默认要求 CUDA、完整 checkpoint 数量、`percent=100`、训练期
+`max_eval_samples=0`、测试期 `max_samples=0`，并拒绝已经含 test 指标的训练源。CPU 或部分样本
+只能分别通过显式 `--allow-cpu`、`--smoke --max-samples N` 使用；正式汇总默认拒绝这些结果。
 
 ## 8. 指标、统计量与因果判定
 
@@ -350,12 +382,13 @@ dataset×horizon 等权，不能按测试窗口数加权，让 Traffic/Electrici
 
 ### 8.2 不确定性
 
-- 报告三 seed mean、sample std 和每 seed 明细。
-- 样本级 CI 使用连续预测起点的 moving-block bootstrap，block length 至少为 `pred_len`，避免把
+- 报告三 seed mean和每 seed 明细；正式报告阶段再排版 sample std。
+- MSE/MAE 的绝对效应与相对效应 CI 均使用连续预测起点的 moving-block bootstrap，block length
+  固定为 `pred_len`，避免把
   高度重叠窗口当独立样本。
 - setting 宏平均再对32个 setting 做分层 bootstrap；同时报告7个 Golden setting 家族与 Exchange
   的结果，不能只报告总体平均。
-- 多个假设/模型/指标的确认性检验使用 Holm correction；效应量与原始 CI 同时保留。
+- 当前自动汇总不执行多重检验；主判定使用预注册效应门槛及原始 CI，不报告未经实现的 Holm 结果。
 
 ### 8.3 判定规则
 
@@ -373,7 +406,7 @@ setting 级“PhaseFormer 对 A 等效不敏感”要求 M0 的 `minus_A` MSE �
 
 | 等级 | 预注册含义 |
 |---|---|
-| Strong | M0 等效不敏感；M1/M2 都满足依赖、剂量和 Interaction；probe 有增益；sham 不解释结果 |
+| Strong | M0 等效不敏感；M1/M2 都满足依赖、剂量和 Interaction；sham 不解释结果 |
 | Partial | M0 等效不敏感；仅 M1 或 M2 满足依赖，或只有部分数据集家族复现 |
 | Model-shared | M0、M1、M2 都明显退化；A 有用，但没有证据证明 PhaseFormer 特别未利用 |
 | OOD/confounded | `sham` 与 `minus_A` 同等或更差，或质量检查显示大量分布破坏 |
@@ -382,7 +415,7 @@ setting 级“PhaseFormer 对 A 等效不敏感”要求 M0 的 `minus_A` MSE �
 “Strong”不要求增强模型的 full 指标一定超过论文 Golden；本实验研究输入利用机制。任何性能提升
 声明仍必须另外对固定 Golden 报告。
 
-## 9. PhaseFormer residual probe
+## 9. PhaseFormer residual probe（可选、当前未自动化）
 
 为了直接检验 A 是否包含 PhaseFormer 尚未解释的信息，对 M0/full 的预测残差
 `e=y-y_hat_M0` 建立简单线性 ridge probe：
@@ -394,8 +427,8 @@ setting 级“PhaseFormer 对 A 等效不敏感”要求 M0 的 `minus_A` MSE �
 - 正式 test 前，用全部 validation 拟合一次 probe；test 只评估一次。
 - 比较 `zero correction`、`sham-A probe` 与 `true-A probe` 的 MSE/MAE。
 
-只有 true-A probe 在 held-out 数据稳定优于 zero 和 sham，才能把 A 称为“PhaseFormer 残差中仍
-可预测的信息”。probe 是诊断，不计入三个主模型的正式预测排名。
+若后续实现，只有 true-A probe 在 held-out 数据稳定优于 zero 和 sham，才能把 A 称为
+“PhaseFormer 残差中仍可预测的信息”。probe 不计入当前三个主模型的正式预测排名或主证据等级。
 
 ## 10. RCRF 机制拆解
 
@@ -406,7 +439,7 @@ M2 的 A 干预同时可能改变 PhaseFormer 分支、NLinear 分支、可靠�
 y_phase, y_nlinear, r, alpha, y_fused
 ```
 
-除真实输出外，离线重组以下反事实预测：
+固定 checkpoint 评估会流式重组以下四类反事实预测，不保存巨大的全量分支张量：
 
 ```text
 F(P_variant, N_variant, alpha_full)     # 固定 gate，只看两个分支变化
@@ -418,7 +451,7 @@ F(P_full, N_variant, alpha_full)        # NLinear 路径贡献
 并校验 `F(P,N,alpha)` 与模型真实 fused 输出最大误差 `<2e-5`。若总体删除效应主要来自
 `alpha_variant` 的变化，而 NLinear 分支本身没有利用 A，不得声称“NLinear 提取了 A”。
 
-## 11. 样本级分析
+## 11. 样本级分析（正式报告阶段，当前 runner 未自动化）
 
 每个 H×dataset×horizon 按程序规则选取以下案例，不人工挑图：
 
@@ -449,6 +482,8 @@ research_runs/phaseformer_input_components_h134_v1/
 
 多数据集、horizon、seed、hypothesis、input variant、model 和 track 通过显式字段区分，不按 setting
 拆目录。checkpoint、训练日志和全量预测只放临时 scratch；汇总与校验完成后清理，不进入最终目录。
+当前脚本负责生成和审计 scratch CSV/NPZ；严格六文件报告包属于正式报告阶段，尚未由本组 runner
+自动生成，不能把 scratch 目录直接当作最终审计目录。
 
 `results.csv` 至少包含：`setting,dataset,horizon,seed,hypothesis,input_variant,model,track,mse,mae,
 delta_mse,delta_mae,interaction_mse,interaction_mae,component_energy,qc_status,selection_source`。
@@ -477,7 +512,7 @@ delta_mse,delta_mae,interaction_mse,interaction_mae,component_energy,qc_status,s
 
 ### 13.4 架构交互与等效性
 
-| H | Scope | M0 equivalence | M1 Interaction MSE/MAE | M2 Interaction MSE/MAE | Holm-adjusted result | Evidence grade |
+| H | Scope | M0 equivalence | M1 Interaction MSE/MAE | M2 Interaction MSE/MAE | CI-based result | Evidence grade |
 |---|---|---|---:|---:|---|---|
 | H1 | — | — | — | — | — | — |
 | H3 | — | — | — | — | — | — |

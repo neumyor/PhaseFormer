@@ -11,14 +11,16 @@ from pathlib import Path
 
 import pandas as pd
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 REQUIRED = {
     "dataset", "horizon", "seed", "mechanism", "input_hypothesis",
-    "input_variant", "checkpoint",
+    "input_variant", "checkpoint", "percent", "max_eval_samples", "test_mse",
 }
 
 
-def discover(root: Path):
+def discover(root: Path, *, smoke: bool):
     rows = []
     for path in root.rglob("metrics.csv"):
         try:
@@ -27,6 +29,8 @@ def discover(root: Path):
             continue
         if not REQUIRED.issubset(frame.columns):
             continue
+        if not smoke and "stage" in frame:
+            frame = frame[frame.stage == "input_components"]
         frame = frame[
             (frame.input_hypothesis == "none") & (frame.input_variant == "full")
         ].copy()
@@ -40,6 +44,10 @@ def discover(root: Path):
     if result.duplicated(keys, keep=False).any():
         duplicates = result.loc[result.duplicated(keys, keep=False), keys]
         raise ValueError(f"duplicate full checkpoints detected:\n{duplicates.to_string(index=False)}")
+    if result.test_mse.notna().any():
+        raise ValueError("full checkpoints already have test metrics; refusing a duplicate test read")
+    if not smoke and ((result.percent != 100).any() or (result.max_eval_samples != 0).any()):
+        raise ValueError("formal Track-F requires percent=100 and max_eval_samples=0")
     return result.sort_values(keys)
 
 
@@ -49,15 +57,20 @@ def main():
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--expected-count", type=int, default=0)
+    parser.add_argument("--expected-count", type=int)
+    parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--allow-cpu", action="store_true")
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--max-samples", type=int, default=0)
     parser.add_argument("--bootstrap-replicates", type=int, default=1000)
     args = parser.parse_args()
-    frame = discover(args.track_r_dir)
-    if args.expected_count and len(frame) != args.expected_count:
-        parser.error(f"expected {args.expected_count} full checkpoints, found {len(frame)}")
+    if args.max_samples and not args.smoke:
+        parser.error("--max-samples requires --smoke")
+    frame = discover(args.track_r_dir, smoke=args.smoke)
+    expected = args.expected_count if args.expected_count is not None else (None if args.smoke else 288)
+    if expected is not None and len(frame) != expected:
+        parser.error(f"expected {expected} full checkpoints, found {len(frame)}")
     print(f"Track-F checkpoints: {len(frame)}", flush=True)
     for row in frame.itertuples(index=False):
         destination = (
@@ -72,6 +85,8 @@ def main():
             print(f"RESUME completed: {metrics}", flush=True)
             continue
         checkpoint = Path(str(row.checkpoint))
+        if not checkpoint.is_absolute():
+            checkpoint = REPO_ROOT / checkpoint
         if not checkpoint.is_file():
             raise FileNotFoundError(f"checkpoint recorded by {row.source_file} is missing: {checkpoint}")
         command = [
@@ -90,9 +105,13 @@ def main():
             command.extend(["--batch-size", str(args.batch_size)])
         if args.max_samples:
             command.extend(["--max-samples", str(args.max_samples)])
+        if args.smoke:
+            command.append("--smoke")
+        if not args.allow_cpu:
+            command.append("--require-cuda")
         print(shlex.join(command), flush=True)
         if args.execute:
-            subprocess.run(command, check=True, cwd=Path(__file__).resolve().parents[1])
+            subprocess.run(command, check=True, cwd=REPO_ROOT)
 
 
 if __name__ == "__main__":
