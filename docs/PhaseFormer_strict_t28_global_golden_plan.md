@@ -206,6 +206,73 @@ H192 易达标；每个把 H192 推到 0.1920 以下的旋钮（lr↓、anchor�
 最终配置在 Weather 四个 horizon 共 8 个 test 指标**全部优于 Golden**（MSE −0.10~−0.37%，
 MAE −1.31~−2.76%）。H96/H192 的 MSE 增益（0.27–0.31%）未达 0.5% 双目标门槛，已记录。
 
+## Stage D 完整登记表（含 Weather 最终配置，2026-09-02）
+
+下表为当前版本在全部 Golden setting 上的登记结果。来源与二次校验规则：
+
+- **ETTh1/ETTh2/ETTm1/ETTm2**：Stage D 3-seed（2021/2022/2023）confirm run 的 test 均值±总体 std。
+- **Weather**：登记 Weather 专项搜索的最终配置（1 seed，seed 2021，单次 test），取代原 Stage D
+  S 档 3-seed 行；生成命令 `scripts/report_strict_t28_master_table.py`，配置身份由
+  `scripts/verify_run_reproducibility.py` 校验为 1:1。
+- **Electricity (M) 与 Traffic (C)**：主研究者指令取消（60/84 处停止），标记 CANCELLED，未登记结果。
+- 稳定判定（3-seed 行）：`mean+std < Golden` 且每 seed 双指标低于 Golden → BOTH；否则按单指标记
+  MSE/MAE。Weather 为单 seed 直接判定。
+
+| Dataset | H | conf | MSE | MAE | Gold M | Gold A | ΔMSE% | ΔMAE% | Beat |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| ETTh1 | 96 | 3seed | 0.368±0.003 | 0.396±0.002 | 0.359 | 0.382 | +2.38 | +3.64 | no |
+| ETTh1 | 192 | 3seed | 0.401±0.001 | 0.416±0.001 | 0.397 | 0.404 | +1.05 | +2.92 | no |
+| ETTh1 | 336 | 3seed | 0.428±0.002 | 0.434±0.000 | 0.425 | 0.424 | +0.68 | +2.45 | no |
+| ETTh1 | 720 | 3seed | 0.435±0.024 | 0.449±0.007 | 0.431 | 0.450 | +1.00 | −0.19 | no |
+| ETTh2 | 96 | 3seed | 0.273±0.001 | 0.332±0.001 | 0.275 | 0.338 | −0.79 | −1.71 | BOTH |
+| ETTh2 | 192 | 3seed | 0.339±0.003 | 0.374±0.001 | 0.341 | 0.376 | −0.54 | −0.43 | MAE |
+| ETTh2 | 336 | 3seed | 0.366±0.004 | 0.401±0.001 | 0.369 | 0.405 | −0.78 | −1.07 | MAE |
+| ETTh2 | 720 | 3seed | 0.395±0.004 | 0.429±0.001 | 0.402 | 0.436 | −1.73 | −1.59 | BOTH |
+| ETTm1 | 96 | 3seed | 0.294±0.000 | 0.346±0.002 | 0.293 | 0.344 | +0.48 | +0.52 | no |
+| ETTm1 | 192 | 3seed | 0.329±0.004 | 0.364±0.002 | 0.323 | 0.361 | +1.73 | +0.82 | no |
+| ETTm1 | 336 | 3seed | 0.359±0.003 | 0.382±0.001 | 0.358 | 0.381 | +0.40 | +0.35 | no |
+| ETTm1 | 720 | 3seed | 0.421±0.002 | 0.415±0.001 | 0.412 | 0.410 | +2.13 | +1.15 | no |
+| ETTm2 | 96 | 3seed | 0.161±0.002 | 0.250±0.001 | 0.163 | 0.256 | −1.29 | −2.40 | BOTH |
+| ETTm2 | 192 | 3seed | 0.214±0.000 | 0.286±0.001 | 0.219 | 0.293 | −2.09 | −2.30 | BOTH |
+| ETTm2 | 336 | 3seed | 0.267±0.001 | 0.323±0.000 | 0.269 | 0.326 | −0.71 | −0.95 | BOTH |
+| ETTm2 | 720 | 3seed | 0.347±0.003 | 0.375±0.001 | 0.351 | 0.379 | −1.18 | −0.98 | BOTH |
+| Weather | 96 | W-srch | 0.1475 | 0.1896 | 0.148 | 0.195 | −0.31 | −2.75 | BOTH |
+| Weather | 192 | W-srch | 0.1925 | 0.2339 | 0.193 | 0.237 | −0.27 | −1.31 | BOTH |
+| Weather | 336 | W-srch | 0.2418 | 0.2734 | 0.242 | 0.278 | −0.10 | −1.65 | BOTH |
+| Weather | 720 | W-srch | 0.3079 | 0.3228 | 0.309 | 0.332 | −0.37 | −2.76 | BOTH |
+| Electricity | 96–720 | CANCELLED | — | — | — | — | — | — | — |
+| Traffic | 96–720 | CANCELLED | — | — | — | — | — | — | — |
+
+共 20 个已登记 setting，其中 10 个稳定双指标超越 Golden（ETTh2 2/4、ETTm2 4/4、Weather 4/4）；
+另有 8 个 setting（Electricity/Traffic 各 4）取消。ETTh2/ETTm2 的 test 曾被历史 two-stage
+Full Repair 实验暴露，非完全盲测。
+
+## 二次校验与可复现清单（2026-09-02）
+
+对两个输出树全部 run 目录执行二次校验
+（`scripts/verify_run_reproducibility.py`，已提交本分支）：对每个 run 用
+`search_phaseformer.py` 的同一算法重算 `config_hash`，必须与 `config.json`、`metrics.csv`、
+run 目录名的 12 位十六进制后缀一致；并核对 metrics 行的 dataset/horizon/seed/loss/mechanism/
+stage 与 config 一致、`commands.sh` 存在、无重复配置结果分叉。
+
+| 树 | 目录数 | 有结果（1:1 校验通过） | 无结果 | hash/字段不一致 | 重复配置分叉 |
+|---|---|---:|---:|---:|---:|
+| pctf_strict_t28_global_golden_v1 | 210 | 60 | 150 | 0 | 0 |
+| pctf_weather_search_v1 | 66 | 64 | 2 | 0 | 0 |
+
+无结果目录均为预期：150 = Stage A/B/C validation-only 或取消的 Electricity run（8 个）；
+2 = Weather anchor_scale=2.0 非法配置（status=failed，模型约束
+`0≤anchored_pctf_anchor_lr_scale≤1.0`）。**124 个有结果 run 全部 1:1 对应，0 硬失败。**
+
+每个 run 的完整配置已整理成清单文件（`manifest/runs/<run_id>.json`：完整 spec + 指标 +
+校验状态；`manifest/index.json` 索引；`manifest/verification_report.md` 汇总）：
+
+- `research_runs/pctf_strict_t28_global_golden_v1/manifest/`
+- `research_runs/pctf_weather_search_v1/manifest/`
+
+（manifest 随 gitignored 的 `research_runs/` 存储，可由提交的校验脚本随时重新生成；`config.json`
+与 `commands.sh` 原本就在每个 run 目录中，是逐 run 的权威配置文件。）
+
 ## 可复现执行与参数治理
 
 所有筛选通过 `scripts/search_phaseformer.py` 执行，必须添加 `--require-cuda`，且不添加 `--test`；
