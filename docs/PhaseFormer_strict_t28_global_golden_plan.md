@@ -254,12 +254,19 @@ ETTm2 4/4、Weather 4/4）；另有 8 个 setting（Electricity/Traffic 各 4）
 
 ### 已登记 cell 的 config/commands 清单（docs/strict_t28_master_table_configs/）
 
-有 run 数据的 12 个 cell（ETTh2/ETTm2 取 seed-2021 代表、Weather 单 seed）的 `config.json` 与
-`commands.sh` 由 `scripts/collect_strict_t28_configs.py` 原样拷贝至
+12 个有文件 cell（ETTh1/ETTm1 为另一台电脑拷入的最佳配置记录、ETTh2/ETTm2 取 seed-2021 代表、
+Weather 单 seed）的 `config.json` 与 `commands.sh` 位于
 `docs/strict_t28_master_table_configs/<Dataset>/h<horizon>/`。布局与收录情况见该目录 `README.md`。
-ETTh1/ETTm1 新搜索结果无本机 run 数据，未收集文件（仅登记结果）；Electricity/Traffic 取消。
-ETTh2/ETTm2 其余两个 seed 的 run 仍保留在 `research_runs/pctf_strict_t28_global_golden_v1/`
-及其 manifest 中。
+
+- **ETTh1 / ETTm1**：文件从另一台电脑 `strict_t28_dataset_best/` 拷入
+  （`docs/strict_t28_master_table_configs/ETTh1/h*` 与 `ETTm1/h*`），已在本机校验
+  config 与 commands.sh 自洽、learning_rate = runner base LR × 0.2（ETTh1 H720 为长 horizon
+  base 0.00015 → 3e-05，其余 0.001 → 0.0002）。此 schema 为「最佳配置记录」（purpose/training/
+  overrides），非 runner 的 `config.json`（hyperparams/config_hash）格式。
+- **ETTh2 / ETTm2**：由 `scripts/collect_strict_t28_configs.py` 原样拷贝 seed-2021 代表；其余
+  两个 seed 的 run 仍保留在 `research_runs/pctf_strict_t28_global_golden_v1/` 及其 manifest 中。
+- **Weather**：由同一脚本拷贝最终配置 4 格。
+- **Electricity / Traffic**：取消，无文件。
 
 ## 二次校验与可复现清单（2026-09-02）
 
