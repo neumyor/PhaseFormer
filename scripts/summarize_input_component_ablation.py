@@ -16,7 +16,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.evaluate_input_component_checkpoint import moving_block_effect_interval
 from scripts.run_input_component_ablation import (
-    HORIZONS, SEEDS, expected_full_anchors, parse_scope,
+    DATASETS, HORIZONS, SEEDS, expected_full_anchors,
+    parse_dataset_scope, parse_scope,
 )
 
 
@@ -83,6 +84,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="+")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--datasets", default=",".join(DATASETS),
+                       help="comma list of datasets to include (default: all)")
     parser.add_argument("--horizons", default=",".join(map(str, HORIZONS)),
                        help="comma list of horizons to include (default: all)")
     parser.add_argument("--seeds", default=",".join(map(str, SEEDS)),
@@ -91,14 +94,20 @@ def main():
     parser.add_argument("--allow-smoke", action="store_true")
     parser.add_argument("--expected-settings-per-track", type=int,
                        help="defaults to the number of (dataset,horizon,seed,model) "
-                            "settings in the requested --horizons/--seeds scope")
+                            "settings in the requested scope")
     parser.add_argument("--bootstrap-replicates", type=int, default=2000)
     args = parser.parse_args()
+    datasets = parse_dataset_scope(parser, args.datasets)
     horizons, seeds = parse_scope(parser, args.horizons, args.seeds)
     if args.expected_settings_per_track is None:
-        args.expected_settings_per_track = expected_full_anchors(horizons, seeds)
+        args.expected_settings_per_track = expected_full_anchors(
+            horizons, seeds, datasets=datasets)
     frame = read_inputs(args.inputs)
-    frame = frame[frame.horizon.isin(horizons) & frame.seed.isin(seeds)]
+    frame = frame[
+        frame.dataset.isin(datasets)
+        & frame.horizon.isin(horizons)
+        & frame.seed.isin(seeds)
+    ]
     if not args.allow_smoke:
         if "evaluation_scope" not in frame or (frame.evaluation_scope != "formal").any():
             raise ValueError("formal summary refuses smoke or unlabelled evaluation rows")

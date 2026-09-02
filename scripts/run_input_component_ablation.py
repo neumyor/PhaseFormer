@@ -48,14 +48,28 @@ def parse_scope(parser, horizons_csv, seeds_csv):
     return horizons, seeds
 
 
-def expected_full_anchors(horizons, seeds):
+def parse_dataset_scope(parser, datasets_csv):
+    """Validate a --datasets whitelist and return the sorted tuple.
+
+    Mirrors parse_scope so a dataset-restricted run (e.g. excluding Traffic)
+    keeps exactly the same dataset vocabulary as the full matrix.
+    """
+    datasets = tuple(sorted(csv_values(datasets_csv, str)))
+    unknown = set(datasets) - set(DATASETS)
+    if unknown:
+        parser.error(f"unknown datasets: {sorted(unknown)}")
+    return datasets
+
+
+def expected_full_anchors(horizons, seeds, datasets=None):
     """Number of unique full (none/full) checkpoints in a scope.
 
     One full checkpoint per (dataset, model, horizon, seed) setting; the frozen
     Track F matrix has exactly this many anchors, and the summarize setting count
-    per track matches it too.
+    per track matches it too.  Pass datasets=None for the full dataset set.
     """
-    return len(DATASETS) * len(MODELS) * len(horizons) * len(seeds)
+    scope_datasets = tuple(datasets) if datasets else DATASETS
+    return len(scope_datasets) * len(MODELS) * len(horizons) * len(seeds)
 
 
 def main():

@@ -1303,3 +1303,36 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   （Track R 仍在跑）、正式门按范围推导报 `expected 24, found 19`；retrained D0 门先由完整性检查
   正确拦截（Traffic 条件未收尾）；默认无参数门仍为 288；`--horizons 192,999` 被 parse_scope
   拒绝。未读取 test。
+
+## 2026-09-02 — v1.2 修订落地：Traffic 剔除 + D0→D1 串行编排（自动恢复）
+
+- 数据范围修订（v1.2）：为加快结论产出，将 **Traffic** 从执行与评估矩阵剔除（不再调度训练、
+  Track F / retrained test / 汇总全部跳过）。执行范围收敛为 7 个数据集（ETTh1、ETTh2、ETTm1、
+  ETTm2、Exchange、Weather、Electricity）。实现方式为新增 `--datasets` 白名单过滤而非改
+  `DATASETS` 常量：给 `scripts/run_input_component_ablation.py`（`parse_dataset_scope()` +
+  `expected_full_anchors(..., datasets=None)`）、`run_input_component_frozen_matrix.py`、
+  `run_input_component_retrained_test_matrix.py`、`summarize_input_component_ablation.py`
+  全部加 `--datasets`，范围期望计数（锚点/retrained）由白名单自动推导，故 Traffic 可随时加回。
+  已完成的 6 个 Traffic D0 run 与进行中的 Traffic 训练就此搁置（其 run dir 与 done.tsv keys
+  被 scope 过滤忽略，不删产物），不参与任何 test 读。v1.2 修订仅为范围/资源管理决定，不改任何
+  提取公式、模型、超参、QC 阈值或判定门槛。
+- 编排决策改为**串行**（因两个调度器各自激活 GPU 后永久占满 slots、绝不 yield，不能安全共享
+  同一 GPU）：先跑完 D0 Track R（210 validation-only runs，7 数据集 h192×seed2021）→ 调度器以
+  `--max-stage 1` 停在 stage1 → D0 下游编排器独占 GPU2/3 跑 audit→Track F(21 锚点)→
+  retrained(189)→汇总 → provisional 结论 → 再恢复 D1 训练（`--max-stage 3` 全矩阵）。
+- 新增 `scripts/run_d0_downstream.py`（563 行）：D0 下游自动编排器，状态机
+  `wait_3a → track_f → retrained → summarize → done`（失败态 *_failed）。wait_3a 复用
+  frozen/retrained 两个矩阵 runner 的 print-only 门做就绪探测（rc=0 才推进，否则 60s 再探）；
+  audit 复用 discover() 权威 coverage/leak/percent/dup 门 + 锚点唯一性检查；track_f/retrained
+  阶段用 `Dispatcher` 做 GPU 占用与崩溃安全重试（子进程 --resume）；summarize 成功且无 err 后
+  `relaunch_supervisor()`（`--resume-supervisor-argv`）重启 D1 supervisor 再落 done。
+- 实际操作（control 目录 `research_runs/input_components_h134_control/`，gitignored）：终止原
+  `--max-stage 3` 调度器进程组（-575623，确认进程组清空、GPU2/3 空闲）；以 `trackr_d0_argv.json`
+  （`--max-stage 1`、7 数据集、jobs-per-gpu 4、min-free 5000）重启 D0 supervisor →
+  **PID 607551**（stage 1: 210 jobs, 180 done, 30 Weather pending，8 个 Weather run 已上
+  GPU2/3）；后台启动编排器（`orchestrator_argv.json`，--probe-sec 60，
+  --resume-supervisor-argv=trackr_d1_argv.json）→ **PID 609856**，d0_state=wait_3a（frozen/
+  retrained 门 rc=2 = 未收尾，60s 周期重探）。编排器逻辑已在启动前核对：Weather 30 未完成期间
+  只会停在 wait_3a，不会提前推进。
+- 校验：五个改动脚本 + 新编排器 py_compile/模块 import 通过；plan doc 状态块与 §2.1 计数已更新
+  为 v1.2（7 数据集：D0 210/21/189；D1 全 2520/252/2268）。未读取 test。

@@ -16,8 +16,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.run_input_component_ablation import (
-    CONDITIONS, HORIZONS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
-    expected_full_anchors, parse_scope,
+    CONDITIONS, DATASETS, HORIZONS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
+    expected_full_anchors, parse_dataset_scope, parse_scope,
 )
 
 
@@ -27,7 +27,8 @@ REQUIRED = {
 }
 
 
-def discover(root: Path, *, smoke: bool, horizons=None, seeds=None):
+def discover(root: Path, *, smoke: bool, horizons=None, seeds=None,
+            datasets=None):
     rows = []
     for path in root.rglob("metrics.csv"):
         try:
@@ -50,9 +51,13 @@ def discover(root: Path, *, smoke: bool, horizons=None, seeds=None):
     # data-integrity failure, even outside the requested scope.
     if result.duplicated(keys, keep=False).any():
         raise ValueError("duplicate Track-R checkpoints detected")
-    # Restrict to the requested horizon/seed scope (D0, D1, or the full matrix).
-    # Completeness / no-test / percent gates then apply to the scoped rows only,
-    # so an unrelated partially-complete D1 setting cannot block a D0 read.
+    # Restrict to the requested dataset/horizon/seed scope (D0, D1, the full
+    # matrix, or a dataset-restricted variant).  Completeness / no-test / percent
+    # gates then apply to the scoped rows only, so an unrelated partially-complete
+    # out-of-scope setting (a D1 setting, or a dropped dataset) cannot block a
+    # scoped read.
+    if datasets is not None:
+        result = result[result.dataset.isin(datasets)].copy()
     if horizons is not None:
         result = result[result.horizon.isin(horizons)].copy()
     if seeds is not None:
@@ -75,6 +80,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--track-r-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--datasets", default=",".join(DATASETS),
+                       help="comma list of datasets to include (default: all)")
     parser.add_argument("--horizons", default=",".join(map(str, HORIZONS)),
                        help="comma list of horizons to include (default: all)")
     parser.add_argument("--seeds", default=",".join(map(str, SEEDS)),
@@ -98,9 +105,10 @@ def main():
     args = parser.parse_args()
     if args.max_samples and not args.smoke:
         parser.error("--max-samples requires --smoke")
+    datasets = parse_dataset_scope(parser, args.datasets)
     horizons, seeds = parse_scope(parser, args.horizons, args.seeds)
     all_frame = discover(args.track_r_dir, smoke=args.smoke,
-                         horizons=horizons, seeds=seeds)
+                         horizons=horizons, seeds=seeds, datasets=datasets)
     # none/full is evaluated once by Track F and reused as Track R's common
     # baseline; only the 9 retrained intervention checkpoints need another read.
     frame = all_frame[
@@ -108,7 +116,8 @@ def main():
     ].copy()
     expected = args.expected_count
     if expected is None and not args.smoke:
-        expected = expected_full_anchors(horizons, seeds) * (len(CONDITIONS) - 1)
+        expected = expected_full_anchors(horizons, seeds, datasets=datasets) \
+            * (len(CONDITIONS) - 1)
     if expected is not None and len(frame) != expected:
         parser.error(f"expected {expected} Track-R checkpoints, found {len(frame)}")
     if args.priority_first:

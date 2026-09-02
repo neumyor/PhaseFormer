@@ -1,9 +1,11 @@
 # PhaseFormer 输入成分 H1/H3/H4 因果消融实验计划
 
-> 状态：提取器、Track R/Track F、配对 CI 与 RCRF 反事实重组已经实现并完成受限 smoke。v1.1
-> （2026-09-02）已恢复正式矩阵，正分批并行执行 D0（h192×seed2021）的 240 个 validation-only
-> Track R（断点可恢复；控制与产物目录见 §7.3），D0 完成后接审计 → Track F → retrained test →
-> D0 汇总。工程 smoke 曾读取 ETTm2-H96 的最多128个 test窗口，仅用于链路校验，未用于选择公式、
+> 状态：提取器、Track R/Track F、配对 CI 与 RCRF 反事实重组已经实现并完成受限 smoke。v1.2
+> （2026-09-02）已恢复正式矩阵（Traffic 已剔除，见下方 v1.2 修订），按串行编排执行 D0
+> （h192×seed2021，7 数据集）的 210 个 validation-only Track R（落地时 180 个非 Traffic run 已
+> 完成，仅剩 Weather 30；断点可恢复；控制与产物目录见 §7.3），D0 完成后接审计 → Track F →
+> retrained test → D0 汇总，再恢复 D1。工程 smoke 曾读取 ETTm2-H96 的最多128个 test窗口，
+> 仅用于链路校验，未用于选择公式、
 > 模型或参数；下列表格仍为空表，不能据此形成效果结论。自 D0 在 Stage 3a-F 首次读取 test 起公式
 > 与门槛冻结（§14），此后不再修改。
 >
@@ -14,6 +16,16 @@
 > 三 seed 宏平均。本修订只改变执行顺序与结论汇报层级，不改任何提取公式、模型、超参、QC 阈值或
 > 判定门槛。D0 在 Stage 3a-F 首次读取 test —— 自该刻起全部公式与门槛即冻结（§14）；D1 不得对
 > 已冻结项做任何修改（否则需新版本并披露 D0 的 test-set exposure）。
+>
+> 修订（数据范围 v1.2，2026-09-02）：为加快结论产出，自本日起将 **Traffic** 数据集从本消融的
+> 执行与评估矩阵中剔除 —— 不再调度 Traffic 的训练任务，Track F / retrained test / 汇总亦全部
+> 跳过 Traffic（即“跳过 Traffic 数据集上的所有测试”）。执行范围收敛为 7 个数据集（ETTh1、ETTh2、
+> ETTm1、ETTm2、Exchange、Weather、Electricity）。所有训练/下游 runner 与 D0 下游编排器已支持
+> `--datasets` 白名单过滤，期望计数随范围自动推导，故可随时把 Traffic 加回；已完成的 6 个 Traffic
+> D0 run 与进行中的 Traffic 训练就此搁置，不参与任何 test 读。本修订仅为范围/资源管理决定，不改
+> 任何提取公式、模型、超参、QC 阈值或判定门槛。GPU 编排同步改为**串行**：Track-R 调度器以
+> `--max-stage 1` 跑完 D0 后退出（不再自动连跑 D1），D0 下游独占 GPU2/3 全速运行，D0 汇总完成后
+> 再以 `--max-stage 3` 恢复 D1 训练。
 
 ## 1. 研究问题
 
@@ -47,15 +59,17 @@ calibration 和 high-frequency damping，无法把差异归因到 RCRF。
 - lookback 固定为 720，horizon 为 96/192/336/720。
 - `period_len=24`，因此每个输入窗口恰好包含 `K=30` 个周期。
 - seeds：2021、2022、2023。
-- **决策范围 D0（优先）**：先固定单个 seed `2021`、`horizon=192`，覆盖全部 8 个数据集、3 个模型
-  和 10 个输入条件（Track R 共 240 个训练任务）。D0 是自足决策范围：Track R(validation) →
-  validation 审计 → Track F（24 个 full 锚点 × 10 输入）→ retrained test（216 个非 full
+- **决策范围 D0（优先）**：先固定单个 seed `2021`、`horizon=192`，覆盖其余 7 个数据集（Traffic
+  已按 v1.2 修订剔除）、3 个模型和 10 个输入条件（Track R 共 210 个训练任务；本修订落地前已
+  完成的 180 个非 Traffic run 照常计入）。D0 是自足决策范围：Track R(validation) →
+  validation 审计 → Track F（21 个 full 锚点 × 10 输入）→ retrained test（189 个非 full
   checkpoint）→ D0 汇总，形成 h192×seed2021 下的完整结论。由于仅 seed=2021，D0 结论为
   **单 seed 判定**（moving-block CI 仍按预测起点时间序列计算，故可行），并在汇报中显式标注
   single-seed provisional，最终分级以 D1 三 seed 宏平均为准。
 - **扩展范围 D1**：D0 结论形成后，按与 D0 完全相同的冻结协议扩展到 `horizon∈{96,336,720} ×
-  seed=2021` 与 `全部 horizon × seed∈{2022,2023}`，得到完整 2880 个 Track R、288 个 full
-  锚点与 2592 个 retrained test，用于三 seed 宏平均与最终分级（含对 D0 单 seed 结论的复查）。
+  seed=2021` 与 `全部 horizon × seed∈{2022,2023}`，得到完整 2520 个 Track R（7 数据集口径，
+  其中 D0 210）、252 个 full 锚点与 2268 个 retrained test，用于三 seed 宏平均与最终分级
+  （含对 D0 单 seed 结论的复查）。
 - full-train；按最低 validation loss 选择 checkpoint；冻结配置后每个 checkpoint×input-condition
   组合只评估一次 test，期间权重不更新。
 - 七个有论文 Golden 的数据集同时报告 Golden 与 matched comparison；Exchange 只报告 matched

@@ -16,8 +16,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.run_input_component_ablation import (
-    HORIZONS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
-    expected_full_anchors, parse_scope,
+    DATASETS, HORIZONS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
+    expected_full_anchors, parse_dataset_scope, parse_scope,
 )
 
 
@@ -27,7 +27,8 @@ REQUIRED = {
 }
 
 
-def discover(root: Path, *, smoke: bool, horizons=None, seeds=None):
+def discover(root: Path, *, smoke: bool, horizons=None, seeds=None,
+            datasets=None):
     rows = []
     for path in root.rglob("metrics.csv"):
         try:
@@ -53,8 +54,12 @@ def discover(root: Path, *, smoke: bool, horizons=None, seeds=None):
     if result.duplicated(keys, keep=False).any():
         duplicates = result.loc[result.duplicated(keys, keep=False), keys]
         raise ValueError(f"duplicate full checkpoints detected:\n{duplicates.to_string(index=False)}")
-    # Restrict to the requested horizon/seed scope (D0, D1, or the full matrix).
-    # All downstream gates then apply to the scoped rows only.
+    # Restrict to the requested dataset/horizon/seed scope (D0, D1, the full
+    # matrix, or a dataset-restricted variant).  All downstream gates then apply
+    # to the scoped rows only, so out-of-scope rows (e.g. a dropped dataset) can
+    # never block a scoped read.
+    if datasets is not None:
+        result = result[result.dataset.isin(datasets)].copy()
     if horizons is not None:
         result = result[result.horizon.isin(horizons)].copy()
     if seeds is not None:
@@ -70,6 +75,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--track-r-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--datasets", default=",".join(DATASETS),
+                       help="comma list of datasets to include (default: all)")
     parser.add_argument("--horizons", default=",".join(map(str, HORIZONS)),
                        help="comma list of horizons to include (default: all)")
     parser.add_argument("--seeds", default=",".join(map(str, SEEDS)),
@@ -94,11 +101,13 @@ def main():
     args = parser.parse_args()
     if args.max_samples and not args.smoke:
         parser.error("--max-samples requires --smoke")
+    datasets = parse_dataset_scope(parser, args.datasets)
     horizons, seeds = parse_scope(parser, args.horizons, args.seeds)
     frame = discover(args.track_r_dir, smoke=args.smoke,
-                     horizons=horizons, seeds=seeds)
+                     horizons=horizons, seeds=seeds, datasets=datasets)
     if args.expected_count is None:
-        expected = None if args.smoke else expected_full_anchors(horizons, seeds)
+        expected = None if args.smoke else expected_full_anchors(
+            horizons, seeds, datasets=datasets)
     else:
         expected = args.expected_count
     if expected is not None and len(frame) != expected:
