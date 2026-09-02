@@ -3,8 +3,10 @@
 
 The single-process driver `run_input_component_ablation.py` executes jobs one at
 a time.  This launcher runs the same preregistered Track-R search commands but
-keeps up to one training subprocess per available GPU, and enforces the
-preregistered execution order in hard stages:
+keeps several training subprocesses running across the available GPUs
+(`--jobs-per-gpu` jobs may share one GPU, since a PhaseFormer run uses only a
+fraction of a GPU), and enforces the preregistered execution order in hard
+stages:
 
     Stage 1 (priority pass): horizon=192, seed=2021   -> 8 x 3 x 10 = 240 runs
     Stage 2:                 horizon in {96,336,720}, seed=2021
@@ -26,7 +28,7 @@ Usage (formal):
     <python> scripts/run_input_components_parallel.py \
         --output-dir /home/niuyiming/PhaseFormer/research_runs/input_components_h134_scratch \
         --control-dir /home/niuyiming/PhaseFormer/research_runs/input_components_h134_control \
-        --gpus 2,3 --max-stage 3
+        --gpus 2,3 --jobs-per-gpu 4 --max-stage 3
 """
 
 from __future__ import annotations
@@ -98,7 +100,7 @@ def build_queue(args):
                                 },
                             )
                         )
-    jobs.sort(key=lambda item: item[0])  # stage 1, then 2, then 3
+    jobs.sort(key=lambda item: item[0])
     return jobs
 
 
@@ -177,6 +179,8 @@ def main():
                    help="candidate physical GPU indices (comma list)")
     p.add_argument("--gpus-file", type=Path,
                    help="optional file listing candidate GPU indices (re-read); union of both")
+    p.add_argument("--jobs-per-gpu", type=int, default=1,
+                   help="number of concurrent training jobs to place on one GPU")
     p.add_argument("--max-stage", type=int, default=3, choices=[1, 2, 3])
     p.add_argument("--min-free-mb", type=int, default=5000)
     p.add_argument("--refresh-sec", type=float, default=20.0)
@@ -199,7 +203,6 @@ def main():
     args.models = tuple(sorted(csvset(args.models)))
     args.horizons = tuple(sorted(int(h) for h in csvset(args.horizons, int)))
     args.seeds = tuple(sorted(int(s) for s in csvset(args.seeds, int)))
-    # validate
     for d in set(args.datasets) - set(DATASETS):
         p.error(f"unknown dataset {d}")
     for m in set(args.models) - set(MODELS):
@@ -230,19 +233,22 @@ def main():
     attempts = {}
     status_path = args.control_dir / "supervisor.json"
 
-    slots = {}  # gpu -> {"key": str, "proc": Popen} when busy; gpu -> None when idle
-    busy = {}   # gpu -> running job key
+    # Slots: each active GPU contributes --jobs-per-gpu slots.
+    slots = {}  # slot id -> {"gpu": int, "proc": Popen|None, "key": str|None}
+    active_gpus = set()
 
-    def running_children():
-        return {g: slots[g] for g in slots if slots[g] is not None}
+    def running_slots():
+        return {sid for sid, s in slots.items() if s["proc"] is not None}
 
     def dump(message, stage=None):
         info = {
             "message": message,
             "stage": stage,
             "done_total": len(done),
-            "running": [busy.get(g) for g in sorted(slots) if busy.get(g)],
-            "active_gpus": sorted(slots),
+            "running": [slots[sid]["key"] for sid in sorted(slots)
+                        if slots[sid]["proc"] is not None],
+            "active_gpus": sorted(active_gpus),
+            "slots": len(slots),
             "last_update": utc_now(),
         }
         atomic_write_json(status_path, info)
@@ -252,19 +258,22 @@ def main():
         free = free_memory_mb()
         now_candidates = candidates | read_gpus_file(args.gpus_file)
         for gpu in sorted(now_candidates):
-            if gpu in slots:
+            if gpu in active_gpus:
                 continue
             mem = free.get(gpu)
+            usable = mem is None or mem >= args.min_free_mb
+            if not usable:
+                print(f"[launcher] gpu {gpu} free mem only {mem} MiB (< {args.min_free_mb}); waiting",
+                      flush=True)
+                continue
             if mem is None:
                 print(f"[launcher] nvidia-smi unavailable; assume gpu {gpu} usable", flush=True)
-                slots[gpu] = None
-            elif mem >= args.min_free_mb:
-                print(f"[launcher] gpu {gpu} free mem {mem} MiB -> active", flush=True)
-                slots[gpu] = None
-            else:
-                print(f"[launcher] gpu {gpu} free mem only {mem} MiB (< {args.min_free_mb}); waiting", flush=True)
+            for _ in range(args.jobs_per_gpu):
+                sid = len(slots)
+                slots[sid] = {"gpu": gpu, "proc": None, "key": None}
+            active_gpus.add(gpu)
+            print(f"[launcher] gpu {gpu} active with {args.jobs_per_gpu} slots", flush=True)
 
-    # ---- run stages in order ----
     dump("launcher start")
     terminal_failure = None
     try:
@@ -280,62 +289,65 @@ def main():
                   flush=True)
             dump(f"stage {stage}: {len(stage_jobs)} jobs start", stage=stage)
 
-            while pending or running_children():
-                # 1) reap finished
-                for gpu in list(slots):
-                    if slots[gpu] is None:
+            while pending or running_slots():
+                # 1) reap finished jobs
+                for sid in list(slots):
+                    s = slots[sid]
+                    if s["proc"] is None:
                         continue
-                    proc = slots[gpu]["proc"]
-                    key = slots[gpu]["key"]
-                    rc = proc.poll()
+                    rc = s["proc"].poll()
                     if rc is None:
                         continue
-                    slots[gpu] = None
-                    del busy[gpu]
+                    key = s["key"]
+                    gpu = s["gpu"]
+                    s["proc"] = None
+                    s["key"] = None
                     if rc == 0:
                         atomic_append(done_path, key)
                         done.add(key)
-                        print(f"[launcher] DONE   gpu{gpu} {key}", flush=True)
+                        print(f"[launcher] DONE   gpu{gpu}/slot{sid} {key}", flush=True)
                     else:
                         attempts[key] = attempts.get(key, 0) + 1
                         if attempts[key] < args.max_attempts:
                             print(f"[launcher] RETRY  gpu{gpu} {key} "
                                   f"(attempt {attempts[key]}/{args.max_attempts}) rc={rc}",
                                   flush=True)
-                            pending.appendleft((stage, next(j for s, j in stage_jobs
-                                                            if job_key(s, j) == key)))
+                            pending.appendleft(
+                                (stage, next(j for s2, j in stage_jobs
+                                             if job_key(s2, j) == key))
+                            )
                         else:
                             atomic_append(fail_path,
                                           f"{key}\t{utc_now()}\trc={rc}\tmax_attempts")
                             terminal_failure = key
                             print(f"[launcher] TERMINAL FAILURE {key} rc={rc}", flush=True)
-                # 2) abort if a job is terminally failed
+                # 2) abort on terminal failure
                 if terminal_failure:
                     break
-                # 3) top up GPU pool
+                # 3) top up GPU pool and dispatch
                 refresh_pool()
-                # 4) dispatch pending jobs to idle GPUs
-                idle = [g for g in slots if slots[g] is None]
+                idle = [sid for sid in sorted(slots) if slots[sid]["proc"] is None]
                 while idle and pending:
                     stage_i, job = pending.popleft()
                     key = job_key(stage_i, job)
                     if key in done:
                         continue
-                    gpu = idle.pop(0)
+                    sid = idle.pop(0)
+                    gpu = slots[sid]["gpu"]
                     cmd = build_command(args, job)
                     logf = open(args.control_dir / "jobs" / f"{key}.log", "a")
-                    logf.write(f"\n# {utc_now()} launch gpu{gpu}\n# {shlex.join(cmd)}\n")
+                    logf.write(f"\n# {utc_now()} launch gpu{gpu} slot{sid}\n"
+                               f"# {shlex.join(cmd)}\n")
                     logf.flush()
                     env = dict(os.environ)
                     env["CUDA_VISIBLE_DEVICES"] = str(gpu)
                     proc = subprocess.Popen(cmd, cwd=str(REPO_ROOT), env=env,
                                             stdout=logf, stderr=subprocess.STDOUT)
-                    slots[gpu] = {"key": key, "proc": proc}
-                    busy[gpu] = key
+                    slots[sid] = {"gpu": gpu, "proc": proc, "key": key}
                     attempts.setdefault(key, 0)
-                    print(f"[launcher] LAUNCH gpu{gpu} {key}", flush=True)
-                # 5) wait a little
-                if running_children():
+                    print(f"[launcher] LAUNCH gpu{gpu}/slot{sid} {key}", flush=True)
+                # 4) wait a little
+                if running_slots():
                     time.sleep(args.poll_sec)
                 else:
                     time.sleep(args.refresh_sec)
@@ -344,10 +356,10 @@ def main():
             dump(f"stage {stage}: completed ({len(stage_jobs)} runs)", stage=stage)
     except KeyboardInterrupt:
         dump("interrupted; terminating children")
-        for g in list(slots):
-            if slots[g] is not None:
+        for sid in list(slots):
+            if slots[sid]["proc"] is not None:
                 try:
-                    slots[g]["proc"].terminate()
+                    slots[sid]["proc"].terminate()
                 except Exception:
                     pass
         raise
