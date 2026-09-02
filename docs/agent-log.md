@@ -1155,3 +1155,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   32%–45%，但稳定精度不足。若强制一次训练，保留梯度解耦+1.0× LR+1.0 anchor loss 作为
   当前最合理配方；当前正式最佳仍是两阶段 Full Repair。完整表见
   `docs/PhaseFormer_pctf_single_stage_training.md`。
+- 2026-09-02 — Consolidated the selected strict-T28 reproductions into
+  `config/strict_t28_dataset_best/{ETTh1,ETTm1}/{H96,H192,H336,H720}/`.
+  Every horizon contains a compact resolved `config.json` and a portable
+  `commands.sh`; set `PYTHON_BIN` to select the local interpreter.  Commands
+  write new artifacts to the gitignored `research_runs/strict_t28_reproduction/`.
+  These configs retain the original test-set-selection disclosure.

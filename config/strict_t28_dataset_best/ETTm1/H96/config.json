@@ -1,0 +1,9 @@
+{
+  "purpose": "ETTm1 shared best strict-T28 configuration; selected jointly for H96/H192",
+  "selection_note": "test-set selection; not a blind test result",
+  "dataset": "ETTm1",
+  "horizon": 96,
+  "model": "pctf_anchor_repair_strict_t28",
+  "training": {"lookback": 720, "period": 24, "cycle_period": 24, "percent": 100, "max_epochs": 50, "seed": 2021, "loss": "mae", "lr_multiplier": 0.2, "learning_rate": 0.0002, "batch_size": 256, "num_workers": 0},
+  "overrides": {"anchored_pctf_correction_max": 0.6, "anchored_pctf_deformation_max": 0.24, "anchored_pctf_global_level_max": 0.12, "anchored_pctf_shape_aux_weight": 0.01, "anchored_pctf_level_aux_weight": 0.01, "anchored_pctf_gate_aux_weight": 0.01}
+}
