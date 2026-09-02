@@ -16,7 +16,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.run_input_component_ablation import (
-    CONDITIONS, DATASETS, HORIZONS, MODELS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
+    CONDITIONS, HORIZONS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
+    expected_full_anchors, parse_scope,
 )
 
 
@@ -26,7 +27,7 @@ REQUIRED = {
 }
 
 
-def discover(root: Path, *, smoke: bool):
+def discover(root: Path, *, smoke: bool, horizons=None, seeds=None):
     rows = []
     for path in root.rglob("metrics.csv"):
         try:
@@ -45,8 +46,17 @@ def discover(root: Path, *, smoke: bool):
         raise FileNotFoundError(f"no completed validation-only Track-R metrics under {root}")
     result = pd.concat(rows, ignore_index=True)
     keys = ["dataset", "horizon", "seed", "mechanism", "input_hypothesis", "input_variant"]
+    # Duplicate detection stays global: duplicates anywhere in the source are a
+    # data-integrity failure, even outside the requested scope.
     if result.duplicated(keys, keep=False).any():
         raise ValueError("duplicate Track-R checkpoints detected")
+    # Restrict to the requested horizon/seed scope (D0, D1, or the full matrix).
+    # Completeness / no-test / percent gates then apply to the scoped rows only,
+    # so an unrelated partially-complete D1 setting cannot block a D0 read.
+    if horizons is not None:
+        result = result[result.horizon.isin(horizons)].copy()
+    if seeds is not None:
+        result = result[result.seed.isin(seeds)].copy()
     if result.test_mse.notna().any():
         raise ValueError("Track-R source already contains test metrics; refusing a second test read")
     if not smoke:
@@ -65,6 +75,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--track-r-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--horizons", default=",".join(map(str, HORIZONS)),
+                       help="comma list of horizons to include (default: all)")
+    parser.add_argument("--seeds", default=",".join(map(str, SEEDS)),
+                       help="comma list of seeds to include (default: all)")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--smoke", action="store_true")
@@ -84,7 +98,9 @@ def main():
     args = parser.parse_args()
     if args.max_samples and not args.smoke:
         parser.error("--max-samples requires --smoke")
-    all_frame = discover(args.track_r_dir, smoke=args.smoke)
+    horizons, seeds = parse_scope(parser, args.horizons, args.seeds)
+    all_frame = discover(args.track_r_dir, smoke=args.smoke,
+                         horizons=horizons, seeds=seeds)
     # none/full is evaluated once by Track F and reused as Track R's common
     # baseline; only the 9 retrained intervention checkpoints need another read.
     frame = all_frame[
@@ -92,7 +108,7 @@ def main():
     ].copy()
     expected = args.expected_count
     if expected is None and not args.smoke:
-        expected = len(DATASETS) * len(HORIZONS) * len(SEEDS) * len(MODELS) * (len(CONDITIONS) - 1)
+        expected = expected_full_anchors(horizons, seeds) * (len(CONDITIONS) - 1)
     if expected is not None and len(frame) != expected:
         parser.error(f"expected {expected} Track-R checkpoints, found {len(frame)}")
     if args.priority_first:

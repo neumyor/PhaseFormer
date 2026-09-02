@@ -388,16 +388,16 @@ D0 汇总 —— 输出单 seed h192 表与 provisional 结论（§13.0）：
 python scripts/summarize_input_component_ablation.py \
   research_runs/input_components_h134_frozen_d0 \
   research_runs/input_components_h134_retrained_test_d0 \
-  --scope horizons=192,seeds=2021 --output /path/to/result_summary_d0.csv
+  --horizons 192 --seeds 2021 --output /path/to/result_summary_d0.csv
 ```
 
-> 实现说明（必做项，须在 D0 Track R 收尾前落地）：当前 `run_input_component_frozen_matrix.py`、
-> `run_input_component_retrained_test_matrix.py` 与 `summarize_input_component_ablation.py` 按
-> 全矩阵（288 / 2592 / 全 2880）设计。决策范围优先要求三者为 `--horizons/--seeds`（或等价
-> `--scope d0|all`）过滤：`expected-count` 由范围推导（D0 = 24 锚点 / 216 retrained；全矩阵 =
-> 288 / 2592），retrained 入口在范围子集上仍须先确认该范围内 validation Track R 完整、且源目录
-> 尚未含该范围内任何 test 指标。D0 下游产物写入独立目录（`*_d0`），避免与 D1 全矩阵产物混用；
-> D1 收尾再写全矩阵目录。
+> 实现说明（必做项，已在 D0 Track R 收尾前落地）：`run_input_component_frozen_matrix.py`、
+> `run_input_component_retrained_test_matrix.py` 与 `summarize_input_component_ablation.py` 均
+> 接受 `--horizons/--seeds` 范围过滤，`expected-count`/`expected-settings-per-track` 由范围自动
+> 推导（D0 = 24 锚点 / 216 retrained；全矩阵 = 288 / 2592）。retrained 入口在范围子集上只校验
+> 该范围内的 validation Track R 完整性、无泄漏与 100% 采样，源目录中出现范围外（未完成的 D1）
+> 条件不会阻塞 D0 读取。D0 下游产物写入独立目录（`*_d0`），避免与 D1 全矩阵产物混用；D1 收尾
+> 再写全矩阵目录（不带过滤参数即为全矩阵默认）。
 
 D1 / 全矩阵 Track R（D0 结论形成后执行，对应 §7.2 Stage 3b）：余下
 `horizon∈{96,336,720} × seed2021` 与全部 horizon × `seed∈{2022,2023}` 共 2640 个

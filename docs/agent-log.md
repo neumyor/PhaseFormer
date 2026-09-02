@@ -1285,3 +1285,21 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `run_input_component_frozen_matrix.py`、`run_input_component_retrained_test_matrix.py` 与
   `summarize_input_component_ablation.py` 增加 `--horizons/--seeds`（或 `--scope d0|all`）
   范围过滤，`expected-count` 由范围推导，D0 下游产物写独立 `*_d0` 目录。
+
+## 2026-09-02 — D0 范围过滤落地到三个下游 runner
+
+- 为决策范围（D0/D1/全矩阵）给 `scripts/run_input_component_frozen_matrix.py`、
+  `scripts/run_input_component_retrained_test_matrix.py` 与
+  `scripts/summarize_input_component_ablation.py` 增加 `--horizons/--seeds` 范围过滤；
+  `--expected-count` / `--expected-settings-per-track` 由范围自动推导（共享
+  `scripts/run_input_component_ablation.py` 新增的 `parse_scope()` 与
+  `expected_full_anchors()`：D0=24 锚点/216 retrained，全矩阵默认=288/2592）。
+  重复 checkpoint 检测仍保持全局（源内任何重复都拒绝）；完整性/无泄漏/percent 门只校验范围内
+  行，范围外未完成的 D1 条件不会阻塞 D0 读取。不带过滤参数即为全矩阵，行为与原来一致。
+- 同步修订实验文档 §7.3：D0 汇总命令改为 `--horizons 192 --seeds 2021`；“实现说明”改为已落地
+  措辞。
+- 校验：四脚本 py_compile、模块 import、`git diff --check` 通过；对真实
+  `research_runs/input_components_h134_scratch` 验证——D0 冻结 smoke 列出 19/24 个 full 锚点
+  （Track R 仍在跑）、正式门按范围推导报 `expected 24, found 19`；retrained D0 门先由完整性检查
+  正确拦截（Traffic 条件未收尾）；默认无参数门仍为 288；`--horizons 192,999` 被 parse_scope
+  拒绝。未读取 test。

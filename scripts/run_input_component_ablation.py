@@ -30,6 +30,34 @@ def csv_values(value, cast=str):
     return tuple(cast(item.strip()) for item in value.split(",") if item.strip())
 
 
+def parse_scope(parser, horizons_csv, seeds_csv):
+    """Validate --horizons/--seeds and return sorted integer tuples.
+
+    Shared by the Track R driver and the Track F / retrained-test / summarize
+    runners so a scoped run (e.g. D0 = horizon 192 x seed 2021) keeps exactly
+    the same horizon/seed vocabulary as the full matrix.
+    """
+    horizons = tuple(sorted(csv_values(horizons_csv, int)))
+    seeds = tuple(sorted(csv_values(seeds_csv, int)))
+    unknown = set(horizons) - set(HORIZONS)
+    if unknown:
+        parser.error(f"unknown horizons: {sorted(unknown)}")
+    unknown = set(seeds) - set(SEEDS)
+    if unknown:
+        parser.error(f"unknown seeds: {sorted(unknown)}")
+    return horizons, seeds
+
+
+def expected_full_anchors(horizons, seeds):
+    """Number of unique full (none/full) checkpoints in a scope.
+
+    One full checkpoint per (dataset, model, horizon, seed) setting; the frozen
+    Track F matrix has exactly this many anchors, and the summarize setting count
+    per track matches it too.
+    """
+    return len(DATASETS) * len(MODELS) * len(horizons) * len(seeds)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--datasets", default=",".join(DATASETS))

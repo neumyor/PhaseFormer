@@ -15,6 +15,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.evaluate_input_component_checkpoint import moving_block_effect_interval
+from scripts.run_input_component_ablation import (
+    HORIZONS, SEEDS, expected_full_anchors, parse_scope,
+)
 
 
 EXPECTED = {("none", "full")} | {
@@ -80,12 +83,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="+")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--horizons", default=",".join(map(str, HORIZONS)),
+                       help="comma list of horizons to include (default: all)")
+    parser.add_argument("--seeds", default=",".join(map(str, SEEDS)),
+                       help="comma list of seeds to include (default: all)")
     parser.add_argument("--allow-incomplete", action="store_true")
     parser.add_argument("--allow-smoke", action="store_true")
-    parser.add_argument("--expected-settings-per-track", type=int, default=288)
+    parser.add_argument("--expected-settings-per-track", type=int,
+                       help="defaults to the number of (dataset,horizon,seed,model) "
+                            "settings in the requested --horizons/--seeds scope")
     parser.add_argument("--bootstrap-replicates", type=int, default=2000)
     args = parser.parse_args()
+    horizons, seeds = parse_scope(parser, args.horizons, args.seeds)
+    if args.expected_settings_per_track is None:
+        args.expected_settings_per_track = expected_full_anchors(horizons, seeds)
     frame = read_inputs(args.inputs)
+    frame = frame[frame.horizon.isin(horizons) & frame.seed.isin(seeds)]
     if not args.allow_smoke:
         if "evaluation_scope" not in frame or (frame.evaluation_scope != "formal").any():
             raise ValueError("formal summary refuses smoke or unlabelled evaluation rows")

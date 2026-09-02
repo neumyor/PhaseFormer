@@ -15,7 +15,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.run_input_component_ablation import PRIORITY_HORIZON, PRIORITY_SEED
+from scripts.run_input_component_ablation import (
+    HORIZONS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
+    expected_full_anchors, parse_scope,
+)
 
 
 REQUIRED = {
@@ -24,7 +27,7 @@ REQUIRED = {
 }
 
 
-def discover(root: Path, *, smoke: bool):
+def discover(root: Path, *, smoke: bool, horizons=None, seeds=None):
     rows = []
     for path in root.rglob("metrics.csv"):
         try:
@@ -45,9 +48,17 @@ def discover(root: Path, *, smoke: bool):
         raise FileNotFoundError(f"no completed Track-R full metrics under {root}")
     result = pd.concat(rows, ignore_index=True)
     keys = ["dataset", "horizon", "seed", "mechanism"]
+    # Duplicate detection stays global: a duplicate anywhere in the source is a
+    # data-integrity failure, even if it falls outside the requested scope.
     if result.duplicated(keys, keep=False).any():
         duplicates = result.loc[result.duplicated(keys, keep=False), keys]
         raise ValueError(f"duplicate full checkpoints detected:\n{duplicates.to_string(index=False)}")
+    # Restrict to the requested horizon/seed scope (D0, D1, or the full matrix).
+    # All downstream gates then apply to the scoped rows only.
+    if horizons is not None:
+        result = result[result.horizon.isin(horizons)].copy()
+    if seeds is not None:
+        result = result[result.seed.isin(seeds)].copy()
     if result.test_mse.notna().any():
         raise ValueError("full checkpoints already have test metrics; refusing a duplicate test read")
     if not smoke and ((result.percent != 100).any() or (result.max_eval_samples != 0).any()):
@@ -59,6 +70,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--track-r-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--horizons", default=",".join(map(str, HORIZONS)),
+                       help="comma list of horizons to include (default: all)")
+    parser.add_argument("--seeds", default=",".join(map(str, SEEDS)),
+                       help="comma list of seeds to include (default: all)")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--expected-count", type=int)
@@ -79,8 +94,13 @@ def main():
     args = parser.parse_args()
     if args.max_samples and not args.smoke:
         parser.error("--max-samples requires --smoke")
-    frame = discover(args.track_r_dir, smoke=args.smoke)
-    expected = args.expected_count if args.expected_count is not None else (None if args.smoke else 288)
+    horizons, seeds = parse_scope(parser, args.horizons, args.seeds)
+    frame = discover(args.track_r_dir, smoke=args.smoke,
+                     horizons=horizons, seeds=seeds)
+    if args.expected_count is None:
+        expected = None if args.smoke else expected_full_anchors(horizons, seeds)
+    else:
+        expected = args.expected_count
     if expected is not None and len(frame) != expected:
         parser.error(f"expected {expected} full checkpoints, found {len(frame)}")
     sort_columns = ["dataset", "horizon", "seed", "mechanism"]
