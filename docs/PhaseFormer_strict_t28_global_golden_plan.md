@@ -206,32 +206,37 @@ H192 易达标；每个把 H192 推到 0.1920 以下的旋钮（lr↓、anchor�
 最终配置在 Weather 四个 horizon 共 8 个 test 指标**全部优于 Golden**（MSE −0.10~−0.37%，
 MAE −1.31~−2.76%）。H96/H192 的 MSE 增益（0.27–0.31%）未达 0.5% 双目标门槛，已记录。
 
-## Stage D 完整登记表（含 Weather 最终配置，2026-09-02）
+## Stage D 完整登记表（2026-09-02 更新，含 ETTh1/ETTm1 专项搜索）
 
 下表为当前版本在全部 Golden setting 上的登记结果。来源与二次校验规则：
 
-- **ETTh1/ETTh2/ETTm1/ETTm2**：Stage D 3-seed（2021/2022/2023）confirm run 的 test 均值±总体 std。
-- **Weather**：登记 Weather 专项搜索的最终配置（1 seed，seed 2021，单次 test），取代原 Stage D
-  S 档 3-seed 行；生成命令 `scripts/report_strict_t28_master_table.py`，配置身份由
-  `scripts/verify_run_reproducibility.py` 校验为 1:1。
+- **ETTh1 / ETTm1**：主研究者在两数据集上专项搜索得到的最佳共享配置（ETTh1 `u_lr020`、
+  ETTm1 `w_aux01`，均 1 seed），结果由主研究者报告、原样登记；**本机无这两个搜索的 run 数据**，
+  因此不参与 1:1 校验、也不收集其 config/commands 文件。
+- **ETTh2 / ETTm2**：Stage D 3-seed（2021/2022/2023）confirm run 的 test 均值±总体 std。
+- **Weather**：Weather 专项搜索最终配置（1 seed，seed 2021，单次 test）。
 - **Electricity (M) 与 Traffic (C)**：主研究者指令取消（60/84 处停止），标记 CANCELLED，未登记结果。
 - 稳定判定（3-seed 行）：`mean+std < Golden` 且每 seed 双指标低于 Golden → BOTH；否则按单指标记
-  MSE/MAE。Weather 为单 seed 直接判定。
+  MSE/MAE。单 seed 行（srch/W-srch）按双指标各自严格低于 Golden 判定。
+- 登记表生成命令 `scripts/report_strict_t28_master_table.py`；有 run 数据的行其配置身份由
+  `scripts/verify_run_reproducibility.py` 校验为 1:1。
+- 每个已登记 cell 的 `config.json` + `commands.sh` 已整理到
+  `docs/strict_t28_master_table_configs/<Dataset>/<h<horizon>>/`（见下节）。
 
 | Dataset | H | conf | MSE | MAE | Gold M | Gold A | ΔMSE% | ΔMAE% | Beat |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| ETTh1 | 96 | 3seed | 0.368±0.003 | 0.396±0.002 | 0.359 | 0.382 | +2.38 | +3.64 | no |
-| ETTh1 | 192 | 3seed | 0.401±0.001 | 0.416±0.001 | 0.397 | 0.404 | +1.05 | +2.92 | no |
-| ETTh1 | 336 | 3seed | 0.428±0.002 | 0.434±0.000 | 0.425 | 0.424 | +0.68 | +2.45 | no |
-| ETTh1 | 720 | 3seed | 0.435±0.024 | 0.449±0.007 | 0.431 | 0.450 | +1.00 | −0.19 | no |
+| ETTh1 | 96 | srch | 0.352 | 0.384 | 0.359 | 0.382 | −1.95 | +0.52 | MSE |
+| ETTh1 | 192 | srch | 0.390 | 0.407 | 0.397 | 0.404 | −1.76 | +0.74 | MSE |
+| ETTh1 | 336 | srch | 0.420 | 0.426 | 0.425 | 0.424 | −1.18 | +0.47 | MSE |
+| ETTh1 | 720 | srch | 0.414 | 0.442 | 0.431 | 0.450 | −3.94 | −1.78 | BOTH |
 | ETTh2 | 96 | 3seed | 0.273±0.001 | 0.332±0.001 | 0.275 | 0.338 | −0.79 | −1.71 | BOTH |
 | ETTh2 | 192 | 3seed | 0.339±0.003 | 0.374±0.001 | 0.341 | 0.376 | −0.54 | −0.43 | MAE |
 | ETTh2 | 336 | 3seed | 0.366±0.004 | 0.401±0.001 | 0.369 | 0.405 | −0.78 | −1.07 | MAE |
 | ETTh2 | 720 | 3seed | 0.395±0.004 | 0.429±0.001 | 0.402 | 0.436 | −1.73 | −1.59 | BOTH |
-| ETTm1 | 96 | 3seed | 0.294±0.000 | 0.346±0.002 | 0.293 | 0.344 | +0.48 | +0.52 | no |
-| ETTm1 | 192 | 3seed | 0.329±0.004 | 0.364±0.002 | 0.323 | 0.361 | +1.73 | +0.82 | no |
-| ETTm1 | 336 | 3seed | 0.359±0.003 | 0.382±0.001 | 0.358 | 0.381 | +0.40 | +0.35 | no |
-| ETTm1 | 720 | 3seed | 0.421±0.002 | 0.415±0.001 | 0.412 | 0.410 | +2.13 | +1.15 | no |
+| ETTm1 | 96 | srch | 0.291 | 0.338 | 0.293 | 0.344 | −0.68 | −1.74 | BOTH |
+| ETTm1 | 192 | srch | 0.329 | 0.357 | 0.323 | 0.361 | +1.86 | −1.11 | MAE |
+| ETTm1 | 336 | srch | 0.359 | 0.376 | 0.358 | 0.381 | +0.28 | −1.31 | MAE |
+| ETTm1 | 720 | srch | 0.415 | 0.408 | 0.412 | 0.410 | +0.73 | −0.49 | MAE |
 | ETTm2 | 96 | 3seed | 0.161±0.002 | 0.250±0.001 | 0.163 | 0.256 | −1.29 | −2.40 | BOTH |
 | ETTm2 | 192 | 3seed | 0.214±0.000 | 0.286±0.001 | 0.219 | 0.293 | −2.09 | −2.30 | BOTH |
 | ETTm2 | 336 | 3seed | 0.267±0.001 | 0.323±0.000 | 0.269 | 0.326 | −0.71 | −0.95 | BOTH |
@@ -243,9 +248,18 @@ MAE −1.31~−2.76%）。H96/H192 的 MSE 增益（0.27–0.31%）未达 0.5% �
 | Electricity | 96–720 | CANCELLED | — | — | — | — | — | — | — |
 | Traffic | 96–720 | CANCELLED | — | — | — | — | — | — | — |
 
-共 20 个已登记 setting，其中 10 个稳定双指标超越 Golden（ETTh2 2/4、ETTm2 4/4、Weather 4/4）；
-另有 8 个 setting（Electricity/Traffic 各 4）取消。ETTh2/ETTm2 的 test 曾被历史 two-stage
-Full Repair 实验暴露，非完全盲测。
+共 20 个已登记 setting，其中 12 个双指标超越 Golden（ETTh1 1/4、ETTh2 2/4、ETTm1 1/4、
+ETTm2 4/4、Weather 4/4）；另有 8 个 setting（Electricity/Traffic 各 4）取消。ETTh1/ETTm1 为
+单 seed 专项搜索结果，ETTh2/ETTm2 的 test 曾被历史 two-stage Full Repair 实验暴露，非完全盲测。
+
+### 已登记 cell 的 config/commands 清单（docs/strict_t28_master_table_configs/）
+
+有 run 数据的 12 个 cell（ETTh2/ETTm2 取 seed-2021 代表、Weather 单 seed）的 `config.json` 与
+`commands.sh` 由 `scripts/collect_strict_t28_configs.py` 原样拷贝至
+`docs/strict_t28_master_table_configs/<Dataset>/h<horizon>/`。布局与收录情况见该目录 `README.md`。
+ETTh1/ETTm1 新搜索结果无本机 run 数据，未收集文件（仅登记结果）；Electricity/Traffic 取消。
+ETTh2/ETTm2 其余两个 seed 的 run 仍保留在 `research_runs/pctf_strict_t28_global_golden_v1/`
+及其 manifest 中。
 
 ## 二次校验与可复现清单（2026-09-02）
 

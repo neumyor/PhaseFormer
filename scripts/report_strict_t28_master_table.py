@@ -2,8 +2,10 @@
 """Compile the strict-T28 master table vs the Gold standard.
 
 Sources:
-  * Stage D runs (3 seeds) for ETTh1/ETTh2/ETTm1/ETTm2 -- the frozen tiers
-    from Stage A/B/C in research_runs/pctf_strict_t28_global_golden_v1.
+  * Stage D runs (3 seeds) for ETTh2/ETTm2 -- the frozen tiers from Stage A/B/C
+    in research_runs/pctf_strict_t28_global_golden_v1.
+  * ETTh1/ETTm1 -- external single-seed search results reported by the PI
+    (u_lr020 / w_aux01; no run data on this machine), registered verbatim.
   * Weather final search config (1 seed, seed 2021): mae / ep30 / lr=0.002 /
     tier W / gate 0 / lookback 720 / anchor_scale=1 / composer_scale=1 /
     anchor_loss_weight=1, at H96/H192/H336/H720, from
@@ -46,6 +48,18 @@ GOLD = {
 }
 
 CANCELLED = {"Electricity", "Traffic"}
+
+# External single-seed search results reported by the PI (no run data on this
+# machine), registered verbatim. Values are (MSE, MAE) at each horizon.
+#   ETTh1 u_lr020: cycle=24, caps 1.40/0.80/0.40, MAE, lr multiplier 0.20, ep50
+#   ETTm1 w_aux01: cycle=24, caps 0.60/0.24/0.12, MAE, lr multiplier 0.20,
+#                  shape/level/gate aux=0.01, ep50
+EXTERNAL = {
+    "ETTh1": {96: (0.352, 0.384), 192: (0.390, 0.407),
+              336: (0.420, 0.426), 720: (0.414, 0.442)},
+    "ETTm1": {96: (0.291, 0.338), 192: (0.329, 0.357),
+              336: (0.359, 0.376), 720: (0.415, 0.408)},
+}
 
 # Final Weather search config identity (from scripts/search_weather_t28.py).
 WEATHER_CONFIG = dict(loss="mae", learning_rate=0.002, lookback=720,
@@ -146,6 +160,23 @@ def main():
                 print(f"{dataset:<11}{horizon:>4} {'CANCELLED':>5} | "
                       f"{'--':>18} {'--':>18} | {'':>6} {'':>6} |  (not run)")
                 continue
+            if dataset in EXTERNAL:
+                mse, mae = EXTERNAL[dataset][horizon]
+                tag_note = "srch"
+                dmse = (mse - gm) / gm * 100
+                dmae = (mae - ga) / ga * 100
+                beat_mse, beat_mae = mse < gm, mae < ga
+                beat = beat_mse and beat_mae
+                tag = "BOTH" if beat else ("MSE" if beat_mse
+                                           else ("MAE" if beat_mae else "no"))
+                totals["settings"] += 1
+                totals["beat_mse"] += beat_mse
+                totals["beat_mae"] += beat_mae
+                totals["beat_both"] += beat
+                print(f"{dataset:<11}{horizon:>4} {tag_note:>5} | "
+                      f"{mse:>14.4f} {mae:>14.4f} | {fmt(gm)} {fmt(ga, 6)} | "
+                      f"{dmse:>6.2f}% {dmae:>6.2f}%  {tag}")
+                continue
             if dataset == "Weather":
                 if horizon not in weather:
                     print(f"{dataset:<11}{horizon:>4} {'?':>5} | "
@@ -197,8 +228,9 @@ def main():
           f"{totals['cancelled']} | stable-beat both {totals['beat_both']} | "
           f"beat MSE {totals['beat_mse']} | beat MAE {totals['beat_mae']}")
     print()
-    print("Note: Weather rows use the final search config (1 seed, seed 2021);")
-    print("      other datasets use the 3-seed Stage D mean+-pstdev.")
+    print("Note: Weather uses the final search config (1 seed, seed 2021);")
+    print("      ETTh1/ETTm1 are external single-seed search results;")
+    print("      ETTh2/ETTm2 use the 3-seed Stage D mean+-pstdev.")
 
 
 if __name__ == "__main__":
