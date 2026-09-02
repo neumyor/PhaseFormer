@@ -1,4 +1,5 @@
 from .data_loader import *
+from .input_component_ablation import InputComponentConfig, InputComponentDataset
 from torch.utils.data import DataLoader
 
 data_dict = {
@@ -88,6 +89,25 @@ def data_provider(args, flag, drop_last_test=False, train_all=False):
             var_needed=var_needed,
             noisy_ratio=noisy_ratio,
         )
+
+    hypothesis = getattr(args, "input_hypothesis", "none")
+    variant = getattr(args, "input_variant", "full")
+    if hypothesis != "none":
+        component_config = InputComponentConfig(
+            hypothesis=hypothesis,
+            variant=variant,
+            period_len=int(getattr(args, "input_period_len", 24)),
+            ema_window=int(getattr(args, "input_ema_window", 96)),
+            intervention_seed=int(getattr(args, "intervention_seed", 9102)),
+            max_phase_shift=int(getattr(args, "input_max_phase_shift", 6)),
+            mad_epsilon=float(getattr(args, "input_mad_epsilon", 1e-6)),
+            minimum_phase_correlation=float(
+                getattr(args, "input_minimum_phase_correlation", 0.15)
+            ),
+        )
+        component_config.validate(int(args.seq_len))
+        namespace = f"{getattr(args, 'data_path', args.data)}|{flag}"
+        data_set = InputComponentDataset(data_set, component_config, namespace)
 
     data_loader = DataLoader(
         data_set,

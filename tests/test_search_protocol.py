@@ -21,6 +21,15 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertEqual(run_id(first), run_id(second))
         self.assertEqual(first["config_hash"], second["config_hash"])
 
+    def test_input_intervention_changes_config_identity(self):
+        full = build_spec(self.args())
+        removed = build_spec(
+            self.args(input_hypothesis="h1", input_variant="minus_A", intervention_seed=9102)
+        )
+        self.assertNotEqual(run_id(full), run_id(removed))
+        self.assertEqual(removed["input_hypothesis"], "h1")
+        self.assertEqual(removed["input_variant"], "minus_A")
+
     def test_plan_defines_expected_mechanisms(self):
         self.assertEqual(len(MECHANISMS), 37)
         self.assertIn("phase_align", MECHANISMS)

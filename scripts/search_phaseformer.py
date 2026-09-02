@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from torch.utils.data import DataLoader, Subset
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -378,9 +379,13 @@ def build_spec(args):
     base.update(overrides)
     spec = {
         "protocol_version": (
-            "search-plan-v2"
-            if cycle_period is not None or require_cuda
-            else "search-plan-v1"
+            "input-components-h134-v1"
+            if getattr(args, "stage", "") == "input_components"
+            else (
+                "search-plan-v2"
+                if cycle_period is not None or require_cuda
+                else "search-plan-v1"
+            )
         ),
         "stage": args.stage,
         "dataset": args.dataset,
@@ -397,6 +402,10 @@ def build_spec(args):
         "capacity": args.capacity,
         "batch_size": args.batch_size or PLANNED_BATCH_SIZE[args.dataset],
         "evaluate_test": args.evaluate_test,
+        "input_hypothesis": getattr(args, "input_hypothesis", "none"),
+        "input_variant": getattr(args, "input_variant", "full"),
+        "intervention_seed": getattr(args, "intervention_seed", 9102),
+        "max_eval_samples": getattr(args, "max_eval_samples", 0),
         "require_cuda": require_cuda,
         "init_checkpoint": repo_relative(getattr(args, "init_checkpoint", ""))
         if getattr(args, "init_checkpoint", "") else "",
@@ -413,6 +422,7 @@ def run_id(spec):
     return (
         f"{spec['stage']}_{spec['dataset'].lower()}_h{spec['horizon']}_"
         f"{spec['mechanism']}_p{spec['period']}{cycle}_{spec['capacity']}_"
+        f"{spec['input_hypothesis']}-{spec['input_variant']}_"
         f"{spec['loss']}_lr{lr:.6g}_pct{spec['percent']}_e{spec['max_epochs']}_"
         f"s{spec['seed']}_{spec['config_hash']}"
     )
@@ -637,9 +647,27 @@ def execute(args):
     if not configured_root.exists() and spec["dataset"].startswith("ETT") and ett_fallback.exists():
         exp_args.dataset_args.root_path = str(ett_fallback)
     exp_args.dataset_args.num_workers = args.num_workers
+    exp_args.dataset_args.input_hypothesis = spec["input_hypothesis"]
+    exp_args.dataset_args.input_variant = spec["input_variant"]
+    exp_args.dataset_args.input_period_len = spec["period"]
+    exp_args.dataset_args.intervention_seed = spec["intervention_seed"]
     exp_args.training_args.num_workers = args.num_workers
     train_set, train_loader = data_provider(exp_args.dataset_args, "train")
     val_set, val_loader = data_provider(exp_args.dataset_args, "val")
+    if len(train_loader) == 0:
+        raise ValueError(
+            "training split produced zero batches; increase --percent or reduce "
+            f"--batch-size (percent={spec['percent']}, batch_size={spec['batch_size']})"
+        )
+    if spec["max_eval_samples"]:
+        val_set = Subset(val_set, range(min(spec["max_eval_samples"], len(val_set))))
+        val_loader = DataLoader(
+            val_set,
+            batch_size=spec["batch_size"],
+            shuffle=False,
+            num_workers=args.num_workers,
+            drop_last=False,
+        )
     if hasattr(train_set, "data_stamp"):
         hp["time_mark_dim"] = int(train_set.data_stamp.shape[-1])
     model = PhaseFormer(PhaseFormerPresetConfig(exp_args, spec["lookback"], spec["horizon"], hp))
@@ -784,6 +812,17 @@ def execute(args):
     test_size = ""
     if spec["evaluate_test"]:
         test_set, test_loader = data_provider(exp_args.dataset_args, "test")
+        if spec["max_eval_samples"]:
+            test_set = Subset(
+                test_set, range(min(spec["max_eval_samples"], len(test_set)))
+            )
+            test_loader = DataLoader(
+                test_set,
+                batch_size=spec["batch_size"],
+                shuffle=False,
+                num_workers=args.num_workers,
+                drop_last=False,
+            )
         test_metrics = evaluate(model, test_loader, test_set, "test", spec["horizon"], run_dir)
         test_size = len(test_set)
     peak = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0
@@ -791,6 +830,10 @@ def execute(args):
         "run_id": rid, "protocol_version": spec["protocol_version"], "stage": spec["stage"],
         "dataset": spec["dataset"], "lookback": spec["lookback"], "horizon": spec["horizon"],
         "mechanism": spec["mechanism"], "period": spec["period"],
+        "input_hypothesis": spec["input_hypothesis"],
+        "input_variant": spec["input_variant"],
+        "intervention_seed": spec["intervention_seed"],
+        "max_eval_samples": spec["max_eval_samples"],
         "cycle_period": spec["cycle_period"], "capacity": spec["capacity"],
         "loss": spec["loss"], "learning_rate": hp["learning_rate"], "lr_multiplier": spec["lr_multiplier"],
         "percent": spec["percent"], "seed": spec["seed"], "batch_size": spec["batch_size"],
@@ -839,13 +882,26 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", required=True, choices=list(PLANNED_BATCH_SIZE))
     p.add_argument("--horizon", required=True, type=int, choices=[96, 192, 336, 720])
-    p.add_argument("--stage", required=True, choices=["smoke", "baseline", "period_screen", "mechanism_screen_1", "mechanism_screen_2", "mechanism_full8", "anchor_attribution", "hp_low", "hp_mid", "finalist", "confirm"])
+    p.add_argument("--stage", required=True, choices=["smoke", "baseline", "period_screen", "mechanism_screen_1", "mechanism_screen_2", "mechanism_full8", "anchor_attribution", "input_components", "hp_low", "hp_mid", "finalist", "confirm"])
     p.add_argument(
         "--mechanism",
         default="original",
         choices=list(MECHANISMS) + ["latest", "best_nonresidual"] + sorted(ABLATION_MODES),
     )
     p.add_argument("--period", type=int, default=24)
+    p.add_argument(
+        "--input-hypothesis", choices=["none", "h1", "h3", "h4"], default="none",
+        help="History-only component extraction applied after train-fitted scaling",
+    )
+    p.add_argument(
+        "--input-variant", choices=["full", "half_A", "minus_A", "sham"],
+        default="full",
+    )
+    p.add_argument("--intervention-seed", type=int, default=9102)
+    p.add_argument(
+        "--max-eval-samples", type=int, default=0,
+        help="Non-formal smoke limit; zero evaluates the complete split",
+    )
     p.add_argument(
         "--cycle-period", type=int,
         help="ICPT cycle period; independent of the PhaseFormer phase period",
@@ -881,8 +937,10 @@ def parse_args():
     p.add_argument("--resume", action="store_true")
     p.add_argument("--progress", action="store_true")
     args = p.parse_args()
-    if args.evaluate_test and args.stage != "confirm":
-        p.error("--evaluate-test is restricted to frozen confirm runs")
+    if args.evaluate_test and args.stage not in ("confirm", "input_components"):
+        p.error("--evaluate-test is restricted to confirm or preregistered input-component runs")
+    if args.max_eval_samples and args.stage not in ("smoke", "input_components"):
+        p.error("--max-eval-samples is a smoke-only diagnostic and cannot be used here")
     return args
 
 

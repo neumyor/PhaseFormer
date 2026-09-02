@@ -1671,6 +1671,13 @@ class PhaseFormer(DefaultPLModule):
         Output: y_hat (B, pred_len, C)
         Also returns intermediate Z (B,C,L,D) and future phase values (B,C,L,P_out) for analysis.
         """
+        # Per-forward diagnostics used by frozen input-intervention attribution.
+        # They are populated only for the plain RCRF path and detached at exit.
+        self.last_phase_forecast = None
+        self.last_residual_forecast = None
+        self.last_rcrf_reliability = None
+        self.last_rcrf_alpha = None
+
         # 1) RevIN normalization
         if self.use_revin:
             # RevIN expects (B, C, L)
@@ -1866,6 +1873,8 @@ class PhaseFormer(DefaultPLModule):
                 y_hat, x_in, phase_series_raw
             )
 
+        phase_forecast_normalized = y_hat
+        residual_forecast_normalized = None
         if self.use_weak_period_residual:
             if self.use_dual_reliability_fusion:
                 linear_hat, periodic_hat = self.weak_period_residual.forward_components(
@@ -1881,6 +1890,7 @@ class PhaseFormer(DefaultPLModule):
                     )
                 else:
                     residual_hat = self.weak_period_residual(x_in)
+                residual_forecast_normalized = residual_hat
                 if self.use_rcrf_fusion:
                     if self.use_anchored_phase_cycle_fusion:
                         anchored_trajectory_hat = residual_hat
@@ -1990,6 +2000,13 @@ class PhaseFormer(DefaultPLModule):
         # 10) De-normalization
         if self.use_revin:
             y_hat = self.revin.denormalize(y_hat, stats)
+            if self.use_rcrf_fusion and residual_forecast_normalized is not None:
+                self.last_phase_forecast = self.revin.denormalize(
+                    phase_forecast_normalized, stats
+                ).detach()
+                self.last_residual_forecast = self.revin.denormalize(
+                    residual_forecast_normalized, stats
+                ).detach()
             if self.use_triaxis_fusion:
                 self.triaxis_expert_outputs = tuple(
                     self.revin.denormalize(expert, stats)
@@ -2036,6 +2053,13 @@ class PhaseFormer(DefaultPLModule):
             self.anchored_pctf_shape_correction_output = (
                 self.anchored_phase_cycle_fusion.shape_correction_for_auxiliary
             )
+
+        if self.use_rcrf_fusion and residual_forecast_normalized is not None:
+            if not self.use_revin:
+                self.last_phase_forecast = phase_forecast_normalized.detach()
+                self.last_residual_forecast = residual_forecast_normalized.detach()
+            self.last_rcrf_reliability = self.rcrf_fusion.last_r
+            self.last_rcrf_alpha = self.rcrf_fusion.last_alpha
 
         return y_hat, Z, y_phase_steps
 

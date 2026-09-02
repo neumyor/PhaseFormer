@@ -175,7 +175,8 @@ sham      = B + A_sham
 
 对每个周期先减去自身中位数并除以 MAD，以免位移估计被水平/振幅支配。稳健模板为标准化周期
 在 `k` 轴上的逐 phase 中位数。对每周期枚举整数循环位移 `d in [-6,6]`，用归一化互相关选择
-峰值，再用峰值及左右相邻点做三点抛物线插值，得到截断在 `[-6,6]` 的小数位移：
+峰值，再用峰值及左右相邻点做三点抛物线插值，得到截断在 `[-6,6]` 的小数位移。实现冻结
+`MAD epsilon=1e-6`、最低相关峰值 `0.15`：
 
 ```text
 delta[k] = argmax_d corr(standardize(X[k]), circular_shift(T, d))
@@ -214,12 +215,19 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
 - Fourier shift 前后每周期均值相对误差 `<1e-6`、L2-energy 相对误差 `<1e-5`。
 - `minus_A` 重新估计的 shift 方差相对 `full` 至少降低 95%。
 - `half_A` 的 shift 标准差比为 `0.5±0.05`。
-- 若模板 MAD、周期 MAD 或相关峰值不足预注册下限，该窗口标记为 `unidentifiable_shift`，四种输入
-  均退化为 `full`；不得对不可识别窗口强加任意 shift。
+- 若周期 MAD 不高于 `1e-6` 或相关峰值低于 `0.15`，该周期/通道保持为 `full`。只有最新周期
+  可识别且至少 50% 历史周期可识别时，该窗口/通道才允许干预；否则该通道四种输入均退化为
+  `full`。`sham` 的置换 donor 不可识别时，对应周期/通道也保持不动，不得用默认零位移强加干预。
+
+### 5.4 Fourier 实值约束
+
+小数循环位移对 `rfft` 系数乘单位模相位。偶数周期下 Nyquist 系数没有共轭伙伴，为保证输出严格
+为实数，该系数保持不变；其余频点只改变相位。因此均值与每周期 L2 能量保持，避免 H4 携带额外
+的振幅删减。
 
 ## 6. 实现前必须通过的测试
 
-计划新增一个无模型依赖的输入干预模块和独立 runner；具体文件名在实现提交中冻结。开始任何正式
+已实现无模型依赖的输入干预模块和独立 runner；开始任何正式
 训练前必须通过：
 
 1. H1 人工模板+残差的精确重构、末值保持、置换能量测试。
@@ -233,6 +241,18 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
    不读取 test 的训练 smoke。
 
 任何质量检查失败都先修复提取器，不得通过跳过样本或放宽正式阈值继续训练。
+
+实现文件冻结为：
+
+- `src/dataset/input_component_ablation.py`：H1/H3/H4 提取、四输入和 dataset 只读包装器；
+- `scripts/search_phaseformer.py`：单个 Track R 训练入口，配置哈希包含 hypothesis/variant/seed；
+- `scripts/run_input_component_ablation.py`：去重后的 10 条输入条件矩阵生成/执行器；
+- `scripts/evaluate_input_component_checkpoint.py`：同一 checkpoint 的 Track F 十条件配对评估、
+  moving-block bootstrap 和 RCRF 分支诊断；
+- `scripts/run_input_component_frozen_matrix.py`：从 Track R 的 `none/full` 结果发现并审计唯一
+  checkpoint，生成/执行完整 Track F；
+- `scripts/summarize_input_component_ablation.py`：矩阵完整性、重复行、checkpoint hash 审计，
+  sham-adjusted 删除效应和相对 original 的 interaction 汇总。
 
 ## 7. 实验矩阵与执行阶段
 
@@ -270,6 +290,44 @@ Track R 正式训练规模为：
 
 Track F 复用 288 个 full checkpoint，增加 `288 × 9 = 2592` 次无训练评估。正式启动前必须记录
 GPU、单 run 时间与预计总成本；可按数据集分批调度，但不能缩减某个模型或干预造成不平衡矩阵。
+
+### 7.3 复现命令
+
+validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才执行）：
+
+```bash
+.venv/bin/python scripts/run_input_component_ablation.py \
+  --datasets ETTm2 --horizons 96 --seeds 2021 --max-epochs 30
+```
+
+正式 Track R 在代码/配置冻结后显式加入 `--evaluate-test --execute`；不传 `--evaluate-test` 时绝不
+构造 test loader。完整默认矩阵打印 2880 条唯一训练命令，三个假设共享 `none/full`。
+
+单 checkpoint 的 Track F：
+
+```bash
+.venv/bin/python scripts/evaluate_input_component_checkpoint.py \
+  --dataset ETTm2 --horizon 96 --model rcrf_nlinear_plain \
+  --checkpoint /path/to/full/best.ckpt \
+  --output-dir /path/to/frozen_eval
+```
+
+完整 Track F 在确认 Track R 有 288 个唯一 `none/full` checkpoint 后执行：
+
+```bash
+.venv/bin/python scripts/run_input_component_frozen_matrix.py \
+  --track-r-dir research_runs/input_components_h134_scratch \
+  --output-dir research_runs/input_components_h134_frozen \
+  --expected-count 288 --execute
+```
+
+其中 `--max-samples` 和训练入口的 `--max-eval-samples` 只允许 smoke，正式结果必须保持默认值 0。
+汇总命令会拒绝缺条件、重复条件或 frozen 条件混用不同 checkpoint：
+
+```bash
+.venv/bin/python scripts/summarize_input_component_ablation.py \
+  /path/to/results --output /path/to/result_summary.csv
+```
 
 ## 8. 指标、统计量与因果判定
 

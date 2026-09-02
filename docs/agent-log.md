@@ -1202,3 +1202,22 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   32%–45%，但稳定精度不足。若强制一次训练，保留梯度解耦+1.0× LR+1.0 anchor loss 作为
   当前最合理配方；当前正式最佳仍是两阶段 Full Repair。完整表见
   `docs/PhaseFormer_pctf_single_stage_training.md`。
+
+## 2026-09-02 — H1/H3/H4 输入成分干预流程实现与校验
+
+- 实现 `src/dataset/input_component_ablation.py`：在 train-fitted scaling 后、模型 RevIN 前，仅对
+  `seq_x` 执行 H1 同相位跨周期残差、H3 近期局部趋势和 H4 相位漂移的 `full/half_A/minus_A/sham`
+  干预；稳定 seed 不依赖 Python hash，目标与时间标记不进入变换函数。
+- 数据入口、单 run 搜索、2880-run Track R 去重矩阵、full-checkpoint 发现与 Track F 固定权重评估、
+  配对 moving-block bootstrap、RCRF 相位/NLinear 分支诊断和 sham-adjusted interaction 汇总均已接通。
+  正式阈值与复现命令见 `docs/PhaseFormer_input_component_H1_H3_H4_plan.md`。
+- 校验：`.venv/bin/python -m pytest tests/ -q` 为 276 passed、262 subtests passed；新增合成测试覆盖
+  H1/H3 重构与端点、H4 已知位移恢复/相位方差降低/实值能量守恒/不可辨识回退、确定性、目标隔离和
+  RCRF 分支重建。`py_compile` 与 `git diff --check` 通过。
+- 真实数据校验：ETTm2-H96 的 10 个输入条件均能生成 `(720,7)` 历史且 `(96,7)` target 与时间标记
+  逐元素不变；三个假设的非 full 干预均非零且最后观测最大误差不超过 `4.45e-16`。CPU 环境完成
+  `rcrf_nlinear_plain`、H4 `minus_A`、5% train、1 epoch 的 validation-only smoke（train 1597，
+  val smoke-limit 32，未构造 test loader），并完成 original 的受限 test/frozen/summarizer 链路。
+- 所有 smoke 产物位于 `/tmp`，不是正式 benchmark，不支持任何 H1/H3/H4 有效性结论。当前 `.venv`
+  的 PyTorch 为 CPU build（尽管机器存在 RTX 4090）；正式 2880-run 矩阵前必须切换 CUDA 环境并
+  记录单 run 成本，且 `--max-eval-samples/--max-samples` 必须保持默认 0。
