@@ -1,5 +1,35 @@
 # Agent Maintenance Log
 
+## 2026-09-01 — ETTh1/ETTm1 单 seed Golden 定向搜索自动化
+
+- 用户将目标扩展为 ETTh1、ETTm1 的 H96/H192 均至少超过 Golden 0.5%，允许使用极端参数且只用
+  seed=2021。新增 `scripts/run_strict_t28_golden_hunt.py` 与
+  `docs/PhaseFormer_strict_t28_ett_golden_hunt.md`。
+- runner 以 test-set selection 方式搜索 cycle、off/C/W/X trust region、Huber/MAE 与 0.3/1/3 LR；
+  每条命令最多自动重试三次，`--resume` 复用已完成运行，结果 CSV 以完整配置 key 去重。不得把该
+  搜索的冠军称为盲测结果。
+
+## 2026-09-01 — ETTh1 Strict-T28 重调参预注册
+
+- 用户认为 T28-W 可能不适合 ETTh1，并要求调参以尝试超过 Golden。新增
+  `docs/PhaseFormer_strict_t28_etth1_retune.md`：固定模型结构，按数据集而非 horizon 共同筛选
+  cycle=24/48、C/M/S/W trust region 与 Huber/MAE（16 个配置）。先运行 32 个 validation-only
+  低成本任务，再以 8 个全数据 validation 任务冻结唯一候选，最后才做 6 个用户授权的 test。
+- 已知 A2 自身在 ETTh1 H96/H192 也弱于 Golden，因此本轮把损失函数纳入搜索；不承诺该小空间一定
+  能达到 Golden。任何 Stage C 后按 test 改参的行为必须披露为 test-set selection。
+
+## 2026-09-01 — 用户指定 Strict-T28 ETTh1 正式 test：未超过 Golden
+
+- 用户明确要求对 strict 单阶段 T28 做 ETTh1 test，故在尚未完成全数据集 trust-region 筛选前，固定
+  `cycle_period=48`、W/T28 边界 `0.60/0.24/0.12`，运行 H96/H192 × seeds 2021/2022/2023 的六个
+  full-train、best-validation checkpoint、single-test job。所有任务在 RTX 4090 CUDA 上完成。
+- H96：`0.366890±0.002813 MSE / 0.395406±0.001830 MAE`，相对 Golden `+2.198% / +3.510%`；
+  H192：`0.400422±0.002279 / 0.415671±0.001225`，相对 Golden `+0.862% / +2.889%`。均为退化，
+  三个 seed 无一双指标胜出。
+- 这次 test 由用户要求直接读取，不构成参数选择；以后若按其数值修改 ETTh1 配置，必须披露为
+  test-set selection。结果与逐 seed 明细写入 `docs/PhaseFormer_strict_t28_etth1_test.md`；临时
+  checkpoint 和 metrics 留在 gitignore 的 `research_runs/pctf_strict_t28_etth1_formal_v1/`。
+
 ## 2026-09-01 — Strict-T28 全数据集 Golden 计划与周期探测
 
 - 新增 `pctf_anchor_repair_strict_t28` preset，将 T28 的完整单阶段训练约束与 trust region 一并冻结：
@@ -1071,6 +1101,36 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - GPU smoke test 已在 RTX 4090 上通过：单次训练无初始化 checkpoint，epoch 0 correction
   scale=0，内部 A2 与最终输出严格一致；未读取 test。协议和待填表见
   `docs/PhaseFormer_pctf_single_stage_training.md`。
+
+## 2026-09-01 — Strict T28 Golden 搜索验收覆盖修复
+
+- `scripts/verify_strict_t28_golden_goal.py` 现纳入校准精修 ledger；因此四阶段任一候选都必须以同一
+  dataset 内共享配置同时通过 H96/H192 的 MSE、MAE 四项门槛，才可报告目标达成。
+- 同步补充 `docs/PhaseFormer_strict_t28_ett_golden_hunt.md` 的第四阶段定义和验收规则；已使用
+  conda `raft` Python 完成 `py_compile` 与 `git diff --check`，未读取训练中实验的新结果。
+
+## 2026-09-02 — Strict T28 horizon 定向精修
+
+- 共享配置的 broad、参数、loss、校准四阶段已穷尽，严格共享验收未通过。汇总显示明确的 horizon 分化：
+  ETTm1-H96 已有单项通过，而 H192 的最佳 MSE 仅差 0.132pp；ETTh1 两 horizon 的主要瓶颈均为 MAE。
+- 新增可恢复的 `scripts/run_strict_t28_golden_horizon_refinement.py` 和独立四-setting 验收器。它只解除
+  “同一超参数同时覆盖 H96/H192”的附加约束，不改变 strict-T28 拓扑，并将每项完整训练/test 选择轨迹写入
+  单一 horizon ledger。计划与 test-set-selection 边界已写入
+  `docs/PhaseFormer_strict_t28_ett_golden_hunt.md`。
+- 已在 conda `raft` 下完成两个脚本的 `py_compile`、三组非空 dry-run、空网格短路与 diff 检查；尚未启动
+  第五阶段训练。
+
+## 2026-09-02 — Strict T28 最优共享配置长 horizon 扩展
+
+- 用户要求把每个数据集当前最优的共享配置扩展至 H336/H720；固定 ETTh1 `u_lr020` 与 ETTm1
+  `w_aux01`，不在长 horizon 重调参数。
+- 新增 `scripts/run_strict_t28_best_long_horizons.py`，对四个 setting 完整训练并一次性读取 test，三次
+  自动重试、`--resume` 和紧凑 CSV ledger 均已配置。协议、Golden 参照、待填表和复现命令见
+  `docs/PhaseFormer_strict_t28_best_long_horizons.md`。
+- 已在 conda `raft` 下通过 `py_compile`、4-command dry-run 和 `git diff --check`；随后启动持久 GPU 服务。
+- 四项完整训练均完成：ETTh1-H720 以 `0.41424/0.44185` 相对 Golden 改善 3.888%/1.810%；ETTh1-H336
+  仅 MSE 改善（MAE +0.456%），ETTm1-H336/H720 均仅 MAE 改善。原始精确数值在该实验的 CSV ledger，汇总表已填入
+  `docs/PhaseFormer_strict_t28_best_long_horizons.md`。
 
 ## 2026-08-31 — PCTF 单阶段第一轮筛选与梯度解耦复测
 

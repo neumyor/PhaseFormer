@@ -854,7 +854,13 @@ def parse_args():
     p.add_argument("--percent", type=int, default=100)
     p.add_argument("--max-epochs", type=int, default=30)
     p.add_argument("--seed", type=int, default=2021)
-    p.add_argument("--loss", choices=["huber", "mae"], default="huber")
+    # All listed losses are already implemented by DefaultModule._get_criterion.
+    # Exposing the complete set lets the Golden-directed tuner test the
+    # MSE--MAE trade-off without adding a new forecasting mechanism.
+    p.add_argument(
+        "--loss", choices=["mse", "mae", "smae", "huber", "smape"],
+        default="huber",
+    )
     p.add_argument("--lr-multiplier", type=float, default=1.0)
     p.add_argument("--learning-rate", type=float)
     p.add_argument("--capacity", choices=["base", "compact"], default="base")
