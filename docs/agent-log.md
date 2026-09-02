@@ -1246,6 +1246,19 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   输出目录为 ignored 的 `research_runs/input_components_h134_scratch/`，使用 `--resume`。
 - Track R 完成后自动串行启动 288-run Track F frozen 评估，以及 2592-run non-full Track R
   retrained test 评估；三阶段命令及参数与实验文档一致，正式运行未启用 smoke 或 CPU 选项。
-- 实验主进程 PID 为 `150545`，标准输出/错误暂存于 `/tmp/phaseformer_h134_formal_experiment.log`；
-  独立监控进程 PID 为 `153592`，使用 `sleep 1800` 每 30 分钟记录三阶段已完成文件数、GPU
-  利用率和主进程状态至 `/tmp/phaseformer_h134_progress.log`。当前仅有启动阶段计数，尚无正式效果结论。
+- 实验主进程 PID 为 `150545`，标准输出/错误暂存于 `research_runs/input_components_h134_control/`；
+  独立监控进程 PID 为 `162217`，使用 `sleep 1800` 每 30 分钟记录三阶段已完成文件数、GPU
+  利用率和主进程状态至同一控制目录。当前仅有启动阶段计数，尚无正式效果结论。
+
+## 2026-09-02 — 暂停正式矩阵并调整优先级
+
+- 按用户要求终止 Track R 主进程组和监控进程组，保留已生成的 validation-only checkpoint 与指标；
+  当前没有 Track F 或 retrained test 结果被写入。
+- 将主日志、进度日志和监控启动记录从 `/tmp` 移至
+  `research_runs/input_components_h134_control/`，后续实验相关日志不得写入 `/tmp`。
+- 在三个矩阵驱动脚本中加入默认的 priority-first 调度：先运行单个 seed `2021`、
+  `horizon=192`；正式优先阶段命令覆盖8数据集×3模型×10条件，共240个 Track R 任务。通过
+  validation 审计后再用 `--resume` 扩展其余 horizon 和 seed；如需旧顺序，显式使用
+  `--no-priority-first`。
+- 校验：三个脚本的 `--help`、优先阶段命令计数、Python 编译检查和 `git diff --check` 通过；
+  尚未恢复实验，也未形成效果结论。

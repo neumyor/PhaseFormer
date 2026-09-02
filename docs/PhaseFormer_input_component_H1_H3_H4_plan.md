@@ -1,8 +1,9 @@
 # PhaseFormer 输入成分 H1/H3/H4 因果消融实验计划
 
-> 状态：提取器、Track R/Track F、配对 CI 与 RCRF 反事实重组已经实现并完成受限 smoke；尚未
-> 启动正式矩阵。工程 smoke 曾读取 ETTm2-H96 的最多128个 test窗口，仅用于链路校验，未用于选择公式、
-> 模型或参数；下列表格仍为空表，不能据此形成效果结论。正式矩阵开始后不得修改公式与门槛。
+> 状态：提取器、Track R/Track F、配对 CI 与 RCRF 反事实重组已经实现并完成受限 smoke；正式矩阵
+> 已启动后暂停，等待优先阶段复核。工程 smoke 曾读取 ETTm2-H96 的最多128个 test窗口，仅用于链路
+> 校验，未用于选择公式、模型或参数；下列表格仍为空表，不能据此形成效果结论。正式矩阵恢复后不得
+> 修改公式与门槛。
 
 ## 1. 研究问题
 
@@ -36,6 +37,9 @@ calibration 和 high-frequency damping，无法把差异归因到 RCRF。
 - lookback 固定为 720，horizon 为 96/192/336/720。
 - `period_len=24`，因此每个输入窗口恰好包含 `K=30` 个周期。
 - seeds：2021、2022、2023。
+- **优先阶段**：先固定单个 seed `2021`、`horizon=192`，覆盖全部 8 个数据集、3 个模型和
+  10 个输入条件（共 240 个 Track R 训练任务）；该阶段只使用 validation，不读取 test。优先阶段
+  通过后，才按相同协议扩展到其余 horizon 和 seed。
 - full-train；按最低 validation loss 选择 checkpoint；冻结配置后每个 checkpoint×input-condition
   组合只评估一次 test，期间权重不更新。
 - 七个有论文 Golden 的数据集同时报告 Golden 与 matched comparison；Exchange 只报告 matched
@@ -285,8 +289,10 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
 3. **Stage 2：validation rehearsal**。在 ETTm2-96、ETTh2-720、Weather-96 上用完整训练集和
    seed 2021 对每个假设跑通四输入×三模型；只读 validation，用于发现训练/资源错误，不据此修改
    提取公式。
-4. **Stage 3：正式完整矩阵**。冻结代码和配置后，运行8数据集×4 horizon×3 seed。
-5. **Stage 4：一次性 test 与机制分析**。每个 checkpoint×input-condition 只评估一次 test；
+4. **Stage 3a：正式优先矩阵**。冻结代码和配置后，先运行8数据集×`horizon=192`×单 seed
+   `2021`；完成 validation 审计后才进入 Stage 3b。
+5. **Stage 3b：正式完整矩阵**。优先阶段通过后，扩展到8数据集×4 horizon×3 seed。
+6. **Stage 4：一次性 test 与机制分析**。每个 checkpoint×input-condition 只评估一次 test；
    test 后不得回头修改 H1/H3/H4。任何后续版本使用新 experiment ID 并披露 test-set selection。
 
 三个假设共享 `full` run。唯一输入条件数为 `1 + 3 hypotheses × 3 interventions = 10`，所以
@@ -313,8 +319,21 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
 正式 Track R 训练严格 validation-only，完整默认矩阵生成2880条唯一训练命令，三个假设共享
 `none/full`；默认向每条命令传递 `--require-cuda`：
 
+正式启动时必须先执行优先阶段；它是完整矩阵的可恢复前缀，不是独立调参实验：
+
 ```bash
-.venv/bin/python scripts/run_input_component_ablation.py \
+python scripts/run_input_component_ablation.py \
+  --horizons 192 --seeds 2021 \
+  --output-dir research_runs/input_components_h134_scratch \
+  --execute --resume
+```
+
+优先阶段共 `8×3×10=240` 个 Track R 训练任务。代码默认启用 `--priority-first`，因此即使直接
+执行完整矩阵，也会先调度 `horizon=192, seed=2021`；只有明确需要旧顺序时才使用
+`--no-priority-first`。
+
+```bash
+python scripts/run_input_component_ablation.py \
   --output-dir research_runs/input_components_h134_scratch \
   --execute --resume
 ```
@@ -322,7 +341,7 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
 单 checkpoint 的 Track F：
 
 ```bash
-.venv/bin/python scripts/evaluate_input_component_checkpoint.py \
+python scripts/evaluate_input_component_checkpoint.py \
   --dataset ETTm2 --horizon 96 --model rcrf_nlinear_plain \
   --checkpoint /path/to/full/best.ckpt \
   --output-dir /path/to/frozen_eval --require-cuda
@@ -331,7 +350,7 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
 完整 Track F 在确认 Track R 有 288 个唯一 `none/full` checkpoint 后执行：
 
 ```bash
-.venv/bin/python scripts/run_input_component_frozen_matrix.py \
+python scripts/run_input_component_frozen_matrix.py \
   --track-r-dir research_runs/input_components_h134_scratch \
   --output-dir research_runs/input_components_h134_frozen \
   --expected-count 288 --execute
@@ -341,7 +360,7 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
 包含任何 test 指标：
 
 ```bash
-.venv/bin/python scripts/run_input_component_retrained_test_matrix.py \
+python scripts/run_input_component_retrained_test_matrix.py \
   --track-r-dir research_runs/input_components_h134_scratch \
   --output-dir research_runs/input_components_h134_retrained_test \
   --expected-count 2592 --execute
@@ -357,7 +376,8 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
   --output /path/to/result_summary.csv
 ```
 
-所有正式矩阵入口默认要求 CUDA、完整 checkpoint 数量、`percent=100`、训练期
+实验主日志、阶段日志和每30分钟监控记录统一保存在
+`research_runs/input_components_h134_control/`，不得写入 `/tmp`。所有正式矩阵入口默认要求 CUDA、完整 checkpoint 数量、`percent=100`、训练期
 `max_eval_samples=0`、测试期 `max_samples=0`，并拒绝已经含 test 指标的训练源。CPU 或部分样本
 只能分别通过显式 `--allow-cpu`、`--smoke --max-samples N` 使用；正式汇总默认拒绝这些结果。
 

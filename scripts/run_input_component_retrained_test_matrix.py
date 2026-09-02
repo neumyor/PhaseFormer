@@ -15,7 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.run_input_component_ablation import CONDITIONS, DATASETS, HORIZONS, MODELS, SEEDS
+from scripts.run_input_component_ablation import (
+    CONDITIONS, DATASETS, HORIZONS, MODELS, PRIORITY_HORIZON, PRIORITY_SEED, SEEDS,
+)
 
 
 REQUIRED = {
@@ -71,6 +73,14 @@ def main():
     parser.add_argument("--expected-count", type=int)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument(
+        "--priority-first", action="store_true", default=True,
+        help=f"evaluate horizon={PRIORITY_HORIZON}, seed={PRIORITY_SEED} first (default)",
+    )
+    parser.add_argument(
+        "--no-priority-first", dest="priority_first", action="store_false",
+        help="preserve ordinary checkpoint ordering",
+    )
     args = parser.parse_args()
     if args.max_samples and not args.smoke:
         parser.error("--max-samples requires --smoke")
@@ -85,6 +95,18 @@ def main():
         expected = len(DATASETS) * len(HORIZONS) * len(SEEDS) * len(MODELS) * (len(CONDITIONS) - 1)
     if expected is not None and len(frame) != expected:
         parser.error(f"expected {expected} Track-R checkpoints, found {len(frame)}")
+    if args.priority_first:
+        frame["_priority"] = (
+            (frame.horizon != PRIORITY_HORIZON) | (frame.seed != PRIORITY_SEED)
+        )
+        frame = frame.sort_values(
+            ["_priority", "dataset", "horizon", "seed", "mechanism",
+             "input_hypothesis", "input_variant"]
+        )
+        print(
+            f"Priority pass first: horizon={PRIORITY_HORIZON}, seed={PRIORITY_SEED}",
+            flush=True,
+        )
     print(f"Track-R test checkpoints: {len(frame)}", flush=True)
 
     for row in frame.itertuples(index=False):

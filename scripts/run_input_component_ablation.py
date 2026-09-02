@@ -15,6 +15,10 @@ DATASETS = ("ETTh1", "ETTh2", "ETTm1", "ETTm2", "Exchange", "Weather", "Electric
 MODELS = ("original", "weak_residual", "rcrf_nlinear_plain")
 HORIZONS = (96, 192, 336, 720)
 SEEDS = (2021, 2022, 2023)
+# The preregistered first pass is deliberately narrow: one seed at the
+# medium horizon.  Full expansion remains available and is resumable.
+PRIORITY_HORIZON = 192
+PRIORITY_SEED = 2021
 CONDITIONS = (("none", "full"),) + tuple(
     (hypothesis, variant)
     for hypothesis in ("h1", "h3", "h4")
@@ -39,6 +43,14 @@ def main():
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
+        "--priority-first", action="store_true", default=True,
+        help=f"run priority horizon={PRIORITY_HORIZON}, seed={PRIORITY_SEED} first (default)",
+    )
+    parser.add_argument(
+        "--no-priority-first", dest="priority_first", action="store_false",
+        help="preserve the ordinary dataset/model/horizon/seed ordering",
+    )
+    parser.add_argument(
         "--allow-cpu", action="store_true",
         help="Explicitly allow CPU; formal runs require CUDA by default",
     )
@@ -57,32 +69,49 @@ def main():
     total = len(datasets) * len(models) * len(horizons) * len(seeds) * len(CONDITIONS)
     print(f"Track-R runs: {total}", flush=True)
 
-    for dataset, model, horizon, seed, condition in itertools.product(
-        datasets, models, horizons, seeds, CONDITIONS
-    ):
-        hypothesis, variant = condition
-        command = [
-            sys.executable,
-            "scripts/search_phaseformer.py",
-            "--dataset", dataset,
-            "--horizon", str(horizon),
-            "--stage", "input_components",
-            "--mechanism", model,
-            "--input-hypothesis", hypothesis,
-            "--input-variant", variant,
-            "--seed", str(seed),
-            "--max-epochs", str(args.max_epochs),
-            "--percent", str(args.percent),
-            "--num-workers", str(args.num_workers),
-            "--output-dir", args.output_dir,
-        ]
-        if not args.allow_cpu:
-            command.append("--require-cuda")
-        if args.resume:
-            command.append("--resume")
-        print(shlex.join(command), flush=True)
-        if args.execute:
-            subprocess.run(command, check=True, cwd=Path(__file__).resolve().parents[1])
+    if args.priority_first:
+        # Keep the complete matrix and only change scheduling order, so a
+        # resumed run never loses coverage.  This puts the single-seed H192
+        # pass ahead of H96/H336/H720 and seeds 2022/2023.
+        horizons = tuple(sorted(horizons, key=lambda h: h != PRIORITY_HORIZON))
+        seeds = tuple(sorted(seeds, key=lambda s: s != PRIORITY_SEED))
+        print(
+            f"Priority pass first: horizon={PRIORITY_HORIZON}, seed={PRIORITY_SEED}; "
+            "use --horizons 192 --seeds 2021 for the isolated priority pass.",
+            flush=True,
+        )
+
+    settings = list(itertools.product(datasets, models, horizons, seeds))
+    if args.priority_first:
+        # Sort settings globally, rather than only sorting the inner horizon /
+        # seed loops, so every h192/seed2021 condition is completed before any
+        # other seed or horizon begins.
+        settings.sort(key=lambda item: (item[2] != PRIORITY_HORIZON or item[3] != PRIORITY_SEED))
+
+    for dataset, model, horizon, seed in settings:
+        for hypothesis, variant in CONDITIONS:
+            command = [
+                sys.executable,
+                "scripts/search_phaseformer.py",
+                "--dataset", dataset,
+                "--horizon", str(horizon),
+                "--stage", "input_components",
+                "--mechanism", model,
+                "--input-hypothesis", hypothesis,
+                "--input-variant", variant,
+                "--seed", str(seed),
+                "--max-epochs", str(args.max_epochs),
+                "--percent", str(args.percent),
+                "--num-workers", str(args.num_workers),
+                "--output-dir", args.output_dir,
+            ]
+            if not args.allow_cpu:
+                command.append("--require-cuda")
+            if args.resume:
+                command.append("--resume")
+            print(shlex.join(command), flush=True)
+            if args.execute:
+                subprocess.run(command, check=True, cwd=Path(__file__).resolve().parents[1])
 
 
 if __name__ == "__main__":

@@ -12,6 +12,10 @@ from pathlib import Path
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.run_input_component_ablation import PRIORITY_HORIZON, PRIORITY_SEED
 
 
 REQUIRED = {
@@ -64,6 +68,14 @@ def main():
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--max-samples", type=int, default=0)
     parser.add_argument("--bootstrap-replicates", type=int, default=1000)
+    parser.add_argument(
+        "--priority-first", action="store_true", default=True,
+        help=f"evaluate horizon={PRIORITY_HORIZON}, seed={PRIORITY_SEED} first (default)",
+    )
+    parser.add_argument(
+        "--no-priority-first", dest="priority_first", action="store_false",
+        help="preserve ordinary checkpoint ordering",
+    )
     args = parser.parse_args()
     if args.max_samples and not args.smoke:
         parser.error("--max-samples requires --smoke")
@@ -71,6 +83,17 @@ def main():
     expected = args.expected_count if args.expected_count is not None else (None if args.smoke else 288)
     if expected is not None and len(frame) != expected:
         parser.error(f"expected {expected} full checkpoints, found {len(frame)}")
+    sort_columns = ["dataset", "horizon", "seed", "mechanism"]
+    if args.priority_first:
+        frame["_priority"] = (
+            (frame.horizon != PRIORITY_HORIZON) | (frame.seed != PRIORITY_SEED)
+        )
+        sort_columns = ["_priority"] + sort_columns
+        frame = frame.sort_values(sort_columns)
+        print(
+            f"Priority pass first: horizon={PRIORITY_HORIZON}, seed={PRIORITY_SEED}",
+            flush=True,
+        )
     print(f"Track-F checkpoints: {len(frame)}", flush=True)
     for row in frame.itertuples(index=False):
         destination = (
