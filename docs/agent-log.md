@@ -1128,6 +1128,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   自动重试、`--resume` 和紧凑 CSV ledger 均已配置。协议、Golden 参照、待填表和复现命令见
   `docs/PhaseFormer_strict_t28_best_long_horizons.md`。
 - 已在 conda `raft` 下通过 `py_compile`、4-command dry-run 和 `git diff --check`；随后启动持久 GPU 服务。
+- 四项完整训练均完成：ETTh1-H720 以 `0.41424/0.44185` 相对 Golden 改善 3.888%/1.810%；ETTh1-H336
+  仅 MSE 改善（MAE +0.456%），ETTm1-H336/H720 均仅 MAE 改善。原始精确数值在该实验的 CSV ledger，汇总表已填入
+  `docs/PhaseFormer_strict_t28_best_long_horizons.md`。
 
 ## 2026-08-31 — PCTF 单阶段第一轮筛选与梯度解耦复测
 
