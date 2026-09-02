@@ -1,5 +1,28 @@
 # Agent Maintenance Log
 
+## 2026-09-02 — 仓库 docs 清理：只保留四种模型结构
+
+- 用户确认当前版本（`474524f`）为最新并已提交后，要求仓库代码清理：只保留原始 PhaseFormer、
+  PhaseFormer + NLinear + RCRF（LFF 编码与无编码两版）、当前最佳 strict-T28 四类结构；对
+  docs 重新整理并删除冗余。用户选择 **git 硬删除**、范围 **只整理 docs**（不动 `src/` 与
+  `scripts/`）。
+- 删除 21 个冗余实验家族 docs + `PhaseFormer_M3_figures/`（共 24 文件，`0dd544e`）：
+  TriAxis、M3/multi-anchor、HPTC、ICPT 周期间 transformer 头、纯相位/动态相位/残差拓扑、
+  PCTF v1/v2 早期谱系。删除前已做交叉引用检查：保留文档不指向被删文件；仅历史记录
+  （`agent-log.md` 旧条目、根目录 `EXPERIMENT_SEARCH_PLAN.md`）残留引用，按历史文档惯例保留。
+  例外保留：`periodic_residual_next_stage.md`（top5 五模型矩阵的完整 3-seed 附录，承载
+  K2/K3 数据）与 `PhaseFormer_pctf_anchor_formal_etts.md`（two-stage Full Repair/A2 正式
+  测试，是 strict-T28 主计划明示的参照基线）。
+- 新增 `docs/README.md` 作为四结构复现索引：结构→mechanism（`original`/`rcrf_pe_lff`/
+  `gold_combo_reliability_s2`/`pctf_anchor_repair_strict_t28`）→权威结果文档→参数组合→
+  复现命令。K4 每数据集 cycle/trust-region 表与 configs 一致（ETTh1 `u_lr020`、ETTh2 C、
+  ETTm1 `w_aux01`、ETTm2 C、Weather W）。
+- 机制映射已逐行核实：`rcrf_pe_lff` = `gold_combo_reliability_s2` +
+  `use_periodic_residual_pe=True`（type `lff`）；K4 以 K2(A2) 为锚点。
+- 验证：`git status --short` 干净；删除与 README/agent-log 分两次提交。脚本唯一引用被删文件
+  的是已退役 M3 分析脚本 `analyze_m3_vs_original.py`（指向 M3_figures 输出目录），不影响
+  保留结构复现。
+
 ## 2026-09-01 — ETTh1/ETTm1 单 seed Golden 定向搜索自动化
 
 - 用户将目标扩展为 ETTh1、ETTm1 的 H96/H192 均至少超过 Golden 0.5%，允许使用极端参数且只用
