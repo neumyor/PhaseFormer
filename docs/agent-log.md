@@ -1238,3 +1238,14 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   smoke/CPU/不完整汇总必须显式 opt-in，已有结果默认拒绝覆盖。ETTm2-H96 的128-window RCRF
   smoke 验证四类反事实最大重建误差不超过 `4.77e-7`，MSE/MAE 相对 CI 均成功生成；该结果不用于
   效果结论。完整测试为280 passed、262 subtests passed。
+
+## 2026-09-02 — H1/H3/H4 正式矩阵启动
+
+- 在 commit `963a0f7`、主机 RTX 4090、`/home/wangjing/miniconda3/envs/raft`（PyTorch
+  2.4.1+cu121、PyTorch Lightning 2.5.6）上启动完整 2880-run validation-only Track R；
+  输出目录为 ignored 的 `research_runs/input_components_h134_scratch/`，使用 `--resume`。
+- Track R 完成后自动串行启动 288-run Track F frozen 评估，以及 2592-run non-full Track R
+  retrained test 评估；三阶段命令及参数与实验文档一致，正式运行未启用 smoke 或 CPU 选项。
+- 实验主进程 PID 为 `150545`，标准输出/错误暂存于 `/tmp/phaseformer_h134_formal_experiment.log`；
+  独立监控进程 PID 为 `153592`，使用 `sleep 1800` 每 30 分钟记录三阶段已完成文件数、GPU
+  利用率和主进程状态至 `/tmp/phaseformer_h134_progress.log`。当前仅有启动阶段计数，尚无正式效果结论。
