@@ -72,6 +72,14 @@
     —— RCRF 公式在 ETTm2 的样本级证据。
 - 复现入口：`scripts/search_phaseformer.py --mechanism gold_combo_reliability_s2`。
 
+### K3 的因果消融对照：`rcrf_nlinear_plain`
+
+- 该机制只保留原始 PhaseFormer 相位主干、共享 NLinear 残差头与 RCRF（`alpha_0=0.5`、
+  `s_0=2`、`s_max=4`）；它明确关闭 uncertainty shrinkage、period-level calibration 与
+  high-frequency damping。
+- 它是检验 RCRF 独立贡献的正式可复现对照，不属于上表的独立保留结构或 incumbent。复现入口：
+  `scripts/search_phaseformer.py --mechanism rcrf_nlinear_plain`。
+
 ## K4 — 当前最佳 strict-T28，mechanism=`pctf_anchor_repair_strict_t28`
 
 - 结构：完整 A2（=K2，见上）预测为**锚点**，单次 `Trainer.fit`、随机初始化、一个

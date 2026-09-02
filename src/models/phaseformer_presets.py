@@ -67,6 +67,10 @@ ABLATION_MODES = {
     "gold_combo_adaptive",
     "gold_combo_reliability_s0",
     "gold_combo_reliability_s2",
+    # Causal RCRF control: original phase stack + NLinear, with no golden-combo
+    # phase calibrations.  This isolates reliability-coupled fusion from those
+    # additional modules.
+    "rcrf_nlinear_plain",
     # Period-position-encoded NLinear residual candidates.  All inherit the
     # frozen gold_combo_reliability_s2 stack and differ only in PE type.
     "rcrf_pe_st",
@@ -769,6 +773,21 @@ def get_ablation_overrides(mode):
             use_adaptive_weak_period_gate=True,
             weak_period_residual_gate_init=0.2,
             weak_period_residual_head_type="shared",
+        )
+    if mode == "rcrf_nlinear_plain":
+        # Strict control for RCRF: preserve the original PhaseFormer phase
+        # path and the shared NLinear-style residual head, but replace the
+        # ordinary static residual gate with reliability-coupled fusion.  Do
+        # not add any golden-combo phase calibration modules here.
+        return dict(
+            scheme_name="rcrf_nlinear_plain",
+            use_weak_period_residual=True,
+            weak_period_residual_gate_init=0.5,
+            weak_period_residual_head_type="shared",
+            use_rcrf_fusion=True,
+            rcrf_alpha_init=0.5,
+            rcrf_sensitivity_init=2.0,
+            rcrf_s_max=4.0,
         )
     if mode == "time_mark":
         return dict(scheme_name="time_mark", use_time_mark_adjustment=True)

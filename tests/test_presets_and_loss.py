@@ -12,6 +12,7 @@ from src.models.phase_adapters import (
 )
 from src.models.phase_adapters import WeakPeriodResidualHead as SplitWeakPeriodResidualHead
 from src.models.phaseformer_presets import (
+    ABLATION_MODES,
     PhaseFormerPresetConfig,
     build_hyperparams,
     get_latest_overrides,
@@ -20,6 +21,18 @@ from src.models.phaseformer_presets import (
 
 
 class PresetAndLossTests(unittest.TestCase):
+    def test_plain_rcrf_nlinear_control_has_no_extra_phase_modules(self):
+        hyperparams = build_hyperparams("ETTm2", 96, "rcrf_nlinear_plain")
+        self.assertIn("rcrf_nlinear_plain", ABLATION_MODES)
+        self.assertTrue(hyperparams["use_weak_period_residual"])
+        self.assertEqual(hyperparams["weak_period_residual_head_type"], "shared")
+        self.assertTrue(hyperparams["use_rcrf_fusion"])
+        self.assertEqual(hyperparams["rcrf_alpha_init"], 0.5)
+        self.assertEqual(hyperparams["rcrf_sensitivity_init"], 2.0)
+        self.assertFalse(hyperparams.get("use_phase_uncertainty_shrinkage", False))
+        self.assertFalse(hyperparams.get("use_phase_period_level_calibration", False))
+        self.assertFalse(hyperparams.get("use_phase_noise_hifreq_damping", False))
+
     def test_legacy_huber_flag_is_normalized_to_real_loss_name(self):
         hyperparams = build_hyperparams("ETTm2", 96, "original")
         args = make_exp_args("ETTm2", 720, 96, hyperparams)

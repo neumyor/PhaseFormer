@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-09-02 — 新增纯 RCRF + NLinear 因果消融机制
+
+- 新增 `rcrf_nlinear_plain` preset：原始 PhaseFormer 相位主干 + `WeakPeriodResidualHead`
+  （NLinear-style）+ RCRF，固定 `alpha_0=0.5`、`s_0=2`、`s_max=4`；不启用
+  uncertainty shrinkage、period-level calibration 或 high-frequency damping。
+- 该机制用于将 RCRF 的独立贡献与 golden-combo 额外相位模块区分；它是诊断/消融对照，尚无
+  正式实验结果，不应表述为已验证的 incumbent。
+- 修改：`src/models/phaseformer_presets.py`、`tests/test_presets_and_loss.py`、
+  `docs/README.md`。验证：`.venv/bin/python -m py_compile
+  src/models/phaseformer_presets.py tests/test_presets_and_loss.py` 通过；
+  `.venv/bin/python -m unittest tests.test_presets_and_loss -v`，10 passed。
+
 ## 2026-09-02 — 仓库 docs 清理：只保留四种模型结构
 
 - 用户确认当前版本（`474524f`）为最新并已提交后，要求仓库代码清理：只保留原始 PhaseFormer、
