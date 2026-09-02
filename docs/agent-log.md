@@ -1120,6 +1120,15 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 已在 conda `raft` 下完成两个脚本的 `py_compile`、三组非空 dry-run、空网格短路与 diff 检查；尚未启动
   第五阶段训练。
 
+## 2026-09-02 — Strict T28 最优共享配置长 horizon 扩展
+
+- 用户要求把每个数据集当前最优的共享配置扩展至 H336/H720；固定 ETTh1 `u_lr020` 与 ETTm1
+  `w_aux01`，不在长 horizon 重调参数。
+- 新增 `scripts/run_strict_t28_best_long_horizons.py`，对四个 setting 完整训练并一次性读取 test，三次
+  自动重试、`--resume` 和紧凑 CSV ledger 均已配置。协议、Golden 参照、待填表和复现命令见
+  `docs/PhaseFormer_strict_t28_best_long_horizons.md`。
+- 已在 conda `raft` 下通过 `py_compile`、4-command dry-run 和 `git diff --check`；随后启动持久 GPU 服务。
+
 ## 2026-08-31 — PCTF 单阶段第一轮筛选与梯度解耦复测
 
 - 在提交 `7cb64cc`、RTX 4090 上完成 8 个 matched A2 和 48 个 candidate 的 validation-only
