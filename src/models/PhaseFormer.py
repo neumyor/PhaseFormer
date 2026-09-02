@@ -625,22 +625,43 @@ class PhaseFormer(DefaultPLModule):
                     configs, "phase_cycle_fusion_amplitude_max", 2.0
                 ),
             )
+        # Ablation-2 mode: no A2 branch exists.  The composer corrects
+        # PhaseFormer's own forecast in place, and the trajectory residual
+        # path (weak period residual / RCRF / periodic-PE) must be absent.
+        # Parsed before the guard because the guard branches on it.
+        self.anchored_pctf_anchorless = bool(getattr(
+            configs, "anchored_pctf_anchorless", False
+        ))
         if self.use_anchored_phase_cycle_fusion:
-            if not self.use_weak_period_residual or not self.use_rcrf_fusion:
-                raise ValueError(
-                    "anchored phase-cycle fusion requires the complete RCRF "
-                    "residual anchor"
-                )
-            if not self.use_periodic_residual_pe:
-                raise ValueError(
-                    "anchored phase-cycle fusion requires the A2 periodic-PE "
-                    "trajectory branch"
-                )
-            if getattr(configs, "periodic_residual_pe_type", None) != "lff":
-                raise ValueError(
-                    "anchored phase-cycle fusion is defined relative to the "
-                    "rcrf_pe_lff A2 anchor"
-                )
+            if self.anchored_pctf_anchorless:
+                # Ablation-2 anchorless mode requires the complete absence of
+                # the A2 trajectory path; the composer anchors on PhaseFormer's
+                # own forecast instead.
+                if (
+                    self.use_weak_period_residual
+                    or self.use_rcrf_fusion
+                    or self.use_periodic_residual_pe
+                ):
+                    raise ValueError(
+                        "anchored_pctf_anchorless requires the A2 trajectory "
+                        "path (weak period residual / RCRF / periodic-PE) disabled"
+                    )
+            else:
+                if not self.use_weak_period_residual or not self.use_rcrf_fusion:
+                    raise ValueError(
+                        "anchored phase-cycle fusion requires the complete RCRF "
+                        "residual anchor"
+                    )
+                if not self.use_periodic_residual_pe:
+                    raise ValueError(
+                        "anchored phase-cycle fusion requires the A2 periodic-PE "
+                        "trajectory branch"
+                    )
+                if getattr(configs, "periodic_residual_pe_type", None) != "lff":
+                    raise ValueError(
+                        "anchored phase-cycle fusion is defined relative to the "
+                        "rcrf_pe_lff A2 anchor"
+                    )
             self.anchored_phase_cycle_fusion = AnchoredPhaseCycleFusionComposer(
                 self.seq_len,
                 self.pred_len,
@@ -1901,9 +1922,10 @@ class PhaseFormer(DefaultPLModule):
                 anchored_phase_hat = self.phase_noise_hifreq_damping(
                     anchored_phase_hat, phase_series
                 )
-                anchored_trajectory_hat = self.phase_noise_hifreq_damping(
-                    anchored_trajectory_hat, phase_series
-                )
+                if anchored_trajectory_hat is not None:
+                    anchored_trajectory_hat = self.phase_noise_hifreq_damping(
+                        anchored_trajectory_hat, phase_series
+                    )
 
         if self.use_safe_triaxis:
             # `y_hat` is now the *complete* A1 prediction, including RCRF and
@@ -1937,9 +1959,19 @@ class PhaseFormer(DefaultPLModule):
             # anchor leaves a gradient path through the correction features.
             # The composer still sees the same numerical values and remains a
             # fully trainable correction of the current A2 forecast.
-            composer_anchor = anchored_anchor_hat
-            composer_phase = anchored_phase_hat
-            composer_trajectory = anchored_trajectory_hat
+            if self.anchored_pctf_anchorless:
+                # Ablation 2: no A2 branch exists.  The composer corrects
+                # PhaseFormer's own forecast in place; all three composer views
+                # are the same signal and there is no trajectory predictor.
+                composer_anchor = y_hat
+                composer_phase = y_hat
+                composer_trajectory = y_hat
+                trajectory_predictor = None
+            else:
+                composer_anchor = anchored_anchor_hat
+                composer_phase = anchored_phase_hat
+                composer_trajectory = anchored_trajectory_hat
+                trajectory_predictor = self.weak_period_residual
             composer_phase_series = phase_series_raw
             if self.anchored_pctf_detach_composer_inputs:
                 composer_anchor = composer_anchor.detach()
@@ -1952,7 +1984,7 @@ class PhaseFormer(DefaultPLModule):
                 composer_trajectory,
                 x_in,
                 composer_phase_series,
-                trajectory_predictor=self.weak_period_residual,
+                trajectory_predictor=trajectory_predictor,
             )
 
         # 10) De-normalization

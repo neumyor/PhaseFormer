@@ -337,9 +337,7 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
             len(origins),
         )
 
-    def _rolling_evidence(self, history, trajectory_predictor):
-        if trajectory_predictor is None:
-            raise ValueError("evidence strategies require the A2 trajectory predictor")
+    def _rolling_evidence(self, history, trajectory_predictor, fallback_reference=None):
         batch, _, channels = history.shape
         (
             cycle_contexts, full_contexts, targets, phase_templates, origins,
@@ -347,7 +345,22 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         evidence_len = self.evidence_cycles * self.cycle_period_len
         with torch.no_grad():
             cycle = self.cycle(cycle_contexts)[:, :evidence_len]
-            trajectory = trajectory_predictor(full_contexts)[:, :evidence_len]
+            if trajectory_predictor is not None:
+                trajectory = trajectory_predictor(full_contexts)[:, :evidence_len]
+            else:
+                # Anchorless ablation: no A2 trajectory predictor exists.  Use
+                # PhaseFormer's own forecast, broadcast across the pseudo-origins,
+                # as the level reference for the evidence comparison.
+                if fallback_reference is None:
+                    raise ValueError(
+                        "evidence strategies require the A2 trajectory predictor "
+                        "or an anchorless fallback reference"
+                    )
+                reference = fallback_reference[:, :evidence_len]
+                reference = reference.unsqueeze(0).expand(
+                    origins, -1, -1, -1
+                ).reshape(-1, evidence_len, channels)
+                trajectory = reference
             cycle = cycle.reshape(
                 origins * batch, self.evidence_cycles,
                 self.cycle_period_len, channels,
@@ -565,10 +578,17 @@ class AnchoredPhaseCycleFusionComposer(nn.Module):
         shape_confidence = level_confidence = ones
         shape_risk = level_risk = shape_std = level_std = zeros
         if self.strategy in ("monotonic_evidence", "mlp_evidence"):
+            fallback_reference = None
+            if trajectory_predictor is None:
+                # The anchor (PhaseFormer's own forecast in anchorless mode)
+                # serves as the trajectory reference for the evidence score.
+                fallback_reference = anchor
             (
                 shape_confidence, level_confidence,
                 shape_risk, level_risk, shape_std, level_std,
-            ) = self._rolling_evidence(history, trajectory_predictor)
+            ) = self._rolling_evidence(
+                history, trajectory_predictor, fallback_reference
+            )
 
         level_update = torch.zeros_like(anchor_cycles)
         if self.strategy == "phase_modulation":

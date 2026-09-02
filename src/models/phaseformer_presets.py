@@ -177,6 +177,13 @@ ABLATION_MODES = {
     "pctf_anchor_repair_full",
     # Strict one-stage version selected from the H192 T28 trust-region screen.
     "pctf_anchor_repair_strict_t28",
+    # ETTh2 ablations of the strict single-stage method:
+    #   no_icpt removes the ICPT branch (complete A2 anchor output only);
+    #   no_a2 removes NLinear + LFF + adaptive fusion + the A2 anchor, keeping
+    #   only the ICPT head doing bounded corrections on PhaseFormer's own
+    #   forecast.
+    "pctf_anchor_repair_strict_t28_no_icpt",
+    "pctf_anchor_repair_strict_t28_no_a2",
 }
 
 HPTC_MODES = {
@@ -1241,6 +1248,28 @@ def get_ablation_overrides(mode):
             phase_cycle_fusion_amplitude_max=2.0,
         )
         return overrides
+    if mode == "pctf_anchor_repair_strict_t28_no_icpt":
+        # Ablation 1: remove the ICPT branch.  Everything else is identical to
+        # the strict single-stage A2 anchor (NLinear + LFF + RCRF adaptive
+        # fusion), so this preset must reproduce that exact output.  The
+        # anchored_pctf_* overrides remain in the config but are inert because
+        # use_anchored_phase_cycle_fusion is disabled.
+        overrides = get_ablation_overrides("pctf_anchor_repair_strict_t28")
+        overrides["scheme_name"] = mode
+        overrides["use_anchored_phase_cycle_fusion"] = False
+        return overrides
+    if mode == "pctf_anchor_repair_strict_t28_no_a2":
+        # Ablation 2: remove NLinear + LFF + adaptive fusion + the A2 anchor.
+        # The composer is switched into its anchorless mode and corrects
+        # PhaseFormer's own (phase-expert) forecast, with no trajectory branch
+        # and no trajectory predictor to reference.
+        overrides = get_ablation_overrides("pctf_anchor_repair_strict_t28")
+        overrides["scheme_name"] = mode
+        overrides["use_weak_period_residual"] = False
+        overrides["use_rcrf_fusion"] = False
+        overrides["use_periodic_residual_pe"] = False
+        overrides["anchored_pctf_anchorless"] = True
+        return overrides
     if mode in PCTF_ANCHORED_MODES:
         # Exact A2 nesting: the full LFF trajectory branch, RCRF gate and phase
         # calibration stack remain intact.  The additional no-PE ICPT head is
@@ -1730,6 +1759,9 @@ class PhaseFormerPresetConfig:
         # flag is enabled by an anchored preset.
         self.use_anchored_phase_cycle_fusion = hyperparams.get(
             "use_anchored_phase_cycle_fusion", False
+        )
+        self.anchored_pctf_anchorless = hyperparams.get(
+            "anchored_pctf_anchorless", False
         )
         self.anchored_pctf_strategy = hyperparams.get(
             "anchored_pctf_strategy", "component_cycle"
