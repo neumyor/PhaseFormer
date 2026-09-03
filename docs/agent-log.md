@@ -1,5 +1,10 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — D7 内部路径诊断预注册
+
+- 在 D1--D6 未发现输入候选后，新增低成本 D7：完整输入上直接量化 phase path 残差、NLinear correction
+  和融合收益，并以六个预固定时序描述量做连续五折 OOF 探针；无训练、无 test。
+
 ## 2026-09-03 — D6 结构关系冻结筛查完成：未发现目标方向
 
 - `raft` CUDA 完成512-origin validation-only D6（约7秒）：周期顺序反转、phase去同步、相邻 phase
