@@ -1369,3 +1369,18 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   §8.1 不符（frozen H1 minus M1−M0 长表重算 +2.4 pp vs 该列 +36.1 pp），D1 汇总前需修；② 计划
   §7.2/§7.3/§13.0 正文仍是 v1.1 的 8 数据集/24 锚点/216/456 计数，与 v1.2 实际（7/21/189/399）
   不一致；③ selection_source 列约 55% 空。
+
+## 2026-09-03 — ETTm1-H192 输入盲区候选发现方案
+
+- 新增 `docs/PhaseFormer_input_candidate_discovery_ETTm1_H192_plan.md`，把后续工作独立为新的
+  validation-only 候选发现实验；范围固定 ETTm1、h192、seed2021，不读取新的 test，也不回写
+  已经发生 test exposure 的 H1/H3/H4 D0 结论。
+- 候选库改为与 PhaseFormer 的24步 phase folding/低维投影和 NLinear 完整时间轴差异直接对应的
+  六类方向：96步日周期增量、672步周内低频、非24整齐频带、周期边界连续性、周期间幅度包络、
+  平滑相位速度。
+- 筛选先做连续序列上的 train-fitted 分解和严格 real/sham 分布 QC，再以512个 validation origins
+  做冻结低剂量筛选、PF残差 cross-fitted ridge probe 与 RCRF 四类分支反事实；至多3个进入全
+  validation，至多2个进入重训。
+- 从零开始的训练上限为21 runs（3个 full 锚点 + 最多18个候选重训），所有日志与监控只写
+  `research_runs/`。若没有候选通过 sham-adjusted Interaction 与分支证据门槛，明确报告未找到，
+  不按排名强行选择。当前仅完成方案，尚未实现或运行。
