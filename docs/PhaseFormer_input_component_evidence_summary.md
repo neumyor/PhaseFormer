@@ -188,6 +188,13 @@ branch”的反事实（详见 [D4 报告](PhaseFormer_input_component_D4_comple
 这进一步排除了把 D1--D3 的 remove-trained 负 interaction 叙述为“增强分支专门使用 A 以外的信息”的
 写法。它们只能支撑增强的**替代/恢复能力**，而不是原版遗漏某个已命名成分的直接证明。
 
+### 7.2 D5 广泛冻结筛查：当前 D1/D2/D3 库没有目标候选
+
+D5 在512个时间均匀 validation origins 上对当前定义的 D1六项、D2四项、D3五项同时补齐 full→remove
+与 NLinear-only 反事实（详见 [D5 报告](PhaseFormer_input_component_D5_broad_frozen_report.md)）。所有
+15项中，M0 对13项有超过1%的即时损失；余下D1-32/D1-24虽分别仅+0.59/+0.37%，但 M1/M2 与其
+NLinear branch 的效应同样很小，没有模型差异。故该候选库整体不进入多 seed 重训。
+
 ### 尚不能成立的结论
 
 1. 不能说 M1/M2 的增强分支“不依赖”D1/D2/D3 成分：D4 已经直接显示其对两个 D3 成分存在实际利用；
@@ -220,3 +227,4 @@ branch”的反事实（详见 [D4 报告](PhaseFormer_input_component_D4_comple
 |D1/D2 当前定义|`research_runs/d1_d2_gaussian_tailzero_control/d1_d2_retrained_summary.csv`|
 |D3|`research_runs/d3_trajectory_remove_control/d3_trajectory_summary.csv`|
 |D4 互补冻结诊断|[D4 报告](PhaseFormer_input_component_D4_complementary_frozen_report.md)；`research_runs/d4_complementary_frozen_probe_control/frozen_complementary_results.csv`|
+|D5 广泛冻结筛查|[D5 报告](PhaseFormer_input_component_D5_broad_frozen_report.md)；`research_runs/d5_broad_frozen_utilisation_control/frozen_broad_utilisation_results.csv`|

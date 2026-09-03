@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — D5 广泛冻结利用验证完成：15项均非目标候选
+
+- 在 `raft` CUDA 上完成 D5 的512个时间均匀 validation origins 筛查（约9秒）：D1六个 Gaussian notch、
+  D2四个尾部置零、D3五个末值锚定轨迹；全程无训练、无 test。M1/M2 均额外执行仅替换 NLinear branch
+  的反事实，最大 fusion replay 误差 `3.82e-6`。
+- 15项没有任何一项显示“M0近零而增强 NLinear 分支显著为正”。D1-32/D1-24 的 M0 效应最小
+  （+0.59/+0.37%），但所有增强与分支效应也同样很小；其余13项的 M0 即时依赖均超过1%。
+- D2 近期原始观测、D1主要频率、D3轨迹均表明 NLinear branch 会使用成分，但原版也有显著即时依赖。
+  因而冻结该库，不进行高耗时多 seed 重训；完整表与后续“结构关系”候选方向记录在新增 D5 报告，并同步
+  入全景汇总。
+
 ## 2026-09-03 — D5 广泛冻结利用验证预注册
 
 - 基于 D4 的分支/恢复区分，新增 `scripts/run_d5_broad_frozen_utilisation.py` 与 D5 计划：固定复用三个
