@@ -418,3 +418,34 @@ class TrajectoryComponentBank:
         if not np.isfinite(result).all():
             raise FloatingPointError("trajectory component removal produced non-finite values")
         return result.astype(seq_x.dtype, copy=False)
+
+
+class ComplementaryTrajectoryBank(TrajectoryComponentBank):
+    """Expose complementary views for a frozen trajectory-utilisation probe.
+
+    ``remainder`` is the ordinary D3 removal input ``X-A``.  ``component_anchor``
+    keeps only the requested zero-endpoint trajectory A plus a constant copy of
+    the observed final value.  The latter is deliberately *not* an exact
+    algebraic complement: it is an A-sufficiency probe which preserves the
+    persistence anchor used by the NLinear-style head, rather than confounding
+    absence of A with absence of the final observation.
+    """
+
+    VARIANTS = {"remainder", "component_anchor"}
+
+    def __init__(self, *args, variant: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.variant = str(variant)
+        if self.variant not in self.VARIANTS:
+            raise ValueError(f"unknown complementary trajectory variant {self.variant}")
+
+    def transform(self, index: int, seq_x: np.ndarray) -> np.ndarray:
+        x = np.asarray(seq_x, dtype=np.float64)
+        component = self.component_values(x)
+        if self.variant == "remainder":
+            result = x - component
+        else:
+            result = np.broadcast_to(x[-1:, :], x.shape).copy() + component
+        if not np.isfinite(result).all():
+            raise FloatingPointError("complementary trajectory view produced non-finite values")
+        return result.astype(seq_x.dtype, copy=False)

@@ -1677,6 +1677,7 @@ class PhaseFormer(DefaultPLModule):
         self.last_residual_forecast = None
         self.last_rcrf_reliability = None
         self.last_rcrf_alpha = None
+        self.last_weak_residual_alpha = None
 
         # 1) RevIN normalization
         if self.use_revin:
@@ -1905,6 +1906,7 @@ class PhaseFormer(DefaultPLModule):
                     else:
                         residual_gate = torch.sigmoid(self.weak_period_residual_gate)
                     y_hat = (1.0 - residual_gate) * y_hat + residual_gate * residual_hat
+                    self.last_weak_residual_alpha = residual_gate.detach()
 
         if self.use_topology_output_convex_residual:
             residual_hat = self.topology_output_convex_residual(x_in)
@@ -2000,7 +2002,7 @@ class PhaseFormer(DefaultPLModule):
         # 10) De-normalization
         if self.use_revin:
             y_hat = self.revin.denormalize(y_hat, stats)
-            if self.use_rcrf_fusion and residual_forecast_normalized is not None:
+            if self.use_weak_period_residual and residual_forecast_normalized is not None:
                 self.last_phase_forecast = self.revin.denormalize(
                     phase_forecast_normalized, stats
                 ).detach()
@@ -2054,10 +2056,11 @@ class PhaseFormer(DefaultPLModule):
                 self.anchored_phase_cycle_fusion.shape_correction_for_auxiliary
             )
 
-        if self.use_rcrf_fusion and residual_forecast_normalized is not None:
+        if self.use_weak_period_residual and residual_forecast_normalized is not None:
             if not self.use_revin:
                 self.last_phase_forecast = phase_forecast_normalized.detach()
                 self.last_residual_forecast = residual_forecast_normalized.detach()
+        if self.use_rcrf_fusion and residual_forecast_normalized is not None:
             self.last_rcrf_reliability = self.rcrf_fusion.last_r
             self.last_rcrf_alpha = self.rcrf_fusion.last_alpha
 

@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — D4 互补信息冻结诊断准备
+
+- 针对既有 D3 的 `recent_linear` 与 `cycle_levels`，新增低成本、validation-only 的冻结诊断脚本
+  `scripts/run_d4_complementary_frozen_probe.py`：比较完整输入 `X`、其余历史 `X-A`，以及保留末值锚点
+  的 A-充分性视图 `repeat(last(X))+A`；不重训、不读取 test。
+- `ComplementaryTrajectoryBank` 明确把后者定义为“充分性 probe”而不是代数互补，避免因移除 NLinear
+  的末值 persistence anchor 而错误归因。脚本对 M1/M2 固定 full-input 的 phase 输出与融合权重、仅替换
+  NLinear 分支输出，并验证重组能精确回放实际融合输出。
+- 修改 `PhaseFormer` 使静态 gate 的 weak-residual 模式与 RCRF 模式一样暴露最近一次相位/残差预测，
+  仅供冻结归因读取；预测路径、参数与训练损失不变。待运行 CUDA validation 后再记录数值结论。
+
 ## 2026-09-02 — 预注册 PhaseFormer 输入成分 H1/H3/H4 消融
 
 - 新增 `docs/PhaseFormer_input_component_H1_H3_H4_plan.md`，冻结 H1 同相位残差、H3 近期漂移、
