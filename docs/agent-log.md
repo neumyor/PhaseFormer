@@ -1443,3 +1443,14 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 结果：D1-96 令三模型的重训后 MAE 均明显恶化（original +17.83%、weak +14.23%、RCRF +16.27%），
   属于共同关键日周期；D2-24/48/96/192 中增强模型的损失均低于原版。没有稳定的“原版相对不利用、增强
   模型更依赖”交互；D1-48 的 weak +0.47pp 单点效应不足以成为候选。
+
+## 2026-09-03 — 按用户定义重跑 D1/D2（高斯陷波 / 直接置零）
+
+- 用户否定上一轮的连续谐波回归与创新残差定义；`GaussianNotchBank` 现对每个720步标准化历史作 rFFT
+  Gaussian notch（目标频率 `1/P`，`sigma=1/720`，DC保留），`TailZeroBank` 直接将末尾24/48/96/192步的
+  所有标准化输入设为零。`search_phaseformer.py` 和 launcher 记录 D1 sigma，旧结果明确保留为历史而不混用。
+- 两个1 epoch、5% train GPU smoke（D1-96 和 D2-24）通过；RTX 4090 / raft 上完成新的30/30个 ETTm1-H192
+  seed2021、30 epoch上限、validation-only任务。运行、日志和汇总位于
+  `research_runs/d1_d2_gaussian_tailzero_{scratch,control}/`，未读 test。
+- 新结果写入候选发现计划§12：D2 置零使 MAE 随尾长从原版 +6.53% 增至 +33.52%，但两种增强模型在四个长度
+  都有更小损失；D1 除约678步的 +0.20/+0.29pp 微小单点外，增强也更可恢复。因此仍未出现可用的原版盲区候选。

@@ -406,6 +406,7 @@ def build_spec(args):
         "input_variant": getattr(args, "input_variant", "full"),
         "intervention_seed": getattr(args, "intervention_seed", 9102),
         "input_d1_period": getattr(args, "input_d1_period", ""),
+        "input_d1_sigma": getattr(args, "input_d1_sigma", ""),
         "input_d2_recent_length": getattr(args, "input_d2_recent_length", ""),
         "max_eval_samples": getattr(args, "max_eval_samples", 0),
         "require_cuda": require_cuda,
@@ -654,6 +655,7 @@ def execute(args):
     exp_args.dataset_args.input_period_len = spec["period"]
     exp_args.dataset_args.intervention_seed = spec["intervention_seed"]
     exp_args.dataset_args.input_d1_period = spec["input_d1_period"]
+    exp_args.dataset_args.input_d1_sigma = spec["input_d1_sigma"]
     exp_args.dataset_args.input_d2_recent_length = spec["input_d2_recent_length"]
     exp_args.training_args.num_workers = args.num_workers
     train_set, train_loader = data_provider(exp_args.dataset_args, "train")
@@ -838,6 +840,7 @@ def execute(args):
         "input_variant": spec["input_variant"],
         "intervention_seed": spec["intervention_seed"],
         "input_d1_period": spec["input_d1_period"],
+        "input_d1_sigma": spec["input_d1_sigma"],
         "input_d2_recent_length": spec["input_d2_recent_length"],
         "max_eval_samples": spec["max_eval_samples"],
         "cycle_period": spec["cycle_period"], "capacity": spec["capacity"],
@@ -905,6 +908,10 @@ def parse_args():
     )
     p.add_argument("--intervention-seed", type=int, default=9102)
     p.add_argument("--input-d1-period", type=float, default=0.0)
+    p.add_argument(
+        "--input-d1-sigma", type=float, default=0.0,
+        help="D1 Gaussian-notch sigma in cycles/step; zero means 1/seq_len",
+    )
     p.add_argument("--input-d2-recent-length", type=int, default=0)
     p.add_argument(
         "--max-eval-samples", type=int, default=0,

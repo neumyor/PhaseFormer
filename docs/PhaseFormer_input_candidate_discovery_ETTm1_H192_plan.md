@@ -277,6 +277,10 @@ PhaseFormer盲区的证明。全程只读取 validation，复用了 §9 三个 f
 
 ## 11. D1/D2 remove-trained 对照（2026-09-03）
 
+> **已弃用的定义。** 本节采用“连续谐波回归删除 / 近期创新删除”的旧实现；用户随后明确要求
+> D1 使用窗口内高斯频率陷波、D2 直接把尾部输入置零。旧表只保留审计历史，不用于当前结论；
+> 请以§12为准。
+
 用户指出，§10 的冻结模型删除只能测出即时敏感性；要测“训练后模型是否实际利用”，必须让模型在
 缺少该成分的输入上重新训练。因此本节将每个 D1/D2 条件在 train 与 validation 同时删除、目标 `y`
 保持不变，从头训练，再配对比较相同模型的 full-input train/full-input validation 锚点。
@@ -320,4 +324,51 @@ PhaseFormer盲区的证明。全程只读取 validation，复用了 §9 三个 f
   --baseline-dir research_runs/input_candidate_discovery_ettm1_h192_v1_scratch/runs \
   --remove-dir research_runs/d1_d2_retrained_remove_scratch/runs \
   --output research_runs/d1_d2_retrained_remove_control/d1_d2_retrained_summary.csv
+```
+
+## 12. D1/D2 修订定义的 remove-trained 对照（2026-09-03）
+
+本节是当前有效实验。仍固定 ETTm1、lookback=720、horizon=192、seed=2021、三个模型、30 epoch
+上限和 validation-only；full-input 锚点不变。唯一改变是用户确认的成分移除定义，所有30个条件均在
+train 与 validation 一致应用、保持目标 `y` 不变，并重新从头训练。
+
+- **D1（高斯频率陷波）**：目标周期仍由训练集频谱的六个固定峰给出。对每一个720步、已标准化的模型
+  输入窗口做 rFFT；对 `f0=1/P` 使用 `1-exp(-(f-f0)^2/(2 sigma_f^2))` 的 Gaussian notch，
+  `sigma_f=1/720`，保留 DC 均值后逆变换。它删除目标频率及其平滑邻域，而不是拟合/减去全局正弦波。
+- **D2（直接尾部置零）**：对每一个已标准化输入窗口，直接将最后24/48/96/192个时间步的所有变量设为
+  0；不再构造创新序列。这里的0是送入模型的标准化输入零值，预测目标不置零、不改写。
+- 指标仍是配对的 `TrainDrop_m(A)`，即 remove-trained/remove-validation MAE 相对 full/full 锚点的
+  百分比变化；括号为相对 original 的交互（百分点）。正交互才符合“增强模型更依赖 A”。
+
+|条件|original MAE损失|weak MAE损失（相对original）|RCRF MAE损失（相对original）|判读|
+|---|---:|---:|---:|---|
+|D1-96|+2.95%|+0.64% (-2.31pp)|+0.39% (-2.56pp)|增强更可恢复|
+|D1-48|+6.38%|+5.37% (-1.01pp)|+4.85% (-1.53pp)|增强更可恢复|
+|D1-32|+1.35%|+0.44% (-0.92pp)|+0.35% (-1.00pp)|增强更可恢复|
+|D1-24|+1.10%|+0.59% (-0.51pp)|+0.58% (-0.52pp)|增强更可恢复|
+|D1-677.647|+7.59%|+7.88% (+0.29pp)|+7.80% (+0.20pp)|仅很小且一致性不足的正交互|
+|D1-205.714|+1.09%|+0.33% (-0.76pp)|+0.29% (-0.80pp)|增强更可恢复|
+|D2-末尾24置零|+6.53%|+6.10% (-0.43pp)|+6.34% (-0.19pp)|三者都依赖；增强略更可恢复|
+|D2-末尾48置零|+11.73%|+10.02% (-1.71pp)|+10.67% (-1.06pp)|增强更可恢复|
+|D2-末尾96置零|+21.15%|+19.38% (-1.77pp)|+18.54% (-2.61pp)|增强更可恢复|
+|D2-末尾192置零|+33.52%|+30.20% (-3.32pp)|+29.90% (-3.62pp)|增强更可恢复|
+
+结论：修订成用户指定的 remove 操作后，仍未得到目标模式。直接置零显示近期原始观测对所有模型都
+非常重要，且窗口越长损失越大；但两种增强模型在四个长度上均比原版更能弥补缺失。高斯陷波的多数
+周期也同向；仅D1-677.647的两个正交互不足0.3pp，单seed下不构成候选。该轮因此不支持把任一 D1/D2
+成分表述为“PhaseFormer没用而增强模型在用”。
+
+复现（GPU）：
+
+```bash
+/home/wangjing/miniconda3/envs/raft/bin/python scripts/run_d1_d2_retrained_remove.py \
+  --execute --jobs-per-gpu 3 --max-epochs 30 --num-workers 2 \
+  --d1-sigma 0.001388888888888889 \
+  --output-dir research_runs/d1_d2_gaussian_tailzero_scratch \
+  --control-dir research_runs/d1_d2_gaussian_tailzero_control
+
+/home/wangjing/miniconda3/envs/raft/bin/python scripts/summarize_d1_d2_retrained_remove.py \
+  --baseline-dir research_runs/input_candidate_discovery_ettm1_h192_v1_scratch/runs \
+  --remove-dir research_runs/d1_d2_gaussian_tailzero_scratch/runs \
+  --output research_runs/d1_d2_gaussian_tailzero_control/d1_d2_retrained_summary.csv
 ```

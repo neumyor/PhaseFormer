@@ -21,10 +21,9 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.run_input_candidate_discovery_frozen import evaluate, load_model
 from src.dataset.data_factory import data_provider
 from src.dataset.input_candidate_discovery import (
-    CandidateConfig,
     CandidateDataset,
-    ContinuousCandidateBank,
-    SpectralRemoveBank,
+    GaussianNotchBank,
+    TailZeroBank,
 )
 
 
@@ -84,10 +83,10 @@ def main():
 
     interventions = []
     for label, period in D1_PERIODS:
-        interventions.append(("D1", label, period, SpectralRemoveBank(full, period)))
+        interventions.append(("D1", label, period, GaussianNotchBank(full.seq_len, period, 1.0 / full.seq_len)))
     for length in D2_LENGTHS:
-        bank = ContinuousCandidateBank(full, CandidateConfig("c7", "remove_full", recent_length=length))
-        # D2 is a full deletion of the selected recent innovation support.
+        bank = TailZeroBank(full.seq_len, length)
+        # D2 directly zeroes the selected final history observations.
         interventions.append(("D2", f"D2-{length}", length, bank))
 
     for track, label, value, bank in interventions:
@@ -106,7 +105,7 @@ def main():
         writer.writeheader(); writer.writerows(rows)
     (args.output_dir / "d1_d2_protocol.json").write_text(json.dumps({
         "split": "validation", "dataset": "ETTm1", "horizon": 192, "seed": 2021,
-        "intervention": "remove only; no sham; deletion sensitivity only",
+        "intervention": "remove only; D1 Gaussian frequency notch (sigma=1/720); D2 tail zeros",
         "d1_periods": D1_PERIODS, "d2_lengths": D2_LENGTHS,
     }, indent=2) + "\n")
     print(args.output_dir / "d1_d2_remove_validation.csv")

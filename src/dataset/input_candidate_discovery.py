@@ -296,36 +296,55 @@ class CandidateDataset(Dataset):
         return getattr(self.dataset, name)
 
 
-class SpectralRemoveBank:
-    """Remove one train-fitted stationary harmonic from a continuous series.
+class GaussianNotchBank:
+    """Remove a target frequency from each history with a Gaussian FFT notch.
 
-    The frequency is selected from the training periodogram and its per-channel
-    sine/cosine coefficients are fitted on the training prefix only.  Evaluation
-    simply extrapolates that harmonic by absolute time, so overlapping windows
-    always receive the same removed value at a given timestamp.
+    The selected period is fixed from the training-only periodogram, while the
+    intervention itself operates only on the available history window.  For a
+    target frequency ``f0=1/period``, rFFT coefficient ``f`` is multiplied by
+    ``1-exp(-(f-f0)^2/(2*sigma_f^2))``.  This gives a smooth band-stop filter
+    rather than subtracting a globally fitted sinusoid.
     """
 
-    def __init__(self, dataset: Dataset, period: float):
+    def __init__(self, seq_len: int, period: float, sigma_frequency: float | None = None):
         if period <= 2:
             raise ValueError("spectral period must exceed two samples")
-        reference = ContinuousCandidateBank(dataset, CandidateConfig("c7", "full"))
-        self.seq_len = reference.seq_len
-        self._start = reference._start
+        self.seq_len = int(seq_len)
+        if self.seq_len < 3:
+            raise ValueError("Gaussian spectral notch requires seq_len >= 3")
         self.period = float(period)
-        values = reference._values
-        train_end = reference._train_end
-        time = np.arange(train_end, dtype=np.float64)
-        design = np.column_stack((np.sin(2.0 * np.pi * time / self.period),
-                                  np.cos(2.0 * np.pi * time / self.period)))
-        coefficient, *_ = np.linalg.lstsq(design, values[:train_end], rcond=None)
-        all_time = np.arange(len(values), dtype=np.float64)
-        all_design = np.column_stack((np.sin(2.0 * np.pi * all_time / self.period),
-                                      np.cos(2.0 * np.pi * all_time / self.period)))
-        self.component_values = all_design @ coefficient
+        self.sigma_frequency = 1.0 / self.seq_len if sigma_frequency is None else float(sigma_frequency)
+        if self.sigma_frequency <= 0:
+            raise ValueError("Gaussian notch sigma_frequency must be positive")
+        frequencies = np.fft.rfftfreq(self.seq_len)
+        target = 1.0 / self.period
+        gaussian = np.exp(-0.5 * np.square((frequencies - target) / self.sigma_frequency))
+        self._keep = 1.0 - gaussian
+        self._keep[0] = 1.0  # Do not alter the window mean / DC component.
 
     def transform(self, index: int, seq_x: np.ndarray) -> np.ndarray:
-        start = self._start + int(index)
-        result = np.asarray(seq_x, dtype=np.float64) - self.component_values[start : start + self.seq_len]
+        x = np.asarray(seq_x, dtype=np.float64)
+        if x.shape[0] != self.seq_len:
+            raise ValueError("Gaussian notch received an unexpected history length")
+        spectrum = np.fft.rfft(x, axis=0)
+        result = np.fft.irfft(spectrum * self._keep[:, None], n=self.seq_len, axis=0)
         if not np.isfinite(result).all():
-            raise FloatingPointError("spectral remove produced non-finite values")
+            raise FloatingPointError("Gaussian spectral notch produced non-finite values")
         return result.astype(seq_x.dtype, copy=False)
+
+
+class TailZeroBank:
+    """Set the final ``recent_length`` scaled input observations to zero."""
+
+    def __init__(self, seq_len: int, recent_length: int):
+        self.seq_len = int(seq_len)
+        self.recent_length = int(recent_length)
+        if not 1 <= self.recent_length <= self.seq_len:
+            raise ValueError("recent_length must be within the history window")
+
+    def transform(self, index: int, seq_x: np.ndarray) -> np.ndarray:
+        result = np.asarray(seq_x).copy()
+        if result.shape[0] != self.seq_len:
+            raise ValueError("tail zeroing received an unexpected history length")
+        result[-self.recent_length :] = 0.0
+        return result
