@@ -1,5 +1,13 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — D5 广泛冻结利用验证预注册
+
+- 基于 D4 的分支/恢复区分，新增 `scripts/run_d5_broad_frozen_utilisation.py` 与 D5 计划：固定复用三个
+  ETTm1-H192 full checkpoint，在 validation-only 上一次性筛查当前定义的 D1六个频率、D2四个尾部窗口、
+  D3五个末值锚定轨迹。
+- 每个条件只做 full→remove 冻结前向与 M1/M2 的“固定 phase+gate、仅替换 NLinear branch”反事实；
+  无重训、无 test。预注册的判断明确禁止把较小 remove 损失误读成 NLinear 不使用该成分。
+
 ## 2026-09-03 — D4 互补信息冻结诊断完成
 
 - 在 `raft` CUDA 环境完成 ETTm1/L720/H192/seed2021 的 validation-only D4 冻结诊断（约22秒）：不训练、
