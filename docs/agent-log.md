@@ -1,5 +1,13 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — 补齐 D3 recent-linear 的完整证据链
+
+- 主线叙事新增 D3 recent-linear 专节：给出末值锚定 OLS 提取公式、remove-trained 恢复结果、D4 全
+  validation 的 B-only/A-only-anchor 冻结结果、M1/M2 NLinear-only 反事实及其CI、D5 低成本复核与
+  D7 内部路径关联。
+- 明确该对象是强共同依赖且增强可恢复的成分，不能作为“原版未用”候选；D7 的关联强度也说明最终缺陷
+  更集中于跨周期水平状态而非广义近期线性趋势。
+
 ## 2026-09-03 — 在主线报告补齐 D2 全窗口结果
 
 - 主线叙事的 D2 小节新增末尾24/48/96/192步直接置零的完整表：分别给出 remove-trained 恢复损失，

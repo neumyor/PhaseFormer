@@ -129,6 +129,58 @@ D5 的冻结筛查则保留 full-trained checkpoint，仅在 validation 输入�
 所以 D2 不是“原版没有充分使用、增强在使用”的候选。remove-trained 中 M1/M2 的较小损失只能说明它们
 对长期缺失近期观测有较强恢复能力。
 
+#### D3 recent-linear 的完整证据链
+
+`recent-linear` 是 D3 中最早显示强模型差异的对象。它先只用窗口最后96步做 OLS，得到每通道斜率
+
+```text
+b_recent = <u-mean(u), X[624:720]-mean(X[624:720])> / <u-mean(u),u-mean(u)>,  u=0,...,95
+A[t] = (t-719) b_recent,   t=0,...,719
+B = X-A
+```
+
+因此 `A[719]=0`，删除时严格保留末值 persistence anchor；它删除的是“最近96步所揭示、延展到全窗的
+方向”，不是将最后96步直接置零。
+
+**(1) remove-trained：增强模型更能在长期缺失后恢复。** 在 train/validation 都使用 `B=X-A` 并从头
+训练后，相对对应 full/full 锚点的 MAE 损失为：
+
+|输入|M0|M1|M2|M1-M0|M2-M0|
+|---|---:|---:|---:|---:|---:|
+|remove-trained，`X-A`|+7.20%|+1.65%|+2.81%|−5.55pp|−4.39pp|
+
+这说明 M1/M2 能从剩余上下文 B 中更好补偿该方向的缺失；它**不**说明完整模型的 NLinear branch 不使用 A。
+
+**(2) full-trained 冻结即时依赖：三种模型都显著使用 A。** D4 在完整 validation（11,329 origins）上对
+同一 full-trained checkpoint 只替换输入、不更新权重：
+
+|冻结输入|M0 fused|M1 fused|M2 fused|
+|---|---:|---:|---:|
+|`X-A`（B-only）|+140.1% [125.7,156.0]|+201.0% [179.2,224.6]|+172.4% [153.9,193.4]|
+|`repeat(last(X))+A`（A-only-anchor）|+154.1% [137.4,172.2]|+223.7% [201.2,248.4]|+193.1% [173.1,214.8]|
+
+两种单侧输入均远差于 full，说明 A 与 B 都不充分；M0 的 `X-A` 损失+140.1%更直接说明原版强烈依赖
+recent-linear，故它不符合“原版未使用”的必要条件。
+
+**(3) NLinear-only 反事实：增强分支也实际使用 A 与 B。** 固定 full phase forecast 和 full fusion
+系数，仅把 NLinear prediction 改为相应变换输入计算的结果：
+
+|分支输入|M1 NLinear-only CF|M2 NLinear-only CF|融合回放最大误差|
+|---|---:|---:|---:|
+|`X-A`|+222.3% [204.9,242.4]|+31.2% [28.4,34.4]|`4.8e-6` / `2.9e-6`|
+|`repeat(last(X))+A`|+225.4% [202.8,249.9]|+77.2% [66.0,89.8]|`3.8e-6` / `2.9e-6`|
+
+这给出直接的分支利用证据：NLinear 既需要 A，也需要其余历史 B。M2 的 branch-only 效应小于其完整
+冻结效应，说明 RCRF 完整输出的输入反应还包含 phase path/可靠性融合变化，不能全部归因给 NLinear。
+
+**(4) D5 低成本复核与 D7 解释。** D5 的512个均匀 origins 对 `X-A` 得到 M0/M1/M2
+`+139.99/+201.34/+173.12%`，与 D4 全 validation 方向和量级一致；对应 NLinear-only 为
+`+222.53/+31.30%`。但 D7 中“近期偏离”与 NLinear 融合收益的相关性仅 M1=+0.233、M2=+0.057，明显
+低于周期水平波动（+0.490/+0.534）和最后周期水平偏移（+0.483/+0.488）。
+
+所以 recent-linear 是一个很强的**共同依赖与缺失恢复**对象，却不是当前最终结构缺陷的最佳表述；当前
+更集中的机制线索仍是跨周期水平状态，而不是广义的最近线性趋势。
+
 ### 2.4 D4/D5：NLinear 确实使用许多被删信息，原版也通常立即依赖
 
 D4 以 full-trained checkpoint 比较 `X`、`X-A` 与末值锚定的 A-only 视图，并固定 full-input phase/gate、
