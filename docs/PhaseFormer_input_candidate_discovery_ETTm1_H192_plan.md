@@ -274,3 +274,50 @@ PhaseFormer盲区的证明。全程只读取 validation，复用了 §9 三个 f
   `+0.54/+0.59/+0.70/+0.80%`，RCRF `+0.48/+0.52/+0.60/+0.72%`。
 - 这说明近期创新对三种模型都有用，但在这四个长度上原版 PhaseFormer 始终至少与增强模型一样敏感；
   remove-only 结果不支持“原版不充分利用、增强模型在利用”的目标模式。
+
+## 11. D1/D2 remove-trained 对照（2026-09-03）
+
+用户指出，§10 的冻结模型删除只能测出即时敏感性；要测“训练后模型是否实际利用”，必须让模型在
+缺少该成分的输入上重新训练。因此本节将每个 D1/D2 条件在 train 与 validation 同时删除、目标 `y`
+保持不变，从头训练，再配对比较相同模型的 full-input train/full-input validation 锚点。
+
+- 范围：ETTm1、lookback=720、horizon=192、seed=2021、30 epoch 上限；original、weak_residual、
+  rcrf_nlinear_plain 三模型，10 个条件，共30个训练。早停仍只看 validation；未读取 test。
+- D1/D2 的提取及删除方式完全沿用§10：D1 为训练集拟合、连续绝对时间谐波删除；D2 为训练集拟合的
+  因果近期创新删除。故 train/validation 均不存在被删除的 A，而预测目标未被改写。
+- 主指标为 `TrainDrop_m(A)=100*(MAE(remove-trained/remove-val)/MAE(full-trained/full-val)-1)`；正值表示
+  缺失 A 后即使重新训练仍有不可恢复的预测损失。增强分支相对原版的交互为
+  `TrainDrop_enhanced-TrainDrop_original`（百分点）。只有该交互稳定为正，才符合“原版相对没利用、
+  增强模型更依赖”的候选方向。
+
+|条件|original MAE损失|weak MAE损失（相对original）|RCRF MAE损失（相对original）|判读|
+|---|---:|---:|---:|---|
+|D1-96|+17.83%|+14.23% (-3.59pp)|+16.27% (-1.56pp)|共同关键周期；增强更可恢复|
+|D1-48|+1.94%|+2.41% (+0.47pp)|+1.05% (-0.89pp)|弱分支仅有很小单点正交互|
+|D1-32|+1.21%|+0.33% (-0.89pp)|+0.66% (-0.56pp)|原版更受影响|
+|D1-24|+1.13%|+0.48% (-0.65pp)|+0.57% (-0.56pp)|原版更受影响|
+|D1-677.647|-0.01%|-0.09% (-0.09pp)|-0.32% (-0.31pp)|近零，单seed训练噪声范围|
+|D1-205.714|+0.08%|-0.30% (-0.38pp)|-0.10% (-0.18pp)|近零，单seed训练噪声范围|
+|D2-24|+0.64%|+0.26% (-0.38pp)|+0.59% (-0.05pp)|增强不更依赖|
+|D2-48|+0.73%|+0.31% (-0.42pp)|+0.53% (-0.20pp)|增强不更依赖|
+|D2-96|+0.77%|+0.34% (-0.42pp)|+0.56% (-0.20pp)|增强不更依赖|
+|D2-192|+0.86%|+0.39% (-0.48pp)|+0.41% (-0.46pp)|增强更可恢复|
+
+结论：采用正确的训练阶段对照后，仍没有找到目标模式。96步日周期是所有模型都不可替代的共同信息；
+近期创新的结果反而一致显示两种增强模型比原版更能在缺失后恢复。D1-48 的 weak 单点 `+0.47pp` 太小，
+且 RCRF 方向相反，不能当作候选。所有结果为单 seed、validation-only，足以淘汰这些具体候选的强主张，
+但不能用来证明任意模型对任意输入成分“从不利用”。
+
+复现（GPU）：
+
+```bash
+/home/wangjing/miniconda3/envs/raft/bin/python scripts/run_d1_d2_retrained_remove.py \
+  --execute --jobs-per-gpu 3 --max-epochs 30 --num-workers 2 \
+  --output-dir research_runs/d1_d2_retrained_remove_scratch \
+  --control-dir research_runs/d1_d2_retrained_remove_control
+
+/home/wangjing/miniconda3/envs/raft/bin/python scripts/summarize_d1_d2_retrained_remove.py \
+  --baseline-dir research_runs/input_candidate_discovery_ettm1_h192_v1_scratch/runs \
+  --remove-dir research_runs/d1_d2_retrained_remove_scratch/runs \
+  --output research_runs/d1_d2_retrained_remove_control/d1_d2_retrained_summary.csv
+```

@@ -405,6 +405,8 @@ def build_spec(args):
         "input_hypothesis": getattr(args, "input_hypothesis", "none"),
         "input_variant": getattr(args, "input_variant", "full"),
         "intervention_seed": getattr(args, "intervention_seed", 9102),
+        "input_d1_period": getattr(args, "input_d1_period", ""),
+        "input_d2_recent_length": getattr(args, "input_d2_recent_length", ""),
         "max_eval_samples": getattr(args, "max_eval_samples", 0),
         "require_cuda": require_cuda,
         "init_checkpoint": repo_relative(getattr(args, "init_checkpoint", ""))
@@ -651,6 +653,8 @@ def execute(args):
     exp_args.dataset_args.input_variant = spec["input_variant"]
     exp_args.dataset_args.input_period_len = spec["period"]
     exp_args.dataset_args.intervention_seed = spec["intervention_seed"]
+    exp_args.dataset_args.input_d1_period = spec["input_d1_period"]
+    exp_args.dataset_args.input_d2_recent_length = spec["input_d2_recent_length"]
     exp_args.training_args.num_workers = args.num_workers
     train_set, train_loader = data_provider(exp_args.dataset_args, "train")
     val_set, val_loader = data_provider(exp_args.dataset_args, "val")
@@ -833,6 +837,8 @@ def execute(args):
         "input_hypothesis": spec["input_hypothesis"],
         "input_variant": spec["input_variant"],
         "intervention_seed": spec["intervention_seed"],
+        "input_d1_period": spec["input_d1_period"],
+        "input_d2_recent_length": spec["input_d2_recent_length"],
         "max_eval_samples": spec["max_eval_samples"],
         "cycle_period": spec["cycle_period"], "capacity": spec["capacity"],
         "loss": spec["loss"], "learning_rate": hp["learning_rate"], "lr_multiplier": spec["lr_multiplier"],
@@ -890,14 +896,16 @@ def parse_args():
     )
     p.add_argument("--period", type=int, default=24)
     p.add_argument(
-        "--input-hypothesis", choices=["none", "h1", "h3", "h4"], default="none",
+        "--input-hypothesis", choices=["none", "h1", "h3", "h4", "d1", "d2"], default="none",
         help="History-only component extraction applied after train-fitted scaling",
     )
     p.add_argument(
-        "--input-variant", choices=["full", "half_A", "minus_A", "sham"],
+        "--input-variant", choices=["full", "half_A", "minus_A", "sham", "remove_full"],
         default="full",
     )
     p.add_argument("--intervention-seed", type=int, default=9102)
+    p.add_argument("--input-d1-period", type=float, default=0.0)
+    p.add_argument("--input-d2-recent-length", type=int, default=0)
     p.add_argument(
         "--max-eval-samples", type=int, default=0,
         help="Non-formal smoke limit; zero evaluates the complete split",

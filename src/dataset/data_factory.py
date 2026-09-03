@@ -1,5 +1,11 @@
 from .data_loader import *
 from .input_component_ablation import InputComponentConfig, InputComponentDataset
+from .input_candidate_discovery import (
+    CandidateConfig,
+    CandidateDataset,
+    ContinuousCandidateBank,
+    SpectralRemoveBank,
+)
 from torch.utils.data import DataLoader
 
 data_dict = {
@@ -92,7 +98,25 @@ def data_provider(args, flag, drop_last_test=False, train_all=False):
 
     hypothesis = getattr(args, "input_hypothesis", "none")
     variant = getattr(args, "input_variant", "full")
-    if hypothesis != "none":
+    if hypothesis == "d1":
+        if variant != "remove_full":
+            raise ValueError("D1 retraining requires input_variant=remove_full")
+        period = float(getattr(args, "input_d1_period", 0.0))
+        if period <= 2:
+            raise ValueError("D1 requires --input-d1-period > 2")
+        data_set = CandidateDataset(data_set, SpectralRemoveBank(data_set, period))
+    elif hypothesis == "d2":
+        if variant != "remove_full":
+            raise ValueError("D2 retraining requires input_variant=remove_full")
+        recent_length = int(getattr(args, "input_d2_recent_length", 0))
+        data_set = CandidateDataset(
+            data_set,
+            ContinuousCandidateBank(
+                data_set,
+                CandidateConfig("c7", "remove_full", recent_length=recent_length),
+            ),
+        )
+    elif hypothesis != "none":
         component_config = InputComponentConfig(
             hypothesis=hypothesis,
             variant=variant,

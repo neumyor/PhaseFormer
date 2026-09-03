@@ -1431,3 +1431,15 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 结论限定为 remove 敏感性：96步周期和近期创新是共同有用的信息；没有出现原版忽略而增强模型依赖的
   明确模式。原始 CSV 与协议位于 `research_runs/input_candidate_discovery_ettm1_h192_v1_scratch/d1_d2_remove/`，
   GPU日志位于对应 control 目录，均不提交。
+
+## 2026-09-03 — D1/D2 remove-trained 训练阶段对照
+
+- 按用户修正，新增 `d1`/`d2` 数据入口与 `scripts/run_d1_d2_retrained_remove.py`：每个条件在训练、
+  validation 均移除相同 A、目标不变，再从头训练 original/weak_residual/rcrf_nlinear_plain；不再用冻结
+  删除的即时反应代替训练后利用判断。新增汇总脚本 `scripts/summarize_d1_d2_retrained_remove.py`。
+- 在 RTX 4090、`/home/wangjing/miniconda3/envs/raft/bin/python`（raft）完成 ETTm1 H192 seed2021 的
+  30/30 个30-epoch上限任务，未读取 test。主结果写在计划§11，原始运行、逐任务日志和汇总均位于
+  `research_runs/d1_d2_retrained_remove_{scratch,control}/`（gitignore）。
+- 结果：D1-96 令三模型的重训后 MAE 均明显恶化（original +17.83%、weak +14.23%、RCRF +16.27%），
+  属于共同关键日周期；D2-24/48/96/192 中增强模型的损失均低于原版。没有稳定的“原版相对不利用、增强
+  模型更依赖”交互；D1-48 的 weak +0.47pp 单点效应不足以成为候选。
