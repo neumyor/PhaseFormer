@@ -172,7 +172,8 @@ def main():
         "dataset": "ETTm1", "split": "validation", "lookback": 720, "horizon": 192, "seed": 2021,
         "components": COMPONENTS, "views": {
             "remainder": "X-A", "component_anchor": "repeat(last(X))+A"
-        }, "models": MODELS, "branch_counterfactual": "phase_full + alpha_full * nlinear_changed",
+        }, "models": MODELS,
+        "branch_counterfactual": "(1-alpha_full)*phase_full + alpha_full*nlinear_changed",
         "checkpoint_paths": {name: str(path) for name, path in checkpoints.items()},
         "bootstrap_replicates": args.bootstrap_replicates,
     }, indent=2) + "\n")

@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — D4 互补信息冻结诊断完成
+
+- 在 `raft` CUDA 环境完成 ETTm1/L720/H192/seed2021 的 validation-only D4 冻结诊断（约22秒）：不训练、
+  不读取 test。运行产物位于 `research_runs/d4_complementary_frozen_probe_control/`，包含协议、配对样本
+  效应与全量聚合 CSV。
+- 对 `recent_linear` 与 `cycle_levels` 分别比较 `X`、`X-A`、`repeat(last(X))+A`；M1/M2 另固定 full
+  phase/gate，仅替换 NLinear branch。所有 fusion replay 最大误差小于 `4.8e-6`。
+- `recent_linear` 的 M0/M1/M2 删除后 MAE 分别 +140.1/+201.0/+172.4%，故 M0 明显在用它；
+  `cycle_levels` 为 +51.8/+46.0/+44.8%，但 M1/M2 的 NLinear-only 反事实仍显著变差（+33.3/+30.1%）。
+  结论是分支实际使用与 remove-trained 的恢复能力不可混同，不能把已有鲁棒性结果表述为“增强分支
+  不依赖被删成分”。完整边界、数值与命令记录在新增 D4 报告，并同步入全景汇总。
+
 ## 2026-09-03 — D4 互补信息冻结诊断准备
 
 - 针对既有 D3 的 `recent_linear` 与 `cycle_levels`，新增低成本、validation-only 的冻结诊断脚本

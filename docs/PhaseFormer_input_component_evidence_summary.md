@@ -174,18 +174,34 @@ PhaseFormer 的24步 folding 与 NLinear 全时间轴线性映射的结构差异
 2. 这更符合“增强路径提供冗余/替代信息利用能力”的解释，而不是“增强路径额外依赖被删除 A”。
 3. H1/H3/H4 与 C1--C7 都没有可靠地找到目标模式；其中很多失败由 sham/扰动本身的伤害主导。
 
+### 7.1 D4 补充：分支利用与恢复能力不是同一结论
+
+D4 对 D3 中 `recent-linear`、`cycle-levels` 补充了 full-trained 的冻结输入视图和“仅替换 NLinear
+branch”的反事实（详见 [D4 报告](PhaseFormer_input_component_D4_complementary_frozen_report.md)）：
+
+- `recent-linear` 被去除时，M0/M1/M2 的完整输出都立即显著变差（MAE +140.1/+201.0/+172.4%），所以
+  M0 绝非没有使用它；M1/M2 的 NLinear-only 反事实也显著变差。
+- `cycle-levels` 被去除时，M0 的完整输出损失略大于 M1/M2（+51.8% vs +46.0/+44.8%），但 M1/M2 的
+  NLinear-only 反事实仍显著变差（+33.3/+30.1%）。因此“增强模型更稳健”和“增强分支不使用 A”并不
+  等价；该分支可以使用 A，同时利用其他信息提供补偿。
+
+这进一步排除了把 D1--D3 的 remove-trained 负 interaction 叙述为“增强分支专门使用 A 以外的信息”的
+写法。它们只能支撑增强的**替代/恢复能力**，而不是原版遗漏某个已命名成分的直接证明。
+
 ### 尚不能成立的结论
 
-1. 不能说 M1/M2 的增强分支“不依赖”D1/D2/D3 成分：还没有对这些相同定义完成 full-train/remove-val
-   的 frozen 评估和 NLinear-only 分支反事实。
-2. 不能说 M0“没使用”任何已测成分：D1/D2/D3 的 remove-trained M0 损失均为正，至少说明这些
+1. 不能说 M1/M2 的增强分支“不依赖”D1/D2/D3 成分：D4 已经直接显示其对两个 D3 成分存在实际利用；
+   其余 D1/D2/D3 成分仍未完成对应的 frozen 分支反事实。
+2. 不能说 M0“没使用”任何已测成分：D4 的 recent-linear frozen 结果也显示 M0 有很强即时依赖；D1/D2/D3
+   的 remove-trained M0 损失均为正，至少说明这些
    成分缺失后 M0 不能完全补偿；这不同于完整模型的即时使用，但绝不是等效不敏感证据。
 3. 不能把单 seed、单数据集 validation 结果推广到其他 horizon、数据集或论文金标准。
 
 ## 8. 最有信息量的下一步
 
-优先不再扩大 remove-trained 候选库，而应从 D2/D3 中选取差异最大的三个成分：`D2-192`、
-`D3-recent-linear`、`D3-cycle-levels`，补齐同一提取器下的冻结和分支级诊断：
+优先不再扩大 remove-trained 候选库。D4 已完成 `D3-recent-linear`、`D3-cycle-levels` 的冻结和分支级
+诊断，均不符合“M0不使用、增强在使用”的目标模式；若继续，应将冻结分支诊断限定到尚未检验的
+`D2-192`，并优先寻找一个在 M0 上即时近零、却令 NLinear-only 反事实显著变差的新候选：
 
 1. 对 full-trained checkpoint 做 full/remove validation，测即时依赖；
 2. 固定 phase 输出和 RCRF gate，只替换 NLinear 分支在 remove 输入上的预测，测分支实际利用；
@@ -203,3 +219,4 @@ PhaseFormer 的24步 folding 与 NLinear 全时间轴线性映射的结构差异
 |C1--C7|`research_runs/input_candidate_discovery_ettm1_h192_v1/objective_error_analysis.md`；同目录 `results.csv`|
 |D1/D2 当前定义|`research_runs/d1_d2_gaussian_tailzero_control/d1_d2_retrained_summary.csv`|
 |D3|`research_runs/d3_trajectory_remove_control/d3_trajectory_summary.csv`|
+|D4 互补冻结诊断|[D4 报告](PhaseFormer_input_component_D4_complementary_frozen_report.md)；`research_runs/d4_complementary_frozen_probe_control/frozen_complementary_results.csv`|
