@@ -1369,3 +1369,15 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   §8.1 不符（frozen H1 minus M1−M0 长表重算 +2.4 pp vs 该列 +36.1 pp），D1 汇总前需修；② 计划
   §7.2/§7.3/§13.0 正文仍是 v1.1 的 8 数据集/24 锚点/216/456 计数，与 v1.2 实际（7/21/189/399）
   不一致；③ selection_source 列约 55% 空。
+
+## 2026-09-03 — 应要求停止全部实验（D1 Track-R supervisor 终止）
+
+- 用户指示「可以停止当前的所有实验」。对 D1 Track-R supervisor（live pid 730056，argv
+  `--max-stage 3`，GPU2/3，jobs-per-gpu 4）及其 8 个 worker 统一 `kill -TERM`，全部正常退出；
+  `ps` 确认无残留，GPU2/3 回到 ~4MiB/0%。GPU0/1（wanghengjun，27-33GB/100%）全程未触碰。
+- 停止前状态：Stage2（h96/336/720×s2021，630 jobs）推进中，supervisor.json 快照 done≈216/630
+  （2026-09-03T02:41），log 已跑到 Electricity h96 与 ETTm2 h336/720；无 failures.tsv。
+- 已完成的 run 记录在 `control/done.tsv`（停止时累计 501 行，含 D0 Stage1 前缀 + D1 已完 stage2）；
+  D0 全链路产物（210 训练 / Track F 21 锚点 / retrained 189 / result_summary_d0.csv 420 行）不受影响。
+- 恢复方式：任意时刻 `bash control/launch_parallel.sh`（幂等，从 done.tsv 续跑，仅 GPU2/3）。
+- 待办不变：D1 汇总前先修 summarize 的 interaction 聚合列口径（§8.1）；D1 训练随时可续。
