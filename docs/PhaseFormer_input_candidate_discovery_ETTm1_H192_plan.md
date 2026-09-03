@@ -1,6 +1,6 @@
 # PhaseFormer 输入盲区候选发现实验：ETTm1-H192
 
-> 状态：方案已按“validation 发现、test 确认”修订，尚未实现、未训练、未为本方案读取 test。
+> 状态：S0、S1a、S1b 已完成并按早停规则结束；未读取本方案 test、未启动 S2 重训。
 > 实验范围固定为 ETTm1、`horizon=192`、`seed=2021`。本实验不回写或修饰既有 H1/H3/H4 D0 结论。
 
 ## 1. 目标与结论边界
@@ -230,3 +230,21 @@ research_runs/input_candidate_discovery_ettm1_h192_v1/
 损失显著上升”，且 validation 发现与冻结后的 test 确认方向一致，才命名为“PhaseFormer未充分
 利用、增强模型正在利用的候选成分”。C7 还必须呈现预注册的近程集中效应。本轮结论只限
 ETTm1-H192、seed2021，并显著披露旧 D0 已造成 test exposure；更强泛化声明仍需未暴露范围复现。
+
+## 9. S1 执行记录与早停（2026-09-03）
+
+- S0：在 `raft` 环境 RTX 4090 上完成 original、weak_residual、rcrf_nlinear_plain 三个 ETTm1-H192
+  full-input 锚点（30 epoch、seed2021）。
+- S1a：7候选 × 4低剂量干预 × 3模型，在 validation 时间均匀的512 origins完成冻结读取；C2、C3、C7
+  进入 S1b。S1b 对这三个候选完成全 validation（11,329 origins）复核，test 未读取。
+- C2 的 remove-vs-sham MAE 均为显著负值（original `-7.92%`、weak `-8.64%`、RCRF `-7.94%`，移动块
+  95% CI 均不跨0），表明 sham 比删除更有害，是 control/intervention mismatch，不能作为正确 A。
+- C3 在 `lambda=0.5` 的 sham-adjusted MAE 为 original `+0.69%`、weak `+0.93%`、RCRF `+0.24%`；三个
+  成对移动块95% CI均跨0，弱残差相对 original 的优势远低于预注册的 `+0.5pp` interaction 与 `>=1%`
+  增强模型效应门。RCRF NLinear-only 重组虽有数值变化，但不能补足总效应和交互门。
+- C7 在预测步1–24有可测响应，但不符合所需方向：`lambda=0.5` 时 original 的 remove/sham MAE 变化为
+  `+0.822/+0.496pp`，weak 为 `+0.999/+1.073pp`，RCRF 为 `+0.316/+1.261pp`；原版并非等效不敏感，增强
+  模型也未显示更大的 sham-adjusted 依赖。
+- 因此没有候选通过 S1 的必要门，按 §6 停止扩展：不进行 S2 的 candidate retraining，也不读取已暴露的
+  ETTm1-H192 test。正式审计产物位于 `research_runs/input_candidate_discovery_ettm1_h192_v1/`；它是
+  validation-only negative candidate-discovery result，而非泛化效果结论。

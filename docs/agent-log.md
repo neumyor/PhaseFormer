@@ -1400,3 +1400,22 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   fusion gate，只替换成干预输入下的 NLinear 输出，要求重组预测的 MSE/MAE 显著上升；仅有分支
   数值敏感或 gate 变化不算实际利用。筛选条件读由6候选75次更新为7候选87次。当前仍只修订方案，
   未实现、未训练、未为本方案读取 test。
+
+## 2026-09-03 — ETTm1-H192 C1--C7 候选发现：S1 早停
+
+- 新增独立连续候选层 `src/dataset/input_candidate_discovery.py` 与冻结 runner
+  `scripts/run_input_candidate_discovery_frozen.py`：所有 C1--C6 在连续、按训练集 scaler 缩放的 ETTm1
+  序列上构造后切窗；C7 先通过 train-fitted 因果三滞后预测器得到连续创新，再对每个 origin 固定支撑
+  到最后24步。S1 runner 同时输出全窗口及1–24/25–48/49–96/97–192指标、样本级配对误差、移动块CI和
+  RCRF 四类重组（含固定 full phase/gate、只替换 NLinear 的损失反事实）。
+- 环境：`/home/wangjing/miniconda3/envs/raft/bin/python`（torch 2.4.1+cu121），RTX 4090。完成三项
+  ETTm1-H192 seed2021 full-input 锚点训练（original/weak_residual/rcrf_nlinear_plain，各30 epoch），
+  然后运行 S1a 512 origins（7×4×3+3=87 条件读）和 S1b 全 validation 11,329 origins（C2/C3/C7）。
+  本实验没有读取 test。
+- 结果：C2 出现显著的 sham 更有害模式；C3 对 weak_residual 的差异不足预注册效应和CI门；C7 的近程
+  响应不满足“PhaseFormer等效不敏感、增强模型更依赖”的方向。无候选通过S1，依 §6 早停，未重训候选、
+  未读取 ETTm1-H192 test。
+- 用 `scripts/package_input_candidate_discovery_s1.py` 生成严格审计包
+  `research_runs/input_candidate_discovery_ettm1_h192_v1/`（6文件+figures，123条完整搜索结果、11,329条
+  样本级诊断行、15个程序化案例和引用图片 ZIP）。已验证目录白名单、结果/案例对齐、Markdown图片和 ZIP
+  原件字节一致；scratch checkpoint、日志与监控保留在 `research_runs/..._scratch`/`..._control`（gitignore）。
