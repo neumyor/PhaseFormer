@@ -408,6 +408,7 @@ def build_spec(args):
         "input_d1_period": getattr(args, "input_d1_period", ""),
         "input_d1_sigma": getattr(args, "input_d1_sigma", ""),
         "input_d2_recent_length": getattr(args, "input_d2_recent_length", ""),
+        "input_d3_component": getattr(args, "input_d3_component", ""),
         "max_eval_samples": getattr(args, "max_eval_samples", 0),
         "require_cuda": require_cuda,
         "init_checkpoint": repo_relative(getattr(args, "init_checkpoint", ""))
@@ -657,6 +658,7 @@ def execute(args):
     exp_args.dataset_args.input_d1_period = spec["input_d1_period"]
     exp_args.dataset_args.input_d1_sigma = spec["input_d1_sigma"]
     exp_args.dataset_args.input_d2_recent_length = spec["input_d2_recent_length"]
+    exp_args.dataset_args.input_d3_component = spec["input_d3_component"]
     exp_args.training_args.num_workers = args.num_workers
     train_set, train_loader = data_provider(exp_args.dataset_args, "train")
     val_set, val_loader = data_provider(exp_args.dataset_args, "val")
@@ -842,6 +844,7 @@ def execute(args):
         "input_d1_period": spec["input_d1_period"],
         "input_d1_sigma": spec["input_d1_sigma"],
         "input_d2_recent_length": spec["input_d2_recent_length"],
+        "input_d3_component": spec["input_d3_component"],
         "max_eval_samples": spec["max_eval_samples"],
         "cycle_period": spec["cycle_period"], "capacity": spec["capacity"],
         "loss": spec["loss"], "learning_rate": hp["learning_rate"], "lr_multiplier": spec["lr_multiplier"],
@@ -899,7 +902,7 @@ def parse_args():
     )
     p.add_argument("--period", type=int, default=24)
     p.add_argument(
-        "--input-hypothesis", choices=["none", "h1", "h3", "h4", "d1", "d2"], default="none",
+        "--input-hypothesis", choices=["none", "h1", "h3", "h4", "d1", "d2", "d3"], default="none",
         help="History-only component extraction applied after train-fitted scaling",
     )
     p.add_argument(
@@ -913,6 +916,7 @@ def parse_args():
         help="D1 Gaussian-notch sigma in cycles/step; zero means 1/seq_len",
     )
     p.add_argument("--input-d2-recent-length", type=int, default=0)
+    p.add_argument("--input-d3-component", default="")
     p.add_argument(
         "--max-eval-samples", type=int, default=0,
         help="Non-formal smoke limit; zero evaluates the complete split",

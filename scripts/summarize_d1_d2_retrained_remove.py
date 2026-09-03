@@ -13,6 +13,13 @@ D1_PERIODS = (
     ("D1-5", 677.6470588235294), ("D1-6", 205.71428571428572),
 )
 D2_LENGTHS = (24, 48, 96, 192)
+D3_COMPONENTS = (
+    ("D3-global-linear", "global_linear"),
+    ("D3-recent-linear", "recent_linear"),
+    ("D3-cycle-levels", "cycle_levels"),
+    ("D3-phase-drift", "phase_drift"),
+    ("D3-cycle-amplitude", "cycle_amplitude"),
+)
 
 
 def read_rows(directory: Path):
@@ -33,6 +40,12 @@ def condition(row: dict[str, str]) -> str:
         raise ValueError(f"unexpected D1 period {period}")
     if row["input_hypothesis"] == "d2":
         return f"D2-{int(row['input_d2_recent_length'])}"
+    if row["input_hypothesis"] == "d3":
+        component = row["input_d3_component"]
+        for label, expected in D3_COMPONENTS:
+            if component == expected:
+                return label
+        raise ValueError(f"unexpected D3 component {component}")
     raise ValueError(f"unexpected hypothesis {row['input_hypothesis']}")
 
 
@@ -54,7 +67,6 @@ def main():
     if set(anchors) != set(MODELS):
         raise RuntimeError(f"need one full anchor per model, found {sorted(anchors)}")
 
-    expected = {label for label, _ in D1_PERIODS} | {f"D2-{length}" for length in D2_LENGTHS}
     removed = {}
     for row in read_rows(args.remove_dir):
         if row["input_variant"] != "remove_full" or row["percent"] != "100":
@@ -63,11 +75,26 @@ def main():
         if key in removed:
             raise RuntimeError(f"duplicate remove result for {key}")
         removed[key] = row
+    active_groups = {row["input_hypothesis"] for row in removed.values()}
+    expected = set()
+    if "d1" in active_groups:
+        expected |= {label for label, _ in D1_PERIODS}
+    if "d2" in active_groups:
+        expected |= {f"D2-{length}" for length in D2_LENGTHS}
+    if "d3" in active_groups:
+        expected |= {label for label, _ in D3_COMPONENTS}
     if set(key[0] for key in removed) != expected or {key[1] for key in removed} != set(MODELS):
         raise RuntimeError("remove results do not cover all 10 conditions and three models")
 
     output = []
-    for label in [name for name, _ in D1_PERIODS] + [f"D2-{length}" for length in D2_LENGTHS]:
+    labels = []
+    if "d1" in active_groups:
+        labels += [name for name, _ in D1_PERIODS]
+    if "d2" in active_groups:
+        labels += [f"D2-{length}" for length in D2_LENGTHS]
+    if "d3" in active_groups:
+        labels += [name for name, _ in D3_COMPONENTS]
+    for label in labels:
         per_model = {}
         for model in MODELS:
             base, changed = anchors[model], removed[(label, model)]

@@ -348,3 +348,73 @@ class TailZeroBank:
             raise ValueError("tail zeroing received an unexpected history length")
         result[-self.recent_length :] = 0.0
         return result
+
+
+class TrajectoryComponentBank:
+    """Remove endpoint-anchored trajectories that a full-time-axis head may use.
+
+    Each component is computed only from an individual available history and is
+    zero at its final observation (or final 24-step block).  The persistence
+    anchor is therefore deliberately preserved while the requested trajectory
+    information is removed.
+    """
+
+    COMPONENTS = {
+        "global_linear", "recent_linear", "cycle_levels", "phase_drift", "cycle_amplitude"
+    }
+
+    def __init__(self, seq_len: int, component: str, period_len: int = 24, recent_length: int = 96):
+        self.seq_len = int(seq_len)
+        self.component = str(component)
+        self.period_len = int(period_len)
+        self.recent_length = int(recent_length)
+        if self.component not in self.COMPONENTS:
+            raise ValueError(f"unknown trajectory component {self.component}")
+        if self.seq_len % self.period_len:
+            raise ValueError("trajectory components require an integral number of periods")
+        if not 2 <= self.recent_length <= self.seq_len:
+            raise ValueError("recent linear component has invalid support")
+
+    @staticmethod
+    def _slope(values: np.ndarray, times: np.ndarray) -> np.ndarray:
+        centered = values - values.mean(axis=0, keepdims=True)
+        time_centered = times - times.mean()
+        return (time_centered[:, None] * centered).sum(axis=0) / np.square(time_centered).sum()
+
+    def component_values(self, seq_x: np.ndarray) -> np.ndarray:
+        x = np.asarray(seq_x, dtype=np.float64)
+        if x.shape[0] != self.seq_len:
+            raise ValueError("trajectory component received an unexpected history length")
+        if self.component in {"global_linear", "recent_linear"}:
+            support = x if self.component == "global_linear" else x[-self.recent_length :]
+            support_time = np.arange(len(support), dtype=np.float64)
+            slope = self._slope(support, support_time)
+            time = np.arange(self.seq_len, dtype=np.float64) - (self.seq_len - 1)
+            return time[:, None] * slope[None, :]
+
+        cycles = x.reshape(-1, self.period_len, x.shape[1])
+        if self.component == "cycle_levels":
+            levels = cycles.mean(axis=1)
+            return np.repeat((levels - levels[-1])[..., None, :], self.period_len, axis=1).reshape(x.shape)
+
+        if self.component == "phase_drift":
+            cycle_time = np.arange(len(cycles), dtype=np.float64)
+            slopes = np.stack([self._slope(cycles[:, phase], cycle_time) for phase in range(self.period_len)])
+            anchored_time = cycle_time - cycle_time[-1]
+            return (anchored_time[:, None, None] * slopes[None, :, :]).reshape(x.shape)
+
+        # A per-window phase template and its cycle-wise amplitude envelope.
+        centered = cycles - cycles.mean(axis=1, keepdims=True)
+        template = centered.mean(axis=0)
+        energy = np.square(template).sum(axis=0)
+        amplitude = np.divide(
+            (centered * template[None]).sum(axis=1), energy[None],
+            out=np.zeros_like(centered[:, 0]), where=energy[None] > 1e-12,
+        )
+        return ((amplitude - amplitude[-1])[:, None, :] * template[None]).reshape(x.shape)
+
+    def transform(self, index: int, seq_x: np.ndarray) -> np.ndarray:
+        result = np.asarray(seq_x, dtype=np.float64) - self.component_values(seq_x)
+        if not np.isfinite(result).all():
+            raise FloatingPointError("trajectory component removal produced non-finite values")
+        return result.astype(seq_x.dtype, copy=False)

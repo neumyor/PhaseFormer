@@ -326,6 +326,49 @@ PhaseFormer盲区的证明。全程只读取 validation，复用了 §9 三个 f
   --output research_runs/d1_d2_retrained_remove_control/d1_d2_retrained_summary.csv
 ```
 
+## 13. D3：末值锚定的全时间轴轨迹成分（2026-09-03）
+
+为继续寻找可能由 NLinear 全时间轴线性映射使用、但24步 phase folding 不充分利用的成分，新增五个
+**末值锚定**候选。每个候选仅从各自720步输入历史计算，移除后输入最后一个时间步严格不变；因此它们
+不等价于 D2 的尾部缺失，也不因 NLinear 的 last-value anchor 被直接删除而造成差异。所有条件仍在
+train/validation 一致移除，目标不变，ETTm1-H192、seed2021、30 epoch上限、validation-only。
+
+|条件|提取与删除|为何可能由增强分支更利用|
+|---|---|---|
+|D3-global-linear|对全720步拟合线性斜率，删除以末点为零点的线性轨迹|NLinear 能直接从完整历史拟合整体轨迹|
+|D3-recent-linear|只用最后96步拟合斜率，再删除该末点锚定的全窗方向|NLinear 的中心化全窗映射可能尤其利用最近的趋势方向|
+|D3-cycle-levels|将每个24步块均值相对最后一块均值的轨迹逐块删除|这保留块内形状，只移除跨周期水平演化|
+|D3-phase-drift|在每个 phase 位置上拟合跨30个周期的线性漂移并锚定最后周期|24步 folding 压缩后可能弱化每个相位各自的慢漂移|
+|D3-cycle-amplitude|估计块内去均值模板及逐周期振幅，删除相对最后周期的幅度包络|低维 phase 表征可能丢失周期间振幅轨迹|
+
+|条件|original MAE损失|weak MAE损失（相对original）|RCRF MAE损失（相对original）|判读|
+|---|---:|---:|---:|---|
+|D3-global-linear|+1.50%|+1.09% (-0.41pp)|+1.26% (-0.24pp)|增强略更可恢复|
+|D3-recent-linear|+7.20%|+1.65% (-5.55pp)|+2.81% (-4.39pp)|增强明显更可恢复|
+|D3-cycle-levels|+5.11%|+1.95% (-3.16pp)|+1.89% (-3.21pp)|增强明显更可恢复|
+|D3-phase-drift|+1.22%|+0.46% (-0.76pp)|+0.61% (-0.62pp)|增强更可恢复|
+|D3-cycle-amplitude|+3.16%|+0.98% (-2.18pp)|+1.03% (-2.13pp)|增强明显更可恢复|
+
+结论：D3 是目前最直接针对“phase folding 对跨周期轨迹的压缩”提出的候选组，但结果与目标相反：
+原版 PhaseFormer 对这五类成分均更脆弱。特别是最近线性趋势、周期级水平和幅度包络，NLinear 与
+RCRF+NLinear 都表现出更强的重训练恢复能力。因此这些成分不能作为“原版没用、增强模型在用”的证据；
+相反，它们初步说明增强分支在信息受限时提供了鲁棒性，而非额外依赖。单 seed 的结论仍只适用于本
+ETTm1-H192 validation 筛查，不能外推为普遍性质。
+
+复现（GPU）：
+
+```bash
+/home/wangjing/miniconda3/envs/raft/bin/python scripts/run_d3_trajectory_retrained_remove.py \
+  --execute --jobs-per-gpu 3 --max-epochs 30 --num-workers 2 \
+  --output-dir research_runs/d3_trajectory_remove_scratch \
+  --control-dir research_runs/d3_trajectory_remove_control
+
+/home/wangjing/miniconda3/envs/raft/bin/python scripts/summarize_d1_d2_retrained_remove.py \
+  --baseline-dir research_runs/input_candidate_discovery_ettm1_h192_v1_scratch/runs \
+  --remove-dir research_runs/d3_trajectory_remove_scratch/runs \
+  --output research_runs/d3_trajectory_remove_control/d3_trajectory_summary.csv
+```
+
 ## 12. D1/D2 修订定义的 remove-trained 对照（2026-09-03）
 
 本节是当前有效实验。仍固定 ETTm1、lookback=720、horizon=192、seed=2021、三个模型、30 epoch

@@ -4,6 +4,7 @@ from .input_candidate_discovery import (
     CandidateDataset,
     GaussianNotchBank,
     TailZeroBank,
+    TrajectoryComponentBank,
 )
 from torch.utils.data import DataLoader
 
@@ -113,6 +114,18 @@ def data_provider(args, flag, drop_last_test=False, train_all=False):
             raise ValueError("D2 retraining requires input_variant=remove_full")
         recent_length = int(getattr(args, "input_d2_recent_length", 0))
         data_set = CandidateDataset(data_set, TailZeroBank(int(args.seq_len), recent_length))
+    elif hypothesis == "d3":
+        if variant != "remove_full":
+            raise ValueError("D3 retraining requires input_variant=remove_full")
+        component = str(getattr(args, "input_d3_component", ""))
+        data_set = CandidateDataset(
+            data_set,
+            TrajectoryComponentBank(
+                int(args.seq_len),
+                component,
+                period_len=int(getattr(args, "input_period_len", 24)),
+            ),
+        )
     elif hypothesis != "none":
         component_config = InputComponentConfig(
             hypothesis=hypothesis,

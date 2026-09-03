@@ -1454,3 +1454,15 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `research_runs/d1_d2_gaussian_tailzero_{scratch,control}/`，未读 test。
 - 新结果写入候选发现计划§12：D2 置零使 MAE 随尾长从原版 +6.53% 增至 +33.52%，但两种增强模型在四个长度
   都有更小损失；D1 除约678步的 +0.20/+0.29pp 微小单点外，增强也更可恢复。因此仍未出现可用的原版盲区候选。
+
+## 2026-09-03 — D3 全时间轴轨迹成分筛查
+
+- 新增 `TrajectoryComponentBank` 与 `scripts/run_d3_trajectory_retrained_remove.py`。五个 remove-only、
+  末值锚定候选为全局线性趋势、最近96步线性趋势、24步周期级水平轨迹、按phase的跨周期漂移、周期幅度
+  包络；每个都改变历史而保留最后输入值。汇总脚本现可按输出目录自动验证/汇总 D1、D2 或 D3 完整网格。
+- 先修复 D3 dataset 参数转发（使用已传递的 `input_period_len`）；语法检查、5个提取器不变末值锚点单测、
+  1 epoch/5% GPU smoke 与既有13项消融测试均通过。RTX 4090 / raft 完成新的15/15个 ETTm1-H192、
+  seed2021、30 epoch上限任务；仅读取 validation。
+- 结果记录于计划§13、原始产物在 `research_runs/d3_trajectory_remove_{scratch,control}/`：五个成分中原版
+  的 MAE 损失始终更大，最显著为 recent-linear +7.20% vs weak +1.65% / RCRF +2.81%，cycle-levels
+  +5.11% vs +1.95% / +1.89%，cycle-amplitude +3.16% vs +0.98% / +1.03%。该批候选不支持原版盲区假设。
