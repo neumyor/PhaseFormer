@@ -1419,3 +1419,15 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `research_runs/input_candidate_discovery_ettm1_h192_v1/`（6文件+figures，123条完整搜索结果、11,329条
   样本级诊断行、15个程序化案例和引用图片 ZIP）。已验证目录白名单、结果/案例对齐、Markdown图片和 ZIP
   原件字节一致；scratch checkpoint、日志与监控保留在 `research_runs/..._scratch`/`..._control`（gitignore）。
+
+## 2026-09-03 — D1 频谱周期与 D2 近期创新 remove-only 筛查
+
+- 按用户要求新增 `SpectralRemoveBank` 和 `scripts/run_d1_d2_remove_screen.py`；该轮没有 sham。D1 先只在
+  ETTm1 train（34,560步）上聚合多通道 periodogram，再固定6个峰（96、48、32、24、677.647、205.714步），
+  用 train-fitted 连续谐波回归删除。D2 用既有 train-fitted 因果创新，分别完整删除窗口末尾24/48/96/192步。
+- 用已完成的三项 full anchor 在全 validation 做冻结评估，未读 test、未训练新模型。D1-1（96步日周期）
+  对三模型影响最大（MAE +13.28% original / +14.31% weak / +13.67% RCRF）；48步次之，约678步和206步
+  接近零。D2 删除长度越长，三者均单调退化，但 original 在四种长度均不低于增强模型的敏感度。
+- 结论限定为 remove 敏感性：96步周期和近期创新是共同有用的信息；没有出现原版忽略而增强模型依赖的
+  明确模式。原始 CSV 与协议位于 `research_runs/input_candidate_discovery_ettm1_h192_v1_scratch/d1_d2_remove/`，
+  GPU日志位于对应 control 目录，均不提交。

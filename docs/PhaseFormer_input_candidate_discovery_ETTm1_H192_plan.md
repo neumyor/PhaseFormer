@@ -248,3 +248,29 @@ ETTm1-H192、seed2021，并显著披露旧 D0 已造成 test exposure；更强�
 - 因此没有候选通过 S1 的必要门，按 §6 停止扩展：不进行 S2 的 candidate retraining，也不读取已暴露的
   ETTm1-H192 test。正式审计产物位于 `research_runs/input_candidate_discovery_ettm1_h192_v1/`；它是
   validation-only negative candidate-discovery result，而非泛化效果结论。
+
+## 10. D1/D2 remove-only 敏感性筛查（2026-09-03）
+
+这一轮按用户要求不使用 sham；所以它只回答“删除后哪个模型更敏感”，不作成分专属、因果或
+PhaseFormer盲区的证明。全程只读取 validation，复用了 §9 三个 full-input checkpoint，未读取 test。
+
+### D1：训练集频谱周期删除
+
+- 只对 ETTm1 训练前缀（34,560个15分钟点）做去均值、多通道平均 periodogram；在 validation 前固定
+  六个最突出的非DC峰：D1-1=`96`、D1-2=`48`、D1-3=`32`、D1-4=`24`、D1-5=`677.647`、
+  D1-6=`205.714` 步。
+- 每个 D1-x 在训练集上按绝对时间拟合每通道的正弦/余弦系数，并在连续序列上删除该谐波；这保证同一
+  timestamp 在重叠窗口中被删除的值相同，而不是逐窗口 FFT mask。
+- 全 validation 的 remove MAE 退化（original / weak / RCRF）：D1-1 `+13.28/+14.31/+13.67%`，
+  D1-2 `+2.73/+2.95/+2.74%`，D1-3 `+0.59/+0.67/+0.61%`，D1-4 `+0.58/+0.66/+0.75%`；D1-5 与 D1-6
+  近零。结论是96步日周期为三模型共同的重要信息，增强模型有时略更敏感，但原版同样高度依赖，
+  不能作为 PhaseFormer 未利用的成分。
+
+### D2：不同长度的近期创新删除
+
+- D2-24/48/96/192 使用同一 train-fitted 因果创新序列，只把每个输入窗口末尾相应长度的创新完整删除；
+  不把原始尾部直接置零。
+- 全 validation 的 remove MAE 退化随长度单调增大：original `+0.56/+0.65/+0.74/+0.83%`，weak
+  `+0.54/+0.59/+0.70/+0.80%`，RCRF `+0.48/+0.52/+0.60/+0.72%`。
+- 这说明近期创新对三种模型都有用，但在这四个长度上原版 PhaseFormer 始终至少与增强模型一样敏感；
+  remove-only 结果不支持“原版不充分利用、增强模型在利用”的目标模式。

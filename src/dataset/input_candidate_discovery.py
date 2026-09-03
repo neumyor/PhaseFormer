@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 
 
 CANDIDATES = ("c1", "c2", "c3", "c4", "c5", "c6", "c7")
-VARIANTS = ("full", "remove_025", "remove_050", "sham_025", "sham_050")
+VARIANTS = ("full", "remove_025", "remove_050", "remove_full", "sham_025", "sham_050")
 
 
 @dataclass(frozen=True)
@@ -42,8 +42,8 @@ class CandidateConfig:
             raise ValueError("candidate discovery requires seq_len >= 672")
         if self.period_len != 24 or self.daily_period != 96 or self.weekly_period != 672:
             raise ValueError("the preregistered ETTm1 candidate grid is fixed at 24/96/672")
-        if self.recent_length != 24:
-            raise ValueError("C7's preregistered recent support is 24 steps")
+        if self.recent_length not in (24, 48, 96, 192):
+            raise ValueError("recent support must be one of 24/48/96/192 steps")
 
 
 def _ema(values: np.ndarray, span: int, initial: np.ndarray) -> np.ndarray:
@@ -265,7 +265,7 @@ class ContinuousCandidateBank:
         x = np.asarray(seq_x, dtype=np.float64)
         if self.config.variant == "full":
             return x.copy()
-        amount = 0.25 if self.config.variant.endswith("025") else 0.50
+        amount = 0.25 if self.config.variant.endswith("025") else (0.50 if self.config.variant.endswith("050") else 1.0)
         component = self.component(index)
         if self.config.variant.startswith("remove"):
             result = x - amount * component
@@ -294,3 +294,38 @@ class CandidateDataset(Dataset):
         if name == "dataset":
             raise AttributeError(name)
         return getattr(self.dataset, name)
+
+
+class SpectralRemoveBank:
+    """Remove one train-fitted stationary harmonic from a continuous series.
+
+    The frequency is selected from the training periodogram and its per-channel
+    sine/cosine coefficients are fitted on the training prefix only.  Evaluation
+    simply extrapolates that harmonic by absolute time, so overlapping windows
+    always receive the same removed value at a given timestamp.
+    """
+
+    def __init__(self, dataset: Dataset, period: float):
+        if period <= 2:
+            raise ValueError("spectral period must exceed two samples")
+        reference = ContinuousCandidateBank(dataset, CandidateConfig("c7", "full"))
+        self.seq_len = reference.seq_len
+        self._start = reference._start
+        self.period = float(period)
+        values = reference._values
+        train_end = reference._train_end
+        time = np.arange(train_end, dtype=np.float64)
+        design = np.column_stack((np.sin(2.0 * np.pi * time / self.period),
+                                  np.cos(2.0 * np.pi * time / self.period)))
+        coefficient, *_ = np.linalg.lstsq(design, values[:train_end], rcond=None)
+        all_time = np.arange(len(values), dtype=np.float64)
+        all_design = np.column_stack((np.sin(2.0 * np.pi * all_time / self.period),
+                                      np.cos(2.0 * np.pi * all_time / self.period)))
+        self.component_values = all_design @ coefficient
+
+    def transform(self, index: int, seq_x: np.ndarray) -> np.ndarray:
+        start = self._start + int(index)
+        result = np.asarray(seq_x, dtype=np.float64) - self.component_values[start : start + self.seq_len]
+        if not np.isfinite(result).all():
+            raise FloatingPointError("spectral remove produced non-finite values")
+        return result.astype(seq_x.dtype, copy=False)
