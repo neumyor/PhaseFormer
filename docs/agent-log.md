@@ -1353,3 +1353,19 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `input_components_h134_frozen_d0/` 与 `input_components_h134_retrained_test_d0/` 均空（0 文件），
   无半成品需清理。状态文件 d0_state.json 重置为 wait_3a，编排器按原 argv 重新 detach 启动。
   未读取 test。
+
+## 2026-09-03 — D0 阶段性汇报文档（H1/H3/H4）
+
+- 新增 `docs/PhaseFormer_input_component_H1_H3_H4_stage_report_D0.md`：把已完成的 D0 全链路
+  （Track R 210 → audit → Track F 210 读 → retrained 189 → 汇总 420 行）整理为对计划文档的阶段
+  性汇报；所有数值由 `result_summary_d0.csv` 长表按 §8.1 定义重算（Δ=变体相对自身 full 基线的
+  宏平均，Interaction=逐 setting 配对差），一律标注 `provisional (seed2021 only)`。
+- 关键修订：先前口径把 frozen 的 h1-sham 之类数字当成「~1.72」小量，实为存储列=小数（0.6875
+  =68.7%）；本汇报按真实百分比重算。D0 宏观事实：M0 对 H1/H3/H4 的 minus_A 等效门槛全不成立
+  （retrain 2.1–84%，frozen 9.9–86%）；三模型对输入扰动普遍极敏感且 frozen 侧 `sham ≥ minus_A`
+  几乎处处成立、retrain 侧 H3/H4 `sham≈minus_A`——D0 provisional 判定：三假设均达不到
+  Strong/Partial，证据形态 OOD/confounded + 近 null 混合，不宣告 Rejected，等 D1 三 seed。
+- 遗留标记（写入文档 §8，不在本次静默改计划）：① summarize 的 aggregate interaction 列口径与
+  §8.1 不符（frozen H1 minus M1−M0 长表重算 +2.4 pp vs 该列 +36.1 pp），D1 汇总前需修；② 计划
+  §7.2/§7.3/§13.0 正文仍是 v1.1 的 8 数据集/24 锚点/216/456 计数，与 v1.2 实际（7/21/189/399）
+  不一致；③ selection_source 列约 55% 空。
