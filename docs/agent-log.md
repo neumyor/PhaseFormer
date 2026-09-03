@@ -1,5 +1,13 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — 整理 PhaseFormer 结构缺陷研究叙事
+
+- 新增 `docs/PhaseFormer_structural_defect_research_narrative.md`，将H1--H4、C1--C7、D1--D7的实验
+  统一为可审计科研主线：输入盲区强假设被系统否定，证据收敛为 phase-only 对非平稳跨周期水平状态的
+  建模不足，以及全时间轴校正路径对该残差的互补修正。
+- 文档显式分开可支持的 claim、被反事实否定的说法、单seed/validation-only边界和下一步结构化状态
+  校正头的参数量匹配验证要求；未改变训练代码或既有实验结果。
+
 ## 2026-09-03 — D7 内部路径诊断完成：锁定周期水平状态缺陷
 
 - `raft` CUDA 完成512-origin完整输入诊断（约7秒）：M1/M2 NLinear correction 与 phase residual 对齐
