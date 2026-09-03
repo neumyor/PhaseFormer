@@ -1466,3 +1466,12 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 结果记录于计划§13、原始产物在 `research_runs/d3_trajectory_remove_{scratch,control}/`：五个成分中原版
   的 MAE 损失始终更大，最显著为 recent-linear +7.20% vs weak +1.65% / RCRF +2.81%，cycle-levels
   +5.11% vs +1.95% / +1.89%，cycle-amplitude +3.16% vs +0.98% / +1.03%。该批候选不支持原版盲区假设。
+
+## 2026-09-03 — 输入成分利用问题的全证据汇总
+
+- 新增 `docs/PhaseFormer_input_component_evidence_summary.md`，统一整理 H1/H3/H4 D0、C1--C7 冻结候选
+  发现、已弃用 D1/D2 定义、当前 D1/D2 高斯陷波/尾部置零，以及 D3 末值锚定轨迹重训的设定、处理、结果
+  与结论边界。
+- 文档明确区分 frozen 即时依赖、remove-trained 恢复能力与 NLinear 分支实际利用；当前证据只支持增强
+  模型对成分缺失有更强的替代/恢复能力，尚不能证明其不依赖相关成分，也没有找到“原版忽略、增强实际
+  使用”的成分。给出 D2-192、D3-recent-linear、D3-cycle-levels 的2×2冻结/重训/分支反事实后续方案。
