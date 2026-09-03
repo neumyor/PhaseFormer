@@ -202,6 +202,14 @@ D6 进一步测了周期顺序、跨 phase 同步和相邻 phase-slot 关系（[
 只是整体略更可恢复。相邻 pair swap 则原版+0.77%、增强约+0.1%，也不满足目标方向。至此，现有输入
 成分与结构关系库没有证据支持“原版不利用、增强分支实际利用”的强叙事。
 
+### 7.4 D7 内部路径诊断：缺陷是建模不足而非完全未使用
+
+D7 在完整输入下直接测量 NLinear 对 phase residual 的修正（[结果](PhaseFormer_input_component_D7_internal_path_report.md)）。
+修正收益与跨周期水平波动的相关性最高（M1/M2为+0.490/+0.534），其次是最后周期的水平偏移
+（+0.483/+0.488）；六个预固定特征的连续5折 OOF R²为0.205/0.299，且 correction 与 phase residual
+方向高度对齐（0.703/0.791）。这将可支持的研究问题收敛为：PhaseFormer 会使用周期水平信息，但其
+phase-only 表示对非平稳周期水平状态的预测不足，需要轻量全时间轴状态校正。
+
 ### 尚不能成立的结论
 
 1. 不能说 M1/M2 的增强分支“不依赖”D1/D2/D3 成分：D4 已经直接显示其对两个 D3 成分存在实际利用；
@@ -236,3 +244,4 @@ D6 进一步测了周期顺序、跨 phase 同步和相邻 phase-slot 关系（[
 |D4 互补冻结诊断|[D4 报告](PhaseFormer_input_component_D4_complementary_frozen_report.md)；`research_runs/d4_complementary_frozen_probe_control/frozen_complementary_results.csv`|
 |D5 广泛冻结筛查|[D5 报告](PhaseFormer_input_component_D5_broad_frozen_report.md)；`research_runs/d5_broad_frozen_utilisation_control/frozen_broad_utilisation_results.csv`|
 |D6 结构关系筛查|[D6 报告](PhaseFormer_input_component_D6_structural_relation_report.md)；`research_runs/d6_structural_relation_frozen_control/frozen_structural_relation_results.csv`|
+|D7 内部路径诊断|[D7 报告](PhaseFormer_input_component_D7_internal_path_report.md)；`research_runs/d7_internal_path_probe_control/internal_path_probe.csv`|
