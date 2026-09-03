@@ -190,3 +190,94 @@ correction 与 phase residual 高度同向。D3 的 remove-trained 中，缺失�
 |D5|[广泛冻结报告](PhaseFormer_input_component_D5_broad_frozen_report.md)|
 |D6|[结构关系报告](PhaseFormer_input_component_D6_structural_relation_report.md)|
 |D7|[内部路径报告](PhaseFormer_input_component_D7_internal_path_report.md)|
+
+## 附录 A：全部已测试成分/关系的提取步骤与公式
+
+本附录给出实验中实际测试过的对象，而不是仅列出最终保留的结论。除 C1--C7 的连续序列构造外，输入均为
+训练集 scaler 标准化后的窗口 `X∈R^(720×C)`，在模型 RevIN 之前处理；目标与时间标记从不改写。令
+`P=24`、`K=720/P=30`，并将窗口写作 `X[k,p,c]`（周期 `k`、phase slot `p`、通道 `c`）。若写作
+`X=A+B`，`A` 是待删除成分，`B` 是其余输入。
+
+### A.1 H 系列：早期加性/几何假设
+
+|对象|提取步骤与公式|删除含义|
+|---|---|---|
+|H1 跨周期同相位残差|`T[p,c]=median_k X[k,p,c]`；令 `d[c]=X[K-1,P-1,c]-T[P-1,c]`，`B[k,p,c]=T[p,c]+d[c]`，`A=X-B`。|删除稳定24步模板之外、同一 phase 跨周期的残差；`A` 在末点为0。|
+|H3 近期水平漂移|先去季节：`R[t,c]=X[t,c]-T[t mod P,c]`。因果 EMA：`m[0]=median(R[0:P])`，`m[t]=αR[t]+(1-α)m[t-1]`，其中 `α=2/(96+1)`；`A[t]=m[t]-m[719]`，`B=X-A`。|删除到达当前水平的慢变路径，保留当前末值。|
+|H4 相位漂移演化|每个周期以自身中位数/MAD 标准化；以跨周期 phase 中位数为模板，在 `d∈[-6,6]` 上最大化循环互相关并用三点抛物线细化为 `δ[k,c]`。`minus_A` 将每周期以 Fourier shift 移到最新位移：`X'[k]=Shift(X[k], δ[K-1]-δ[k])`。|不是加性 A；压平跨周期 phase shift 演化，同时保留最新周期的相位。|
+
+H1/H3 的半删除为 `X-0.5A`，全删除为 `B`；H1 sham 为周期残差的确定性置换、H3 sham 为反转的低频
+轨迹，经末值锚定和 RMS 匹配。H4 sham 为位移序列的确定性置换。它们用于匹配一般扰动，而非成分定义。
+
+### A.2 C 系列：预注册候选发现库
+
+这些候选先在连续标准化 ETTm1 序列上用训练前缀拟合模板/参数，再切出窗口，避免同一时间戳在重叠窗口
+中有不同成分值。`μ_train` 为训练均值，`EMA_W` 为以训练统计初始化的因果指数平滑。
+
+|对象|提取步骤与公式（概要）|
+|---|---|
+|C1 96步日周期增量|训练期计算 `T96[q]=mean(X_t | t mod 96=q)` 与 `T24[p]`；`A[t]=T96[t mod96]-T24[t mod24]`。|
+|C2 672步低频|`A[t]=EMA_672(X)[t]-μ_train-C1[t]`。|
+|C3 非24整齐频带|`U=EMA_32(X)-EMA_80(X)`；在训练期逐通道投影去除 C1：`β=<U,C1>/<C1,C1>`，`A=U-βC1`。|
+|C4 周期边界连续性|`ΔX[t]=X[t]-X[t-1]`；仅在 `t mod24=0` 保留 `A[t]=ΔX[t]-median_train(ΔX | phase=0)`，其余为0。|
+|C5 周期间幅度包络|以24步模板的零均值版本 `T0` 为基，周期 `k` 的投影幅度 `a_k=<X_k-mean(X_k),T0>/<T0,T0>`；`A[k,p]=(a_k-median_train(a))T0[p]`。|
+|C6 平滑相位速度|每周期在整数 shift `[-6,6]` 上匹配模板得 `s_k`，因果 `EMA_5(s_k)` 后取速度 `v_k=s_k-s_{k-1}`；`A[k,p]=v_k∇T[p]`。|
+|C7 尾部近期创新|训练期拟合每通道因果线性预测器 `g(x_{t-1},x_{t-24},x_{t-96})`；连续创新 `e_t=x_t-g(...)`。窗口内仅保留最后24步，并乘余弦 ramp `r_j=.5-.5cos(πj/23)`：`A[720-24+j]=r_j e[...]`。|
+
+C 系列低剂量输入为 `X-λA`，`λ∈{.25,.5}`；C7 的主终点是预测步1--24。该库没有任何候选通过预注册的
+sham 校正、M0 等效性与分支反事实共同门槛。
+
+### A.3 D1--D3：当前有效的 remove-trained/冻结定义
+
+|对象|提取/干预公式|备注|
+|---|---|---|
+|D1 频谱峰|对每个窗口 `F=RFFT(X)`；对训练期固定峰周期 `P0∈{96,48,32,24,677.647,205.714}`，频率 `f0=1/P0`，乘保持系数 `h(f)=1-exp(-(f-f0)^2/(2σ_f^2))`，`σ_f=1/720`，且 `h(0)=1`；输出 `IRFFT(hF)`。|非加性窗口滤波；被“移除”的频带可理解为 `A=X-IRFFT(hF)`。|
+|D2 近程原始观测|对 `L∈{24,48,96,192}`，直接令 `X'[720-L:720,:]=0`。|非加性置零；0为标准化输入零，target不变。|
+|D3 global-linear|全窗 OLS 斜率 `b=<t-mean(t),X-mean(X)>/<t-mean(t),t-mean(t)>`；`A[t]=(t-719)b`。|`A[719]=0`。|
+|D3 recent-linear|仅以最后96步估计同一 OLS 斜率 `b_recent`，但在全窗删除 `A[t]=(t-719)b_recent`。|检验近期方向的全窗影响，仍保末点。|
+|D3 cycle-levels|`l_k=mean_p X[k,p]`；`A[k,p]=l_k-l_{K-1}`。|删除跨周期水平轨迹，保留每周期形状与末周期水平。|
+|D3 phase-drift|对每个 phase `p`，跨周期 OLS 斜率 `b_p`；`A[k,p]=(k-(K-1))b_p`。|删除每个 phase 的慢漂移。|
+|D3 cycle-amplitude|`Z_k=X_k-mean_pX_k`，`T=mean_k Z_k`，`a_k=<Z_k,T>/<T,T>`；`A[k,p]=(a_k-a_{K-1})T[p]`。|删除相对末周期的幅度包络。|
+
+D3 的删除统一为 `X'=X-A`；所有 A 在末点为零。D1/D2/D3 的 remove-trained 结果只衡量缺失后重新训练的
+恢复能力；D4/D5 冻结评估才衡量 full-trained 模型的即时依赖。
+
+### A.4 D4/D5 的互补与分支反事实定义
+
+对于可加的 D3 成分，D4 还使用 `B-only=X-A`，以及 A-充分性 probe `A-only-anchor=repeat(X[719])+A`。
+后者不是严格代数互补，而是防止删除 NLinear 的最后值 persistence anchor。
+
+对 M1/M2，记 full 输入的 phase forecast、NLinear forecast、融合系数为 `(p_F,n_F,α_F)`，变换输入的
+NLinear forecast 为 `n_V`。实际利用反事实固定 phase/gate，只替换 NLinear：
+
+```text
+y_CF = (1-α_F) p_F + α_F n_V
+```
+
+若 `MAE(y_CF)>MAE(y_full)` 且配对 CI 为正，才称该分支实际使用了被改变输入；这不等于其他路径没有使用。
+
+### A.5 D6：非加性结构关系扰动
+
+这些对象不是 `X=A+B`，而是保留特定统计量、改变时间关系的确定性输入变换；均保留整个最后周期，从而
+严格保持末点。
+
+|对象|变换|
+|---|---|
+|cycle-order-reverse|`X'[k,:,:]=X[K-2-k,:,:]`（`k=0..K-2`），`X'[K-1]=X[K-1]`。保留各 phase 的值集合与周期内波形，反转早期周期顺序。|
+|phase-desync|对每个 phase `p`，早期周期沿 k 轴循环移位：`X'[0:K-1,p]=roll(X[0:K-1,p], (7p+1) mod(K-1))`；最后周期不变。保留每个 phase 的值集合，破坏跨 phase 同步。|
+|adjacent-pair-swap|对早期周期的 phase pair `(0,1),(2,3),...,(22,23)` 交换；最后周期不变。保留每周期值集合、均值与幅度，破坏相邻 phase edge。|
+
+### A.6 D7：内部路径收益的描述量（不是输入消融）
+
+D7 在 full 输入上定义 `gain=MAE(phase path)-MAE(fused)`，并以六个窗口描述量预测 gain：
+
+```text
+local_diff        = mean |X[t]-X[t-1]|,                 t∈最后96步
+recent_deviation  = mean |X[t]-mean_last96(X)|,          t∈最后96步
+cycle_level_std   = mean_c std_k(mean_p X[k,p,c])
+cycle_amplitude_std = mean_c std_k(std_p X[k,p,c])
+last_cycle_shift  = mean_c |l_(K-1,c)-mean_(k<K-1) l_(k,c)|
+daily_lag_change  = mean |X[t]-X[t-96]|,                 t∈最后96步
+```
+
+这些量只用于连续五折 OOF ridge 的关联诊断，不能单独作为“输入成分被使用”的因果证据。
