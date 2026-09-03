@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -68,6 +68,10 @@ def main():
     parser.add_argument("--weak-checkpoint", type=Path, required=True)
     parser.add_argument("--rcrf-checkpoint", type=Path, required=True)
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument(
+        "--max-samples", type=int, default=512,
+        help="Uniformly spaced validation origins; 0 means all origins for a confirmed finalist.",
+    )
     parser.add_argument("--bootstrap-replicates", type=int, default=500)
     parser.add_argument("--require-cuda", action="store_true")
     args = parser.parse_args()
@@ -88,7 +92,12 @@ def main():
         models[name] = model
     exp_args.dataset_args.num_workers = args.num_workers
     full, _ = data_provider(exp_args.dataset_args, "val")
-    full_loader = DataLoader(full, batch_size=exp_args.dataset_args.batch_size, shuffle=False,
+    if args.max_samples < 0:
+        parser.error("--max-samples must be non-negative")
+    sample_count = len(full) if args.max_samples == 0 else min(args.max_samples, len(full))
+    indices = np.linspace(0, len(full) - 1, sample_count, dtype=int)
+    evaluated_full = Subset(full, indices.tolist())
+    full_loader = DataLoader(evaluated_full, batch_size=exp_args.dataset_args.batch_size, shuffle=False,
                              num_workers=args.num_workers, drop_last=False)
     rows, samples, full_metrics = [], {}, {}
     for name, model in models.items():
@@ -100,7 +109,7 @@ def main():
 
     for family, component, bank in interventions(full.seq_len):
         changed = CandidateDataset(full, bank)
-        changed_loader = DataLoader(changed, batch_size=exp_args.dataset_args.batch_size, shuffle=False,
+        changed_loader = DataLoader(Subset(changed, indices.tolist()), batch_size=exp_args.dataset_args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, drop_last=False)
         quality = qc(full, changed)
         for name, model in models.items():
@@ -140,7 +149,7 @@ def main():
         "models": MODELS, "D1": "Gaussian notch at fixed train-spectrum periods, sigma=1/720",
         "D2": "zero final standardized input window", "D3": "endpoint-anchored trajectory removal",
         "branch_counterfactual": "(1-alpha_full)*phase_full + alpha_full*nlinear_changed",
-        "bootstrap_replicates": args.bootstrap_replicates,
+        "sample_count": sample_count, "bootstrap_replicates": args.bootstrap_replicates,
     }, indent=2) + "\n")
     print(args.output_dir / "frozen_broad_utilisation_results.csv")
 

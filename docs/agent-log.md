@@ -6,7 +6,9 @@
   ETTm1-H192 full checkpoint，在 validation-only 上一次性筛查当前定义的 D1六个频率、D2四个尾部窗口、
   D3五个末值锚定轨迹。
 - 每个条件只做 full→remove 冻结前向与 M1/M2 的“固定 phase+gate、仅替换 NLinear branch”反事实；
-  无重训、无 test。预注册的判断明确禁止把较小 remove 损失误读成 NLinear 不使用该成分。
+  无重训、无 test。由于15项的全 validation 前向超过单次执行时限，发现阶段固定为时间均匀的512个
+  origins；只有满足目标方向的项才允许以完整 validation 复核。预注册的判断明确禁止把较小 remove
+  损失误读成 NLinear 不使用该成分。
 
 ## 2026-09-03 — D4 互补信息冻结诊断完成
 
