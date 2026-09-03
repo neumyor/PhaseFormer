@@ -195,6 +195,13 @@ D5 在512个时间均匀 validation origins 上对当前定义的 D1六项、D2�
 15项中，M0 对13项有超过1%的即时损失；余下D1-32/D1-24虽分别仅+0.59/+0.37%，但 M1/M2 与其
 NLinear branch 的效应同样很小，没有模型差异。故该候选库整体不进入多 seed 重训。
 
+### 7.3 D6 结构关系筛查：关系也是共同利用的信息
+
+D6 进一步测了周期顺序、跨 phase 同步和相邻 phase-slot 关系（[结果](PhaseFormer_input_component_D6_structural_relation_report.md)）。
+前两种破坏令 M0 分别+70.33%/+61.71%，故原版高度利用；M1/M2 和它们的 NLinear branch 同样显著受损，
+只是整体略更可恢复。相邻 pair swap 则原版+0.77%、增强约+0.1%，也不满足目标方向。至此，现有输入
+成分与结构关系库没有证据支持“原版不利用、增强分支实际利用”的强叙事。
+
 ### 尚不能成立的结论
 
 1. 不能说 M1/M2 的增强分支“不依赖”D1/D2/D3 成分：D4 已经直接显示其对两个 D3 成分存在实际利用；
@@ -228,3 +235,4 @@ NLinear branch 的效应同样很小，没有模型差异。故该候选库整�
 |D3|`research_runs/d3_trajectory_remove_control/d3_trajectory_summary.csv`|
 |D4 互补冻结诊断|[D4 报告](PhaseFormer_input_component_D4_complementary_frozen_report.md)；`research_runs/d4_complementary_frozen_probe_control/frozen_complementary_results.csv`|
 |D5 广泛冻结筛查|[D5 报告](PhaseFormer_input_component_D5_broad_frozen_report.md)；`research_runs/d5_broad_frozen_utilisation_control/frozen_broad_utilisation_results.csv`|
+|D6 结构关系筛查|[D6 报告](PhaseFormer_input_component_D6_structural_relation_report.md)；`research_runs/d6_structural_relation_frozen_control/frozen_structural_relation_results.csv`|
