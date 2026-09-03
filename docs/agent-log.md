@@ -1,5 +1,13 @@
 # Agent Maintenance Log
 
+## 2026-09-03 — D6 结构关系冻结筛查预注册
+
+- D5 后不再扩展当前 D1/D2/D3 数值成分库，新增 D6：测试 phase folding 与全时间轴映射对时间关系的
+  不同利用。三个 endpoint-preserving 扰动分别为早期周期顺序反转、phase-wise 周期去同步、相邻 phase
+  pair 交换；均明确其保留统计量与破坏关系。
+- 新增 `StructuralRelationBank`、D6 512-origin validation-only runner 和计划；仍无训练、无 test，
+  并沿用 M1/M2 仅替换 NLinear branch 的可回放反事实。
+
 ## 2026-09-03 — D5 广泛冻结利用验证完成：15项均非目标候选
 
 - 在 `raft` CUDA 上完成 D5 的512个时间均匀 validation origins 筛查（约9秒）：D1六个 Gaussian notch、

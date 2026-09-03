@@ -449,3 +449,52 @@ class ComplementaryTrajectoryBank(TrajectoryComponentBank):
         if not np.isfinite(result).all():
             raise FloatingPointError("complementary trajectory view produced non-finite values")
         return result.astype(seq_x.dtype, copy=False)
+
+
+class StructuralRelationBank:
+    """Deterministic, endpoint-preserving probes of time-order relationships.
+
+    These are discovery perturbations, not additive component removals.  They
+    preserve selected marginal statistics while changing either the order of
+    cycles or cross-phase co-occurrence, targeting information a phase-folded
+    representation may organise differently from a full time-axis mapping.
+    """
+
+    VARIANTS = {"cycle_order_reverse", "phase_desync", "adjacent_pair_swap"}
+
+    def __init__(self, seq_len: int, variant: str, period_len: int = 24):
+        self.seq_len = int(seq_len)
+        self.variant = str(variant)
+        self.period_len = int(period_len)
+        if self.variant not in self.VARIANTS:
+            raise ValueError(f"unknown structural relation variant {self.variant}")
+        if self.seq_len % self.period_len:
+            raise ValueError("structural relation probes require full cycles")
+        if self.seq_len // self.period_len < 3:
+            raise ValueError("structural relation probes require at least three cycles")
+
+    def transform(self, index: int, seq_x: np.ndarray) -> np.ndarray:
+        x = np.asarray(seq_x)
+        if x.shape[0] != self.seq_len:
+            raise ValueError("structural relation probe received an unexpected history length")
+        cycles = x.reshape(-1, self.period_len, x.shape[1])
+        early = len(cycles) - 1  # Leave the final cycle, including the endpoint, untouched.
+        result = cycles.copy()
+        if self.variant == "cycle_order_reverse":
+            # Exact phase-wise value multisets and all within-cycle edges survive;
+            # only the chronological ordering of earlier cycles is reversed.
+            result[:early] = cycles[:early][::-1]
+        elif self.variant == "phase_desync":
+            # For each phase slot, retain its complete early-cycle value multiset
+            # while using a distinct circular shift.  This breaks within-cycle
+            # cross-phase co-occurrence without altering phase-wise marginals.
+            for phase in range(self.period_len):
+                shift = (phase * 7 + 1) % early
+                result[:early, phase] = np.roll(cycles[:early, phase], shift, axis=0)
+        else:
+            # Preserve each cycle's value multiset, mean and amplitude.  Swap
+            # adjacent slots in all earlier cycles; leave the final cycle intact.
+            for phase in range(0, self.period_len - 1, 2):
+                result[:early, phase] = cycles[:early, phase + 1]
+                result[:early, phase + 1] = cycles[:early, phase]
+        return result.reshape(x.shape).copy()
