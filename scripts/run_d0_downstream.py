@@ -162,6 +162,13 @@ def run_d0_audit(track_r_dir, horizons, seeds, datasets):
         retrain = retrained_discover(track_r_dir, smoke=False,
                                      horizons=horizons, seeds=seeds,
                                      datasets=datasets)
+        # The retrained-test read covers only the 9 non-full intervention
+        # checkpoints per setting (none/full is evaluated once by Track F and
+        # reused as the common baseline), so mirror that subset before counting:
+        # discover() returns the full condition set as its completeness gate.
+        retrain = retrain[
+            ~((retrain.input_hypothesis == "none") & (retrain.input_variant == "full"))
+        ].copy()
         issues["full_anchors"] = int(len(frozen))
         issues["retrained_checkpoints"] = int(len(retrain))
         issues["expected_full_anchors"] = expected_full_anchors(

@@ -1336,3 +1336,20 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   只会停在 wait_3a，不会提前推进。
 - 校验：五个改动脚本 + 新编排器 py_compile/模块 import 通过；plan doc 状态块与 §2.1 计数已更新
   为 v1.2（7 数据集：D0 210/21/189；D1 全 2520/252/2268）。未读取 test。
+
+## 2026-09-03 — 修复 D0 audit 的 retrained 计数口径（210 vs 189 误报）
+
+- 现象：D0 Track R 全部 210 完成后，编排器在 wait_3a→audit 停在终端态 `audit_failed`：
+  `full_anchors=21 ✓` 但 `retrained_checkpoints=210 ≠ expected 189`，管道停摆。
+- 根因：`run_d0_audit` 用 `len(retrained_discover(...))` 作为 retrained 计数，但该 discover
+  （`run_input_component_retrained_test_matrix.py`）作为完整性门返回**全部条件行**（含 21 个
+  none/full 锚点），其自身 main() 在计数前会先滤掉 none/full（只读 9 个干预变体）。audit 少了
+  这一步过滤，故 210 被拿去比 189。先前 6 数据集 probe 显示 162/189 是因为当时 6×27=162 个非
+  full 行恰好等于过滤后的期望，掩盖了该口径问题；7 数据集全完成后 210>189 才暴露。
+- 修复：`run_d0_downstream.py` 的 `run_d0_audit` 在计数前加与 runner main() 相同的
+  `~(input_hypothesis=='none' & input_variant=='full')` 过滤，再比 `expected_retrained`。
+- 校验：直接对真实 `research_runs/input_components_h134_scratch` 调 `run_d0_audit(...)` →
+  `PASSED: True`（full_anchors=21、retrained=189、anchors_per_setting 1/1、anchor_path_dups=0）。
+  `input_components_h134_frozen_d0/` 与 `input_components_h134_retrained_test_d0/` 均空（0 文件），
+  无半成品需清理。状态文件 d0_state.json 重置为 wait_3a，编排器按原 argv 重新 detach 启动。
+  未读取 test。
