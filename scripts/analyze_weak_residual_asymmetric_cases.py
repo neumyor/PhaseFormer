@@ -26,27 +26,27 @@ from src.models.asymmetric_trend_components import TREND_COMPONENTS, extract_tre
 from src.models.phaseformer_presets import PhaseFormerPresetConfig, make_exp_args
 
 
-def find_run(root: Path, component: str | None) -> Path:
+def find_run(root: Path, dataset: str, horizon: int, component: str | None) -> Path:
     matches = []
     for path in root.glob("runs/*"):
         config = path / "config.json"
         if not config.is_file():
             continue
         data = json.loads(config.read_text())
-        if data.get("dataset") != "ETTh1" or data.get("horizon") != 96:
+        if data.get("dataset") != dataset or data.get("horizon") != horizon:
             continue
         actual = data["hyperparams"].get("weak_residual_asymmetric_component")
         if actual == component:
             matches.append(path)
     if len(matches) != 1:
-        raise RuntimeError(f"expected one ETTh1-H96 run for {component!r}, found {matches}")
+        raise RuntimeError(f"expected one {dataset}-H{horizon} run for {component!r}, found {matches}")
     return matches[0]
 
 
 def load_model(run_dir: Path, device: torch.device):
     config = json.loads((run_dir / "config.json").read_text())
     hp = config["hyperparams"]
-    args = make_exp_args("ETTh1", config["lookback"], config["horizon"], hp)
+    args = make_exp_args(config["dataset"], config["lookback"], config["horizon"], hp)
     model = PhaseFormer(PhaseFormerPresetConfig(args, config["lookback"], config["horizon"], hp))
     result = next(csv.DictReader((run_dir / "metrics.csv").open()))
     checkpoint = ROOT / result["checkpoint"]
@@ -101,6 +101,8 @@ def plot_case(path, component, sample_id, history, residual_history, truth, base
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--discovery-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_trend_discovery"))
+    parser.add_argument("--dataset", default="ETTh1", choices=["ETTh1", "Weather"])
+    parser.add_argument("--horizon", type=int, default=96, choices=[96])
     parser.add_argument("--component", choices=sorted(TREND_COMPONENTS), default="cycle_levels")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--num-workers", type=int, default=0)
@@ -111,13 +113,14 @@ def main():
     if args.require_cuda and not torch.cuda.is_available():
         raise RuntimeError("--require-cuda was requested but CUDA is unavailable")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    baseline_run = find_run(args.discovery_root, None)
+    baseline_run = find_run(args.discovery_root, args.dataset, args.horizon, None)
     component_name = args.component
-    candidate_run = find_run(args.discovery_root, component_name)
+    candidate_run = find_run(args.discovery_root, args.dataset, args.horizon, component_name)
     baseline_model, exp_args, baseline_checkpoint = load_model(baseline_run, device)
     candidate_model, _, candidate_checkpoint = load_model(candidate_run, device)
     exp_args.dataset_args.num_workers = args.num_workers
     dataset, loader = data_provider(exp_args.dataset_args, "val")
+    setting = f"{args.dataset}_h{args.horizon}_seed2021_validation"
 
     histories = []; removed_histories = []; truths = []; baseline_preds = []; candidate_preds = []
     with torch.inference_mode():
@@ -129,9 +132,9 @@ def main():
             component = extract_trend_component(x.float(), component_name, period_len=24)
             histories.append(x[:, :, 0].cpu().numpy())
             removed_histories.append((x - component)[:, :, 0].cpu().numpy())
-            truths.append(y[:, -96:, 0].float().cpu().numpy())
-            baseline_preds.append(base[:, -96:, 0].cpu().numpy())
-            candidate_preds.append(candidate[:, -96:, 0].cpu().numpy())
+            truths.append(y[:, -args.horizon:, 0].float().cpu().numpy())
+            baseline_preds.append(base[:, -args.horizon:, 0].cpu().numpy())
+            candidate_preds.append(candidate[:, -args.horizon:, 0].cpu().numpy())
     history = np.concatenate(histories); removed_history = np.concatenate(removed_histories)
     truth = np.concatenate(truths); baseline = np.concatenate(baseline_preds); candidate = np.concatenate(candidate_preds)
     baseline_mae = np.abs(baseline - truth).mean(axis=1)
@@ -145,7 +148,7 @@ def main():
     rows = []
     selected_arrays = {key: [] for key in ("sample_id", "group", "history", "removed_history", "truth", "baseline_prediction", "candidate_prediction", "baseline_mae", "candidate_mae")}
     for sample_id in range(len(truth)):
-        rows.append({"setting": "ETTh1_H96_seed2021_validation", "sample_id": sample_id, "channel": 0,
+        rows.append({"setting": setting, "baseline_config_id": "baseline_full", "candidate_config_id": f"asymmetric_{component_name}", "sample_id": sample_id, "channel": 0,
                      "baseline_mae": baseline_mae[sample_id], "candidate_mae": candidate_mae[sample_id],
                      "delta_mae": candidate_mae[sample_id] - baseline_mae[sample_id],
                      "baseline_mse": baseline_mse[sample_id], "candidate_mse": candidate_mse[sample_id],
@@ -157,26 +160,42 @@ def main():
         for key, value in (("sample_id", sample_id), ("group", group), ("history", history[sample_id]), ("removed_history", removed_history[sample_id]), ("truth", truth[sample_id]), ("baseline_prediction", baseline[sample_id]), ("candidate_prediction", candidate[sample_id]), ("baseline_mae", baseline_mae[sample_id]), ("candidate_mae", candidate_mae[sample_id])):
             selected_arrays[key].append(value)
     np.savez_compressed(args.output / "selected_cases.npz", **{key: np.asarray(value) for key, value in selected_arrays.items()})
-    result_rows = [{"setting": "ETTh1_H96_seed2021_validation", "split": "validation", "channel": 0,
-                    "baseline_mae": float(baseline_mae.mean()), "candidate_mae": float(candidate_mae.mean()),
-                    "relative_mae_change": float(candidate_mae.mean() / baseline_mae.mean() - 1),
-                    "baseline_mse": float(baseline_mse.mean()), "candidate_mse": float(candidate_mse.mean()),
-                    "relative_mse_change": float(candidate_mse.mean() / baseline_mse.mean() - 1),
-                    "selected_cases": len(selected)}]
+    result_rows = [
+        {"setting": setting, "config_id": "baseline_full", "dataset": args.dataset, "horizon": args.horizon, "seed": 2021, "model": "weak_residual", "key_params": "residual=X", "mse": float(baseline_mse.mean()), "mae": float(baseline_mae.mean()), "delta_mse": 0.0, "delta_mae": 0.0, "selected": True},
+        {"setting": setting, "config_id": f"asymmetric_{component_name}", "dataset": args.dataset, "horizon": args.horizon, "seed": 2021, "model": "weak_residual", "key_params": f"residual=X-{component_name}", "mse": float(candidate_mse.mean()), "mae": float(candidate_mae.mean()), "delta_mse": float(candidate_mse.mean()-baseline_mse.mean()), "delta_mae": float(candidate_mae.mean()-baseline_mae.mean()), "selected": True},
+    ]
     with (args.output / "results.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(result_rows[0])); writer.writeheader(); writer.writerows(result_rows)
-    run = {"setting": "ETTh1_H96_seed2021_validation", "component": component_name, "channel": 0,
+    run = {"experiment_id": args.output.name, "setting": setting, "component": component_name, "channel": 0,
            "selection": "top 10 candidate-minus-baseline MAE regressions with >=96-start-index separation", "split": "validation only", "test_read": False,
            "baseline_run": str(baseline_run), "candidate_run": str(candidate_run), "baseline_checkpoint": str(baseline_checkpoint), "candidate_checkpoint": str(candidate_checkpoint)}
     (args.output / "run.yaml").write_text(json.dumps(run, indent=2) + "\n")
     table = "\n".join(f"| {rank} | {group} | {sample_id} | {baseline_mae[sample_id]:.4f} | {candidate_mae[sample_id]:.4f} | {candidate_mae[sample_id]-baseline_mae[sample_id]:+.4f} |" for rank, (group, sample_id) in enumerate(selected, 1))
-    report = f"""# ETTh1 {component_name} validation maximal-regression cases
+    report = f"""# Experiment and Objective Error Analysis
 
-Setting: ETTh1, lookback 720, horizon 96, seed 2021, validation split only, channel 0.  No test data was loaded.
+## 1. Experiment Setup
+
+Setting: `{setting}`; channel 0; validation only; no test data was loaded.
+
+## 2. Experiment Results
 
 The comparison is independently trained Baseline-full Weak Residual versus Asymmetric-{component_name}, where the PhaseFormer path sees X and only the NLinear residual path sees X-A.  The component is extracted deterministically and endpoint anchored before residual-branch RevIN normalization.
 
 Channel-0 aggregate error: baseline MAE {baseline_mae.mean():.4f}, asymmetric MAE {candidate_mae.mean():.4f} ({100*(candidate_mae.mean()/baseline_mae.mean()-1):+.2f}%); baseline MSE {baseline_mse.mean():.4f}, asymmetric MSE {candidate_mse.mean():.4f} ({100*(candidate_mse.mean()/baseline_mse.mean()-1):+.2f}%).
+
+## 3. Parameter / Configuration Search
+
+No parameter search: the plan-fixed baseline and one plan-fixed component condition were trained with seed 2021 and selected by validation checkpoint loss.
+
+## 4. Error Distribution
+
+`sample_errors.csv` contains every validation origin for channel 0.
+
+## 5. Horizon-wise Error
+
+The ranking metric is the MAE averaged over all {args.horizon} future steps.
+
+## 6. High-Error Selection
 
 The ten cases are the largest positive values of `Asymmetric channel-0 MAE - Baseline channel-0 MAE`, retaining origins at least 96 steps apart.  Thus every displayed case is one where denying this component to NLinear is maximally harmful within this validation split; it is not a significance test.
 
@@ -184,7 +203,21 @@ The ten cases are the largest positive values of `Asymmetric channel-0 MAE - Bas
 |---:|---|---:|---:|---:|---:|
 {table}
 
+## 7. Case Analysis
+
 Each figure has the full 720-step history and the exact component-removed residual-branch history above; below it has the final 192 history steps, future truth, and both predictions.  Corresponding numeric arrays are in `selected_cases.npz`; all channel-0 validation-origin errors are in `sample_errors.csv`.
+
+## 8. Repeated Observable Patterns
+
+The selected examples all have positive channel-0 MAE deltas by construction; the report does not infer a causal mechanism from their shapes.
+
+## 9. Objective Defect Summary
+
+The measurable defect under this intervention is the reported positive MAE difference.  Whether it represents component use rather than intervention-induced distribution shift requires the broader paired evidence.
+
+## 10. Experiment Scope
+
+This is one dataset/horizon/seed validation-only diagnostic, not a test result or a multi-seed confirmation.
 """
     report_path = args.output / "objective_error_analysis.md"; report_path.write_text(report)
     with zipfile.ZipFile(args.output / "objective_error_analysis.zip", "w", zipfile.ZIP_DEFLATED) as archive:

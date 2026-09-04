@@ -47,18 +47,28 @@ def main():
     parser.add_argument("--max-epochs", type=int, default=30)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--component", choices=("all",) + COMPONENTS, default="all")
+    parser.add_argument("--datasets", default=",".join(DATASETS),
+                        help="Comma-separated subset of ETTh1,ETTh2,ETTm1,ETTm2,Weather")
+    parser.add_argument("--horizons", default=",".join(map(str, HORIZONS)),
+                        help="Comma-separated subset of 96,192")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--require-cuda", action="store_true")
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
 
     components = COMPONENTS if args.component == "all" else (args.component,)
-    schedule = [(dataset, horizon, "none") for dataset in DATASETS for horizon in HORIZONS]
+    datasets = tuple(value.strip() for value in args.datasets.split(",") if value.strip())
+    horizons = tuple(int(value) for value in args.horizons.split(",") if value.strip())
+    if not datasets or set(datasets) - set(DATASETS):
+        parser.error("--datasets must be a non-empty subset of the discovery datasets")
+    if not horizons or set(horizons) - set(HORIZONS):
+        parser.error("--horizons must be a non-empty subset of 96,192")
+    schedule = [(dataset, horizon, "none") for dataset in datasets for horizon in horizons]
     schedule += [
         (dataset, horizon, component)
         for component in components
-        for dataset in DATASETS
-        for horizon in HORIZONS
+        for dataset in datasets
+        for horizon in horizons
     ]
     print(f"validation-only discovery schedule: {len(schedule)} runs")
     for index, (dataset, horizon, component) in enumerate(schedule, start=1):
