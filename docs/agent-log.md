@@ -1815,3 +1815,11 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `research_runs/weak_residual_trend_2comp_3ds_experiment_scratch/`。输入压缩包经路径安全检查，不含绝对路径或 `..` 路径穿越项；原压缩包未删除。
 - 归档内容为 `causal_ema` 和 `holt_local_linear` 在 ETTh1、ETTm1、Weather、L=720→H=96、seed=2021、validation-only 上的完整原始交付物：3 个 Baseline-full 与 12 个 X-A/Only-A 候选的 checkpoint、日志、预测、代码快照、汇总结果和 channel-0 预测差异图。
 - 该目录明确标为 scratch，因为它含 checkpoint 和全量中间产物；其中的 `analysis/audit/` 缺少规范审计根所必需的 `sample_errors.csv`（README 说明该文件约119 MB且未随包提供），故不得将其标为符合六文件白名单的正式审计目录。未重算或改写任何实验指标。
+
+## 2026-09-04 — 交付 checkpoint 的预测分歧案例重新导出
+
+- 扩展 `scripts/export_asymmetric_prediction_divergence_cases.py`，使其可读取归档交付物的
+  `checkpoints/<dataset>_h96_seed2021/<component>-<route>/` 布局，并从候选 `config.json` 复用精确的趋势提取超参数；普通本地 `runs/` 布局保持兼容。
+- Baseline-full 使用当前已有 checkpoint：ETTh1 来自 `weak_residual_asymmetric_trend_discovery`、Weather 来自
+  `weak_residual_asymmetric_weather_h96_scratch`、ETTm1 来自 `weak_residual_asymmetric_ettm1_h96_scratch`；候选只使用用户交付的 `causal_ema` 与 `holt_local_linear` checkpoint。三者均为 L=720→H=96、seed=2021 的 validation 配置。
+- 重新推理并导出 channel 0 的案例；排序仅使用 Baseline 与候选预测曲线在96步上的 MAD，GT 不参与排序但在图中显示。每个 dataset×component×route 保留3个、原点间隔至少96的案例。结果合并至既有 `research_runs/asymmetric_prediction_divergence_cases/X_minus_A/` 与 `.../Only_A/`，各新增18张图；各路由的 `imported_2trend_current_baselines_manifest.csv` 记录新选择，未覆盖此前五种成分的产物。

@@ -23,9 +23,17 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.analyze_asymmetric_multichannel_cases import COMPONENTS, DATASETS, load_model, run_dir
+from scripts.analyze_asymmetric_multichannel_cases import DATASETS, run_dir
 from src.dataset.data_factory import data_provider
 from src.models.asymmetric_trend_components import extract_trend_component
+from src.models.PhaseFormer import PhaseFormer
+from src.models.phaseformer_presets import PhaseFormerPresetConfig, make_exp_args
+import scripts.search_phaseformer as search_phaseformer
+
+
+DEFAULT_COMPONENTS = (
+    "cycle_levels", "recent_linear", "global_linear", "smooth_local", "smooth_multiscale",
+)
 
 
 def select(entries, count, separation):
@@ -39,7 +47,67 @@ def select(entries, count, separation):
     raise RuntimeError("candidate heap did not yield enough separated origins")
 
 
-def find_candidate_run(root, dataset, component, input_mode):
+def load_model(path: Path):
+    """Load either a normal local run or a delivered checkpoint directory."""
+    config = json.loads((path / "config.json").read_text())
+    hp = dict(config["hyperparams"])
+    args = make_exp_args(
+        config["dataset"], config["lookback"], config["horizon"], hp,
+        batch_size=config.get("batch_size"),
+    )
+    args.dataset_args.percent = config.get("percent", 100)
+    args.dataset_args.num_workers = 0
+    train_set, _ = search_phaseformer.data_provider(args.dataset_args, "train")
+    if hasattr(train_set, "data_stamp"):
+        hp["time_mark_dim"] = int(train_set.data_stamp.shape[-1])
+    model = PhaseFormer(PhaseFormerPresetConfig(
+        args, config["lookback"], config["horizon"], hp
+    ))
+    checkpoint = path / "attempts/001/checkpoints/best.ckpt"
+    if not checkpoint.exists():
+        raise FileNotFoundError(f"missing best checkpoint: {checkpoint}")
+    state = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    model.load_state_dict(state.get("state_dict", state), strict=True)
+    return model, args, checkpoint, hp
+
+
+def trend_kwargs(hyperparams: dict) -> dict:
+    """Mirror the candidate model's frozen extraction hyperparameters."""
+    return {
+        "period_len": hyperparams.get("period_len", 24),
+        "recent_window": hyperparams.get("weak_residual_trend_recent_window", 96),
+        "local_sigma": hyperparams.get("weak_residual_trend_local_sigma", 24.0),
+        "long_sigma": hyperparams.get("weak_residual_trend_long_sigma", 72.0),
+        "trend_filter_kappa": hyperparams.get("weak_residual_trend_filter_kappa", 100.0),
+        "trend_filter_sample_interval_hours": hyperparams.get(
+            "weak_residual_trend_filter_sample_interval_hours", 1.0
+        ),
+        "trend_filter_iterations": hyperparams.get("weak_residual_trend_filter_iterations", 128),
+        "causal_ema_alpha": hyperparams.get("weak_residual_causal_ema_alpha", 0.08),
+        "causal_local_linear_window": hyperparams.get(
+            "weak_residual_causal_local_linear_window", 72
+        ),
+        "causal_local_linear_sigma": hyperparams.get(
+            "weak_residual_causal_local_linear_sigma", 24.0
+        ),
+        "holt_level_alpha": hyperparams.get("weak_residual_holt_level_alpha", 0.15),
+        "holt_trend_beta": hyperparams.get("weak_residual_holt_trend_beta", 0.03),
+    }
+
+
+def find_candidate_run(root, dataset, component, input_mode, layout):
+    if layout == "delivery":
+        path = root / "checkpoints" / f"{dataset}_h96_seed2021" / f"{component}-{input_mode}"
+        config_path = path / "config.json"
+        if not config_path.exists():
+            raise FileNotFoundError(f"delivered candidate is missing: {path}")
+        config = json.loads(config_path.read_text())
+        hp = config["hyperparams"]
+        if (config["dataset"] != dataset or config["horizon"] != 96
+                or hp.get("weak_residual_asymmetric_component") != component
+                or hp.get("weak_residual_asymmetric_input_mode") != input_mode):
+            raise RuntimeError(f"delivered candidate config mismatch: {path}")
+        return path
     matches = []
     for config_path in (root / "runs").glob("*/config.json"):
         config = json.loads(config_path.read_text())
@@ -86,6 +154,10 @@ def main():
     parser.add_argument("--ettm1-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_ettm1_h96_scratch"))
     parser.add_argument("--candidate-root", type=Path, default=None,
                         help="Root holding candidates; omit to reuse the per-dataset baseline roots")
+    parser.add_argument("--candidate-layout", choices=("runs", "delivery"), default="runs",
+                        help="'delivery' reads checkpoints/<setting>/<component>-<route> from an imported bundle")
+    parser.add_argument("--components", nargs="+", default=list(DEFAULT_COMPONENTS),
+                        help="Components to export; must match the candidate checkpoints")
     parser.add_argument("--input-mode", choices=("minus_component", "component_only"), default="minus_component")
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--channel", type=int, default=0)
@@ -103,10 +175,13 @@ def main():
     manifest = []
 
     for dataset in DATASETS:
-        baseline, experiment_args, _ = load_model(run_dir(roots[dataset], dataset, None))
+        baseline, experiment_args, _, _ = load_model(run_dir(roots[dataset], dataset, None))
         baseline.to(device).eval(); dataset_obj, loader = data_provider(experiment_args.dataset_args, "val")
-        for component in COMPONENTS:
-            candidate, _, _ = load_model(find_candidate_run(candidate_roots[dataset], dataset, component, args.input_mode))
+        for component in args.components:
+            candidate_path = find_candidate_run(
+                candidate_roots[dataset], dataset, component, args.input_mode, args.candidate_layout
+            )
+            candidate, _, _, candidate_hp = load_model(candidate_path)
             candidate.to(device).eval()
             heap = []
             origin_cursor = 0
@@ -135,7 +210,9 @@ def main():
                     decoder = baseline._build_decoder_input(y.float())
                     base, _, _ = baseline(x.float(), xm.float(), decoder, ym.float())
                     asymmetric, _, _ = candidate(x.float(), xm.float(), decoder, ym.float())
-                component_values = extract_trend_component(x.float(), component, period_len=24)
+                component_values = extract_trend_component(
+                    x.float(), component, **trend_kwargs(candidate_hp)
+                )
                 history = x[0, :, channel].cpu().numpy(); a = component_values[0, :, channel].cpu().numpy()
                 truth = y[0, -len(base[0]):, channel].cpu().numpy()
                 base = base[0, :, channel].cpu().numpy(); asymmetric = asymmetric[0, :, channel].cpu().numpy()
@@ -157,7 +234,7 @@ def main():
         del baseline; torch.cuda.empty_cache()
     with (args.output / "manifest.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=manifest[0].keys()); writer.writeheader(); writer.writerows(manifest)
-    (args.output / "README.md").write_text(json.dumps({"selection": "top forecast-curve MAD; GT excluded from ranking and included in plots", "input_mode": args.input_mode, "channel": args.channel, "top_k": args.top_k, "origin_separation": args.origin_separation, "datasets": DATASETS, "components": COMPONENTS}, indent=2) + "\n")
+    (args.output / "README.md").write_text(json.dumps({"selection": "top forecast-curve MAD; GT excluded from ranking and included in plots", "input_mode": args.input_mode, "channel": args.channel, "top_k": args.top_k, "origin_separation": args.origin_separation, "datasets": DATASETS, "components": args.components, "candidate_layout": args.candidate_layout}, indent=2) + "\n")
 
 
 if __name__ == "__main__":
