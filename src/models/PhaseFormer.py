@@ -550,6 +550,15 @@ class PhaseFormer(DefaultPLModule):
         self.weak_residual_trend_long_sigma = getattr(
             configs, "weak_residual_trend_long_sigma", 72.0
         )
+        self.weak_residual_trend_filter_kappa = getattr(
+            configs, "weak_residual_trend_filter_kappa", 100.0
+        )
+        self.weak_residual_trend_filter_sample_interval_hours = getattr(
+            configs, "weak_residual_trend_filter_sample_interval_hours", 1.0
+        )
+        self.weak_residual_trend_filter_iterations = getattr(
+            configs, "weak_residual_trend_filter_iterations", 128
+        )
         self.use_phase_cycle_fusion = getattr(
             configs, "use_phase_cycle_fusion", False
         )

@@ -10,6 +10,8 @@
   `scripts/run_weak_residual_asymmetric_trend_filter.py`；正式原始训练工件写到
   `research_runs/weak_residual_asymmetric_trend_filter_h96_scratch/`，最终六文件审计包将写到
   `research_runs/weak_residual_asymmetric_trend_filter_h96_audit/`。待完成：GPU 数值近似抽查、六个完整训练与审计。
+- 冒烟训练首次暴露 `PhaseFormer` 未复制新配置字段，已补齐构造路径并新增 trend-filter candidate forward
+  覆盖；失败的独立 smoke 目录仅含不完整尝试，未作为正式证据或复用。
 
 ## 2026-09-04 — ETTm1 H96 五趋势成分全流程及样本级审计
 

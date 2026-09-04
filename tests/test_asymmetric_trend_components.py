@@ -55,6 +55,18 @@ class AsymmetricTrendComponentTests(unittest.TestCase):
         hp = build_hyperparams("ETTm1", 96, "weak_residual_asymmetric_trend")
         self.assertEqual(hp["weak_residual_asymmetric_component"], "cycle_levels")
 
+    def test_trend_filter_candidate_forward_runs(self):
+        hp = build_hyperparams("ETTh1", 96, "weak_residual_asymmetric_trend")
+        hp.update(
+            weak_residual_asymmetric_component="trend_filter",
+            weak_residual_trend_filter_iterations=4,
+        )
+        args = make_exp_args("ETTh1", 720, 96, hp)
+        model = PhaseFormer(PhaseFormerPresetConfig(args, 720, 96, hp)).eval()
+        with torch.no_grad():
+            output, _, _ = model(torch.randn(1, 720, model.enc_in))
+        self.assertEqual(tuple(output.shape), (1, 96, model.enc_in))
+
 
 if __name__ == "__main__":
     unittest.main()
