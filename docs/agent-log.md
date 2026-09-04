@@ -1679,3 +1679,18 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 文档明确区分 frozen 即时依赖、remove-trained 恢复能力与 NLinear 分支实际利用；当前证据只支持增强
   模型对成分缺失有更强的替代/恢复能力，尚不能证明其不依赖相关成分，也没有找到“原版忽略、增强实际
   使用”的成分。给出 D2-192、D3-recent-linear、D3-cycle-levels 的2×2冻结/重训/分支反事实后续方案。
+
+## 2026-09-04 — Weak-residual 非对称趋势输入的三数据集全通道案例统一
+
+- 新增 `scripts/analyze_asymmetric_multichannel_cases.py` 与内存安全的
+  `scripts/finalize_asymmetric_multichannel_audit.py`。后者从既有 validation 预测的完整样本表流式挑选案例，
+  不重训也不读取 test：案例单位从单一 channel 0 改为 `validation origin × channel`。
+- 在 ETTh1、Weather、ETTm1 的 H96、seed2021、L720 设置中，基线的 PhaseFormer/NLinear 都看完整 X；
+  非对称候选仅将 NLinear 的输入改为 `X-A`，且二者共享完整 X 的 RevIN 统计。每个数据集×趋势成分
+  （cycle-levels/recent-linear/global-linear/smooth-local/smooth-multiscale）均保留候选相对基线 MAE 最大的
+  5 个退化和 5 个改善案例；同一组全部十个 origin 相隔至少96步。
+- 输出严格审计包 `research_runs/asymmetric_trend_multichannel_three_dataset_audit/`：18条模型结果、
+  1,040,725 条样本×通道误差行、150 个选择案例及其图、Markdown 和可携带 ZIP。以 raft Python + RTX 4090
+  只做既有 checkpoint 的 validation 推理和出图；语法检查及目录白名单、案例数/去重、图片引用、ZIP 原件
+  一致性校验均通过。全通道分布显示每个数据集×成分组合都含有正负两类样本影响，因此这些结果用于定位
+  条件性行为模式，不能单独证明某趋势成分被某分支稳定利用或忽略。
