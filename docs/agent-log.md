@@ -1808,3 +1808,10 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   ETTm1 A6 当作已验证趋势成分。
 - GPU driver 当前不可用（raft 的 `torch.cuda.is_available()=False`、NVML 初始化失败），故CUDA smoke仍无法执行；
   在实际GPU烟雾测试确认4096步的时间/显存前，不启动完整18项训练。
+
+## 2026-09-04 — 两种单侧趋势成分实验交付物归档
+
+- 按用户提供的 `weak_residual_trend_2comp_3ds_experiment.tar.gz` 解压并原样归档到
+  `research_runs/weak_residual_trend_2comp_3ds_experiment_scratch/`。输入压缩包经路径安全检查，不含绝对路径或 `..` 路径穿越项；原压缩包未删除。
+- 归档内容为 `causal_ema` 和 `holt_local_linear` 在 ETTh1、ETTm1、Weather、L=720→H=96、seed=2021、validation-only 上的完整原始交付物：3 个 Baseline-full 与 12 个 X-A/Only-A 候选的 checkpoint、日志、预测、代码快照、汇总结果和 channel-0 预测差异图。
+- 该目录明确标为 scratch，因为它含 checkpoint 和全量中间产物；其中的 `analysis/audit/` 缺少规范审计根所必需的 `sample_errors.csv`（README 说明该文件约119 MB且未随包提供），故不得将其标为符合六文件白名单的正式审计目录。未重算或改写任何实验指标。
