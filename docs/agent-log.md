@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-09-04 — 修正五成分案例图的测试模型标签
+
+- 用户审阅 RecentLinear sample 936 图时发现图中预测差异不如汇总 MAE 直观。人工复核确认：两预测的差异是
+  跨多个峰谷约 0.2--0.5 的系统性偏低，而不是单次大幅分叉；该样本的 +0.2243 MAE 是 96 步平均误差差。
+- 同时发现绘图图例将所有候选错误固定标为 `Asymmetric-A1`，实际预测数值和筛选均正确，但 RecentLinear、
+  GlobalLinear、LocalSmooth、MultiScaleSmooth 的显示标签会误导阅读。已修正为动态 `Asymmetric-<component>`
+  并重新导出五个案例包的全部 50 张图与 ZIP。
+- 图中 RecentLinear 的 `X-A` 历史可出现远大于原序列幅度的长斜坡，源自“最近96步 OLS斜率外推到完整720步”
+  的冻结定义。这是该成分干预强度/分布偏移风险，不能将其最大个例直接解释为 NLinear 对自然近期趋势的
+  干净因果依赖；若继续推进 A2，需要先重新冻结较局部的平滑趋势定义并成对重训。
+
 ## 2026-09-04 — ETTh1 五类趋势成分的最大误差差异案例导出
 
 - 用户将案例选择目标改为“两个预测模型误差差异最大”，而不是共同高误差。`analyze_weak_residual_asymmetric_cases.py`

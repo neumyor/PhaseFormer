@@ -87,7 +87,7 @@ def plot_case(path, component, sample_id, history, residual_history, truth, base
     axes[1].plot(np.arange(-recent, 0), residual_history[-recent:], color="#E07A2D", lw=0.9, alpha=0.9, label="X-A1")
     axes[1].plot(future_x, truth, color="#111111", lw=1.6, label="future truth")
     axes[1].plot(future_x, baseline, color="#2878B5", lw=1.2, label="Baseline-full")
-    axes[1].plot(future_x, candidate, color="#C43C39", lw=1.2, label="Asymmetric-A1")
+    axes[1].plot(future_x, candidate, color="#C43C39", lw=1.2, label=f"Asymmetric-{component}")
     axes[1].axvline(0, color="#999999", lw=0.8)
     axes[1].set_xlabel("forecast step (history is negative)")
     axes[1].set_ylabel("scaled value")
