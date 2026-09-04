@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Export one joint X-A/Only-A validation case per dataset and component.
 
-Selection uses neither ground truth nor per-model error: it maximizes the mean
-of the two 96-step forecast-curve MADs to the same Baseline-full prediction.
+Selection uses neither ground truth nor per-model error: it maximizes the
+96-step forecast-curve MAD between the X-A and Only-A predictions.  Within a
+dataset the selected origins for different components must be at least one
+horizon apart, so the final component catalogue does not repeat one sample.
 The resulting two-row plot shows X and A, then GT and all three forecasts.
 """
 
@@ -132,19 +134,40 @@ def main() -> None:
         baseline.to(device).eval()
         dataset_obj, loader = data_provider(args.dataset_args, "val")
         histories, truths, baseline_preds, _ = predict_all(baseline, loader, device)
+        candidates = []
         for component in COMPONENTS:
             minus, _, _, minus_hp = load_model(candidate_path(dataset, component, "minus_component"))
             only, _, _, _ = load_model(candidate_path(dataset, component, "component_only"))
             minus.to(device).eval(); only.to(device).eval()
             _, _, minus_preds, _ = predict_all(minus, loader, device)
             _, _, only_preds, _ = predict_all(only, loader, device)
-            # Channel 0 only.  GT is deliberately absent from this score.
+            # Channel 0 only. GT is deliberately absent from this score.
             gap_minus = np.abs(minus_preds[:, :, 0] - baseline_preds[:, :, 0]).mean(axis=1)
             gap_only = np.abs(only_preds[:, :, 0] - baseline_preds[:, :, 0]).mean(axis=1)
-            joint_gap = .5 * (gap_minus + gap_only)
-            origin = int(np.argmax(joint_gap))
+            route_gap = np.abs(minus_preds[:, :, 0] - only_preds[:, :, 0]).mean(axis=1)
+            candidates.append({
+                "component": component, "minus_hp": minus_hp,
+                "minus_preds": minus_preds, "only_preds": only_preds,
+                "gap_minus": gap_minus, "gap_only": gap_only, "route_gap": route_gap,
+            })
+            del minus, only
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+
+        selected_origins = []
+        for candidate in candidates:
+            component = candidate["component"]
+            order = np.argsort(candidate["route_gap"])[::-1]
+            origin = next(
+                (int(item) for item in order
+                 if all(abs(int(item) - previous) >= 96 for previous in selected_origins)),
+                None,
+            )
+            if origin is None:
+                raise RuntimeError(f"cannot select a separated origin: {dataset} {component}")
+            selected_origins.append(origin)
             x = torch.from_numpy(histories[origin:origin + 1]).to(device).float()
-            component_a = extract_trend_component(x, component, **trend_kwargs(minus_hp))
+            component_a = extract_trend_component(x, component, **trend_kwargs(candidate["minus_hp"]))
             folder = output / dataset / component
             folder.mkdir(parents=True)
             figure = folder / f"origin_{origin}_channel_0.png"
@@ -156,10 +179,10 @@ def main() -> None:
             )
             row = {
                 "dataset": dataset, "component": component, "origin": origin, "channel": 0,
-                "joint_forecast_curve_mad": float(joint_gap[origin]),
+                "x_minus_a_vs_only_a_forecast_curve_mad": float(candidate["route_gap"][origin]),
                 "baseline_forecast_curve_mad": 0.0,
-                "x_minus_a_forecast_curve_mad": float(gap_minus[origin]),
-                "only_a_forecast_curve_mad": float(gap_only[origin]),
+                "x_minus_a_vs_baseline_forecast_curve_mad": float(candidate["gap_minus"][origin]),
+                "only_a_vs_baseline_forecast_curve_mad": float(candidate["gap_only"][origin]),
                 "figure": str(figure.relative_to(output)), **metrics,
             }
             manifest.append(row)
@@ -170,17 +193,16 @@ def main() -> None:
                 "x_minus_a_prediction": minus_preds[origin, :, 0], "only_a_prediction": only_preds[origin, :, 0],
             })
             (folder / "README.md").write_text(
-                "Selection: maximum mean of X-A/Baseline and Only-A/Baseline forecast-curve MAD on channel 0. "
+                "Selection: maximum X-A/Only-A forecast-curve MAD on channel 0, with selected origins across "
+                "components in the same dataset separated by at least 96 steps. "
                 "Ground truth is not used to select the sample; it is shown to interpret the two model errors.\n"
             )
-            del minus, only, minus_preds, only_preds
-            if device.type == "cuda":
-                torch.cuda.empty_cache()
+        del candidates
     with (output / "manifest.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=manifest[0].keys())
         writer.writeheader(); writer.writerows(manifest)
     (output / "README.md").write_text(json.dumps({
-        "selection": "maximum mean forecast-curve MAD of X-A and Only-A relative to Baseline-full; GT excluded",
+        "selection": "maximum X-A/Only-A forecast-curve MAD; one horizon of separation between component origins; GT excluded",
         "display": "two rows: full X plus extracted A; GT plus Baseline, X-A, Only-A forecasts",
         "datasets": DATASETS, "components": COMPONENTS, "channel": 0, "lookback": 720, "horizon": 96,
     }, indent=2) + "\n")

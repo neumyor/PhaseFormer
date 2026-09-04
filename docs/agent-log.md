@@ -1831,3 +1831,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `.5 * (MAD(X-A, Baseline) + MAD(Only-A, Baseline))` 选择一个 validation origin；GT 不参与选择。
 - 统一图均为两行：第一行叠绘完整 history X 与候选提取的 A，标题注明 dataset、validation origin、channel、L=720、H=96；第二行叠绘 GT、Baseline-full、X-A、Only-A，并在标题写出三者的样本 MAE/MSE 和按 MSE 的最佳者。
 - 通过 raft 在 ETTh1、Weather、ETTm1 和7种成分（原五种、causal_ema、holt_local_linear）上重新推理，产生21张图及根目录 `manifest.csv`。输出位于 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/`。旧版按路由拆分的 `X_minus_A/`、`Only_A/` 产物未直接删除，已移动至 `/tmp/asymmetric_prediction_divergence_cases_*_previous/`，可恢复。
+
+## 2026-09-04 — 统一样本图的去重重导出与最终校验
+
+- 发现初版联合选择使用“两个路由相对 Baseline 的平均分歧”，会被同一异常窗口主导，多个成分因此复用相同 origin，不适合作为逐成分图册。选择规则修正为直接最大化 `MAD(X-A prediction, Only-A prediction)`；在每个数据集内，七个成分的已选 origin 两两至少相隔96步。
+- 重导出的21张图全部位于 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/`。最终程序校验通过：`manifest.csv` 恰有21行，ETTh1/Weather/ETTm1 各7行、每行对应文件存在、同数据集 origin 满足96步间隔；21张 PNG 有21个不同 SHA-256。人工抽查 ETTm1/smooth_local 的两行图，确认标题与四条预测曲线均正确。
+- 被替换的首版统一图未直接删除，已移动至 `/tmp/asymmetric_prediction_divergence_cases_joint_previous/`，可恢复。
