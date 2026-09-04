@@ -1823,3 +1823,11 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - Baseline-full 使用当前已有 checkpoint：ETTh1 来自 `weak_residual_asymmetric_trend_discovery`、Weather 来自
   `weak_residual_asymmetric_weather_h96_scratch`、ETTm1 来自 `weak_residual_asymmetric_ettm1_h96_scratch`；候选只使用用户交付的 `causal_ema` 与 `holt_local_linear` checkpoint。三者均为 L=720→H=96、seed=2021 的 validation 配置。
 - 重新推理并导出 channel 0 的案例；排序仅使用 Baseline 与候选预测曲线在96步上的 MAD，GT 不参与排序但在图中显示。每个 dataset×component×route 保留3个、原点间隔至少96的案例。结果合并至既有 `research_runs/asymmetric_prediction_divergence_cases/X_minus_A/` 与 `.../Only_A/`，各新增18张图；各路由的 `imported_2trend_current_baselines_manifest.csv` 记录新选择，未覆盖此前五种成分的产物。
+
+## 2026-09-04 — 统一 X-A / Only-A 样本图
+
+- 用户要求将所有样本图统一为 dataset×component 各一张。新增
+  `scripts/export_asymmetric_joint_route_cases.py`：对 channel 0，在每个成分下按
+  `.5 * (MAD(X-A, Baseline) + MAD(Only-A, Baseline))` 选择一个 validation origin；GT 不参与选择。
+- 统一图均为两行：第一行叠绘完整 history X 与候选提取的 A，标题注明 dataset、validation origin、channel、L=720、H=96；第二行叠绘 GT、Baseline-full、X-A、Only-A，并在标题写出三者的样本 MAE/MSE 和按 MSE 的最佳者。
+- 通过 raft 在 ETTh1、Weather、ETTm1 和7种成分（原五种、causal_ema、holt_local_linear）上重新推理，产生21张图及根目录 `manifest.csv`。输出位于 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/`。旧版按路由拆分的 `X_minus_A/`、`Only_A/` 产物未直接删除，已移动至 `/tmp/asymmetric_prediction_divergence_cases_*_previous/`，可恢复。
