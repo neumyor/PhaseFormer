@@ -40,7 +40,24 @@ def select(entries, count, separation):
     raise RuntimeError("candidate heap did not yield enough separated origins")
 
 
-def plot_case(path, dataset, component, origin, channel, x, a, baseline, asymmetric):
+def find_candidate_run(root, dataset, component, input_mode):
+    matches = []
+    for config_path in (root / "runs").glob("*/config.json"):
+        config = json.loads(config_path.read_text())
+        hyperparams = config["hyperparams"]
+        if config["dataset"] != dataset or config["horizon"] != 96:
+            continue
+        if hyperparams.get("weak_residual_asymmetric_component") != component:
+            continue
+        mode = hyperparams.get("weak_residual_asymmetric_input_mode", "minus_component")
+        if mode == input_mode:
+            matches.append(config_path.parent)
+    if len(matches) != 1:
+        raise RuntimeError(f"need one candidate run: {dataset=} {component=} {input_mode=}; found {matches}")
+    return matches[0]
+
+
+def plot_case(path, dataset, component, input_mode, origin, channel, x, a, baseline, asymmetric):
     horizon = len(baseline)
     history_x = np.arange(-len(x), 0)
     future_x = np.arange(horizon)
@@ -54,7 +71,8 @@ def plot_case(path, dataset, component, origin, channel, x, a, baseline, asymmet
     axes[1].legend(loc="upper left")
     divergence = float(np.abs(asymmetric - baseline).mean())
     axes[2].plot(future_x, baseline, color="#2878b5", lw=1.25, label="Baseline-full prediction")
-    axes[2].plot(future_x, asymmetric, color="#c43c39", lw=1.25, label="Asymmetric X-A prediction")
+    branch_label = "Asymmetric X-A" if input_mode == "minus_component" else "Only-A"
+    axes[2].plot(future_x, asymmetric, color="#c43c39", lw=1.25, label=f"{branch_label} prediction")
     axes[2].set_title(f"forecast-curve MAD = {divergence:.4f}; GT not used or displayed")
     axes[2].set_xlabel("forecast step"); axes[2].legend(loc="upper left")
     figure.savefig(path, dpi=150); plt.close(figure)
@@ -66,6 +84,9 @@ def main():
     parser.add_argument("--etth1-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_trend_discovery"))
     parser.add_argument("--weather-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_weather_h96_scratch"))
     parser.add_argument("--ettm1-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_ettm1_h96_scratch"))
+    parser.add_argument("--candidate-root", type=Path, default=None,
+                        help="Root holding candidates; omit to reuse the per-dataset baseline roots")
+    parser.add_argument("--input-mode", choices=("minus_component", "component_only"), default="minus_component")
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--channel", type=int, default=0)
     parser.add_argument("--origin-separation", type=int, default=96)
@@ -77,6 +98,7 @@ def main():
         parser.error("--top-k and --origin-separation must be positive")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     roots = {"ETTh1": args.etth1_root, "Weather": args.weather_root, "ETTm1": args.ettm1_root}
+    candidate_roots = {dataset: args.candidate_root or roots[dataset] for dataset in DATASETS}
     args.output.mkdir(parents=True, exist_ok=True)
     manifest = []
 
@@ -84,7 +106,7 @@ def main():
         baseline, experiment_args, _ = load_model(run_dir(roots[dataset], dataset, None))
         baseline.to(device).eval(); dataset_obj, loader = data_provider(experiment_args.dataset_args, "val")
         for component in COMPONENTS:
-            candidate, _, _ = load_model(run_dir(roots[dataset], dataset, component))
+            candidate, _, _ = load_model(find_candidate_run(candidate_roots[dataset], dataset, component, args.input_mode))
             candidate.to(device).eval()
             heap = []
             origin_cursor = 0
@@ -117,7 +139,7 @@ def main():
                 history = x[0, :, channel].cpu().numpy(); a = component_values[0, :, channel].cpu().numpy()
                 base = base[0, :, channel].cpu().numpy(); asymmetric = asymmetric[0, :, channel].cpu().numpy()
                 filename = f"case_{rank:02d}_origin_{origin}_channel_{channel}.png"
-                plot_case(folder / filename, dataset, component, origin, channel, history, a, base, asymmetric)
+                plot_case(folder / filename, dataset, component, args.input_mode, origin, channel, history, a, base, asymmetric)
                 rows.append({"rank": rank, "origin": origin, "channel": channel, "forecast_curve_mad": divergence, "figure": filename})
                 for key, value in (("origin", origin), ("channel", channel), ("forecast_curve_mad", divergence), ("history_x", history), ("component_a", a), ("baseline_prediction", base), ("asymmetric_prediction", asymmetric)):
                     arrays[key].append(value)
@@ -127,14 +149,14 @@ def main():
             np.savez_compressed(folder / "selected_cases.npz", **{key: np.asarray(value) for key, value in arrays.items()})
             (folder / "README.md").write_text(
                 "# Prediction-divergence cases\n\n"
-                "Ranking metric: mean absolute difference between Baseline-full and Asymmetric X-A forecasts over 96 steps. "
+                f"Candidate branch input mode: `{args.input_mode}`. Ranking metric: mean absolute difference between Baseline-full and candidate forecasts over 96 steps. "
                 "Ground truth is neither used for ranking nor shown in figures. Each plot shows X, extracted A, and the two forecasts.\n"
             )
             del candidate; torch.cuda.empty_cache()
         del baseline; torch.cuda.empty_cache()
     with (args.output / "manifest.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=manifest[0].keys()); writer.writeheader(); writer.writerows(manifest)
-    (args.output / "README.md").write_text(json.dumps({"selection": "top forecast-curve MAD, no GT", "top_k": args.top_k, "origin_separation": args.origin_separation, "datasets": DATASETS, "components": COMPONENTS}, indent=2) + "\n")
+    (args.output / "README.md").write_text(json.dumps({"selection": "top forecast-curve MAD, no GT", "input_mode": args.input_mode, "channel": args.channel, "top_k": args.top_k, "origin_separation": args.origin_separation, "datasets": DATASETS, "components": COMPONENTS}, indent=2) + "\n")
 
 
 if __name__ == "__main__":

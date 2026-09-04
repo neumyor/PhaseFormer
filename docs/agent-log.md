@@ -1717,3 +1717,6 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   与进行中的 only-A 全量训练争抢 RTX 4090，本次只完成静态校验，待训练释放 GPU 后再执行只读推理导出。
 - 用户随后将案例范围收紧为固定 channel 0、每个数据集×成分仅3个最大预测曲线分歧案例；脚本默认值已
   同步修改，排序公式和“不使用/不显示 GT”的约束不变。
+- 用户要求在 only-A 完成后同步导出两种路由。导出器现显式支持 `minus_component` 与 `component_only`，
+  并将分别写入 `research_runs/asymmetric_prediction_divergence_cases/X_minus_A/` 和 `.../Only_A/`；二者均
+  复用同一批此前 Baseline-full checkpoint，只有候选 checkpoint 与图例标签不同。
