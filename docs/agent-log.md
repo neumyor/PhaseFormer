@@ -1787,3 +1787,13 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   六个固定 validation 样本图、目录白名单及 ZIP 原件一致性均已校验，且未读 test、未训练模型。
 - 图形复核确认：ETTh1 24步与 ETTm1 约96步主周期不再主导 EMA/Holt 曲线；这一结论限于目标频带的抑制，不可表述
   为模型预测收益或分支利用证据。
+
+## 2026-09-04 — 三趋势成分非对称输入实验准备
+
+- 新增 `docs/Weak_residual_three_trend_components_experiment_plan.md` 与
+  `scripts/run_weak_residual_trend_comparison.py`。计划冻结 trend-filter、频谱约束 causal-EMA、频谱约束 Holt，
+  在 ETTh1/Weather/ETTm1、L720→H96、seed2021、validation-only 下执行 X-A/Only-A 共18项 candidate 训练，
+  并复用已有同协议 Baseline-full。
+- PhaseFormer 与 preset 配置现可显式传递 EMA/Holt/单侧局部线性参数到提取器；单测覆盖三种候选的真实 model
+  forward。当前 `nvidia-smi` 无法连接 GPU driver，故仅完成 CPU 静态/forward 与 launcher dry-run 校验；CUDA
+  1-epoch smoke 被如实保留为待办，未启动完整训练。

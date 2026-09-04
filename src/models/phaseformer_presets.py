@@ -1650,6 +1650,21 @@ class PhaseFormerPresetConfig:
         self.weak_residual_trend_filter_iterations = hyperparams.get(
             "weak_residual_trend_filter_iterations", 128
         )
+        self.weak_residual_causal_ema_alpha = hyperparams.get(
+            "weak_residual_causal_ema_alpha", 0.08
+        )
+        self.weak_residual_causal_local_linear_window = hyperparams.get(
+            "weak_residual_causal_local_linear_window", 72
+        )
+        self.weak_residual_causal_local_linear_sigma = hyperparams.get(
+            "weak_residual_causal_local_linear_sigma", 24.0
+        )
+        self.weak_residual_holt_level_alpha = hyperparams.get(
+            "weak_residual_holt_level_alpha", 0.15
+        )
+        self.weak_residual_holt_trend_beta = hyperparams.get(
+            "weak_residual_holt_trend_beta", 0.03
+        )
         self.use_adaptive_weak_period_gate = hyperparams.get(
             "use_adaptive_weak_period_gate", False
         )

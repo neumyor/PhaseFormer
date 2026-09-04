@@ -559,6 +559,21 @@ class PhaseFormer(DefaultPLModule):
         self.weak_residual_trend_filter_iterations = getattr(
             configs, "weak_residual_trend_filter_iterations", 128
         )
+        self.weak_residual_causal_ema_alpha = getattr(
+            configs, "weak_residual_causal_ema_alpha", 0.08
+        )
+        self.weak_residual_causal_local_linear_window = getattr(
+            configs, "weak_residual_causal_local_linear_window", 72
+        )
+        self.weak_residual_causal_local_linear_sigma = getattr(
+            configs, "weak_residual_causal_local_linear_sigma", 24.0
+        )
+        self.weak_residual_holt_level_alpha = getattr(
+            configs, "weak_residual_holt_level_alpha", 0.15
+        )
+        self.weak_residual_holt_trend_beta = getattr(
+            configs, "weak_residual_holt_trend_beta", 0.03
+        )
         self.use_phase_cycle_fusion = getattr(
             configs, "use_phase_cycle_fusion", False
         )
@@ -1737,6 +1752,11 @@ class PhaseFormer(DefaultPLModule):
                 trend_filter_kappa=self.weak_residual_trend_filter_kappa,
                 trend_filter_sample_interval_hours=self.weak_residual_trend_filter_sample_interval_hours,
                 trend_filter_iterations=self.weak_residual_trend_filter_iterations,
+                causal_ema_alpha=self.weak_residual_causal_ema_alpha,
+                causal_local_linear_window=self.weak_residual_causal_local_linear_window,
+                causal_local_linear_sigma=self.weak_residual_causal_local_linear_sigma,
+                holt_level_alpha=self.weak_residual_holt_level_alpha,
+                holt_trend_beta=self.weak_residual_holt_trend_beta,
             )
             residual_raw = (
                 component
