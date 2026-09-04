@@ -1843,3 +1843,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 用户澄清每个 dataset×component 需要三个、而非一个样本。`export_asymmetric_joint_route_cases.py` 已改为在每个 dataset×component 内按 `MAD(X-A prediction, Only-A prediction)` 降序选择3个 channel-0 validation origin，并要求这三个 origin 两两相隔至少96步；GT 始终不参与选择。
 - 同时修复上一版绘图循环错误复用最后一个候选预测数组的问题；现在绘制和保存的 X-A/Only-A 预测均从当前 component 的候选数组读取。
 - 重新导出63张两行图（3 datasets×7 components×3 cases）至 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/`。最终校验通过：根 manifest 恰有63行，每 dataset×component 均为rank 1--3且满足间隔，三个 `selected_cases.npz` 预测数组逐项重算的 X-A/Only-A MAD 与 manifest 精确一致，63张PNG有63个不同 SHA-256。被替换的21图版本移至 `/tmp/asymmetric_prediction_divergence_cases_joint_21_previous/`，可恢复。
+
+## 2026-09-04 — 统一案例筛选与可视化的独立 GPU 复核
+
+- 对63个案例从 checkpoint 独立重跑完整 validation：每个 dataset×component 的 manifest origin 均精确等于按 channel-0 的 `mean_t |X-A prediction - Only-A prediction|` 降序、并在同组内执行96步间隔后的前三项；GT 未进入该排序。
+- 两路候选的趋势提取超参数逐组件一致。每个 `selected_cases.npz` 的 Baseline、X-A、Only-A 预测与独立重跑逐元素一致（`atol=1e-6`）；A 与同一历史窗口按同一GPU提取路径重算一致（最大绝对差 `2.38e-6`，为float32舍入）。
+- 静态检查确认图的第一行是 full X 与 A，标题包含 dataset/origin/channel/L720/H96；第二行是 GT、Baseline、X-A、Only-A，标题列出三者 MAE/MSE，并按最小 MSE 标注最佳者。因此当前筛选及可视化逻辑符合用户指定口径。
