@@ -1705,3 +1705,13 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   随后已启动 ETTh1/Weather/ETTm1 × 五个 A 的15项完整训练；原始输出写入
   `research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96_scratch/`。汇总结果待全部 checkpoint
   完成后再生成，不能把中途指标作为结论。
+
+## 2026-09-04 — X-A 预测曲线分歧案例导出（待 only-A 训练结束后执行）
+
+- 按用户的新筛选口径新增 `scripts/export_asymmetric_prediction_divergence_cases.py`。单位为完整 validation
+  的 `origin × channel`，排序量固定为未来96步 `mean(|prediction_asymmetric - prediction_baseline|)`，不读取、
+  不参与排序、也不显示 ground truth。每个 ETTh1/Weather/ETTm1 × 五个 A 导出10个最大分歧且 origin 相隔
+  至少96步的案例。
+- 每个 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/` 子目录将保存选例 CSV、
+  数组和十张图；图依次显示完整历史 X、提取的 A 轨迹、Baseline-full 与 Asymmetric X-A 的预测曲线。为避免
+  与进行中的 only-A 全量训练争抢 RTX 4090，本次只完成静态校验，待训练释放 GPU 后再执行只读推理导出。
