@@ -1837,3 +1837,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 发现初版联合选择使用“两个路由相对 Baseline 的平均分歧”，会被同一异常窗口主导，多个成分因此复用相同 origin，不适合作为逐成分图册。选择规则修正为直接最大化 `MAD(X-A prediction, Only-A prediction)`；在每个数据集内，七个成分的已选 origin 两两至少相隔96步。
 - 重导出的21张图全部位于 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/`。最终程序校验通过：`manifest.csv` 恰有21行，ETTh1/Weather/ETTm1 各7行、每行对应文件存在、同数据集 origin 满足96步间隔；21张 PNG 有21个不同 SHA-256。人工抽查 ETTm1/smooth_local 的两行图，确认标题与四条预测曲线均正确。
 - 被替换的首版统一图未直接删除，已移动至 `/tmp/asymmetric_prediction_divergence_cases_joint_previous/`，可恢复。
+
+## 2026-09-04 — 每个成分的三例 X-A / Only-A 最大分歧图
+
+- 用户澄清每个 dataset×component 需要三个、而非一个样本。`export_asymmetric_joint_route_cases.py` 已改为在每个 dataset×component 内按 `MAD(X-A prediction, Only-A prediction)` 降序选择3个 channel-0 validation origin，并要求这三个 origin 两两相隔至少96步；GT 始终不参与选择。
+- 同时修复上一版绘图循环错误复用最后一个候选预测数组的问题；现在绘制和保存的 X-A/Only-A 预测均从当前 component 的候选数组读取。
+- 重新导出63张两行图（3 datasets×7 components×3 cases）至 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/`。最终校验通过：根 manifest 恰有63行，每 dataset×component 均为rank 1--3且满足间隔，三个 `selected_cases.npz` 预测数组逐项重算的 X-A/Only-A MAD 与 manifest 精确一致，63张PNG有63个不同 SHA-256。被替换的21图版本移至 `/tmp/asymmetric_prediction_divergence_cases_joint_21_previous/`，可恢复。

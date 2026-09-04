@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Export one joint X-A/Only-A validation case per dataset and component.
+"""Export three joint X-A/Only-A validation cases per dataset and component.
 
 Selection uses neither ground truth nor per-model error: it maximizes the
-96-step forecast-curve MAD between the X-A and Only-A predictions.  Within a
-dataset the selected origins for different components must be at least one
-horizon apart, so the final component catalogue does not repeat one sample.
-The resulting two-row plot shows X and A, then GT and all three forecasts.
+96-step forecast-curve MAD between the X-A and Only-A predictions. For every
+dataset and component it retains the top three origins, with each pair at least
+one forecast horizon apart. The resulting two-row plot shows X and A, then GT
+and all three forecasts.
 """
 
 from __future__ import annotations
@@ -39,6 +39,8 @@ COMPONENTS = (
     "smooth_multiscale", "causal_ema", "holt_local_linear",
 )
 DELIVERED = {"causal_ema", "holt_local_linear"}
+TOP_K = 3
+ORIGIN_SEPARATION = 96
 BASELINE_ROOTS = {
     "ETTh1": ROOT / "research_runs/weak_residual_asymmetric_trend_discovery",
     "Weather": ROOT / "research_runs/weak_residual_asymmetric_weather_h96_scratch",
@@ -154,47 +156,58 @@ def main() -> None:
             if device.type == "cuda":
                 torch.cuda.empty_cache()
 
-        selected_origins = []
         for candidate in candidates:
             component = candidate["component"]
             order = np.argsort(candidate["route_gap"])[::-1]
-            origin = next(
-                (int(item) for item in order
-                 if all(abs(int(item) - previous) >= 96 for previous in selected_origins)),
-                None,
-            )
-            if origin is None:
-                raise RuntimeError(f"cannot select a separated origin: {dataset} {component}")
-            selected_origins.append(origin)
-            x = torch.from_numpy(histories[origin:origin + 1]).to(device).float()
-            component_a = extract_trend_component(x, component, **trend_kwargs(candidate["minus_hp"]))
             folder = output / dataset / component
             folder.mkdir(parents=True)
-            figure = folder / f"origin_{origin}_channel_0.png"
-            metrics = plot_case(
-                figure, dataset, component, origin, 0,
-                histories[origin, :, 0], component_a[0, :, 0].cpu().numpy(),
-                truths[origin, :, 0], baseline_preds[origin, :, 0],
-                minus_preds[origin, :, 0], only_preds[origin, :, 0],
-            )
-            row = {
-                "dataset": dataset, "component": component, "origin": origin, "channel": 0,
-                "x_minus_a_vs_only_a_forecast_curve_mad": float(candidate["route_gap"][origin]),
-                "baseline_forecast_curve_mad": 0.0,
-                "x_minus_a_vs_baseline_forecast_curve_mad": float(candidate["gap_minus"][origin]),
-                "only_a_vs_baseline_forecast_curve_mad": float(candidate["gap_only"][origin]),
-                "figure": str(figure.relative_to(output)), **metrics,
-            }
-            manifest.append(row)
-            np.savez_compressed(folder / "selected_case.npz", **{
-                "origin": np.asarray(origin), "channel": np.asarray(0),
-                "history_x": histories[origin, :, 0], "component_a": component_a[0, :, 0].cpu().numpy(),
-                "ground_truth": truths[origin, :, 0], "baseline_prediction": baseline_preds[origin, :, 0],
-                "x_minus_a_prediction": minus_preds[origin, :, 0], "only_a_prediction": only_preds[origin, :, 0],
+            selected_origins = []
+            for item in order:
+                origin = int(item)
+                if not all(abs(origin - previous) >= ORIGIN_SEPARATION for previous in selected_origins):
+                    continue
+                selected_origins.append(origin)
+                if len(selected_origins) == TOP_K:
+                    break
+            if len(selected_origins) != TOP_K:
+                raise RuntimeError(f"cannot select {TOP_K} separated origins: {dataset} {component}")
+            selected_arrays = {key: [] for key in (
+                "origin", "channel", "history_x", "component_a", "ground_truth",
+                "baseline_prediction", "x_minus_a_prediction", "only_a_prediction",
+            )}
+            for rank, origin in enumerate(selected_origins, 1):
+                x = torch.from_numpy(histories[origin:origin + 1]).to(device).float()
+                component_a = extract_trend_component(x, component, **trend_kwargs(candidate["minus_hp"]))
+                figure = folder / f"case_{rank:02d}_origin_{origin}_channel_0.png"
+                metrics = plot_case(
+                    figure, dataset, component, origin, 0,
+                    histories[origin, :, 0], component_a[0, :, 0].cpu().numpy(),
+                    truths[origin, :, 0], baseline_preds[origin, :, 0],
+                    candidate["minus_preds"][origin, :, 0], candidate["only_preds"][origin, :, 0],
+                )
+                manifest.append({
+                    "dataset": dataset, "component": component, "rank": rank,
+                    "origin": origin, "channel": 0,
+                    "x_minus_a_vs_only_a_forecast_curve_mad": float(candidate["route_gap"][origin]),
+                    "baseline_forecast_curve_mad": 0.0,
+                    "x_minus_a_vs_baseline_forecast_curve_mad": float(candidate["gap_minus"][origin]),
+                    "only_a_vs_baseline_forecast_curve_mad": float(candidate["gap_only"][origin]),
+                    "figure": str(figure.relative_to(output)), **metrics,
+                })
+                for key, value in (
+                    ("origin", origin), ("channel", 0), ("history_x", histories[origin, :, 0]),
+                    ("component_a", component_a[0, :, 0].cpu().numpy()),
+                    ("ground_truth", truths[origin, :, 0]), ("baseline_prediction", baseline_preds[origin, :, 0]),
+                    ("x_minus_a_prediction", candidate["minus_preds"][origin, :, 0]),
+                    ("only_a_prediction", candidate["only_preds"][origin, :, 0]),
+                ):
+                    selected_arrays[key].append(value)
+            np.savez_compressed(folder / "selected_cases.npz", **{
+                key: np.asarray(value) for key, value in selected_arrays.items()
             })
             (folder / "README.md").write_text(
-                "Selection: maximum X-A/Only-A forecast-curve MAD on channel 0, with selected origins across "
-                "components in the same dataset separated by at least 96 steps. "
+                "Selection: top three X-A/Only-A forecast-curve MAD cases on channel 0, with selected origins "
+                "within this component separated by at least 96 steps. "
                 "Ground truth is not used to select the sample; it is shown to interpret the two model errors.\n"
             )
         del candidates
@@ -202,7 +215,7 @@ def main() -> None:
         writer = csv.DictWriter(handle, fieldnames=manifest[0].keys())
         writer.writeheader(); writer.writerows(manifest)
     (output / "README.md").write_text(json.dumps({
-        "selection": "maximum X-A/Only-A forecast-curve MAD; one horizon of separation between component origins; GT excluded",
+        "selection": "top three X-A/Only-A forecast-curve MAD cases per dataset and component; one horizon separation within each component; GT excluded",
         "display": "two rows: full X plus extracted A; GT plus Baseline, X-A, Only-A forecasts",
         "datasets": DATASETS, "components": COMPONENTS, "channel": 0, "lookback": 720, "horizon": 96,
     }, indent=2) + "\n")
