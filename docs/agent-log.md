@@ -1713,5 +1713,7 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   不参与排序、也不显示 ground truth。每个 ETTh1/Weather/ETTm1 × 五个 A 导出10个最大分歧且 origin 相隔
   至少96步的案例。
 - 每个 `research_runs/asymmetric_prediction_divergence_cases/<dataset>/<component>/` 子目录将保存选例 CSV、
-  数组和十张图；图依次显示完整历史 X、提取的 A 轨迹、Baseline-full 与 Asymmetric X-A 的预测曲线。为避免
+  数组和案例图；图依次显示完整历史 X、提取的 A 轨迹、Baseline-full 与 Asymmetric X-A 的预测曲线。为避免
   与进行中的 only-A 全量训练争抢 RTX 4090，本次只完成静态校验，待训练释放 GPU 后再执行只读推理导出。
+- 用户随后将案例范围收紧为固定 channel 0、每个数据集×成分仅3个最大预测曲线分歧案例；脚本默认值已
+  同步修改，排序公式和“不使用/不显示 GT”的约束不变。

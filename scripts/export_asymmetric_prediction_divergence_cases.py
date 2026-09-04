@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export all-channel cases with maximal Baseline/Asymmetric forecast divergence.
+"""Export channel-0 cases with maximal Baseline/Asymmetric forecast divergence.
 
 Ranking intentionally uses only the two model forecasts, never ground truth:
 mean_t(abs(asymmetric_prediction - baseline_prediction)).  The model's normal
@@ -66,7 +66,8 @@ def main():
     parser.add_argument("--etth1-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_trend_discovery"))
     parser.add_argument("--weather-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_weather_h96_scratch"))
     parser.add_argument("--ettm1-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_ettm1_h96_scratch"))
-    parser.add_argument("--top-k", type=int, default=10)
+    parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--channel", type=int, default=0)
     parser.add_argument("--origin-separation", type=int, default=96)
     parser.add_argument("--require-cuda", action="store_true")
     args = parser.parse_args()
@@ -95,12 +96,13 @@ def main():
                     base, _, _ = baseline(x.float(), xm.float(), decoder, ym.float())
                     asymmetric, _, _ = candidate(x.float(), xm.float(), decoder, ym.float())
                     divergence = (asymmetric - base).abs().mean(dim=1).cpu().numpy()
+                    if args.channel < 0 or args.channel >= divergence.shape[1]:
+                        raise ValueError(f"channel {args.channel} is unavailable for {dataset}")
                     for row in range(x.size(0)):
                         origin = origin_cursor + row
-                        for channel, value in enumerate(divergence[row]):
-                            heapq.heappush(heap, (float(value), int(origin), channel))
-                            if len(heap) > 5000:
-                                heapq.heappop(heap)
+                        heapq.heappush(heap, (float(divergence[row, args.channel]), int(origin), args.channel))
+                        if len(heap) > 5000:
+                            heapq.heappop(heap)
                     origin_cursor += x.size(0)
             selected = select(heap, args.top_k, args.origin_separation)
             folder = args.output / dataset / component; folder.mkdir(parents=True, exist_ok=True)
