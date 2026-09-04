@@ -1723,3 +1723,6 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - `scripts/run_after_only_trend_exports.sh` 已作为低优先级后处理队列启动：每60秒检查 only-A 的15项状态，
   只在全部 completed 后串行进行两套 GPU 推理导出；若训练非正常停止则显式退出而不生成不完整结果。队列日志
   位于 `research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96_control/export_after_training.log`。
+- only-A 训练现已15/15完成。后台等待会话未保留日志，故在确认 GPU 空闲后直接顺序执行两套只读导出；
+  `X_minus_A/` 与 `Only_A/` 均经程序校验为15个 dataset×component 目录、每目录3条 channel-0 记录和3张图，
+  各45个案例、合计90张图。抽查确认图的三面板为 X、A、两条预测，GT 未被使用或显示。
