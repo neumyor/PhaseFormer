@@ -1,5 +1,12 @@
 # Agent Maintenance Log
 
+## 2026-09-04 — 冻结 Weak Residual 非对称输入实验设计
+
+- 新增 `docs/Weak_residual_asymmetric_component_plan.md`：PhaseFormer 路径始终读取完整 X，NLinear
+  residual 路径读取 `X-A`，首个 A 固定为 D3 cycle-levels；范围为五数据集×H96/H192×seed2021。
+- 用户明确排除 sham/matched-control，文档相应限定可作的增量价值结论。新增强制共享 RevIN 约束：完整
+  X 只估计一次统计量，`X-A` 必须使用同一统计量标准化和同一统计量反归一化，禁止分支独立归一化。
+
 ## 2026-09-03 — 补齐 D3 recent-linear 的完整证据链
 
 - 主线叙事新增 D3 recent-linear 专节：给出末值锚定 OLS 提取公式、remove-trained 恢复结果、D4 全
