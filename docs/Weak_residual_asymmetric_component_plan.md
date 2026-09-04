@@ -43,6 +43,13 @@ Chambolle--Pock primal--dual 求解，优化目标与上式相同；先按逐样
 `research_runs/causal_trend_component_visual_probe/`。该诊断没有训练预测模型、没有读取 test，不能据此作出
 预测性能或分支利用结论。
 
+后续若把单侧方法纳入训练，参数不得按图形直觉或预测指标选择，而要先在不读取标签的历史频谱上冻结：以
+主峰及相邻频点的 `trend_power/input_power <= 0.10` 为周期泄漏约束，在满足约束的设置中选择最大的更新增益
+（避免不必要地退化为全局常数）。当前八个 validation 历史窗口的筛查表明：ETTh1 的主峰为 24 步，EMA/Holt
+可取 `alpha≈.024`、`beta=alpha/4`；ETTm1 主峰约 90--103 步，应取 `alpha≈.006`、`beta=alpha/4`。Weather
+没有同样尖锐的短周期主峰，不能把 72 步能量机械地视为应删除的周期。单侧局部线性在 ETTm1 的完整候选网格
+中最低主峰泄漏仍约 0.19，未通过该约束，故当前淘汰而不进入重训。
+
 此前的首个候选 A1 `cycle-levels`：对 `P=24`、`K=30` 个周期，
 
 ```text

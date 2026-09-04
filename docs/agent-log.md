@@ -1766,3 +1766,14 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `research_runs/causal_trend_component_visual_probe/`，含六张图、统计量、Markdown 与 ZIP；未训练模型、未读 test。
 - 图形检查：三种单侧方法消除了 A4/A5 的末端 replicate-padding 问题；但在 ETTh1/ETTm1 当前冻结尺度下均保留
   较明显主周期，尤其局部线性与 Holt。它们暂不进入 X-A/Only-A 训练，除非先重新定义目标时间尺度并独立复核。
+
+## 2026-09-04 — 单侧趋势参数的频谱泄漏约束
+
+- 用户指出“无 padding 伪影”不足以证明趋势纯度。对三个数据集八个固定 validation 历史窗口（仅输入、无标签）
+  的平均 periodogram 及参数网格，新增/冻结筛选规则：趋势在输入主周期及相邻 bin 的能量比例必须不高于 0.10，
+  再在合格项中取最大更新增益，避免后验按预测指标调参。
+- ETTh1 的最强主峰为24步；EMA/Holt 的 `alpha=.024`、`beta=.006` 满足泄漏约束。ETTm1 的主峰集中在约90--103步；
+  `alpha=.006`、`beta=.0015` 满足约束。Weather 没有同样尖锐的短周期峰，暂不套用机械的72步抑制规则。
+- 单侧局部线性在 ETTm1 从72到720步窗口、多个带宽的网格中最低泄漏仍约0.19，未达到趋势纯度阈值；因此不能以
+  “调大窗口”包装为趋势候选，当前不进入 X-A/Only-A 重训。提取器已支持显式参数传入，以便仅对通过该约束的
+  EMA/Holt 候选进行后续冻结与训练。

@@ -183,6 +183,11 @@ def extract_trend_component(
     trend_filter_kappa: float = 100.0,
     trend_filter_sample_interval_hours: float = 1.0,
     trend_filter_iterations: int = 128,
+    causal_ema_alpha: float = 0.08,
+    causal_local_linear_window: int = 72,
+    causal_local_linear_sigma: float = 24.0,
+    holt_level_alpha: float = 0.15,
+    holt_trend_beta: float = 0.03,
 ) -> torch.Tensor:
     """Extract one frozen trend component from ``(B,L,C)`` input."""
     if component not in TREND_COMPONENTS:
@@ -216,11 +221,19 @@ def extract_trend_component(
             )
         )
     if component == "causal_ema":
-        return _endpoint_anchor(_causal_ema(x))
+        return _endpoint_anchor(_causal_ema(x, causal_ema_alpha))
     if component == "causal_local_linear":
-        return _endpoint_anchor(_causal_local_linear(x))
+        return _endpoint_anchor(
+            _causal_local_linear(
+                x, window=causal_local_linear_window, sigma=causal_local_linear_sigma
+            )
+        )
     if component == "holt_local_linear":
-        return _endpoint_anchor(_holt_local_linear(x))
+        return _endpoint_anchor(
+            _holt_local_linear(
+                x, level_alpha=holt_level_alpha, trend_beta=holt_trend_beta
+            )
+        )
     # Difference of short- and long-scale smoothed trends.  Both smoothers use
     # the observed history only; endpoint anchoring retains NLinear's last value.
     return _endpoint_anchor(
