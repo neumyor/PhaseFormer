@@ -1,5 +1,20 @@
 # Agent Maintenance Log
 
+## 2026-09-04 — ETTh1 A1 高误差 validation 案例审计
+
+- 新增 `scripts/analyze_weak_residual_asymmetric_cases.py`，从本轮完成的 best-validation checkpoint
+  重建 ETTh1-H96 Baseline-full 与 Asymmetric-A1（CycleLevels），只读取 validation split 的 channel 0。
+  脚本对全部 2,785 个 origin 计算逐样本 MAE/MSE，交替抽取两个模型的高 MAE 样本，并要求起点间隔至少
+  96 步，避免十张图只是高度重叠的滑窗。
+- 完成并人工检查 10 张图：每张上图展示完整 720 步 `X` 和 NLinear 实际可见的 `X-A1`，下图展示最后
+  192 步历史、96 步真值、Baseline-full 与 Asymmetric-A1 预测。审计包位于
+  `research_runs/weak_residual_asymmetric_etth1_h96_a1_cases/`，含完整逐样本 CSV、选例数组、报告、图和 ZIP；
+  未读取 test。
+- Channel-0 全 validation 平均：A1 条件 MAE -0.21%、MSE +0.46% 相对 baseline，说明全变量汇总中的
+  A1 退化不能直接外推为单一 channel-0 上的平均 MAE 退化。10 个困难且非重叠案例同时包含 A1 恶化
+  （例如 sample 810: +0.1385 MAE）和改善（sample 2487: -0.1420），支持后续按时序状态而非只按
+  平均指标分析。
+
 ## 2026-09-04 — Weak Residual 非对称趋势性成分发现阶段
 
 - 在 `weak_residual_exploration` 分支将五个冻结候选写入
