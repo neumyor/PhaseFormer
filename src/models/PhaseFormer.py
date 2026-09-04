@@ -67,6 +67,7 @@ from src.models.residual_topology import (
     LatentResidualPath,
     PhaseSlotResidualHead,
 )
+from src.models.asymmetric_trend_components import extract_trend_component
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -522,6 +523,20 @@ class PhaseFormer(DefaultPLModule):
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
         if not self.use_residual_head:
             self.use_weak_period_residual = False
+        # In the asymmetric-input study this flag changes only the input to the
+        # NLinear-style residual path.  The phase path always receives X.
+        self.weak_residual_asymmetric_component = getattr(
+            configs, "weak_residual_asymmetric_component", "none"
+        )
+        self.weak_residual_trend_recent_window = getattr(
+            configs, "weak_residual_trend_recent_window", 96
+        )
+        self.weak_residual_trend_local_sigma = getattr(
+            configs, "weak_residual_trend_local_sigma", 24.0
+        )
+        self.weak_residual_trend_long_sigma = getattr(
+            configs, "weak_residual_trend_long_sigma", 72.0
+        )
         self.use_phase_cycle_fusion = getattr(
             configs, "use_phase_cycle_fusion", False
         )
@@ -1685,6 +1700,24 @@ class PhaseFormer(DefaultPLModule):
             x_in, stats = self.revin.normalize(x_enc)
         else:
             x_in = x_enc.float()
+            stats = None
+        if self.weak_residual_asymmetric_component == "none":
+            # Preserve the historical flag-off route bit-for-bit.
+            residual_x_in = x_in
+        else:
+            component = extract_trend_component(
+                x_enc.float(),
+                self.weak_residual_asymmetric_component,
+                period_len=self.period_len,
+                recent_window=self.weak_residual_trend_recent_window,
+                local_sigma=self.weak_residual_trend_local_sigma,
+                long_sigma=self.weak_residual_trend_long_sigma,
+            )
+            residual_raw = x_enc.float() - component
+            residual_x_in = (
+                self.revin.normalize_with_stats(residual_raw, stats)
+                if self.use_revin else residual_raw
+            )
         # 2) Use original input (no cross-channel fusion)
         x_fused = x_in  # (B, L, C)
 
@@ -1890,7 +1923,7 @@ class PhaseFormer(DefaultPLModule):
                         x_in, x_mark_enc=x_mark_enc, x_mark_dec=x_mark_dec
                     )
                 else:
-                    residual_hat = self.weak_period_residual(x_in)
+                    residual_hat = self.weak_period_residual(residual_x_in)
                 residual_forecast_normalized = residual_hat
                 if self.use_rcrf_fusion:
                     if self.use_anchored_phase_cycle_fusion:

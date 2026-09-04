@@ -31,6 +31,19 @@ class RevIN(nn.Module):
             xn = xn * self.weight + self.bias
         return xn, (mu, sigma)
 
+    def normalize_with_stats(self, x, stats):
+        """Normalize a second branch in the coordinate system of ``normalize``.
+
+        This deliberately does not recompute per-branch moments.  It is used by
+        asymmetric residual-input experiments, where only branch visibility is
+        allowed to change.
+        """
+        mu, sigma = stats
+        xn = (x - mu) / sigma
+        if self.affine:
+            xn = xn * self.weight + self.bias
+        return xn
+
     def denormalize(self, y, stats):  # y: (B, L', C)
         mu, sigma = stats
         return y * sigma + mu

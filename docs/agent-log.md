@@ -1,5 +1,23 @@
 # Agent Maintenance Log
 
+## 2026-09-04 — Weak Residual 非对称趋势性成分发现阶段
+
+- 在 `weak_residual_exploration` 分支将五个冻结候选写入
+  `docs/Weak_residual_asymmetric_component_plan.md`：cycle-levels、recent-linear、global-linear、
+  local Gaussian-smoothed trend、multi-scale Gaussian-smoothed trend。所有成分逐样本逐变量提取且
+  末点锚定为零；A4/A5 均基于 Gaussian smoothing，不使用二次曲率拟合。
+- 新增 `src/models/asymmetric_trend_components.py`，并为 `RevIN` 加入共享统计量归一化。PhaseFormer
+  的相位路径保持完整 `X`；只有 shared NLinear weak-residual 路径读取 `X-A`，且使用完整 `X` 的同一
+  RevIN 统计量。flag-off 时复用原 `X_norm`，保持历史 weak-residual 前向数值等价。
+- 新增 `scripts/run_weak_residual_asymmetric_trend.py`：在 ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192
+  × seed 2021 上顺序运行 10 个 Baseline-full 与 50 个 asymmetric-A validation-only full training，支持
+  `--resume`。运行与监控记录固定在
+  `research_runs/weak_residual_asymmetric_trend_discovery/`，确认 test 在 validation 选定成分后才启动。
+- 校验：raft 环境运行
+  `python -m unittest tests.test_asymmetric_trend_components tests.test_presets_and_loss -v`，14 项通过；
+  launcher 的 cycle-levels 20-job dry-run 通过。GPU 为 RTX 4090（24 GiB）；仓库规则列出的 py310
+  解释器在该主机不存在，故按既有约定使用 raft。
+
 ## 2026-09-04 — 冻结 Weak Residual 非对称输入实验设计
 
 - 新增 `docs/Weak_residual_asymmetric_component_plan.md`：PhaseFormer 路径始终读取完整 X，NLinear

@@ -9,6 +9,7 @@ DEFAULT_NORM_HYPERS = dict(revin_affine=False, revin_eps=1e-5)
 DEFAULT_HORIZONS = [96, 192, 336, 720]
 ABLATION_MODES = {
     "weak_residual",
+    "weak_residual_asymmetric_trend",
     "adaptive_residual",
     "time_mark",
     "phase_trend",
@@ -765,6 +766,17 @@ def get_ablation_overrides(mode):
             use_weak_period_residual=True,
             weak_period_residual_gate_init=0.2,
             weak_period_residual_head_type="shared",
+        )
+    if mode == "weak_residual_asymmetric_trend":
+        return dict(
+            scheme_name="weak_residual_asymmetric_trend",
+            use_weak_period_residual=True,
+            weak_period_residual_gate_init=0.2,
+            weak_period_residual_head_type="shared",
+            weak_residual_asymmetric_component="cycle_levels",
+            weak_residual_trend_recent_window=96,
+            weak_residual_trend_local_sigma=24.0,
+            weak_residual_trend_long_sigma=72.0,
         )
     if mode == "adaptive_residual":
         return dict(
@@ -1609,6 +1621,18 @@ class PhaseFormerPresetConfig:
         )
         self.weak_period_residual_head_type = hyperparams.get(
             "weak_period_residual_head_type", "shared"
+        )
+        self.weak_residual_asymmetric_component = hyperparams.get(
+            "weak_residual_asymmetric_component", "none"
+        )
+        self.weak_residual_trend_recent_window = hyperparams.get(
+            "weak_residual_trend_recent_window", 96
+        )
+        self.weak_residual_trend_local_sigma = hyperparams.get(
+            "weak_residual_trend_local_sigma", 24.0
+        )
+        self.weak_residual_trend_long_sigma = hyperparams.get(
+            "weak_residual_trend_long_sigma", 72.0
         )
         self.use_adaptive_weak_period_gate = hyperparams.get(
             "use_adaptive_weak_period_gate", False
