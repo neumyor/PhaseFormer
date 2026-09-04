@@ -774,6 +774,7 @@ def get_ablation_overrides(mode):
             weak_period_residual_gate_init=0.2,
             weak_period_residual_head_type="shared",
             weak_residual_asymmetric_component="cycle_levels",
+            weak_residual_asymmetric_input_mode="minus_component",
             weak_residual_trend_recent_window=96,
             weak_residual_trend_local_sigma=24.0,
             weak_residual_trend_long_sigma=72.0,
@@ -1624,6 +1625,9 @@ class PhaseFormerPresetConfig:
         )
         self.weak_residual_asymmetric_component = hyperparams.get(
             "weak_residual_asymmetric_component", "none"
+        )
+        self.weak_residual_asymmetric_input_mode = hyperparams.get(
+            "weak_residual_asymmetric_input_mode", "minus_component"
         )
         self.weak_residual_trend_recent_window = hyperparams.get(
             "weak_residual_trend_recent_window", 96

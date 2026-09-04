@@ -528,6 +528,19 @@ class PhaseFormer(DefaultPLModule):
         self.weak_residual_asymmetric_component = getattr(
             configs, "weak_residual_asymmetric_component", "none"
         )
+        # ``minus_component`` is the established asymmetric ablation: NLinear
+        # sees X-A. ``component_only`` is its complementary information probe:
+        # PhaseFormer keeps full X while NLinear can see only the extracted A.
+        self.weak_residual_asymmetric_input_mode = getattr(
+            configs, "weak_residual_asymmetric_input_mode", "minus_component"
+        )
+        if self.weak_residual_asymmetric_input_mode not in {
+            "minus_component", "component_only"
+        }:
+            raise ValueError(
+                "weak_residual_asymmetric_input_mode must be 'minus_component' "
+                "or 'component_only'"
+            )
         self.weak_residual_trend_recent_window = getattr(
             configs, "weak_residual_trend_recent_window", 96
         )
@@ -1713,7 +1726,11 @@ class PhaseFormer(DefaultPLModule):
                 local_sigma=self.weak_residual_trend_local_sigma,
                 long_sigma=self.weak_residual_trend_long_sigma,
             )
-            residual_raw = x_enc.float() - component
+            residual_raw = (
+                component
+                if self.weak_residual_asymmetric_input_mode == "component_only"
+                else x_enc.float() - component
+            )
             residual_x_in = (
                 self.revin.normalize_with_stats(residual_raw, stats)
                 if self.use_revin else residual_raw

@@ -113,3 +113,24 @@ best-validation checkpoint；该阶段产生的指标只能用于候选发现，
 不能表述为：
 
 > PhaseFormer 完全没有使用 CycleLevels；或该实验已用 matched control 排除所有扰动/分布变化解释。
+
+## 7. 补充探针：NLinear 只保留趋势成分 A（only-A）
+
+为检验残差分支在没有其余历史细节时能否仅依靠某项趋势性信息作出有用校正，补充固定的
+`component_only` 条件。PhaseFormer 分支继续接收完整 `X`；NLinear 分支接收 `A` 本身，而非此前的
+`X-A`。两条分支仍共享由完整 `X` 计算的 RevIN 统计量。A 保持既有末点锚定定义，因此该条件只提供
+趋势的相对历史形状，而不额外泄漏原始末值水平。
+
+固定运行范围为 ETTh1、Weather、ETTm1，`L=720 → H=96`、period=24、seed=2021、Huber、最多30 epoch，
+以 validation 最优 checkpoint 汇总 MAE/MSE；不读取 test，也不做样本选择。比较对象复用上一阶段在同一
+设置、同一 seed 训练的 Baseline-full weak-residual checkpoint。该对照回答的是“仅有 A 是否足以给
+NLinear 分支提供增量校正线索”，不能单独证明因果利用或与 `X-A` 的强弱关系。
+
+```bash
+/home/wangjing/miniconda3/envs/raft/bin/python \
+  scripts/run_weak_residual_asymmetric_only_trend.py --require-cuda --resume
+```
+
+原始训练日志与 checkpoint 位于
+`research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96_scratch/`；只保留整体统计的审计包将写到
+`research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96/`。

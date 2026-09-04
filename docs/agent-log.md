@@ -1694,3 +1694,14 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   只做既有 checkpoint 的 validation 推理和出图；语法检查及目录白名单、案例数/去重、图片引用、ZIP 原件
   一致性校验均通过。全通道分布显示每个数据集×成分组合都含有正负两类样本影响，因此这些结果用于定位
   条件性行为模式，不能单独证明某趋势成分被某分支稳定利用或忽略。
+
+## 2026-09-04 — Weak-residual only-A 趋势信息补充实验（进行中）
+
+- 按用户的反向输入约束，新增 `weak_residual_asymmetric_input_mode=component_only`：PhaseFormer 保持完整
+  `X`，NLinear 残差支路仅接收端点锚定的 A，并继续复用完整 X 的 RevIN 统计；缺省
+  `minus_component` 保留此前 `X-A` 路由。新增三数据集 H96 launcher，并在计划中冻结 five-A、
+  seed2021、30-epoch 上限、validation-only 协议和同设置既有 Baseline-full 对照。
+- RTX 4090/raft 上的 ETTh1 cycle-levels、1 epoch 冒烟训练通过（71,295 参数、验证链路正常，未读 test）。
+  随后已启动 ETTh1/Weather/ETTm1 × 五个 A 的15项完整训练；原始输出写入
+  `research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96_scratch/`。汇总结果待全部 checkpoint
+  完成后再生成，不能把中途指标作为结论。
