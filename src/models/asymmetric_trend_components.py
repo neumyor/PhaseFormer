@@ -17,6 +17,7 @@ TREND_COMPONENTS = {
     "global_linear",
     "smooth_local",
     "smooth_multiscale",
+    "trend_filter",
 }
 
 
@@ -53,6 +54,61 @@ def _gaussian_smooth(x: torch.Tensor, sigma: float) -> torch.Tensor:
     return smoothed.transpose(1, 2)
 
 
+def _second_difference(values: torch.Tensor) -> torch.Tensor:
+    """Second finite difference along the history axis, ``(B,L,C)->(B,L-2,C)``."""
+    return values[:, :-2, :] - 2.0 * values[:, 1:-1, :] + values[:, 2:, :]
+
+
+def _second_difference_transpose(values: torch.Tensor) -> torch.Tensor:
+    """Adjoint of :func:`_second_difference` without a dense ``L×L`` matrix."""
+    result = values.new_zeros(values.size(0), values.size(1) + 2, values.size(2))
+    result[:, :-2, :] += values
+    result[:, 1:-1, :] -= 2.0 * values
+    result[:, 2:, :] += values
+    return result
+
+
+def _trend_filter(
+    x: torch.Tensor,
+    *,
+    kappa: float,
+    sample_interval_hours: float,
+    iterations: int,
+) -> torch.Tensor:
+    """GPU-batched first-order trend-filter approximation.
+
+    This solves ``min_f .5||x-f||² + lambda||D²f||₁`` by a fixed-iteration
+    Chambolle--Pock primal-dual method.  It deliberately contains no CPU or
+    per-series linear algebra in ``forward``.  Dividing each series by its
+    own standard deviation makes the fixed normalized penalty exactly
+    equivalent to ``lambda=kappa*std(x)*(1 hour/dt)²`` after rescaling.
+    """
+    if sample_interval_hours <= 0:
+        raise ValueError("trend-filter sample interval must be positive")
+    if iterations <= 0:
+        raise ValueError("trend-filter iterations must be positive")
+    # ``unbiased=False`` is the frozen population sample scale used by the
+    # visual diagnostic.  Constant series have an identically zero component.
+    scale = x.std(dim=1, keepdim=True, unbiased=False).clamp_min(torch.finfo(x.dtype).eps)
+    z = x / scale
+    penalty = float(kappa) * (1.0 / float(sample_interval_hours)) ** 2
+    # ||D²||² <= 16.  The strongly-convex primal acceleration is important
+    # at the intentionally large frozen penalty (kappa=100).
+    tau = sigma = 0.24
+    fitted = z
+    extrapolated = z
+    dual = z.new_zeros(z.size(0), z.size(1) - 2, z.size(2))
+    for _ in range(int(iterations)):
+        dual = (dual + sigma * _second_difference(extrapolated)).clamp(-penalty, penalty)
+        updated = (fitted + tau * z - tau * _second_difference_transpose(dual)) / (1.0 + tau)
+        theta = (1.0 + 2.0 * tau) ** -0.5
+        extrapolated = updated + theta * (updated - fitted)
+        fitted = updated
+        tau *= theta
+        sigma /= theta
+    return fitted * scale
+
+
 def extract_trend_component(
     x: torch.Tensor,
     component: str,
@@ -61,8 +117,11 @@ def extract_trend_component(
     recent_window: int = 96,
     local_sigma: float = 24.0,
     long_sigma: float = 72.0,
+    trend_filter_kappa: float = 100.0,
+    trend_filter_sample_interval_hours: float = 1.0,
+    trend_filter_iterations: int = 128,
 ) -> torch.Tensor:
-    """Extract one of the five frozen trend components from ``(B,L,C)`` input."""
+    """Extract one frozen trend component from ``(B,L,C)`` input."""
     if component not in TREND_COMPONENTS:
         raise ValueError(f"Unsupported asymmetric trend component: {component}")
     if x.ndim != 3:
@@ -84,6 +143,15 @@ def extract_trend_component(
         return _linear_trend(x, 0)
     if component == "smooth_local":
         return _endpoint_anchor(_gaussian_smooth(x, local_sigma))
+    if component == "trend_filter":
+        return _endpoint_anchor(
+            _trend_filter(
+                x,
+                kappa=trend_filter_kappa,
+                sample_interval_hours=trend_filter_sample_interval_hours,
+                iterations=trend_filter_iterations,
+            )
+        )
     # Difference of short- and long-scale smoothed trends.  Both smoothers use
     # the observed history only; endpoint anchoring retains NLinear's last value.
     return _endpoint_anchor(

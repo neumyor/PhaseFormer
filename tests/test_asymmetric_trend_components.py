@@ -24,6 +24,13 @@ class AsymmetricTrendComponentTests(unittest.TestCase):
             self.assertEqual(a.shape, x.shape)
             torch.testing.assert_close(a[:, -1, :], torch.zeros_like(a[:, -1, :]))
 
+    def test_trend_filter_is_scale_equivariant(self):
+        torch.manual_seed(8)
+        x = torch.randn(2, 720, 3)
+        a = extract_trend_component(x, "trend_filter", trend_filter_iterations=32)
+        scaled = extract_trend_component(3.7 * x, "trend_filter", trend_filter_iterations=32)
+        torch.testing.assert_close(scaled, 3.7 * a, rtol=2e-5, atol=2e-5)
+
     def test_shared_revin_stats_match_full_branch_when_component_is_zero(self):
         x = torch.randn(2, 720, 3)
         revin = RevIN(3, affine=True)

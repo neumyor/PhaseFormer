@@ -18,9 +18,15 @@ PhaseFormer 主分支始终看到完整输入 `X`，NLinear 分支失去 A 后�
 |A3|`global_linear`|对完整 720 点做逐变量 OLS，斜率为 `b`，`A[t]=(t-(L-1))b`|全窗口长期线性漂移|
 |A4|`smooth_local`|`S_24(X)` 为 replicate-pad 的高斯平滑（标准差 24、半径 72），`A[t]=S_24(X)[t]-S_24(X)[L-1]`|不依赖参数拟合的局部平滑趋势|
 |A5|`smooth_multiscale`|`A[t]=[S_24(X)[t]-S_72(X)[t]]-[S_24(X)[L-1]-S_72(X)[L-1]]`|近期平滑趋势相对更长期平滑趋势的偏离/转向|
+|A6|`trend_filter`|令 `f=argmin_f 0.5∑_t(X[t]-f[t])²+λ∑_t|f[t]-2f[t+1]+f[t+2]|`，`A[t]=f[t]-f[L-1]`；`λ=100·std(X)·(1 hour/Δt)²`|允许数据驱动折点的连续分段线性中尺度趋势；ETTh1/Weather 取 `Δt=1h`，ETTm1 取 `.25h`|
 
 这里 `S_σ` 的卷积核为 `exp(-u²/(2σ²))` 后归一化，`u∈[-ceil(3σ),ceil(3σ)]`；边界采用
 replicate padding。A4、A5 均是基于平滑获取的趋势性信息，而非二次曲线或曲率拟合。
+
+A6 使用一阶 trend filtering（对二阶差分施加 L1 惩罚）。训练实现采用固定 256 步的 GPU 批量
+Chambolle--Pock primal--dual 求解，优化目标与上式相同；先按逐样本逐变量 `std(X)` 缩放、在标准化空间
+固定惩罚后缩放回原空间，严格等价于表中的 `λ` 规则。它不在每个 forward 执行 CPU ADMM 或逐变量 CPU
+线性代数。`κ=100` 由六个固定 validation 历史窗口的独立可视诊断预先冻结，未使用预测标签或 test。
 
 此前的首个候选 A1 `cycle-levels`：对 `P=24`、`K=30` 个周期，
 
@@ -134,3 +140,19 @@ NLinear 分支提供增量校正线索”，不能单独证明因果利用或与
 原始训练日志与 checkpoint 位于
 `research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96_scratch/`；只保留整体统计的审计包将写到
 `research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96/`。
+
+## 8. 补充探针：A6 trend filter 的 X-A 与 Only-A
+
+固定 A6 后，在 ETTh1、Weather、ETTm1 上各运行 `L=720→H=96`、seed 2021、最多 30 epoch 的完整训练。
+两种路由均复用已有同协议 Baseline-full，不重新训练 baseline；训练、checkpoint 选择和比较只读取
+validation，绝不实例化 test loader。原始日志、checkpoint 和监控记录存入
+`research_runs/weak_residual_asymmetric_trend_filter_h96_scratch/`，最终审计包单独保留在
+`research_runs/weak_residual_asymmetric_trend_filter_h96_audit/`。
+
+```bash
+/home/wangjing/miniconda3/envs/raft/bin/python \
+  scripts/run_weak_residual_asymmetric_trend_filter.py --require-cuda --resume
+```
+
+`minus_component` 表示 NLinear residual 接收 `X-A6`；`component_only` 表示其仅接收 `A6`。两者都共享
+完整 `X` 的 RevIN 统计量，PhaseFormer 始终接收完整 `X`。

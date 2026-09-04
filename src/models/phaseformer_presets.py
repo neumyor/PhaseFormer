@@ -778,6 +778,9 @@ def get_ablation_overrides(mode):
             weak_residual_trend_recent_window=96,
             weak_residual_trend_local_sigma=24.0,
             weak_residual_trend_long_sigma=72.0,
+            weak_residual_trend_filter_kappa=100.0,
+            weak_residual_trend_filter_sample_interval_hours=1.0,
+            weak_residual_trend_filter_iterations=128,
         )
     if mode == "adaptive_residual":
         return dict(
@@ -1637,6 +1640,15 @@ class PhaseFormerPresetConfig:
         )
         self.weak_residual_trend_long_sigma = hyperparams.get(
             "weak_residual_trend_long_sigma", 72.0
+        )
+        self.weak_residual_trend_filter_kappa = hyperparams.get(
+            "weak_residual_trend_filter_kappa", 100.0
+        )
+        self.weak_residual_trend_filter_sample_interval_hours = hyperparams.get(
+            "weak_residual_trend_filter_sample_interval_hours", 1.0
+        )
+        self.weak_residual_trend_filter_iterations = hyperparams.get(
+            "weak_residual_trend_filter_iterations", 128
         )
         self.use_adaptive_weak_period_gate = hyperparams.get(
             "use_adaptive_weak_period_gate", False

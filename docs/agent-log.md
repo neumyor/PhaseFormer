@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-09-04 — A6 trend-filter 非对称 Weak Residual 探针
+
+- 新增冻结的趋势滤波趋势性成分 `A6=trend_filter`，定义为一阶 trend filtering：
+  `min_f .5||X-f||²+λ||D²f||₁`，端点锚定 `A=f-f[-1]`，其中
+  `λ=100·std(X)·(1 hour/Δt)²`；ETTh1/Weather 的 `Δt=1h`、ETTm1 的 `Δt=.25h`。
+- 训练路径使用固定 256 步 GPU 批量、强凸加速的 Chambolle--Pock 近似，避免每个 forward 的 CPU ADMM；PhaseFormer
+  继续看完整 X，NLinear 通过完整-X 共享 RevIN stats 接收 X-A 或 Only-A。新增启动器
+  `scripts/run_weak_residual_asymmetric_trend_filter.py`；正式原始训练工件写到
+  `research_runs/weak_residual_asymmetric_trend_filter_h96_scratch/`，最终六文件审计包将写到
+  `research_runs/weak_residual_asymmetric_trend_filter_h96_audit/`。待完成：GPU 数值近似抽查、六个完整训练与审计。
+
 ## 2026-09-04 — ETTm1 H96 五趋势成分全流程及样本级审计
 
 - 在 RTX 4090 / raft（CUDA 12.1）完成 ETTm1、L720→H96、seed2021 的 Baseline-full 与五个 `X-A`

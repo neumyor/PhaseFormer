@@ -1725,6 +1725,9 @@ class PhaseFormer(DefaultPLModule):
                 recent_window=self.weak_residual_trend_recent_window,
                 local_sigma=self.weak_residual_trend_local_sigma,
                 long_sigma=self.weak_residual_trend_long_sigma,
+                trend_filter_kappa=self.weak_residual_trend_filter_kappa,
+                trend_filter_sample_interval_hours=self.weak_residual_trend_filter_sample_interval_hours,
+                trend_filter_iterations=self.weak_residual_trend_filter_iterations,
             )
             residual_raw = (
                 component
