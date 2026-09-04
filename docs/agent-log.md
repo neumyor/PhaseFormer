@@ -1,5 +1,34 @@
 # Agent Maintenance Log
 
+## 2026-09-04 — ETTm1 H96 五趋势成分全流程及样本级审计
+
+- 在 RTX 4090 / raft（CUDA 12.1）完成 ETTm1、L720→H96、seed2021 的 Baseline-full 与五个 `X-A`
+  residual 分支条件共6次完整训练；30 epoch上限、Huber、最低 validation-loss checkpoint，未读取 test。
+  所有任务完成且无失败，训练记录位于 `research_runs/weak_residual_asymmetric_ettm1_h96_scratch/`。
+- 分析器的 dataset 白名单补充 ETTm1，并将审计打包器泛化为 Weather/ETTm1。最终包
+  `research_runs/weak_residual_asymmetric_ettm1_h96_audit/` 严格含六个审计文件和 `figures/`：6个模型结果、
+  57,125 条 channel-0 validation paired-error 行、五成分各10个最大正 MAE 差且起点间隔≥96步案例、共50图；
+  Markdown/ZIP的50个图片引用已核验。
+- channel-0 validation 基线 MAE/MSE=0.4949/0.4916。相对变化：CycleLevels +0.53%/-0.61%，
+  RecentLinear -2.30%/-3.99%，GlobalLinear -2.41%/-4.05%，LocalSmooth +0.16%/-1.04%，
+  MultiScaleSmooth +0.38%/-0.38%。这是单seed、validation观察；最大正差案例由排序规则产生，不能替代
+  总体平均方向或多seed确认。
+
+## 2026-09-04 — Weather H96 五趋势成分全流程及样本级审计
+
+- 使用 experiment-and-error-analysis 流程，在 RTX 4090 / raft（CUDA 12.1）完成 Weather、L720→H96、
+  seed2021 的 Baseline-full 加五个 `X-A` residual 分支条件的 6 次完整训练；30 epoch 上限、Huber、
+  lowest validation-loss checkpoint，未读取 test。训练原始可恢复记录位于
+  `research_runs/weak_residual_asymmetric_weather_h96_scratch/`。
+- 新增 Weather 范围入口与 `scripts/package_weather_asymmetric_component_cases.py`。最终审计包
+  `research_runs/weak_residual_asymmetric_weather_h96_audit/` 严格只含六个审计文件及 `figures/`，汇总五个
+  成分的 6 个模型结果、25,875 条 channel-0 validation-origin paired error 行和各成分 10 个最大正 MAE
+  差案例（共50图）；ZIP 与 Markdown 的50个图引用逐项核验。
+- channel 0 validation 聚合结果相对 baseline（MAE/MSE=0.2208/0.0938）：CycleLevels -14.18%/-24.59%、
+  RecentLinear -5.70%/-12.22%、GlobalLinear -6.37%/-12.22%、LocalSmooth -4.21%/-7.09%、
+  MultiScaleSmooth +0.75%/-1.37%。这些是单 seed validation 观察；且各成分的案例按最大正误差差挑选，
+  不应与总体平均方向混淆。
+
 ## 2026-09-04 — 修正五成分案例图的测试模型标签
 
 - 用户审阅 RecentLinear sample 936 图时发现图中预测差异不如汇总 MAE 直观。人工复核确认：两预测的差异是

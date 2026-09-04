@@ -101,7 +101,7 @@ def plot_case(path, component, sample_id, history, residual_history, truth, base
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--discovery-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_trend_discovery"))
-    parser.add_argument("--dataset", default="ETTh1", choices=["ETTh1", "Weather"])
+    parser.add_argument("--dataset", default="ETTh1", choices=["ETTh1", "ETTm1", "Weather"])
     parser.add_argument("--horizon", type=int, default=96, choices=[96])
     parser.add_argument("--component", choices=sorted(TREND_COMPONENTS), default="cycle_levels")
     parser.add_argument("--output", type=Path, required=True)
