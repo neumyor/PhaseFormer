@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -23,7 +22,7 @@ if str(ROOT) not in sys.path:
 
 from src.dataset.data_factory import data_provider
 from src.models.PhaseFormer import PhaseFormer
-from src.models.asymmetric_trend_components import extract_trend_component
+from src.models.asymmetric_trend_components import TREND_COMPONENTS, extract_trend_component
 from src.models.phaseformer_presets import PhaseFormerPresetConfig, make_exp_args
 
 
@@ -58,31 +57,28 @@ def load_model(run_dir: Path, device: torch.device):
 
 
 def select_cases(baseline_mae: np.ndarray, candidate_mae: np.ndarray, count: int = 10, min_separation: int = 96):
-    ranked = []
-    baseline_rank = np.argsort(baseline_mae)[::-1]
-    candidate_rank = np.argsort(candidate_mae)[::-1]
-    for baseline_index, candidate_index in zip(baseline_rank, candidate_rank):
-        ranked.append(("baseline_high_mae", int(baseline_index)))
-        ranked.append(("candidate_high_mae", int(candidate_index)))
+    """Find non-overlapping cases where hiding A most increases channel-0 MAE."""
+    ranked = np.argsort(candidate_mae - baseline_mae)[::-1]
     selected, seen = [], set()
-    for group, index in ranked:
+    for index in ranked:
+        index = int(index)
         if index not in seen and all(abs(index - prior) >= min_separation for _, prior in selected):
-            selected.append((group, index))
+            selected.append(("candidate_mae_regression", index))
             seen.add(index)
         if len(selected) == count:
             return selected
     raise RuntimeError("not enough distinct validation cases")
 
 
-def plot_case(path, sample_id, history, residual_history, truth, baseline, candidate, baseline_mae, candidate_mae):
+def plot_case(path, component, sample_id, history, residual_history, truth, baseline, candidate, baseline_mae, candidate_mae):
     horizon = len(truth)
     fig, axes = plt.subplots(2, 1, figsize=(11, 5.7), dpi=150, sharex=False)
     history_x = np.arange(-len(history), 0)
     future_x = np.arange(horizon)
     axes[0].plot(history_x, history, color="#555555", lw=0.85, label="full history X")
-    axes[0].plot(history_x, residual_history, color="#E07A2D", lw=0.85, alpha=0.9, label="residual history X-A1")
+    axes[0].plot(history_x, residual_history, color="#E07A2D", lw=0.85, alpha=0.9, label=f"residual history X-{component}")
     axes[0].axvline(0, color="#999999", lw=0.8)
-    axes[0].set_title(f"ETTh1 H96 validation sample {sample_id}, channel 0 — A1 CycleLevels")
+    axes[0].set_title(f"ETTh1 H96 validation sample {sample_id}, channel 0 — {component}")
     axes[0].set_ylabel("scaled value")
     axes[0].legend(loc="upper left", ncol=2, fontsize=8)
 
@@ -105,7 +101,8 @@ def plot_case(path, sample_id, history, residual_history, truth, baseline, candi
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--discovery-root", type=Path, default=Path("research_runs/weak_residual_asymmetric_trend_discovery"))
-    parser.add_argument("--output", type=Path, default=Path("research_runs/weak_residual_asymmetric_etth1_h96_a1_cases"))
+    parser.add_argument("--component", choices=sorted(TREND_COMPONENTS), default="cycle_levels")
+    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--require-cuda", action="store_true")
     args = parser.parse_args()
@@ -115,7 +112,8 @@ def main():
         raise RuntimeError("--require-cuda was requested but CUDA is unavailable")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     baseline_run = find_run(args.discovery_root, None)
-    candidate_run = find_run(args.discovery_root, "cycle_levels")
+    component_name = args.component
+    candidate_run = find_run(args.discovery_root, component_name)
     baseline_model, exp_args, baseline_checkpoint = load_model(baseline_run, device)
     candidate_model, _, candidate_checkpoint = load_model(candidate_run, device)
     exp_args.dataset_args.num_workers = args.num_workers
@@ -128,7 +126,7 @@ def main():
             decoder = baseline_model._build_decoder_input(y.float())
             base, _, _ = baseline_model(x.float(), xm.float(), decoder, ym.float())
             candidate, _, _ = candidate_model(x.float(), xm.float(), decoder, ym.float())
-            component = extract_trend_component(x.float(), "cycle_levels", period_len=24)
+            component = extract_trend_component(x.float(), component_name, period_len=24)
             histories.append(x[:, :, 0].cpu().numpy())
             removed_histories.append((x - component)[:, :, 0].cpu().numpy())
             truths.append(y[:, -96:, 0].float().cpu().numpy())
@@ -155,7 +153,7 @@ def main():
     with (args.output / "sample_errors.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
     for rank, (group, sample_id) in enumerate(selected, start=1):
-        plot_case(figures / f"case_{rank:02d}_sample_{sample_id}.png", sample_id, history[sample_id], removed_history[sample_id], truth[sample_id], baseline[sample_id], candidate[sample_id], baseline_mae[sample_id], candidate_mae[sample_id])
+        plot_case(figures / f"case_{rank:02d}_sample_{sample_id}.png", component_name, sample_id, history[sample_id], removed_history[sample_id], truth[sample_id], baseline[sample_id], candidate[sample_id], baseline_mae[sample_id], candidate_mae[sample_id])
         for key, value in (("sample_id", sample_id), ("group", group), ("history", history[sample_id]), ("removed_history", removed_history[sample_id]), ("truth", truth[sample_id]), ("baseline_prediction", baseline[sample_id]), ("candidate_prediction", candidate[sample_id]), ("baseline_mae", baseline_mae[sample_id]), ("candidate_mae", candidate_mae[sample_id])):
             selected_arrays[key].append(value)
     np.savez_compressed(args.output / "selected_cases.npz", **{key: np.asarray(value) for key, value in selected_arrays.items()})
@@ -167,26 +165,26 @@ def main():
                     "selected_cases": len(selected)}]
     with (args.output / "results.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(result_rows[0])); writer.writeheader(); writer.writerows(result_rows)
-    run = {"setting": "ETTh1_H96_seed2021_validation", "component": "cycle_levels", "channel": 0,
-           "selection": "top 10 unique samples after interleaving baseline/candidate MAE ranks with >=96-start-index separation", "split": "validation only", "test_read": False,
+    run = {"setting": "ETTh1_H96_seed2021_validation", "component": component_name, "channel": 0,
+           "selection": "top 10 candidate-minus-baseline MAE regressions with >=96-start-index separation", "split": "validation only", "test_read": False,
            "baseline_run": str(baseline_run), "candidate_run": str(candidate_run), "baseline_checkpoint": str(baseline_checkpoint), "candidate_checkpoint": str(candidate_checkpoint)}
     (args.output / "run.yaml").write_text(json.dumps(run, indent=2) + "\n")
     table = "\n".join(f"| {rank} | {group} | {sample_id} | {baseline_mae[sample_id]:.4f} | {candidate_mae[sample_id]:.4f} | {candidate_mae[sample_id]-baseline_mae[sample_id]:+.4f} |" for rank, (group, sample_id) in enumerate(selected, 1))
-    report = f"""# ETTh1 A1 CycleLevels validation high-error cases
+    report = f"""# ETTh1 {component_name} validation maximal-regression cases
 
 Setting: ETTh1, lookback 720, horizon 96, seed 2021, validation split only, channel 0.  No test data was loaded.
 
-The comparison is independently trained Baseline-full Weak Residual versus Asymmetric-A1, where the PhaseFormer path sees X and only the NLinear residual path sees X-A1.  A1 is the endpoint-anchored 24-step cycle-level trajectory.
+The comparison is independently trained Baseline-full Weak Residual versus Asymmetric-{component_name}, where the PhaseFormer path sees X and only the NLinear residual path sees X-A.  The component is extracted deterministically and endpoint anchored before residual-branch RevIN normalization.
 
 Channel-0 aggregate error: baseline MAE {baseline_mae.mean():.4f}, asymmetric MAE {candidate_mae.mean():.4f} ({100*(candidate_mae.mean()/baseline_mae.mean()-1):+.2f}%); baseline MSE {baseline_mse.mean():.4f}, asymmetric MSE {candidate_mse.mean():.4f} ({100*(candidate_mse.mean()/baseline_mse.mean()-1):+.2f}%).
 
-The ten cases are selected by interleaving the descending baseline and asymmetric channel-0 MAE rankings, retaining the first ten distinct validation origins whose start indices are at least 96 steps apart.  This avoids plotting nearly identical overlapping windows while still selecting difficult cases for both models; it is not a significance test.
+The ten cases are the largest positive values of `Asymmetric channel-0 MAE - Baseline channel-0 MAE`, retaining origins at least 96 steps apart.  Thus every displayed case is one where denying this component to NLinear is maximally harmful within this validation split; it is not a significance test.
 
 | Rank | Selection source | Validation sample | Baseline MAE | Asymmetric MAE | Delta |
 |---:|---|---:|---:|---:|---:|
 {table}
 
-Each figure has the full 720-step history and the exact A1-removed residual-branch history above; below it has the final 192 history steps, future truth, and both predictions.  Corresponding numeric arrays are in `selected_cases.npz`; all channel-0 validation-origin errors are in `sample_errors.csv`.
+Each figure has the full 720-step history and the exact component-removed residual-branch history above; below it has the final 192 history steps, future truth, and both predictions.  Corresponding numeric arrays are in `selected_cases.npz`; all channel-0 validation-origin errors are in `sample_errors.csv`.
 """
     report_path = args.output / "objective_error_analysis.md"; report_path.write_text(report)
     with zipfile.ZipFile(args.output / "objective_error_analysis.zip", "w", zipfile.ZIP_DEFLATED) as archive:

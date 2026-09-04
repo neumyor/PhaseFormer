@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-09-04 — ETTh1 五类趋势成分的最大误差差异案例导出
+
+- 用户将案例选择目标改为“两个预测模型误差差异最大”，而不是共同高误差。`analyze_weak_residual_asymmetric_cases.py`
+  现按 `Asymmetric-A channel-0 MAE − Baseline-full channel-0 MAE` 从大到小选取 10 个 validation origin，
+  并要求起点间隔至少 96 步；因此每张图展示的是该成分被 NLinear 遮蔽后最明显的正向退化案例。
+- 在 ETTh1-H96、seed2021、完整 validation 的 channel 0 上完成五个成分各 10 个案例、合计 50 张图。
+  五个独立可审计包在 `research_runs/weak_residual_asymmetric_etth1_h96_component_gap_cases/` 下，每个包均有
+  `run.yaml/results.csv/sample_errors.csv/selected_cases.npz/objective_error_analysis.md/.zip/figures`；未读取 test。
+- 最大单样本 MAE 差异分别为：CycleLevels +0.1498（sample 812）、RecentLinear +0.2243（936）、
+  GlobalLinear +0.0991（587）、LocalSmooth +0.1271（810）、MultiScaleSmooth +0.0282（1597）。该案例筛选
+  是用于定位机制敏感状态，不能替代全 validation 的平均效应或显著性判断。
+
 ## 2026-09-04 — ETTh1 A1 高误差 validation 案例审计
 
 - 新增 `scripts/analyze_weak_residual_asymmetric_cases.py`，从本轮完成的 best-validation checkpoint
