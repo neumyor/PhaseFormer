@@ -50,6 +50,10 @@ Chambolle--Pock primal--dual 求解，优化目标与上式相同；先按逐样
 没有同样尖锐的短周期主峰，不能把 72 步能量机械地视为应删除的周期。单侧局部线性在 ETTm1 的完整候选网格
 中最低主峰泄漏仍约 0.19，未通过该约束，故当前淘汰而不进入重训。
 
+频谱约束后的 EMA/Holt 图形复核（不含 `causal_local_linear`）位于
+`research_runs/causal_trend_component_spectral_probe/`。六个固定样本上，ETTh1 的24步和 ETTm1 的约96步
+主周期均不再主导 EMA/Holt 曲线；该观察仅说明提取器抑制了目标频带，仍不等同于预测收益。
+
 此前的首个候选 A1 `cycle-levels`：对 `P=24`、`K=30` 个周期，
 
 ```text

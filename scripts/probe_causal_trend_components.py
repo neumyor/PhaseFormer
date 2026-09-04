@@ -23,9 +23,16 @@ from src.models.asymmetric_trend_components import extract_trend_component
 
 LOOKBACK = 720
 CHANNEL = 0
-COMPONENTS = ("trend_filter", "causal_ema", "causal_local_linear", "holt_local_linear")
-COLORS = {"trend_filter": "#1f77b4", "causal_ema": "#ff7f0e", "causal_local_linear": "#2ca02c", "holt_local_linear": "#9467bd"}
-LABELS = {"trend_filter": "Trend filter A6", "causal_ema": "Causal EMA", "causal_local_linear": "Causal local-linear", "holt_local_linear": "Holt local-linear"}
+COMPONENTS = ("trend_filter", "causal_ema", "holt_local_linear")
+COLORS = {"trend_filter": "#1f77b4", "causal_ema": "#ff7f0e", "holt_local_linear": "#9467bd"}
+LABELS = {"trend_filter": "Trend filter A6", "causal_ema": "Spectrally constrained causal EMA", "holt_local_linear": "Spectrally constrained Holt"}
+# Frozen before plotting.  ETTh1/ETTm1 use their input-spectrum leakage gate;
+# Weather has no narrow short-period peak, so uses the conservative hourly value.
+SMOOTHING = {
+    "ETTh1": {"alpha": 0.024, "beta": 0.006},
+    "Weather": {"alpha": 0.024, "beta": 0.006},
+    "ETTm1": {"alpha": 0.006, "beta": 0.0015},
+}
 
 
 def main() -> None:
@@ -46,7 +53,14 @@ def main() -> None:
             extracted: dict[str, np.ndarray] = {}
             with torch.no_grad():
                 for component in COMPONENTS:
-                    kwargs = {"trend_filter_iterations": 256, "trend_filter_sample_interval_hours": spec.sample_interval_hours}
+                    params = SMOOTHING[spec.name]
+                    kwargs = {
+                        "trend_filter_iterations": 256,
+                        "trend_filter_sample_interval_hours": spec.sample_interval_hours,
+                        "causal_ema_alpha": params["alpha"],
+                        "holt_level_alpha": params["alpha"],
+                        "holt_trend_beta": params["beta"],
+                    }
                     extracted[component] = extract_trend_component(input_tensor, component, **kwargs)[0, :, 0].numpy()
             time = np.arange(LOOKBACK)
             figure, axis = plt.subplots(figsize=(15, 5.6), constrained_layout=True)
@@ -77,10 +91,10 @@ def main() -> None:
     (args.output / "sample_errors.csv").write_text("setting\n", encoding="utf-8")
     np.savez(args.output / "selected_cases.npz", setting=np.asarray([item[0] for item in selected]), origin=np.asarray([item[1] for item in selected]), channel=np.zeros(len(selected), dtype=np.int64))
     (args.output / "run.yaml").write_text(
-        "experiment_id: causal_trend_component_visual_probe\nsplit: validation_only\ndatasets: [ETTh1, Weather, ETTm1]\nlookback: 720\nhorizon: 96\nchannel: 0\ncomponents: [trend_filter, causal_ema, causal_local_linear, holt_local_linear]\nforecast_model_training: false\ntest_accessed: false\n",
+        "experiment_id: causal_trend_component_spectral_probe\nsplit: validation_only\ndatasets: [ETTh1, Weather, ETTm1]\nlookback: 720\nhorizon: 96\nchannel: 0\ncomponents: [trend_filter, causal_ema, holt_local_linear]\nparameters: {ETTh1: {alpha: 0.024, beta: 0.006}, Weather: {alpha: 0.024, beta: 0.006}, ETTm1: {alpha: 0.006, beta: 0.0015}}\nforecast_model_training: false\ntest_accessed: false\n",
         encoding="utf-8",
     )
-    report = ["# Causal trend-component visual probe", "", "Validation-only extraction comparison; no forecast model was trained and no test data was read.", "", "All curves use the exact extractor implementation and are endpoint anchored. Trend filter uses the frozen 256-step GPU-compatible Chambolle--Pock approximation; causal components use no right-boundary padding.", "", "## Figures", ""]
+    report = ["# Spectrally constrained causal trend-component visual probe", "", "Validation-only extraction comparison; no forecast model was trained and no test data was read.", "", "All curves use the exact extractor implementation and are endpoint anchored. Trend filter uses the frozen 256-step GPU-compatible Chambolle--Pock approximation; causal components use no right-boundary padding. Causal local-linear is excluded because it failed the predeclared periodic-leakage gate on ETTm1.", "", "ETTh1 uses EMA/Holt alpha=0.024 and beta=0.006; ETTm1 uses alpha=0.006 and beta=0.0015. Weather has no narrow short-period peak, so uses the conservative hourly alpha=0.024 and beta=0.006 rather than a prediction-selected value.", "", "## Figures", ""]
     for setting, origin in selected:
         dataset = setting.split("_validation_")[0]
         name = f"{dataset}_validation_origin{origin}_channel0.png"

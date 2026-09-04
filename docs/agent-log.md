@@ -1777,3 +1777,13 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 单侧局部线性在 ETTm1 从72到720步窗口、多个带宽的网格中最低泄漏仍约0.19，未达到趋势纯度阈值；因此不能以
   “调大窗口”包装为趋势候选，当前不进入 X-A/Only-A 重训。提取器已支持显式参数传入，以便仅对通过该约束的
   EMA/Holt 候选进行后续冻结与训练。
+
+## 2026-09-04 — 频谱约束后的 EMA/Holt 可视复核
+
+- 按用户要求从后续候选与新版图中排除 `causal_local_linear`，并更新
+  `scripts/probe_causal_trend_components.py`：仅绘制 A6 trend-filter、频谱约束 EMA 和频谱约束 Holt。
+- 新审计包位于 `research_runs/causal_trend_component_spectral_probe/`。ETTh1/Weather 固定
+  `alpha=.024,beta=.006`，ETTm1 固定 `alpha=.006,beta=.0015`；Weather 参数为保守的小时级设置，非预测指标选择。
+  六个固定 validation 样本图、目录白名单及 ZIP 原件一致性均已校验，且未读 test、未训练模型。
+- 图形复核确认：ETTh1 24步与 ETTm1 约96步主周期不再主导 EMA/Holt 曲线；这一结论限于目标频带的抑制，不可表述
+  为模型预测收益或分支利用证据。
