@@ -1849,3 +1849,8 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 对63个案例从 checkpoint 独立重跑完整 validation：每个 dataset×component 的 manifest origin 均精确等于按 channel-0 的 `mean_t |X-A prediction - Only-A prediction|` 降序、并在同组内执行96步间隔后的前三项；GT 未进入该排序。
 - 两路候选的趋势提取超参数逐组件一致。每个 `selected_cases.npz` 的 Baseline、X-A、Only-A 预测与独立重跑逐元素一致（`atol=1e-6`）；A 与同一历史窗口按同一GPU提取路径重算一致（最大绝对差 `2.38e-6`，为float32舍入）。
 - 静态检查确认图的第一行是 full X 与 A，标题包含 dataset/origin/channel/L720/H96；第二行是 GT、Baseline、X-A、Only-A，标题列出三者 MAE/MSE，并按最小 MSE 标注最佳者。因此当前筛选及可视化逻辑符合用户指定口径。
+
+## 2026-09-04 — X-A / Only-A / Baseline 聚合差异表
+
+- 新增 `scripts/summarize_asymmetric_component_metrics.py`，从当前图册实际使用的 Baseline-full、X-A、Only-A checkpoint 的 `metrics.csv` 生成 validation 聚合表；执行前校验 dataset、L=720、H=96、percent=100 与 seed=2021。
+- 结果写入 `research_runs/asymmetric_prediction_divergence_cases/XA_OnlyA_Baseline_validation_comparison.md`。按 ETTh1、Weather、ETTm1 分表列出7种成分的 MSE/MAE 及 X-A、Only-A 相对 Baseline-full 的绝对/百分比差。差值定义为候选减 Baseline，负值为更好；文档明确它不能和按预测分歧选择的局部案例误差混读。
