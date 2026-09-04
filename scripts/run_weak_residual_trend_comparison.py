@@ -14,6 +14,9 @@ PYTHON = Path("/home/wangjing/miniconda3/envs/raft/bin/python")
 DATASETS = ("ETTh1", "Weather", "ETTm1")
 COMPONENTS = ("trend_filter", "causal_ema", "holt_local_linear")
 INTERVAL_HOURS = {"ETTh1": 1.0, "Weather": 1.0, "ETTm1": 0.25}
+# ETTm1's strong approximately-96-step peak needs this many fixed CP updates
+# before A6 meets the frozen <=0.10 periodic-leakage criterion.
+TREND_FILTER_ITERATIONS = {"ETTh1": 256, "Weather": 256, "ETTm1": 4096}
 CAUSAL_PARAMS = {
     "ETTh1": {"alpha": 0.024, "beta": 0.006},
     # Weather has no narrow short-period peak; this is the predeclared
@@ -30,7 +33,7 @@ def command(dataset: str, component: str, input_mode: str, args: argparse.Namesp
         "weak_residual_asymmetric_input_mode": input_mode,
         "weak_residual_trend_filter_kappa": 100.0,
         "weak_residual_trend_filter_sample_interval_hours": INTERVAL_HOURS[dataset],
-        "weak_residual_trend_filter_iterations": args.trend_filter_iterations,
+        "weak_residual_trend_filter_iterations": TREND_FILTER_ITERATIONS[dataset],
         "weak_residual_causal_ema_alpha": params["alpha"],
         "weak_residual_holt_level_alpha": params["alpha"],
         "weak_residual_holt_trend_beta": params["beta"],
@@ -55,7 +58,6 @@ def main() -> None:
     parser.add_argument("--output-dir", default="research_runs/weak_residual_trend_comparison_h96_scratch")
     parser.add_argument("--max-epochs", type=int, default=30)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--trend-filter-iterations", type=int, default=256)
     parser.add_argument("--datasets", default=",".join(DATASETS))
     parser.add_argument("--components", default=",".join(COMPONENTS))
     parser.add_argument("--modes", default="minus_component,component_only")

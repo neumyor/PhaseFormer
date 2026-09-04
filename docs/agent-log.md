@@ -1797,3 +1797,14 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - PhaseFormer 与 preset 配置现可显式传递 EMA/Holt/单侧局部线性参数到提取器；单测覆盖三种候选的真实 model
   forward。当前 `nvidia-smi` 无法连接 GPU driver，故仅完成 CPU 静态/forward 与 launcher dry-run 校验；CUDA
   1-epoch smoke 被如实保留为待办，未启动完整训练。
+
+## 2026-09-04 — 三成分实际输入频谱验收与 A6 收敛修正
+
+- 使用 raft 对 ETTh1/Weather/ETTm1 的16个固定 channel-0 validation 历史窗口直接执行真实提取器；验收量为主周期
+  及相邻频点的 `trend_power/input_power <= .10`。ETTh1 的24步峰：A6 `.034`、EMA `.009`、Holt `.009`；ETTm1 的
+  约96步峰：EMA `.024`、Holt `.029`。三者均抑制主周期。
+- 初始 A6 的 ETTm1 256步 Chambolle--Pock 近似泄漏 `.976`，不合格；kappa 增大无效，表明问题是固定迭代尚未收敛。
+  4096步时泄漏降至 `.056`，故新三成分实验 launcher 对 ETTm1 冻结4096步、ETTh1/Weather 保持256步。未把256步的
+  ETTm1 A6 当作已验证趋势成分。
+- GPU driver 当前不可用（raft 的 `torch.cuda.is_available()=False`、NVML 初始化失败），故CUDA smoke仍无法执行；
+  在实际GPU烟雾测试确认4096步的时间/显存前，不启动完整18项训练。

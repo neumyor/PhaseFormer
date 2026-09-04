@@ -17,11 +17,13 @@ sham/matched residual control，不能单独证明严格成分因果效应或“
 
 |成分|公式/实现|ETTh1|Weather|ETTm1|
 |---|---|---:|---:|---:|
-|`trend_filter`|256步 GPU Chambolle--Pock 近似：`min 0.5||X-f||²+λ||D²f||₁`；`λ=100·std(X)·(1hour/Δt)²`|`Δt=1h`|`Δt=1h`|`Δt=.25h`|
+|`trend_filter`|GPU Chambolle--Pock 近似：`min 0.5||X-f||²+λ||D²f||₁`；`λ=100·std(X)·(1hour/Δt)²`|256步，`Δt=1h`|256步，`Δt=1h`|4096步，`Δt=.25h`|
 |`causal_ema`|`T[t]=αX[t]+(1-α)T[t-1]`|`α=.024`|`α=.024`|`α=.006`|
 |`holt_local_linear`|`l[t]=αX[t]+(1-α)(l[t-1]+b[t-1])`；`b[t]=β(l[t]-l[t-1])+(1-β)b[t-1]`|`α=.024,β=.006`|`α=.024,β=.006`|`α=.006,β=.0015`|
 
 所有成分均采用 `A[t]=T[t]-T[L-1]`，因此 `A[L-1]=0`。A6 是固定迭代近似，不得称为逐窗口精确 trend-filter 解。
+ETTm1 的256步 A6 在实际历史频谱检查中未通过约96步周期泄漏阈值；4096步后泄漏约为0.056，故4096步是本实验的
+冻结设置。这增加了 A6 的训练成本，必须在 CUDA smoke 中实测时间与显存后才允许启动完整矩阵。
 
 ## 3. 固定训练与路由协议
 
@@ -91,6 +93,9 @@ Baseline-full 比较；二者的直接差异只能说明 A 与 A 外信息在该
 ## 6. 实施前验证
 
 - [x] 三种 candidate 均通过组件 shape、末点锚定、flag-off 等价和真实 PhaseFormer forward 单测。
+- [x] 输入频谱验证：ETTh1 的24步主峰泄漏为 trend-filter `.034`、EMA `.009`、Holt `.009`；ETTm1 的约96步
+  主峰泄漏为 trend-filter `.056`（4096步）、EMA `.024`、Holt `.029`。这些值均小于 `.10`；Weather 无窄带短周期
+  主峰，使用低二阶差分与图形复核而非机械周期删除。
 - [x] launcher dry-run 必须列出恰好18项训练。
 - [ ] CUDA 1-epoch smoke：在驱动恢复后运行一项 `trend_filter` 与一项 `causal_ema`，分别覆盖两种路由；当前
   主机的 `nvidia-smi` 无法连接 driver，未虚报 GPU smoke 通过。
