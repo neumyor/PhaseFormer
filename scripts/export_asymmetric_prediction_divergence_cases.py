@@ -2,9 +2,8 @@
 """Export channel-0 cases with maximal Baseline/Asymmetric forecast divergence.
 
 Ranking intentionally uses only the two model forecasts, never ground truth:
-mean_t(abs(asymmetric_prediction - baseline_prediction)).  The model's normal
-decoder-context input is still passed to forward for API compatibility, but y is
-not used for selection or plotting.
+mean_t(abs(asymmetric_prediction - baseline_prediction)). Ground truth is shown
+in figures for interpretation but never participates in ranking.
 """
 
 from __future__ import annotations
@@ -57,7 +56,7 @@ def find_candidate_run(root, dataset, component, input_mode):
     return matches[0]
 
 
-def plot_case(path, dataset, component, input_mode, origin, channel, x, a, baseline, asymmetric):
+def plot_case(path, dataset, component, input_mode, origin, channel, x, a, truth, baseline, asymmetric):
     horizon = len(baseline)
     history_x = np.arange(-len(x), 0)
     future_x = np.arange(horizon)
@@ -70,10 +69,11 @@ def plot_case(path, dataset, component, input_mode, origin, channel, x, a, basel
     axes[1].axhline(0, color="#999999", lw=.7); axes[1].axvline(0, color="#999999", lw=.8)
     axes[1].legend(loc="upper left")
     divergence = float(np.abs(asymmetric - baseline).mean())
+    axes[2].plot(future_x, truth, color="#1f1f1f", lw=1.3, label="ground truth (not used for selection)")
     axes[2].plot(future_x, baseline, color="#2878b5", lw=1.25, label="Baseline-full prediction")
     branch_label = "Asymmetric X-A" if input_mode == "minus_component" else "Only-A"
     axes[2].plot(future_x, asymmetric, color="#c43c39", lw=1.25, label=f"{branch_label} prediction")
-    axes[2].set_title(f"forecast-curve MAD = {divergence:.4f}; GT not used or displayed")
+    axes[2].set_title(f"forecast-curve MAD = {divergence:.4f}; GT not used for selection")
     axes[2].set_xlabel("forecast step"); axes[2].legend(loc="upper left")
     figure.savefig(path, dpi=150); plt.close(figure)
 
@@ -137,11 +137,12 @@ def main():
                     asymmetric, _, _ = candidate(x.float(), xm.float(), decoder, ym.float())
                 component_values = extract_trend_component(x.float(), component, period_len=24)
                 history = x[0, :, channel].cpu().numpy(); a = component_values[0, :, channel].cpu().numpy()
+                truth = y[0, -len(base[0]):, channel].cpu().numpy()
                 base = base[0, :, channel].cpu().numpy(); asymmetric = asymmetric[0, :, channel].cpu().numpy()
                 filename = f"case_{rank:02d}_origin_{origin}_channel_{channel}.png"
-                plot_case(folder / filename, dataset, component, args.input_mode, origin, channel, history, a, base, asymmetric)
+                plot_case(folder / filename, dataset, component, args.input_mode, origin, channel, history, a, truth, base, asymmetric)
                 rows.append({"rank": rank, "origin": origin, "channel": channel, "forecast_curve_mad": divergence, "figure": filename})
-                for key, value in (("origin", origin), ("channel", channel), ("forecast_curve_mad", divergence), ("history_x", history), ("component_a", a), ("baseline_prediction", base), ("asymmetric_prediction", asymmetric)):
+                for key, value in (("origin", origin), ("channel", channel), ("forecast_curve_mad", divergence), ("history_x", history), ("component_a", a), ("ground_truth", truth), ("baseline_prediction", base), ("asymmetric_prediction", asymmetric)):
                     arrays[key].append(value)
                 manifest.append({"dataset": dataset, "component": component, **rows[-1]})
             with (folder / "selected_cases.csv").open("w", newline="") as handle:
@@ -150,13 +151,13 @@ def main():
             (folder / "README.md").write_text(
                 "# Prediction-divergence cases\n\n"
                 f"Candidate branch input mode: `{args.input_mode}`. Ranking metric: mean absolute difference between Baseline-full and candidate forecasts over 96 steps. "
-                "Ground truth is neither used for ranking nor shown in figures. Each plot shows X, extracted A, and the two forecasts.\n"
+                "Ground truth is not used for ranking, but is shown in figures for interpretation. Each plot shows X, extracted A, ground truth, and the two forecasts.\n"
             )
             del candidate; torch.cuda.empty_cache()
         del baseline; torch.cuda.empty_cache()
     with (args.output / "manifest.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=manifest[0].keys()); writer.writeheader(); writer.writerows(manifest)
-    (args.output / "README.md").write_text(json.dumps({"selection": "top forecast-curve MAD, no GT", "input_mode": args.input_mode, "channel": args.channel, "top_k": args.top_k, "origin_separation": args.origin_separation, "datasets": DATASETS, "components": COMPONENTS}, indent=2) + "\n")
+    (args.output / "README.md").write_text(json.dumps({"selection": "top forecast-curve MAD; GT excluded from ranking and included in plots", "input_mode": args.input_mode, "channel": args.channel, "top_k": args.top_k, "origin_separation": args.origin_separation, "datasets": DATASETS, "components": COMPONENTS}, indent=2) + "\n")
 
 
 if __name__ == "__main__":

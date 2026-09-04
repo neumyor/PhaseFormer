@@ -1726,3 +1726,6 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - only-A 训练现已15/15完成。后台等待会话未保留日志，故在确认 GPU 空闲后直接顺序执行两套只读导出；
   `X_minus_A/` 与 `Only_A/` 均经程序校验为15个 dataset×component 目录、每目录3条 channel-0 记录和3张图，
   各45个案例、合计90张图。抽查确认图的三面板为 X、A、两条预测，GT 未被使用或显示。
+- 用户澄清：GT 只应排除在筛选指标外，而必须显示在图中。已修正绘图与数组导出并重生成两套90张图：第三
+  面板现含黑色 GT、蓝色 Baseline 和红色候选预测；`forecast_curve_mad` 的候选排序公式完全不变，仍只用
+  两条预测曲线。此前“GT 未显示”的描述作废。
