@@ -1729,3 +1729,16 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 用户澄清：GT 只应排除在筛选指标外，而必须显示在图中。已修正绘图与数组导出并重生成两套90张图：第三
   面板现含黑色 GT、蓝色 Baseline 和红色候选预测；`forecast_curve_mad` 的候选排序公式完全不变，仍只用
   两条预测曲线。此前“GT 未显示”的描述作废。
+
+## 2026-09-04 — 趋势滤波平滑尺度的 validation 诊断
+
+- 新增 `scripts/probe_trend_filter_smoothing.py`。该工具不训练模型、不读取 test；它严格复用数据加载器的
+  training-scaler 和 validation 窗口定义，在 ETTh1、Weather、ETTm1 各固定两个 channel-0、L=720 窗口上，
+  对比连续 72 步线性样条趋势与一阶趋势滤波趋势。所有成分均末点锚定。
+- 比较的冻结规则为 `lambda = kappa * sample_std * (1 hour / sample_interval)^2`，`kappa={25,100,400}`；因此
+  ETTm1 的离散 lambda 在同一 kappa 下为小时级数据的16倍，属于采样间隔换算而非按数据集调参。诊断包位于
+  `research_runs/trend_filter_parameter_probe/`，包含六张图、参数表和可携带 ZIP，且只含规定的审计文件与
+  `figures/`。
+- 人工检查六张 validation 图：`kappa=25` 在 ETTh1/ETTm1 仍保留显著局部周期起伏，`kappa=400` 在多个样本中
+  近似全局漂移；`kappa=100` 保留中尺度趋势转折而未跟随主周期，故作为未来趋势滤波 A 候选的暂定统一尺度。
+  该结论只证明提取尺度的视觉合理性，不构成预测提升、分支利用或因果结论。
