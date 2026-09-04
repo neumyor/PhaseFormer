@@ -1720,3 +1720,6 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 用户要求在 only-A 完成后同步导出两种路由。导出器现显式支持 `minus_component` 与 `component_only`，
   并将分别写入 `research_runs/asymmetric_prediction_divergence_cases/X_minus_A/` 和 `.../Only_A/`；二者均
   复用同一批此前 Baseline-full checkpoint，只有候选 checkpoint 与图例标签不同。
+- `scripts/run_after_only_trend_exports.sh` 已作为低优先级后处理队列启动：每60秒检查 only-A 的15项状态，
+  只在全部 completed 后串行进行两套 GPU 推理导出；若训练非正常停止则显式退出而不生成不完整结果。队列日志
+  位于 `research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96_control/export_after_training.log`。
