@@ -18,6 +18,9 @@ TREND_COMPONENTS = {
     "smooth_local",
     "smooth_multiscale",
     "trend_filter",
+    "causal_ema",
+    "causal_local_linear",
+    "holt_local_linear",
 }
 
 
@@ -109,6 +112,66 @@ def _trend_filter(
     return fitted * scale
 
 
+def _causal_ema(x: torch.Tensor, alpha: float = 0.08) -> torch.Tensor:
+    """One-sided exponential level smoother with no right-boundary extension."""
+    if not 0.0 < alpha <= 1.0:
+        raise ValueError("causal EMA alpha must lie in (0, 1]")
+    level = x[:, :1, :]
+    values = [level]
+    for index in range(1, x.size(1)):
+        level = alpha * x[:, index:index + 1, :] + (1.0 - alpha) * level
+        values.append(level)
+    return torch.cat(values, dim=1)
+
+
+def _causal_local_linear(
+    x: torch.Tensor, *, window: int = 72, sigma: float = 24.0
+) -> torch.Tensor:
+    """One-sided Gaussian-weighted local-linear level, computed by convolutions."""
+    if window < 2 or sigma <= 0:
+        raise ValueError("causal local-linear window must be >=2 and sigma positive")
+    window = min(int(window), x.size(1))
+    age = torch.arange(window, device=x.device, dtype=x.dtype)
+    weights = torch.exp(-0.5 * (age / float(sigma)).square())
+    # conv1d is a cross-correlation, so reverse to make age zero mean "now".
+    def convolve(values: torch.Tensor, coefficients: torch.Tensor) -> torch.Tensor:
+        kernel = coefficients.flip(0).view(1, 1, -1)
+        series = values.transpose(1, 2).reshape(-1, 1, values.size(1))
+        return F.conv1d(F.pad(series, (window - 1, 0)), kernel).reshape_as(values.transpose(1, 2)).transpose(1, 2)
+
+    ones = torch.ones_like(x[:, :, :1])
+    u = -age
+    s0 = convolve(ones, weights)
+    s1 = convolve(ones, weights * u)
+    s2 = convolve(ones, weights * u.square())
+    y0 = convolve(x, weights)
+    y1 = convolve(x, weights * u)
+    determinant = s0 * s2 - s1.square()
+    fallback = y0 / s0.clamp_min(torch.finfo(x.dtype).eps)
+    return torch.where(
+        determinant.abs() > torch.finfo(x.dtype).eps,
+        (s2 * y0 - s1 * y1) / determinant,
+        fallback,
+    )
+
+
+def _holt_local_linear(
+    x: torch.Tensor, *, level_alpha: float = 0.15, trend_beta: float = 0.03
+) -> torch.Tensor:
+    """Causal Holt level-plus-drift smoother with fixed, data-independent gains."""
+    if not 0.0 < level_alpha <= 1.0 or not 0.0 < trend_beta <= 1.0:
+        raise ValueError("Holt gains must lie in (0, 1]")
+    level = x[:, :1, :]
+    drift = torch.zeros_like(level)
+    values = [level]
+    for index in range(1, x.size(1)):
+        previous = level
+        level = level_alpha * x[:, index:index + 1, :] + (1.0 - level_alpha) * (level + drift)
+        drift = trend_beta * (level - previous) + (1.0 - trend_beta) * drift
+        values.append(level)
+    return torch.cat(values, dim=1)
+
+
 def extract_trend_component(
     x: torch.Tensor,
     component: str,
@@ -152,6 +215,12 @@ def extract_trend_component(
                 iterations=trend_filter_iterations,
             )
         )
+    if component == "causal_ema":
+        return _endpoint_anchor(_causal_ema(x))
+    if component == "causal_local_linear":
+        return _endpoint_anchor(_causal_local_linear(x))
+    if component == "holt_local_linear":
+        return _endpoint_anchor(_holt_local_linear(x))
     # Difference of short- and long-scale smoothed trends.  Both smoothers use
     # the observed history only; endpoint anchoring retains NLinear's last value.
     return _endpoint_anchor(

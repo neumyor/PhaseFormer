@@ -28,6 +28,21 @@ Chambolle--Pock primal--dual 求解，优化目标与上式相同；先按逐样
 固定惩罚后缩放回原空间，严格等价于表中的 `λ` 规则。它不在每个 forward 执行 CPU ADMM 或逐变量 CPU
 线性代数。`κ=100` 由六个固定 validation 历史窗口的独立可视诊断预先冻结，未使用预测标签或 test。
 
+### 尚未进入训练的单侧局部平滑候选
+
+为排查 A4/A5 的右端 replicate-padding 伪影，额外实现但**尚未纳入 X-A 或 Only-A 训练**三种单侧候选：
+
+|名称|冻结提取|当前可视诊断结论|
+|---|---|---|
+|`causal_ema`|`T[t]=0.08X[t]+0.92T[t-1]`，`A[t]=T[t]-T[L-1]`|无右端填充，但 ETTh1/ETTm1 上仍保留明显周期形状|
+|`causal_local_linear`|仅用最近 72 步、权重 `exp(-i²/(2·24²))` 的加权 OLS，取当前截距 `T[t]`|无右端填充、局部转折灵敏，但当前尺度明显跟随主周期|
+|`holt_local_linear`|`l[t]=.15X[t]+.85(l[t-1]+b[t-1])`，`b[t]=.03(l[t]-l[t-1])+.97b[t-1]`，`A[t]=l[t]-l[L-1]`|无右端填充，但比 EMA 更明显地保留周期振幅|
+
+三者均只使用当前及过去的历史点；由于末点锚定，改变未来历史会共同平移此前的 A 值，但不会改变此前的
+相对轨迹。固定 validation 样本的图形比较位于
+`research_runs/causal_trend_component_visual_probe/`。该诊断没有训练预测模型、没有读取 test，不能据此作出
+预测性能或分支利用结论。
+
 此前的首个候选 A1 `cycle-levels`：对 `P=24`、`K=30` 个周期，
 
 ```text

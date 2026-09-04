@@ -1755,3 +1755,14 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 人工检查六张 validation 图：`kappa=25` 在 ETTh1/ETTm1 仍保留显著局部周期起伏，`kappa=400` 在多个样本中
   近似全局漂移；`kappa=100` 保留中尺度趋势转折而未跟随主周期，故作为未来趋势滤波 A 候选的暂定统一尺度。
   该结论只证明提取尺度的视觉合理性，不构成预测提升、分支利用或因果结论。
+
+## 2026-09-04 — 单侧局部趋势候选的实现与图形筛查
+
+- 在 `src/models/asymmetric_trend_components.py` 新增 `causal_ema`、`causal_local_linear` 与
+  `holt_local_linear`。三者均逐样本逐变量提取、无右侧 padding，并以 `A[L-1]=0` 末点锚定；新增单测确认
+  shape/锚定、缩放等变性、flag-off 等价性，以及三种单侧提取器在消除共同锚定平移后的前缀相对轨迹不依赖未来点。
+- 新增 `scripts/probe_causal_trend_components.py`，在 ETTh1、Weather、ETTm1 各两个固定 channel-0 validation
+  窗口上直接使用与训练相同的256步趋势滤波近似，叠图比较四种成分。审计包为
+  `research_runs/causal_trend_component_visual_probe/`，含六张图、统计量、Markdown 与 ZIP；未训练模型、未读 test。
+- 图形检查：三种单侧方法消除了 A4/A5 的末端 replicate-padding 问题；但在 ETTh1/ETTm1 当前冻结尺度下均保留
+  较明显主周期，尤其局部线性与 Holt。它们暂不进入 X-A/Only-A 训练，除非先重新定义目标时间尺度并独立复核。

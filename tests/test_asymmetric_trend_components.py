@@ -31,6 +31,22 @@ class AsymmetricTrendComponentTests(unittest.TestCase):
         scaled = extract_trend_component(3.7 * x, "trend_filter", trend_filter_iterations=32)
         torch.testing.assert_close(scaled, 3.7 * a, rtol=2e-5, atol=2e-5)
 
+    def test_causal_components_do_not_depend_on_future_history(self):
+        torch.manual_seed(13)
+        x = torch.randn(2, 720, 3)
+        changed = x.clone()
+        changed[:, 360:, :] += 5.0
+        for component in ("causal_ema", "causal_local_linear", "holt_local_linear"):
+            original = extract_trend_component(x, component)
+            altered = extract_trend_component(changed, component)
+            # Endpoint anchoring translates every A value when the final trend
+            # changes; causal extraction requires the pre-cutoff *shape* to be
+            # invariant after removing that common anchor translation.
+            torch.testing.assert_close(
+                original[:, :360, :] - original[:, :1, :],
+                altered[:, :360, :] - altered[:, :1, :],
+            )
+
     def test_shared_revin_stats_match_full_branch_when_component_is_zero(self):
         x = torch.randn(2, 720, 3)
         revin = RevIN(3, affine=True)
