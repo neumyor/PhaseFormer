@@ -1,5 +1,9 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — 完整化 Global/EMA 趋势候选与 NLinear 路由角色报告
+
+- 新增 `scripts/render_global_ema_route_role_report.py`，将已完成的60个双向极端样本案例组织为中文可审计报告：覆盖七候选的视觉筛选理由、为何选 Global-linear/EMA、组统计、8个具体图证及解释边界。报告更新 `global_ema_route_role_cases/objective_error_analysis.md` 与可携带 ZIP。
+
 ## 2026-09-05 — Global-linear 与 Causal-EMA 的双向路由角色样本审计
 
 - 用户授权停止尚未完成的 SSA 六项训练以释放 GPU；ETTh1 的 e30 原始 run 保留为因 DataLoader 被终止而失败，未作为结果使用。
