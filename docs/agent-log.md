@@ -1921,3 +1921,13 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `smooth_multiscale=G_24(X)-G_72(X)` 是双尺度差分/中频宽波包，而不是 global smooth trend。
   这两个 A 的代表样本均显示右端曲率风险，故结果仅用于 NLinear 路由条件性诊断，不能作为
   PhaseFormer 未使用趋势成分或纯趋势机制的结论。
+
+## 2026-09-05 — 补齐深入样本表的 Baseline-full MAE
+
+- `etth1_smooth_route_role_cases` 的32个选例表原本已经包含 Baseline MAE。为保持已有的
+  global-linear / causal-EMA 深入审计一致，更新 `analyze_global_ema_route_roles.py`，使新审计
+  在 `sample_errors.csv` 中直接写入 `baseline_mae`；更新渲染器以在全部60个选例表显示
+  `Baseline-full MAE`。
+- 已完成的旧审计从其与 CSV 行顺序严格对齐的 `selected_cases.npz` 中重算 Baseline prediction
+  相对 GT 的 MAE 并回填。raft 校验确认60行均有该字段，报告 ZIP 中的 Markdown 与磁盘原件字节一致，
+  图数量不变。

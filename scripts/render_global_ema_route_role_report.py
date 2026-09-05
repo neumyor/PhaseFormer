@@ -9,6 +9,8 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "research_runs/global_ema_route_role_cases"
 REPORT = OUT / "objective_error_analysis.md"
@@ -25,6 +27,23 @@ def mean(rows: list[dict[str, str]], key: str) -> float:
 
 def main() -> None:
     rows = list(csv.DictReader((OUT / "sample_errors.csv").open(encoding="utf-8")))
+    # Older completed audits predate the Baseline-full MAE field.  Recover it
+    # exactly from the aligned, immutable selected-case arrays once, so every
+    # selected-example table uses the same three-way error comparison.
+    if "baseline_mae" not in rows[0]:
+        selected = np.load(OUT / "selected_cases.npz")
+        baseline_mae = np.abs(
+            selected["baseline_prediction"] - selected["ground_truth"]
+        ).mean(axis=1)
+        if len(rows) != len(baseline_mae):
+            raise RuntimeError("sample-errors and selected-case arrays are misaligned")
+        for row, value in zip(rows, baseline_mae):
+            row["baseline_mae"] = str(float(value))
+        fields = list(rows[0])
+        fields.insert(fields.index("x_minus_a_mae"), fields.pop(fields.index("baseline_mae")))
+        with (OUT / "sample_errors.csv").open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader(); writer.writerows(rows)
     groups: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in rows:
         groups[row["dataset"], row["component"], row["direction"]].append(row)
@@ -96,10 +115,10 @@ def main() -> None:
     ]
     for dataset in ("ETTh1", "Weather", "ETTm1"):
         for component in ("global_linear", "causal_ema"):
-            lines += [f"### {dataset} / `{component}`", "", "| 方向 | rank | origin | X-A MAE | Only-A MAE | Only-A−X-A | 图 |", "|---|---:|---:|---:|---:|---:|---|"]
+            lines += [f"### {dataset} / `{component}`", "", "| 方向 | rank | origin | Baseline-full MAE | X-A MAE | Only-A MAE | Only-A−X-A | 图 |", "|---|---:|---:|---:|---:|---:|---:|---|"]
             for direction in ("x_minus_a_better", "only_a_better"):
                 for row in groups[dataset, component, direction]:
-                    lines.append(f"| `{direction}` | {row['rank']} | {row['origin']} | {float(row['x_minus_a_mae']):.4f} | {float(row['only_a_mae']):.4f} | {float(row['only_minus_x_mae']):+.4f} | [figure](figures/{figure(row)}) |")
+                    lines.append(f"| `{direction}` | {row['rank']} | {row['origin']} | {float(row['baseline_mae']):.4f} | {float(row['x_minus_a_mae']):.4f} | {float(row['only_a_mae']):.4f} | {float(row['only_minus_x_mae']):+.4f} | [figure](figures/{figure(row)}) |")
             lines.append("")
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
     with zipfile.ZipFile(OUT / "objective_error_analysis.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
