@@ -1,5 +1,9 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — 补充六种连续趋势提取的统一样本图与公式
+
+- 新增 `scripts/plot_six_trend_extraction_examples.py`，在 ETTh1 origin1046、Weather origin2073、ETTm1 origin9073 的既有 validation channel-0 history 上，以一图六子图方式绘制 global/recent linear、local/multiscale Gaussian、causal EMA、Holt 的实际末点锚定 A。相应图、统一公式及当前参数已加入 Global/EMA 路由角色审计报告并重打 ZIP。
+
 ## 2026-09-05 — 完整化 Global/EMA 趋势候选与 NLinear 路由角色报告
 
 - 新增 `scripts/render_global_ema_route_role_report.py`，将已完成的60个双向极端样本案例组织为中文可审计报告：覆盖七候选的视觉筛选理由、为何选 Global-linear/EMA、组统计、8个具体图证及解释边界。报告更新 `global_ema_route_role_cases/objective_error_analysis.md` 与可携带 ZIP。
