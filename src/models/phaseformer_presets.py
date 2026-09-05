@@ -1665,6 +1665,14 @@ class PhaseFormerPresetConfig:
         self.weak_residual_holt_trend_beta = hyperparams.get(
             "weak_residual_holt_trend_beta", 0.03
         )
+        self.weak_residual_ssa_window = hyperparams.get("weak_residual_ssa_window", 144)
+        self.weak_residual_ssa_rank = hyperparams.get("weak_residual_ssa_rank", 2)
+        self.weak_residual_ssa_candidate_rank = hyperparams.get(
+            "weak_residual_ssa_candidate_rank", 12
+        )
+        self.weak_residual_ssa_min_period = hyperparams.get(
+            "weak_residual_ssa_min_period", 144
+        )
         self.use_adaptive_weak_period_gate = hyperparams.get(
             "use_adaptive_weak_period_gate", False
         )

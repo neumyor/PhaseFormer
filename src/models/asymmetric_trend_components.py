@@ -196,8 +196,17 @@ def _ssa_low_frequency(
     # (B, L, C) -> (B*C, W, K), where K is the number of lagged vectors.
     series = x.permute(0, 2, 1).reshape(-1, length)
     trajectory = series.unfold(1, window, 1).transpose(1, 2)
-    left, singular, right = torch.linalg.svd(trajectory, full_matrices=False)
-    usable = min(int(candidate_rank), singular.size(1))
+    # Only the leading candidate eigentriples are needed.  Computing the
+    # eigendecomposition of the W×W Gram matrix is deterministic and avoids
+    # materialising all min(W,K) right singular vectors for every training
+    # batch; it is algebraically equivalent to the leading part of an SVD.
+    usable = min(int(candidate_rank), trajectory.size(1))
+    gram = trajectory @ trajectory.transpose(1, 2)
+    eigenvalues, eigenvectors = torch.linalg.eigh(gram)
+    singular = eigenvalues[:, -usable:].clamp_min(0).sqrt()
+    left = eigenvectors[:, :, -usable:]
+    right = (trajectory.transpose(1, 2) @ left).transpose(1, 2)
+    right = right / singular.unsqueeze(-1).clamp_min(torch.finfo(x.dtype).eps)
     keep = min(int(rank), usable)
     indices = torch.arange(window, device=x.device).view(-1, 1) + torch.arange(
         trajectory.size(2), device=x.device

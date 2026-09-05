@@ -1889,3 +1889,8 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 本轮正式范围限定为 ETTh1、L=720、H=96、seed=2021、validation-only 的 causal EMA/Holt 两成分×X-A/Only-A 四项训练；原始日志和 checkpoint 写入 `research_runs/weak_residual_etth1_slow_causal_trend_h96_scratch/`。
 - 训练前必须使用 raft 环境完成 CUDA smoke 和参数/频谱校验；本条记录对应配置修正，最终指标、审计报告及案例图待训练完成后补充。
 - 轻量校验：launcher dry-run 正确列出4项；四组 overrides 均显示上述慢参数；脚本通过 `py_compile`。首次随机张量检查误用了函数参数名，已按实际接口 `causal_ema_alpha`/`holt_level_alpha` 修正 smoke 命令，未启动错误配置训练。
+# 2026-09-05 — SSA X-A/Only-A training preparation
+
+- 将 `ssa_low_frequency` 纳入 `scripts/run_weak_residual_trend_comparison.py`，并在 `PhaseFormer`/preset 中显式传递冻结参数 `W=144, r=2, candidate_rank=12, Pmin=144`。
+- SSA 分解改用确定性的 Gram 矩阵前 12 个特征对，避免完整 SVD；固定输入成分提取包在 `torch.no_grad()` 中，避免训练反向图穿过分解。前向形状、短周期抑制、尺度等测试通过（8 passed）。
+- CUDA smoke 首次发现完整 SVD 训练代价过高，已中止并修正为上述确定性 top-r 实现；正式实验尚未开始。

@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = Path("/home/wangjing/miniconda3/envs/raft/bin/python")
 DATASETS = ("ETTh1", "Weather", "ETTm1")
-COMPONENTS = ("trend_filter", "causal_ema", "holt_local_linear")
+COMPONENTS = ("trend_filter", "causal_ema", "holt_local_linear", "ssa_low_frequency")
 INTERVAL_HOURS = {"ETTh1": 1.0, "Weather": 1.0, "ETTm1": 0.25}
 # ETTm1's strong approximately-96-step peak needs this many fixed CP updates
 # before A6 meets the frozen <=0.10 periodic-leakage criterion.
@@ -39,6 +39,12 @@ def command(dataset: str, component: str, input_mode: str, args: argparse.Namesp
         "weak_residual_causal_ema_alpha": params["alpha"],
         "weak_residual_holt_level_alpha": params["alpha"],
         "weak_residual_holt_trend_beta": params["beta"],
+        # Frozen low-frequency SSA trend extractor.  Keep these explicit in
+        # every candidate config so checkpoint provenance is auditable.
+        "weak_residual_ssa_window": 144,
+        "weak_residual_ssa_rank": 2,
+        "weak_residual_ssa_candidate_rank": 12,
+        "weak_residual_ssa_min_period": 144,
     }
     result = [
         str(PYTHON), "scripts/search_phaseformer.py",

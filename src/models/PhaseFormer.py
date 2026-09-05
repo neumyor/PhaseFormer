@@ -574,6 +574,14 @@ class PhaseFormer(DefaultPLModule):
         self.weak_residual_holt_trend_beta = getattr(
             configs, "weak_residual_holt_trend_beta", 0.03
         )
+        self.weak_residual_ssa_window = getattr(configs, "weak_residual_ssa_window", 144)
+        self.weak_residual_ssa_rank = getattr(configs, "weak_residual_ssa_rank", 2)
+        self.weak_residual_ssa_candidate_rank = getattr(
+            configs, "weak_residual_ssa_candidate_rank", 12
+        )
+        self.weak_residual_ssa_min_period = getattr(
+            configs, "weak_residual_ssa_min_period", 144
+        )
         self.use_phase_cycle_fusion = getattr(
             configs, "use_phase_cycle_fusion", False
         )
@@ -1742,22 +1750,29 @@ class PhaseFormer(DefaultPLModule):
             # Preserve the historical flag-off route bit-for-bit.
             residual_x_in = x_in
         else:
-            component = extract_trend_component(
-                x_enc.float(),
-                self.weak_residual_asymmetric_component,
-                period_len=self.period_len,
-                recent_window=self.weak_residual_trend_recent_window,
-                local_sigma=self.weak_residual_trend_local_sigma,
-                long_sigma=self.weak_residual_trend_long_sigma,
-                trend_filter_kappa=self.weak_residual_trend_filter_kappa,
-                trend_filter_sample_interval_hours=self.weak_residual_trend_filter_sample_interval_hours,
-                trend_filter_iterations=self.weak_residual_trend_filter_iterations,
-                causal_ema_alpha=self.weak_residual_causal_ema_alpha,
-                causal_local_linear_window=self.weak_residual_causal_local_linear_window,
-                causal_local_linear_sigma=self.weak_residual_causal_local_linear_sigma,
-                holt_level_alpha=self.weak_residual_holt_level_alpha,
-                holt_trend_beta=self.weak_residual_holt_trend_beta,
-            )
+            # A is a fixed preprocessing component; do not construct a
+            # training graph through its SVD/filter operations.
+            with torch.no_grad():
+                component = extract_trend_component(
+                    x_enc.float(),
+                    self.weak_residual_asymmetric_component,
+                    period_len=self.period_len,
+                    recent_window=self.weak_residual_trend_recent_window,
+                    local_sigma=self.weak_residual_trend_local_sigma,
+                    long_sigma=self.weak_residual_trend_long_sigma,
+                    trend_filter_kappa=self.weak_residual_trend_filter_kappa,
+                    trend_filter_sample_interval_hours=self.weak_residual_trend_filter_sample_interval_hours,
+                    trend_filter_iterations=self.weak_residual_trend_filter_iterations,
+                    causal_ema_alpha=self.weak_residual_causal_ema_alpha,
+                    causal_local_linear_window=self.weak_residual_causal_local_linear_window,
+                    causal_local_linear_sigma=self.weak_residual_causal_local_linear_sigma,
+                    holt_level_alpha=self.weak_residual_holt_level_alpha,
+                    holt_trend_beta=self.weak_residual_holt_trend_beta,
+                    ssa_window=self.weak_residual_ssa_window,
+                    ssa_rank=self.weak_residual_ssa_rank,
+                    ssa_candidate_rank=self.weak_residual_ssa_candidate_rank,
+                    ssa_min_period=self.weak_residual_ssa_min_period,
+                )
             residual_raw = (
                 component
                 if self.weak_residual_asymmetric_input_mode == "component_only"
