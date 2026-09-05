@@ -18,8 +18,8 @@ sham/matched residual control，不能单独证明严格成分因果效应或“
 |成分|公式/实现|ETTh1|Weather|ETTm1|
 |---|---|---:|---:|---:|
 |`trend_filter`|GPU Chambolle--Pock 近似：`min 0.5||X-f||²+λ||D²f||₁`；`λ=100·std(X)·(1hour/Δt)²`|256步，`Δt=1h`|256步，`Δt=1h`|4096步，`Δt=.25h`|
-|`causal_ema`|`T[t]=αX[t]+(1-α)T[t-1]`|`α=.024`|`α=.024`|`α=.006`|
-|`holt_local_linear`|`l[t]=αX[t]+(1-α)(l[t-1]+b[t-1])`；`b[t]=β(l[t]-l[t-1])+(1-β)b[t-1]`|`α=.024,β=.006`|`α=.024,β=.006`|`α=.006,β=.0015`|
+|`causal_ema`|`T[t]=αX[t]+(1-α)T[t-1]`|`α=.006`|`α=.024`|`α=.006`|
+|`holt_local_linear`|`l[t]=αX[t]+(1-α)(l[t-1]+b[t-1])`；`b[t]=β(l[t]-l[t-1])+(1-β)b[t-1]`|`α=.006,β=.0015`|`α=.024,β=.006`|`α=.006,β=.0015`|
 
 所有成分均采用 `A[t]=T[t]-T[L-1]`，因此 `A[L-1]=0`。A6 是固定迭代近似，不得称为逐窗口精确 trend-filter 解。
 ETTm1 的256步 A6 在实际历史频谱检查中未通过约96步周期泄漏阈值；4096步后泄漏约为0.056，故4096步是本实验的
@@ -38,7 +38,8 @@ ETTm1 的256步 A6 在实际历史频谱检查中未通过约96步周期泄漏�
 |X-A (`minus_component`)|完整 `X`|`X-A`|
 |Only-A (`component_only`)|完整 `X`|`A`|
 
-完整矩阵为 `3 数据集 × 3 成分 × 2 路由 = 18` 项 candidate full trainings。X-A 与 Only-A 是独立重训，均相对同一
+本轮 ETTh1 慢趋势复核限定为 `ETTh1 × 2 成分 × 2 路由 = 4` 项 candidate full trainings；使用上表 ETTh1 的慢参数。
+此前使用 ETTh1 `.024/.006` 的结果不与本轮慢参数结果混合。X-A 与 Only-A 是独立重训，均相对同一
 Baseline-full 比较；二者的直接差异只能说明 A 与 A 外信息在该实验内的相对充分性，不能替代因果对照。
 
 ## 4. 启动与产物路径
@@ -59,10 +60,10 @@ Baseline-full 比较；二者的直接差异只能说明 A 与 A 外信息在该
   --dry-run
 ```
 
-原始训练日志、checkpoint 和监控记录必须写入：
+本轮 ETTh1 慢趋势原始训练日志、checkpoint 和监控记录必须写入：
 
 ```text
-/home/wangjing/PhaseFormer/research_runs/weak_residual_trend_comparison_h96_scratch/
+/home/wangjing/PhaseFormer/research_runs/weak_residual_etth1_slow_causal_trend_h96_scratch/
 ```
 
 完整训练结束后，严格六文件审计包应单独生成到：

@@ -1860,3 +1860,10 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 使用已导出的 ETTh1 channel-0 origin 853、1978、2533 历史窗口，对 `causal_ema` 与 `holt_local_linear` 比较当前 `alpha=.024`（Holt `beta=.006`）和更慢的 `.006/.0015`、`.003/.00075`。叠图与24步谐波回归幅度表位于 `research_runs/causal_ema_holt_etth1_parameter_debug_scratch/`；不训练模型、不读取 test。
 - 当前参数在三个样本的24步谐波幅度增益为 EMA `.097--.106`、Holt `.097--.109`，因而虽不主导频谱，时域图上仍有明显周期波纹。`.006/.0015` 降至约 `.023--.026`，`.003/.00075` 降至约 `.011--.012`；图形确认周期纹波随之明显消失。
 - 结论仅限提取纯度：ETTh1 的当前参数过快，不能把 EMA/Holt 表述为严格纯趋势；`.006/.0015` 是保留较慢轨迹的候选折中，`.003/.00075` 更严格但更接近全局慢漂移。尚未用新参数重训，故不得将其推断为预测收益。
+
+## 2026-09-05 — 启动 ETTh1 慢趋势参数重训练
+
+- 将 `scripts/run_weak_residual_trend_comparison.py` 的 ETTh1 参数更新为 `causal_ema α=.006`、`holt_local_linear α=.006, β=.0015`，与已完成的周期泄漏调试结论一致；Weather/ETTm1 参数保持不变。
+- 本轮正式范围限定为 ETTh1、L=720、H=96、seed=2021、validation-only 的 causal EMA/Holt 两成分×X-A/Only-A 四项训练；原始日志和 checkpoint 写入 `research_runs/weak_residual_etth1_slow_causal_trend_h96_scratch/`。
+- 训练前必须使用 raft 环境完成 CUDA smoke 和参数/频谱校验；本条记录对应配置修正，最终指标、审计报告及案例图待训练完成后补充。
+- 轻量校验：launcher dry-run 正确列出4项；四组 overrides 均显示上述慢参数；脚本通过 `py_compile`。首次随机张量检查误用了函数参数名，已按实际接口 `causal_ema_alpha`/`holt_level_alpha` 修正 smoke 命令，未启动错误配置训练。

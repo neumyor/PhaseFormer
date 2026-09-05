@@ -18,7 +18,9 @@ INTERVAL_HOURS = {"ETTh1": 1.0, "Weather": 1.0, "ETTm1": 0.25}
 # before A6 meets the frozen <=0.10 periodic-leakage criterion.
 TREND_FILTER_ITERATIONS = {"ETTh1": 256, "Weather": 256, "ETTm1": 4096}
 CAUSAL_PARAMS = {
-    "ETTh1": {"alpha": 0.024, "beta": 0.006},
+    # ETTh1 parameter-debug follow-up: use the slower filters to suppress the
+    # dominant 24-step harmonic.
+    "ETTh1": {"alpha": 0.006, "beta": 0.0015},
     # Weather has no narrow short-period peak; this is the predeclared
     # conservative hourly setting, not a prediction-selected parameter.
     "Weather": {"alpha": 0.024, "beta": 0.006},
