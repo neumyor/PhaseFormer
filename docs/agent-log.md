@@ -1931,3 +1931,11 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 已完成的旧审计从其与 CSV 行顺序严格对齐的 `selected_cases.npz` 中重算 Baseline prediction
   相对 GT 的 MAE 并回填。raft 校验确认60行均有该字段，报告 ZIP 中的 Markdown 与磁盘原件字节一致，
   图数量不变。
+
+## 2026-09-05 — Weak Residual 趋势性成分研究阶段结题
+
+- 新增 `docs/Weak_residual_trend_component_study_closure.md`，冻结本分支的研究协议、可审计交付物、
+  可支持/不可支持的结论与后续边界。结论限定为 NLinear 弱残差分支对趋势/宽尺度 A 的条件性校正作用，
+  不宣称 PhaseFormer 完全未使用趋势，亦不把 validation discovery 结果表述为 test 泛化结论。
+- 本阶段至此结束；下一阶段将在独立的 `weak_residual_nlinear_bottleneck` 分支研究 NLinear 分支的信息
+  瓶颈压缩。已有原始训练、checkpoint 和审计工件仍保留在 `research_runs/`，未被移动或删除。
