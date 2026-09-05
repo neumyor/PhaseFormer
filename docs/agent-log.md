@@ -1,5 +1,10 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — Global-linear 与 Causal-EMA 的双向路由角色样本审计
+
+- 用户授权停止尚未完成的 SSA 六项训练以释放 GPU；ETTh1 的 e30 原始 run 保留为因 DataLoader 被终止而失败，未作为结果使用。
+- 新增 `scripts/analyze_global_ema_route_roles.py`，对三数据集×两成分，从全 validation channel-0 按 `Only-A MAE − X-A MAE` 双向各选5个、间隔至少96步的样本，合计60张图。审计包位于 `research_runs/global_ema_route_role_cases/`，严格含六文件及 figures；选择使用 GT 来定位“哪个路由更好”，与 prediction-divergence 图的无 GT 选样目的不同。
+
 ## 2026-09-05 — 按数据集章节呈现 X-A/Only-A 路由差异
 
 - `ALL_COMPONENT_ROUTE_VALIDATION_METRICS.md` 改为 ETTh1、Weather、ETTm1 三个章节；新增 `Only-A 相对 X-A ΔMSE / ΔMAE` 百分比列，定义为 `(Only-A−X-A)/X-A`，负值表示 Only-A 误差更低。
