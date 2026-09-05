@@ -121,7 +121,7 @@ def main() -> None:
         lines.append(f"| {dataset} | {p['window']} | {p['rank']} | {p['candidate_rank']} | {p['min_period']} |")
     lines += [
         "", "## Important provenance boundary", "",
-        "The existing ETTh1 `causal_ema` and `holt_local_linear` case images above use the delivered checkpoints' α=.024 (and Holt β=.006). They predate the separate slow-parameter ETTh1 retraining (α=.006, β=.0015), and must not be relabelled as that newer run until its images are regenerated.",
+        "ETTh1 `causal_ema` and `holt_local_linear` case images above were regenerated from the completed slow-parameter retraining: α=.006 and, for Holt, β=.0015. Weather retains delivered α=.024/β=.006, while ETTm1 retains delivered α=.006/β=.0015. The table is therefore intentionally mixed by dataset, exactly as the checkpoint provenance requires.",
         "",
         "Validation command: `python scripts/audit_asymmetric_case_extraction_params.py`. The command fails if a checkpoint identity, mode, effective extraction arguments, manifest cardinality, or a referenced figure disagrees.",
     ]

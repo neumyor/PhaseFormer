@@ -49,9 +49,30 @@ BASELINE_ROOTS = {
 X_MINUS_A_ROOTS = BASELINE_ROOTS
 ONLY_A_ROOT = ROOT / "research_runs/weak_residual_asymmetric_only_trend_three_dataset_h96_scratch"
 DELIVERY_ROOT = ROOT / "research_runs/weak_residual_trend_2comp_3ds_experiment_scratch"
+# ETTh1 was subsequently retrained after tightening the periodic-leakage gate.
+# These completed e30 checkpoints supersede only its two delivered causal
+# components; Weather/ETTm1 intentionally continue to use the delivered run.
+SLOW_ETTH1_ROOT = ROOT / "research_runs/weak_residual_etth1_slow_causal_trend_h96_scratch"
+
+
+def slow_etth1_candidate_path(component: str, mode: str) -> Path:
+    matches = []
+    for config_path in (SLOW_ETTH1_ROOT / "runs").glob("*/config.json"):
+        config = json.loads(config_path.read_text())
+        hp = config["hyperparams"]
+        if (config.get("dataset"), config.get("lookback"), config.get("horizon"), config.get("max_epochs"),
+            hp.get("weak_residual_asymmetric_component"), hp.get("weak_residual_asymmetric_input_mode")) == (
+            "ETTh1", 720, 96, 30, component, mode
+        ):
+            matches.append(config_path.parent)
+    if len(matches) != 1:
+        raise RuntimeError(f"expected one completed slow ETTh1 candidate for {component}/{mode}, got {matches}")
+    return matches[0]
 
 
 def candidate_path(dataset: str, component: str, mode: str) -> Path:
+    if dataset == "ETTh1" and component in DELIVERED:
+        return slow_etth1_candidate_path(component, mode)
     if component in DELIVERED:
         return find_candidate_run(DELIVERY_ROOT, dataset, component, mode, "delivery")
     root = X_MINUS_A_ROOTS[dataset] if mode == "minus_component" else ONLY_A_ROOT

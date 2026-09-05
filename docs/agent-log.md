@@ -1,5 +1,9 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — 用 ETTh1 慢趋势重训更新 EMA/Holt 可视化来源
+
+- `export_asymmetric_joint_route_cases.py` 对 ETTh1 的 `causal_ema`、`holt_local_linear` 改为只解析已完成的慢趋势 `e30` 原始训练 run（排除 e1 smoke）；Weather、ETTm1 仍使用原交付 checkpoint。随后重建 joint-route 图、manifest、聚合表和提取参数审计；旧目录先移动至可恢复的 `/tmp` 备份。
+
 ## 2026-09-05 — 固定 SSA 参数并审计预测分歧案例的提取参数
 
 - `ssa_low_frequency` 在 ETTh1、Weather、ETTm1 均冻结为 `W=144, retained-rank=2, candidate-rank=12, Pmin=144 steps`；映射显式写入 `scripts/probe_ssa_low_frequency_trend.py`，即便当前三者数值一致也避免依赖隐式默认值。
