@@ -1854,3 +1854,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 
 - 新增 `scripts/summarize_asymmetric_component_metrics.py`，从当前图册实际使用的 Baseline-full、X-A、Only-A checkpoint 的 `metrics.csv` 生成 validation 聚合表；执行前校验 dataset、L=720、H=96、percent=100 与 seed=2021。
 - 结果写入 `research_runs/asymmetric_prediction_divergence_cases/XA_OnlyA_Baseline_validation_comparison.md`。按 ETTh1、Weather、ETTm1 分表列出7种成分的 MSE/MAE 及 X-A、Only-A 相对 Baseline-full 的绝对/百分比差。差值定义为候选减 Baseline，负值为更好；文档明确它不能和按预测分歧选择的局部案例误差混读。
+
+## 2026-09-05 — ETTh1 单侧平滑参数的周期泄漏调试
+
+- 使用已导出的 ETTh1 channel-0 origin 853、1978、2533 历史窗口，对 `causal_ema` 与 `holt_local_linear` 比较当前 `alpha=.024`（Holt `beta=.006`）和更慢的 `.006/.0015`、`.003/.00075`。叠图与24步谐波回归幅度表位于 `research_runs/causal_ema_holt_etth1_parameter_debug_scratch/`；不训练模型、不读取 test。
+- 当前参数在三个样本的24步谐波幅度增益为 EMA `.097--.106`、Holt `.097--.109`，因而虽不主导频谱，时域图上仍有明显周期波纹。`.006/.0015` 降至约 `.023--.026`，`.003/.00075` 降至约 `.011--.012`；图形确认周期纹波随之明显消失。
+- 结论仅限提取纯度：ETTh1 的当前参数过快，不能把 EMA/Holt 表述为严格纯趋势；`.006/.0015` 是保留较慢轨迹的候选折中，`.003/.00075` 更严格但更接近全局慢漂移。尚未用新参数重训，故不得将其推断为预测收益。
