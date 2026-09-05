@@ -91,6 +91,8 @@ def main():
     parser.add_argument("--output-root", default="research_runs/progressive_ib_stage1_scratch")
     parser.add_argument("--max-epochs", type=int, default=30)
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--fusion-gate-checkpoint", default="",
+                        help="completed Stage-0 fusion checkpoint; required for target_residual")
     parser.add_argument("--require-cuda", action="store_true")
     parser.add_argument("--progress", action="store_true")
     args = parser.parse_args()
@@ -107,9 +109,19 @@ def main():
     train_set, train_loader = data_provider(exp.dataset_args, "train")
     val_set, val_loader = data_provider(exp.dataset_args, "val")
     before_hash = digest(phaseformer)
+    fusion_gate_logit = None
+    if args.mode == "target_residual":
+        if not args.fusion_gate_checkpoint:
+            parser.error("--target_residual requires --fusion-gate-checkpoint")
+        payload = torch.load(args.fusion_gate_checkpoint, map_location="cpu", weights_only=False)
+        state = payload.get("state_dict", payload)
+        if "fusion_gate" not in state:
+            raise RuntimeError("Stage-0 checkpoint does not contain fusion_gate")
+        fusion_gate_logit = state["fusion_gate"]
     model = FrozenPhaseNLinearCorrection(
         phaseformer, mode=args.mode, learning_rate=exp.training_args.learning_rate,
         loss_name=exp.training_args.loss_func, huber_delta=exp.training_args.huber_delta,
+        fusion_gate_logit=fusion_gate_logit,
     )
     logger = build_logger(str(run_dir / "lightning"), name="stage1", version="train")
     trainer, checkpoint = build_trainer(
@@ -132,6 +144,7 @@ def main():
         "seed": args.seed, "mode": args.mode, "split": "validation", "mse": metrics["mse"], "mae": metrics["mae"],
         "phase_checkpoint": str(Path(args.phase_checkpoint).resolve()), "phase_config": str(Path(args.phase_config).resolve()),
         "phase_hash_before": before_hash, "phase_hash_after": after_hash,
+        "fusion_gate_checkpoint": str(Path(args.fusion_gate_checkpoint).resolve()) if args.fusion_gate_checkpoint else "",
         "checkpoint": str(Path(checkpoint.best_model_path).resolve()),
         "elapsed_sec": time.monotonic() - started,
         "params_total": sum(x.numel() for x in model.parameters()),

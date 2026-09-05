@@ -42,7 +42,8 @@ class FrozenPhaseNLinearCorrection(pl.LightningModule):
     MODES = {"fusion", "target_residual", "direct"}
 
     def __init__(self, phaseformer: nn.Module, *, mode: str, learning_rate: float,
-                 loss_name: str = "huber", huber_delta: float = 1.0):
+                 loss_name: str = "huber", huber_delta: float = 1.0,
+                 fusion_gate_logit: torch.Tensor | None = None):
         super().__init__()
         if mode not in self.MODES:
             raise ValueError(f"unsupported Stage-1 mode: {mode}")
@@ -56,9 +57,13 @@ class FrozenPhaseNLinearCorrection(pl.LightningModule):
         head_type = WeakPeriodResidualHead if mode == "fusion" else ResidualNLinearHead
         self.correction_head = head_type(int(phaseformer.seq_len), self.pred_len)
         # The fusion gate is part of Stage-0 / Treatment-A's unchanged fusion.
-        self.fusion_gate = nn.Parameter(torch.zeros(1, 1, int(phaseformer.enc_in)))
-        if self.mode == "direct":
-            self.fusion_gate.requires_grad_(False)
+        if self.mode == "fusion":
+            self.fusion_gate = nn.Parameter(torch.zeros(1, 1, int(phaseformer.enc_in)))
+        else:
+            if self.mode == "target_residual" and fusion_gate_logit is None:
+                raise ValueError("target_residual requires the frozen Stage-0 fusion gate")
+            gate = torch.zeros(1, 1, int(phaseformer.enc_in)) if fusion_gate_logit is None else fusion_gate_logit
+            self.register_buffer("fusion_gate", gate.detach().clone())
         self.freeze_phaseformer()
 
     def freeze_phaseformer(self):
@@ -127,8 +132,12 @@ class FrozenPhaseNLinearCorrection(pl.LightningModule):
         target = self._target(y)
         if self.mode == "fusion":
             loss = self._criterion(output, target)
-        else:
+        elif split == "train":
             loss = self._criterion(correction, target - phase)
+        else:
+            # Model selection is always by the deployable final forecast, even
+            # though Treatment A's training target is the PhaseFormer residual.
+            loss = self._criterion(output, target)
         self.log(f"{split}_loss", loss, on_epoch=True, prog_bar=split == "val")
         return loss
 

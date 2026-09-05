@@ -15,7 +15,8 @@
 - 从原版 PhaseFormer checkpoint 加载 (P)，训练前和最低 validation-loss
   checkpoint 恢复后均计算 state hash；hash 不一致立即失败。
 - `fusion` 是冻结 (P) 下的 Stage-0 配对 control；`target_residual` 使用同
-  参数量的 centered-NLinear head 拟合 (Y-P(X))，并保留 learned fusion；
+  参数量的 centered-NLinear head 拟合 (Y-P(X))，并复用 completed Stage-0 control
+  checkpoint 的**冻结** learned fusion gate；
   `direct` 仅移除该 fusion，输出 (P(X)+\Delta(X))。
 - 所有选择只读取 validation；正式运行固定 (L=720)、Huber、30 epochs、同一
   PhaseFormer checkpoint 和同 seed 配对。正式矩阵的每个 dataset/horizon 至少 3
@@ -29,6 +30,11 @@
 GPU 恢复前保持未启动状态；CPU 结果不得进入正式矩阵。已使用 `raft` 环境在
 ETTh1-H96、seed 2021、`direct`、1 epoch 完成 CPU smoke，仅验证数据、冻结 hash、
 训练、最低 validation checkpoint 恢复和逐样本统计链路，不构成实验结果。
+
+正式单 seed 启动顺序为 `fusion` → `target_residual`（传入前一步 checkpoint 的
+`--fusion-gate-checkpoint`）→ `direct`。其中 target-residual 的训练损失是
+`Delta` 对 `(Y-P(X))` 的误差，而最低 validation checkpoint 一律按最终可部署预测
+误差选择；这避免把 residual training target 与不受训的 fusion gate 混为一个实验变量。
 
 ---
 
