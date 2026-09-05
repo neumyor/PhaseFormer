@@ -1907,3 +1907,17 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 将 `ssa_low_frequency` 纳入 `scripts/run_weak_residual_trend_comparison.py`，并在 `PhaseFormer`/preset 中显式传递冻结参数 `W=144, r=2, candidate_rank=12, Pmin=144`。
 - SSA 分解改用确定性的 Gram 矩阵前 12 个特征对，避免完整 SVD；固定输入成分提取包在 `torch.no_grad()` 中，避免训练反向图穿过分解。前向形状、短周期抑制、尺度等测试通过（8 passed）。
 - CUDA smoke 首次发现完整 SVD 训练代价过高，已中止并修正为上述确定性 top-r 实现；正式实验尚未开始。
+
+## 2026-09-05 — ETTh1 local smooth / smooth-multiscale 深入样本审计
+
+- 新增 `scripts/analyze_etth1_smooth_route_roles.py` 与
+  `scripts/render_etth1_smooth_route_role_report.py`。它们只读取已存在的完整训练 checkpoint，
+  对 ETTh1 validation、channel 0、L=720→H=96、seed=2021 的 `smooth_local` 与
+  `smooth_multiscale` 分别选取8个 X-A 更优和8个 Only-A 更优样本；同一成分内 origin 间隔至少96。
+- 结果按六文件审计目录写入 `research_runs/etth1_smooth_route_role_cases/`，包括32张两行图、
+  样本级误差/形状描述统计、完整中文解释和可携 ZIP。检查通过：两个脚本 `py_compile` 成功；ZIP 内
+  Markdown 与磁盘原件字节一致，且恰包含被报告引用的32张图。
+- 审计明确记录：`smooth_local=G_24(X)` 是双侧 replicate-padded 的局部平滑；
+  `smooth_multiscale=G_24(X)-G_72(X)` 是双尺度差分/中频宽波包，而不是 global smooth trend。
+  这两个 A 的代表样本均显示右端曲率风险，故结果仅用于 NLinear 路由条件性诊断，不能作为
+  PhaseFormer 未使用趋势成分或纯趋势机制的结论。
