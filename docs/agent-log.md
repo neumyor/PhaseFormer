@@ -1939,3 +1939,9 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   不宣称 PhaseFormer 完全未使用趋势，亦不把 validation discovery 结果表述为 test 泛化结论。
 - 本阶段至此结束；下一阶段将在独立的 `weak_residual_nlinear_bottleneck` 分支研究 NLinear 分支的信息
   瓶颈压缩。已有原始训练、checkpoint 和审计工件仍保留在 `research_runs/`，未被移动或删除。
+## 2026-09-05 — Progressive IB Stage 1 implementation and smoke validation
+
+- Added `src/models/frozen_nlinear_correction.py` and `scripts/run_progressive_ib_stage1.py` on branch `weak_residual_nlinear_bottleneck`.
+- The runner freezes a checkpointed original PhaseFormer, verifies its state hash before/after fitting, and compares frozen fusion, target-only residual, and direct residual formulations with a shared NLinear-sized correction parameterization.
+- Validation: `/home/wangjing/miniconda3/envs/raft/bin/python -m py_compile src/models/frozen_nlinear_correction.py scripts/run_progressive_ib_stage1.py`; CPU-only ETTh1 H96 seed 2021 direct one-epoch smoke completed under `research_runs/progressive_ib_stage1_smoke_scratch/` (training, best-checkpoint restore, hash check, and sample metrics). This is not a formal result.
+- GPU probe found no usable NVIDIA driver/device. Formal Stage 1 commands require CUDA and have not been launched; temporary artifacts are kept below the ignored `research_runs/*_scratch/` roots.
