@@ -1,5 +1,10 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — 固定 SSA 参数并审计预测分歧案例的提取参数
+
+- `ssa_low_frequency` 在 ETTh1、Weather、ETTm1 均冻结为 `W=144, retained-rank=2, candidate-rank=12, Pmin=144 steps`；映射显式写入 `scripts/probe_ssa_low_frequency_trend.py`，即便当前三者数值一致也避免依赖隐式默认值。
+- 新增 `scripts/audit_asymmetric_case_extraction_params.py`，从 `asymmetric_prediction_divergence_cases` 真正用于图像生成的 X-A/Only-A checkpoint 配置反查并验证参数、L/H/seed/mode、63条 manifest 与63张图。它写入同目录 `EXTRACTION_PARAMETERS.md`；该审计明确现有 ETTh1 EMA/Holt 图仍是旧交付参数 α=.024、β=.006，而非新慢参数重训。
+
 ## 2026-09-05 — 低频 SSA 趋势提取与固定样本可视化
 
 - 新增 `ssa_low_frequency`：将每个 `(sample, channel)` 的 720 步历史嵌入 144×577 轨迹矩阵，进行 SVD 与 Hankel 对角平均；在前12个 SSA 重构分量中按周期不少于144步的频谱能量占比选择两个相加，最后端点锚定。该固定低频筛选刻意不把 ETT 的24/96步主周期当趋势；它不是普通的“直接取最大奇异值”SSA。

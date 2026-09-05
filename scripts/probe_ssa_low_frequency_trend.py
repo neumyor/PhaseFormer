@@ -22,9 +22,15 @@ from src.models.asymmetric_trend_components import extract_trend_component
 
 
 # These are the currently accepted slow EMA parameters, frozen before this
-# diagnostic.  SSA uses one dataset-independent setting in sample steps.
+# diagnostic.  The explicit per-dataset SSA map is intentionally identical at
+# present: it freezes a single cross-dataset extraction rule rather than
+# retrofitting values to forecast outcomes.
 SLOW_EMA = {"ETTh1": 0.006, "Weather": 0.024, "ETTm1": 0.006}
-SSA = {"window": 144, "rank": 2, "candidate_rank": 12, "min_period": 144}
+SSA_BY_DATASET = {
+    "ETTh1": {"window": 144, "rank": 2, "candidate_rank": 12, "min_period": 144},
+    "Weather": {"window": 144, "rank": 2, "candidate_rank": 12, "min_period": 144},
+    "ETTm1": {"window": 144, "rank": 2, "candidate_rank": 12, "min_period": 144},
+}
 
 
 def _level(component: np.ndarray, endpoint: float) -> np.ndarray:
@@ -49,9 +55,10 @@ def main() -> None:
             ground_truth = validation[origin + LOOKBACK : origin + LOOKBACK + HORIZON, CHANNEL]
             x = torch.as_tensor(history, dtype=torch.float32).view(1, LOOKBACK, 1)
             with torch.no_grad():
+                ssa_params = SSA_BY_DATASET[spec.name]
                 ssa_a = extract_trend_component(x, "ssa_low_frequency", **{
-                    "ssa_window": SSA["window"], "ssa_rank": SSA["rank"],
-                    "ssa_candidate_rank": SSA["candidate_rank"], "ssa_min_period": SSA["min_period"],
+                    "ssa_window": ssa_params["window"], "ssa_rank": ssa_params["rank"],
+                    "ssa_candidate_rank": ssa_params["candidate_rank"], "ssa_min_period": ssa_params["min_period"],
                 })[0, :, 0].cpu().numpy()
                 ema_a = extract_trend_component(
                     x, "causal_ema", causal_ema_alpha=SLOW_EMA[spec.name]
@@ -95,7 +102,7 @@ def main() -> None:
         "split: validation_only\n"
         "datasets: [ETTh1, Weather, ETTm1]\nlookback: 720\nhorizon: 96\nchannel: 0\n"
         "origins: [fixed_validation_fractions_0.3757, 0.75]\n"
-        "ssa: {window: 144, retained_rank: 2, candidate_rank: 12, min_period_steps: 144}\n"
+        "ssa: {ETTh1: {window: 144, retained_rank: 2, candidate_rank: 12, min_period_steps: 144}, Weather: {window: 144, retained_rank: 2, candidate_rank: 12, min_period_steps: 144}, ETTm1: {window: 144, retained_rank: 2, candidate_rank: 12, min_period_steps: 144}}\n"
         "slow_causal_ema: {ETTh1: 0.006, Weather: 0.024, ETTm1: 0.006}\n"
         "forecast_model_training: false\ntest_accessed: false\n", encoding="utf-8")
     report = [
