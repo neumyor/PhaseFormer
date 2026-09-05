@@ -73,12 +73,16 @@ def delta(value: float, baseline: float) -> str:
     return f"{value - baseline:+.6f} ({100.0 * (value - baseline) / baseline:+.2f}%)"
 
 
+def route_delta(only_a: float, x_minus_a: float) -> str:
+    """Only-A relative to X-A; negative means Only-A has lower error."""
+    return f"{100.0 * (only_a - x_minus_a) / x_minus_a:+.2f}%"
+
+
 def main() -> None:
     lines = [
         "# All component-route validation metrics", "",
-        "This is the one-table record for all components represented by the prediction-divergence images in this directory. All results are **validation-only** (not test): L=720, H=96, seed=2021, percent=100. `X-A` keeps full X for PhaseFormer and gives X−A to NLinear; `Only-A` keeps full X for PhaseFormer and gives A to NLinear. All values are the best validation checkpoint's MSE/MAE; lower is better.", "",
-        "| Dataset | Component | Exact extraction parameters | Baseline-full MSE / MAE | X-A MSE / MAE | X-A ΔMSE / ΔMAE | Only-A MSE / MAE | Only-A ΔMSE / ΔMAE |",
-        "|---|---|---|---:|---:|---:|---:|---:|",
+        "This record covers all components represented by the prediction-divergence images in this directory. All results are **validation-only** (not test): L=720, H=96, seed=2021, percent=100. `X-A` keeps full X for PhaseFormer and gives X−A to NLinear; `Only-A` keeps full X for PhaseFormer and gives A to NLinear. All values are the best validation checkpoint's MSE/MAE; lower is better.",
+        "", "`Only-A 相对 X-A` is `(Only-A − X-A) / X-A`: negative means Only-A is better; positive means X-A is better.", "",
     ]
     validated = 0
     for dataset in DATASETS:
@@ -86,6 +90,11 @@ def main() -> None:
         _, baseline = load_and_verify(baseline_path, dataset, None, None)
         baseline_mse, baseline_mae = float(baseline["val_mse"]), float(baseline["val_mae"])
         validated += 1
+        lines.extend([
+            f"## {dataset}", "",
+            "| Component | Exact extraction parameters | Baseline-full MSE / MAE | X-A MSE / MAE | X-A ΔMSE / ΔMAE | Only-A MSE / MAE | Only-A ΔMSE / ΔMAE | Only-A 相对 X-A ΔMSE / ΔMAE |",
+            "|---|---|---:|---:|---:|---:|---:|---:|",
+        ])
         for component in COMPONENTS:
             minus_cfg, minus = load_and_verify(candidate_path(dataset, component, "minus_component"), dataset, component, "minus_component")
             only_cfg, only = load_and_verify(candidate_path(dataset, component, "component_only"), dataset, component, "component_only")
@@ -94,12 +103,14 @@ def main() -> None:
             x_mse, x_mae = float(minus["val_mse"]), float(minus["val_mae"])
             a_mse, a_mae = float(only["val_mse"]), float(only["val_mae"])
             lines.append(
-                f"| {dataset} | `{component}` | {params(component, minus_cfg['hyperparams'])} | "
+                f"| `{component}` | {params(component, minus_cfg['hyperparams'])} | "
                 f"{metric(baseline_mse)} / {metric(baseline_mae)} | {metric(x_mse)} / {metric(x_mae)} | "
                 f"{delta(x_mse, baseline_mse)} / {delta(x_mae, baseline_mae)} | "
-                f"{metric(a_mse)} / {metric(a_mae)} | {delta(a_mse, baseline_mse)} / {delta(a_mae, baseline_mae)} |"
+                f"{metric(a_mse)} / {metric(a_mae)} | {delta(a_mse, baseline_mse)} / {delta(a_mae, baseline_mae)} | "
+                f"{route_delta(a_mse, x_mse)} / {route_delta(a_mae, x_mae)} |"
             )
             validated += 2
+        lines.append("")
     lines += [
         "", "## Verification", "",
         f"The generator validated {validated} real runs (3 Baseline-full + 21 X-A + 21 Only-A): each has a matching dataset/L/H/seed/mode configuration, exactly one finite aggregate `metrics.csv` row, and an existing checkpoint referenced by that row. It also verified X-A and Only-A use identical effective extraction arguments for every dataset/component pair.",

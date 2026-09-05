@@ -1,5 +1,9 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — 按数据集章节呈现 X-A/Only-A 路由差异
+
+- `ALL_COMPONENT_ROUTE_VALIDATION_METRICS.md` 改为 ETTh1、Weather、ETTm1 三个章节；新增 `Only-A 相对 X-A ΔMSE / ΔMAE` 百分比列，定义为 `(Only-A−X-A)/X-A`，负值表示 Only-A 误差更低。
+
 ## 2026-09-05 — 汇总并核验全部预测分歧成分的路由指标
 
 - 新增 `scripts/write_asymmetric_case_all_metrics.py`，在生成一张三数据集×七成分的 Baseline-full、X-A、Only-A validation MSE/MAE 总表前，逐一核验 45 个真实 run 的协议、模式、有限指标、checkpoint 存在性及同成分 X-A/Only-A 参数一致性。输出写至 prediction-divergence 目录的 `ALL_COMPONENT_ROUTE_VALIDATION_METRICS.md`。
