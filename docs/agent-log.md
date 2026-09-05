@@ -1,5 +1,10 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — 低频 SSA 趋势提取与固定样本可视化
+
+- 新增 `ssa_low_frequency`：将每个 `(sample, channel)` 的 720 步历史嵌入 144×577 轨迹矩阵，进行 SVD 与 Hankel 对角平均；在前12个 SSA 重构分量中按周期不少于144步的频谱能量占比选择两个相加，最后端点锚定。该固定低频筛选刻意不把 ETT 的24/96步主周期当趋势；它不是普通的“直接取最大奇异值”SSA。
+- 新增 validation-only 探针 `scripts/probe_ssa_low_frequency_trend.py`：在 ETTh1、Weather、ETTm1 各两个既有 channel-0 固定样本绘制历史、SSA 趋势层级、当前慢速 Causal-EMA 趋势层级及后续96步 GT；GT 仅作图，不进入提取或参数选择。输出严格六文件审计目录与命令待验证后记录。
+
 ## 2026-09-04 — A6 trend-filter 非对称 Weak Residual 探针
 
 - 新增冻结的趋势滤波趋势性成分 `A6=trend_filter`，定义为一阶 trend filtering：

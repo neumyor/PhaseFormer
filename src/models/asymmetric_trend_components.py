@@ -21,6 +21,7 @@ TREND_COMPONENTS = {
     "causal_ema",
     "causal_local_linear",
     "holt_local_linear",
+    "ssa_low_frequency",
 }
 
 
@@ -172,6 +173,68 @@ def _holt_local_linear(
     return torch.cat(values, dim=1)
 
 
+def _ssa_low_frequency(
+    x: torch.Tensor, *, window: int = 144, rank: int = 2, candidate_rank: int = 12,
+    min_period: int = 144,
+) -> torch.Tensor:
+    """Reconstruct a low-frequency SSA trend by diagonal averaging.
+
+    The trajectory matrix is decomposed independently for every sample and
+    variable.  Merely retaining its largest singular values is unsuitable for
+    these data: a strong 24/96-step cycle can occupy the leading SSA pair.
+    Therefore this *low-frequency SSA* scores the first ``candidate_rank``
+    reconstructed eigentriples by their Fourier energy at periods no shorter
+    than ``min_period`` and retains the best ``rank`` of them.  All choices are
+    fixed extraction hyperparameters, not fitted per dataset or forecast.
+    """
+    length = x.size(1)
+    if not 2 <= int(window) < length:
+        raise ValueError("SSA window must lie in [2, history_length)")
+    if rank <= 0 or candidate_rank <= 0 or min_period < 2:
+        raise ValueError("SSA rank, candidate rank, and minimum period must be positive")
+    window = int(window)
+    # (B, L, C) -> (B*C, W, K), where K is the number of lagged vectors.
+    series = x.permute(0, 2, 1).reshape(-1, length)
+    trajectory = series.unfold(1, window, 1).transpose(1, 2)
+    left, singular, right = torch.linalg.svd(trajectory, full_matrices=False)
+    usable = min(int(candidate_rank), singular.size(1))
+    keep = min(int(rank), usable)
+    indices = torch.arange(window, device=x.device).view(-1, 1) + torch.arange(
+        trajectory.size(2), device=x.device
+    ).view(1, -1)
+    flat_indices = indices.reshape(1, -1).expand(series.size(0), -1)
+    counts = torch.bincount(indices.reshape(-1), minlength=length).to(dtype=x.dtype).view(1, -1)
+    reconstructed: list[torch.Tensor] = []
+    scores: list[torch.Tensor] = []
+    # Candidate ranks are intentionally few; looping avoids materializing an
+    # N×R×W×K tensor in training-time use.
+    for component_index in range(usable):
+        elementary = (
+            left[:, :, component_index : component_index + 1]
+            * singular[:, component_index].view(-1, 1, 1)
+            * right[:, component_index : component_index + 1, :]
+        )
+        diagonal_sum = series.new_zeros(series.size(0), length)
+        diagonal_sum.scatter_add_(1, flat_indices, elementary.reshape(series.size(0), -1))
+        component = diagonal_sum / counts.clamp_min(torch.finfo(x.dtype).eps)
+        reconstructed.append(component)
+        centered = component - component.mean(dim=1, keepdim=True)
+        spectrum = torch.fft.rfft(centered, dim=1).abs().square()
+        # Bin k represents period L/k.  Exclude DC: an endpoint-anchored
+        # constant contributes no usable residual-branch input anyway.
+        max_bin = min(length // int(min_period), spectrum.size(1) - 1)
+        low_energy = spectrum[:, 1 : max_bin + 1].sum(dim=1)
+        total_energy = spectrum[:, 1:].sum(dim=1).clamp_min(torch.finfo(x.dtype).eps)
+        scores.append(low_energy / total_energy)
+    candidate_values = torch.stack(reconstructed, dim=1)
+    candidate_scores = torch.stack(scores, dim=1)
+    selected = candidate_scores.topk(keep, dim=1).indices
+    selected_values = candidate_values.gather(
+        1, selected.unsqueeze(-1).expand(-1, -1, length)
+    ).sum(dim=1)
+    return selected_values.reshape(x.size(0), x.size(2), length).permute(0, 2, 1)
+
+
 def extract_trend_component(
     x: torch.Tensor,
     component: str,
@@ -188,6 +251,10 @@ def extract_trend_component(
     causal_local_linear_sigma: float = 24.0,
     holt_level_alpha: float = 0.15,
     holt_trend_beta: float = 0.03,
+    ssa_window: int = 144,
+    ssa_rank: int = 2,
+    ssa_candidate_rank: int = 12,
+    ssa_min_period: int = 144,
 ) -> torch.Tensor:
     """Extract one frozen trend component from ``(B,L,C)`` input."""
     if component not in TREND_COMPONENTS:
@@ -232,6 +299,16 @@ def extract_trend_component(
         return _endpoint_anchor(
             _holt_local_linear(
                 x, level_alpha=holt_level_alpha, trend_beta=holt_trend_beta
+            )
+        )
+    if component == "ssa_low_frequency":
+        return _endpoint_anchor(
+            _ssa_low_frequency(
+                x,
+                window=ssa_window,
+                rank=ssa_rank,
+                candidate_rank=ssa_candidate_rank,
+                min_period=ssa_min_period,
             )
         )
     # Difference of short- and long-scale smoothed trends.  Both smoothers use

@@ -31,6 +31,24 @@ class AsymmetricTrendComponentTests(unittest.TestCase):
         scaled = extract_trend_component(3.7 * x, "trend_filter", trend_filter_iterations=32)
         torch.testing.assert_close(scaled, 3.7 * a, rtol=2e-5, atol=2e-5)
 
+    def test_low_frequency_ssa_is_scale_equivariant_and_rejects_short_cycle(self):
+        time = torch.arange(720, dtype=torch.float32)
+        # A low-frequency drift and a deliberately much larger 24-step cycle.
+        x = (0.002 * time + 3.0 * torch.sin(2.0 * torch.pi * time / 24.0)).view(1, 720, 1)
+        component = extract_trend_component(
+            x, "ssa_low_frequency", ssa_window=144, ssa_rank=2,
+            ssa_candidate_rank=12, ssa_min_period=144,
+        )
+        scaled = extract_trend_component(
+            2.5 * x, "ssa_low_frequency", ssa_window=144, ssa_rank=2,
+            ssa_candidate_rank=12, ssa_min_period=144,
+        )
+        torch.testing.assert_close(scaled, 2.5 * component, rtol=2e-4, atol=2e-4)
+        # Removing the linear projection leaves little of the 24-step cycle.
+        cycle = torch.sin(2.0 * torch.pi * time / 24.0)
+        correlation = torch.corrcoef(torch.stack((component[0, :, 0], cycle)))[0, 1].abs()
+        self.assertLess(float(correlation), 0.20)
+
     def test_causal_components_do_not_depend_on_future_history(self):
         torch.manual_seed(13)
         x = torch.randn(2, 720, 3)
