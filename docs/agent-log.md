@@ -1,5 +1,9 @@
 # Agent Maintenance Log
 
+## 2026-09-05 — 汇总并核验全部预测分歧成分的路由指标
+
+- 新增 `scripts/write_asymmetric_case_all_metrics.py`，在生成一张三数据集×七成分的 Baseline-full、X-A、Only-A validation MSE/MAE 总表前，逐一核验 45 个真实 run 的协议、模式、有限指标、checkpoint 存在性及同成分 X-A/Only-A 参数一致性。输出写至 prediction-divergence 目录的 `ALL_COMPONENT_ROUTE_VALIDATION_METRICS.md`。
+
 ## 2026-09-05 — 用 ETTh1 慢趋势重训更新 EMA/Holt 可视化来源
 
 - `export_asymmetric_joint_route_cases.py` 对 ETTh1 的 `causal_ema`、`holt_local_linear` 改为只解析已完成的慢趋势 `e30` 原始训练 run（排除 e1 smoke）；Weather、ETTm1 仍使用原交付 checkpoint。随后重建 joint-route 图、manifest、聚合表和提取参数审计；旧目录先移动至可恢复的 `/tmp` 备份。
