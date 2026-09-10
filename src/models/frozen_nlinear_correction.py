@@ -9,6 +9,7 @@ the phase branch.
 from __future__ import annotations
 
 import torch
+from torch.nn import functional as F
 from torch import nn
 import pytorch_lightning as pl
 
@@ -28,6 +29,69 @@ class ResidualNLinearHead(nn.Module):
         last = x[:, -1:, :]
         centered = (x - last).permute(0, 2, 1).contiguous()
         return self.linear(centered).permute(0, 2, 1).contiguous()
+
+
+class PooledLowRankResidualHead(nn.Module):
+    """Centered NLinear correction with optional smoothing and temporal pooling.
+
+    The final observation remains excluded from the dynamic input, matching
+    NLinear's level-anchor convention. ``smooth_ratio`` blends the centered
+    history with a fixed moving-average view before the pooling bottleneck.
+    """
+
+    def __init__(
+        self,
+        seq_len: int,
+        pred_len: int,
+        *,
+        pool_factor: int,
+        rank: int,
+        smooth_ratio: float = 0.0,
+        smooth_window: int = 24,
+    ):
+        super().__init__()
+        if pool_factor < 1:
+            raise ValueError("pool_factor must be >= 1")
+        if rank < 1:
+            raise ValueError("rank must be >= 1")
+        if not 0.0 <= smooth_ratio <= 1.0:
+            raise ValueError("smooth_ratio must be in [0, 1]")
+        if smooth_window < 1:
+            raise ValueError("smooth_window must be >= 1")
+        self.seq_len = int(seq_len)
+        self.pred_len = int(pred_len)
+        self.pool_factor = int(pool_factor)
+        self.pooled_len = (self.seq_len + self.pool_factor - 1) // self.pool_factor
+        if rank > min(self.pooled_len, self.pred_len):
+            raise ValueError(
+                f"rank={rank} exceeds factorized map limit "
+                f"min({self.pooled_len}, {self.pred_len})"
+            )
+        self.rank = int(rank)
+        self.smooth_ratio = float(smooth_ratio)
+        self.smooth_window = int(smooth_window)
+        self.encoder = nn.Linear(self.pooled_len, self.rank)
+        self.decoder = nn.Linear(self.rank, self.pred_len)
+        nn.init.zeros_(self.decoder.weight)
+        nn.init.zeros_(self.decoder.bias)
+
+    def forward(self, x):
+        last = x[:, -1:, :]
+        centered = (x - last).transpose(1, 2).contiguous()
+        if self.smooth_ratio:
+            left = (self.smooth_window - 1) // 2
+            right = self.smooth_window - 1 - left
+            smoothed = F.avg_pool1d(
+                F.pad(centered, (left, right), mode="replicate"),
+                kernel_size=self.smooth_window,
+                stride=1,
+            )
+            centered = (
+                (1.0 - self.smooth_ratio) * centered
+                + self.smooth_ratio * smoothed
+            )
+        pooled = F.adaptive_avg_pool1d(centered, self.pooled_len)
+        return self.decoder(self.encoder(pooled)).transpose(1, 2).contiguous()
 
 
 class FrozenPhaseNLinearCorrection(pl.LightningModule):
@@ -151,4 +215,36 @@ class FrozenPhaseNLinearCorrection(pl.LightningModule):
         return torch.optim.Adam(
             [parameter for parameter in self.parameters() if parameter.requires_grad],
             lr=self.learning_rate,
+        )
+
+
+class FrozenPhasePooledLowRankCorrection(FrozenPhaseNLinearCorrection):
+    """Frozen PhaseFormer plus a pooled, factorized direct residual correction."""
+
+    def __init__(
+        self,
+        phaseformer: nn.Module,
+        *,
+        learning_rate: float,
+        loss_name: str = "huber",
+        huber_delta: float = 1.0,
+        pool_factor: int,
+        rank: int,
+        smooth_ratio: float = 0.0,
+        smooth_window: int = 24,
+    ):
+        super().__init__(
+            phaseformer,
+            mode="direct",
+            learning_rate=learning_rate,
+            loss_name=loss_name,
+            huber_delta=huber_delta,
+        )
+        self.correction_head = PooledLowRankResidualHead(
+            int(phaseformer.seq_len),
+            int(phaseformer.pred_len),
+            pool_factor=pool_factor,
+            rank=rank,
+            smooth_ratio=smooth_ratio,
+            smooth_window=smooth_window,
         )
