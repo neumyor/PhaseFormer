@@ -134,6 +134,8 @@ def main():
     after_hash = digest(model.phaseformer)
     if before_hash != after_hash:
         raise RuntimeError("frozen PhaseFormer hash changed during Stage 1 training")
+    # Lightning >= 2.5 teardown moves the LightningModule back to CPU after fit.
+    model.to(trainer.strategy.root_device)
     metrics = evaluate(model, val_loader, trainer.strategy.root_device)
     rows = metrics.pop("sample_rows")
     with (run_dir / "sample_metrics.jsonl").open("w") as handle:
