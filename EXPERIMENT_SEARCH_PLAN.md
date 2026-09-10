@@ -1,5 +1,13 @@
 # PhaseFormer 32 任务机制与超参数搜索计划
 
+> 当前优先计划：针对完成的 pooled low-rank NLinear 初筛，开展可识别的
+> 池化、相对低秩与平滑因素实验。初筛未观察到可推广的单调关系，后续将以
+> validation-only 的 `pool x relative-rank` 全因子容量阶段和预注册平滑交互阶段，
+> 配对 `phase_only`、direct-NLinear 与 full-rank-factorized controls；冻结后才进行一次
+> 三 seed test。完整设计、停止条件和 test 边界见
+> `docs/PhaseFormer_pooled_lowrank_nlinear_experiment.md` 的
+> “Controlled Follow-up Plan”。本计划尚未启动训练，既有 exploratory test 结果不参与选择。
+
 > 当前用户指定实验：PhaseFormer 输入成分 H1/H3/H4 因果消融，预注册方案见
 > `docs/PhaseFormer_input_component_H1_H3_H4_plan.md`。比较 `original`、`weak_residual`、
 > `rcrf_nlinear_plain` 在 `full/half_A/minus_A/sham` 输入上的重训与固定-checkpoint效应；当前仅完成

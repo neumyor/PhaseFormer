@@ -1,5 +1,11 @@
 # Agent Maintenance Log
 
+## 2026-09-10 — 重规划池化低秩 NLinear 因素实验
+
+- 用户指出 H96 单 seed 初筛未呈现明确的性能—低秩/池化关联。确认该判断：上一轮同时改变 pool/rank、按原始 rank 而非相对容量比较、仅对三个 data-driven cell 测平滑，不能识别主效应。
+- 更新 `docs/PhaseFormer_pooled_lowrank_nlinear_experiment.md` 的 Controlled Follow-up Plan，并在 `EXPERIMENT_SEARCH_PLAN.md` 登记为当前优先计划。新设计新增 direct-NLinear 和 full-rank-factorized controls，以相对 rank `q` 建立 pool×capacity 全因子 validation-only 阶段，随后用跨 pool/低中容量的预注册平滑格点识别交互；冻结前禁止读取新的 test。
+- 未修改模型或训练代码，未启动任何 follow-up 训练。实施前必须为 runner 增加不读取 test 的 validation-only 模式。
+
 ## 2026-09-10 — 联合池化低秩 NLinear H96 筛选完成
 
 - 按用户要求在 NLinear 分支前加入可配置时间池化和低秩瓶颈；PhaseFormer 路径、池化低秩 NLinear 路径与静态融合 gate 均从随机初始化开始，在每个 `(pool factor, rank, smooth ratio)` 配置中联合训练，未冻结任何分支。

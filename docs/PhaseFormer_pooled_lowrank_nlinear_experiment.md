@@ -34,7 +34,8 @@ smoothing ratio is a separate blend coefficient in `[0, 1]`.
 
 1. With `smooth_ratio=0`, evaluate pool factors `{1, 2, 4, 8}` and ranks
    `{4, 8, 16, 32, 64, 96}` where the rank is valid for the pooled length.
-2. Use validation MSE and MAE normalized by the matched frozen-phase baseline
+2. Use validation MSE and MAE normalized by the matched jointly trained original
+   baseline
    to select the best three non-full `(pool_factor, rank)` configurations per
    dataset.
 3. For those three configurations, evaluate smoothing ratios
@@ -67,3 +68,115 @@ smoothing ratio is a separate blend coefficient in `[0, 1]`.
 - A negative Golden delta means a lower error than Golden. It is not by itself
   a paper-level improvement claim.
 - The experiment does not change the current model preset.
+
+## Controlled Follow-up Plan
+
+> Status: planned only on September 10, 2026. No follow-up model has been
+> trained and no further test prediction will be read until the selection is
+> frozen.
+
+### Question
+
+The completed screen does not identify a monotonic low-rank or pooling effect:
+pooling and rank changed jointly, ranks were not normalized to each pooled
+input length, smoothing was only evaluated on three validation-selected cells,
+and H96/one-seed results may reflect optimizer variance. The follow-up asks:
+
+1. At fixed pooling, how does **relative factor rank** change validation
+   error?
+2. At fixed relative rank, how does pooling change validation error?
+3. Does smoothing have a main effect, or only an interaction with pooling and
+   rank?
+
+The prior exploratory test results are retained for audit but are excluded
+from all follow-up configuration selection.
+
+### Controls And Factors
+
+- `phase_only`: original PhaseFormer.
+- `direct_nlinear`: the existing unpooled, unfactorized
+  `WeakPeriodResidualHead` jointly trained with PhaseFormer and the same static
+  fusion gate. This distinguishes a bottleneck effect from merely replacing a
+  direct linear map with two linear layers.
+- `factorized_full`: pooled-low-rank head with `pool=1` and the maximum valid
+  rank. This is the factorization-parameterization control.
+- Pool factor: `p in {1, 2, 4, 8}`.
+- Relative rank:
+  `q in {1/24, 1/12, 1/6, 1/3, 2/3, 1}`. For each `(p, H)`, use
+  `r = max(4, round_to_multiple_of_4(q * min(ceil(720 / p), H)))`, capped at
+  the valid maximum. Results are analyzed by `q`, not by raw rank alone.
+- Smoothing ratio: `s in {0, .10, .25, .50, .75}` with the fixed 24-step
+  replicated-boundary moving-average definition already used in the initial
+  screen.
+
+All conditions keep L720, Huber, 30-epoch maximum, the lowest-validation-loss
+checkpoint, identical data splits, and random joint optimization of the
+PhaseFormer path, residual path, and fusion gate.
+
+### Phase A: Capacity Identification, Validation Only
+
+- Settings: `ETTh1` and `ETTm1`, H96 and H192, seeds `2021` and `2022`.
+- Train `phase_only`, `direct_nlinear`, and the complete
+  `p x q x s=0` factorial grid. Duplicate rank values created by capping are
+  deduplicated but recorded.
+- Do not call `trainer.test()` or otherwise read test predictions.
+- Primary paired response for every seed is candidate MSE/MAE minus the
+  same-seed `direct_nlinear` control. Golden is reported only after the final
+  confirmation; it is not used for factor-effect estimation.
+
+### Phase B: Smoothing Identification, Validation Only
+
+- Preconditions: Phase A completes without data, checkpoint, or numerical
+  failures; its analysis is recorded before this phase starts.
+- Settings: `ETTh1` and `ETTm1`, H96, seeds `2021` and `2022`.
+- Evaluate a predeclared balanced subset:
+  `p in {1, 2, 4, 8}` crossed with `q in {1/12, 1/3}`, and every smoothing
+  ratio `s`. The `s=0` points are reused only when the exact setting and seed
+  match Phase A; all nonzero-smoothing cells are independently trained.
+- This grid measures smoothing at low and medium relative capacity across the
+  entire pooling range, rather than only around prior validation winners.
+
+### Budget And Stop Conditions
+
+- Phase A has at most 26 jointly trained models per dataset-horizon-seed
+  setting, or 208 runs before rank-capping deduplication.
+- Phase B reuses exact `s=0` Phase A runs and adds at most 32 nonzero-smoothing
+  runs per dataset-seed setting, or 128 additional runs.
+- Confirmation has at most two frozen shared candidates plus the two controls:
+  at most 48 full-train test runs across two datasets, two horizons, and three
+  seeds.
+- Stop after Phase A if neither MSE nor MAE yields a reproducible pool, rank,
+  or pool-by-rank effect under the rules below. Stop after Phase B if smoothing
+  has no reproducible conditional effect. In either case, retain the direct
+  NLinear control and do not introduce pool/rank/smoothing as a preset.
+
+### Analysis And Decision Rules
+
+- Use seed-paired validation deltas and report means, standard deviations,
+  paired bootstrap 95% intervals, and per-setting rank/pool response curves.
+- Estimate fixed effects for `log2(p)`, `log2(q)`, their interaction, and, in
+  Phase B, smoothing plus its interactions. Dataset and horizon remain
+  explicitly reported strata; no dataset-specific mechanism is promoted from
+  a single favorable cell.
+- A claimed main effect requires the same directional paired effect in at
+  least three of the four dataset-horizon settings and a pooled bootstrap
+  interval excluding zero for both MSE and MAE. Otherwise the result is
+  recorded as an interaction or as inconclusive.
+- A smoothing claim additionally requires its direction to be consistent in
+  both seeds at the affected `(p, q)` cells. A benefit limited to high rank is
+  described as a capacity-by-smoothing interaction, not a global smoothing
+  benefit.
+- Select at most two shared configurations only after these validation rules
+  are frozen. If neither passes, stop without a new test run or preset change.
+
+### Confirmation And Test Boundary
+
+- Only a validation-qualified shared configuration proceeds to full 30-epoch
+  confirmation on ETTh1/ETTm1, H96/H192, seeds `2021`, `2022`, and `2023`,
+  paired against `phase_only` and `direct_nlinear`.
+- Test is read exactly once after the configuration is frozen. The final
+  package reports Golden deltas, matched-control deltas, parameter count,
+  training time, and sample-level error analysis.
+- The required runner must add a validation-only mode that omits
+  `--evaluate-test`; the existing test-reading matrix runner must not be
+  reused for Phases A or B without that change.
