@@ -72,6 +72,65 @@ class WeakPeriodResidualHead(nn.Module):
         return delta + last.expand(-1, delta.size(1), -1)
 
 
+class PooledLowRankWeakPeriodResidualHead(nn.Module):
+    """Jointly trained NLinear branch with pooling and a rank bottleneck."""
+
+    def __init__(
+        self,
+        seq_len: int,
+        pred_len: int,
+        *,
+        pool_factor: int,
+        rank: int,
+        smooth_ratio: float = 0.0,
+        smooth_window: int = 24,
+    ):
+        super().__init__()
+        if pool_factor < 1:
+            raise ValueError("pool_factor must be >= 1")
+        if rank < 1:
+            raise ValueError("rank must be >= 1")
+        if not 0.0 <= smooth_ratio <= 1.0:
+            raise ValueError("smooth_ratio must be in [0, 1]")
+        if smooth_window < 1:
+            raise ValueError("smooth_window must be >= 1")
+        self.seq_len = int(seq_len)
+        self.pred_len = int(pred_len)
+        self.pool_factor = int(pool_factor)
+        self.pooled_len = math.ceil(self.seq_len / self.pool_factor)
+        max_rank = min(self.pooled_len, self.pred_len)
+        if rank > max_rank:
+            raise ValueError(
+                f"rank={rank} exceeds factorized-map limit {max_rank}"
+            )
+        self.rank = int(rank)
+        self.smooth_ratio = float(smooth_ratio)
+        self.smooth_window = int(smooth_window)
+        self.encoder = nn.Linear(self.pooled_len, self.rank)
+        self.decoder = nn.Linear(self.rank, self.pred_len)
+        nn.init.zeros_(self.decoder.weight)
+        nn.init.zeros_(self.decoder.bias)
+
+    def forward(self, x):  # x: (B, L, C), normalized scale
+        last = x[:, -1:, :]
+        centered = (x - last).permute(0, 2, 1).contiguous()
+        if self.smooth_ratio:
+            left = (self.smooth_window - 1) // 2
+            right = self.smooth_window - 1 - left
+            smoothed = F.avg_pool1d(
+                F.pad(centered, (left, right), mode="replicate"),
+                kernel_size=self.smooth_window,
+                stride=1,
+            )
+            centered = (
+                (1.0 - self.smooth_ratio) * centered
+                + self.smooth_ratio * smoothed
+            )
+        pooled = F.adaptive_avg_pool1d(centered, self.pooled_len)
+        delta = self.decoder(self.encoder(pooled)).permute(0, 2, 1).contiguous()
+        return delta + last.expand(-1, self.pred_len, -1)
+
+
 class PeriodPositionEncodedResidualHead(nn.Module):
     """NLinear residual augmented by a position-only periodic retrieval path.
 

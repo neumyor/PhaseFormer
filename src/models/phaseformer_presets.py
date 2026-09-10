@@ -1626,6 +1626,18 @@ class PhaseFormerPresetConfig:
         self.weak_period_residual_head_type = hyperparams.get(
             "weak_period_residual_head_type", "shared"
         )
+        self.weak_period_residual_pool_factor = hyperparams.get(
+            "weak_period_residual_pool_factor", 1
+        )
+        self.weak_period_residual_rank = hyperparams.get(
+            "weak_period_residual_rank", min(16, horizon)
+        )
+        self.weak_period_residual_smooth_ratio = hyperparams.get(
+            "weak_period_residual_smooth_ratio", 0.0
+        )
+        self.weak_period_residual_smooth_window = hyperparams.get(
+            "weak_period_residual_smooth_window", 24
+        )
         self.weak_residual_asymmetric_component = hyperparams.get(
             "weak_residual_asymmetric_component", "none"
         )

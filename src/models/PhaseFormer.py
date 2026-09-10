@@ -11,6 +11,7 @@ from src.models.pl_bases.default_module import DefaultPLModule
 from src.models.phase_adapters import (
     RevIN,
     WeakPeriodResidualHead,
+    PooledLowRankWeakPeriodResidualHead,
     ChannelWiseWeakPeriodResidualHead,
     LowPassWeakPeriodResidualHead,
     AdaptiveWeakPeriodGate,
@@ -999,6 +1000,21 @@ class PhaseFormer(DefaultPLModule):
                     self.seq_len,
                     self.pred_len,
                     window=getattr(configs, "weak_period_residual_smooth_window", 25),
+                )
+            elif residual_head_type == "pooled_lowrank":
+                self.weak_period_residual = PooledLowRankWeakPeriodResidualHead(
+                    self.seq_len,
+                    self.pred_len,
+                    pool_factor=getattr(
+                        configs, "weak_period_residual_pool_factor", 1
+                    ),
+                    rank=getattr(configs, "weak_period_residual_rank", 16),
+                    smooth_ratio=getattr(
+                        configs, "weak_period_residual_smooth_ratio", 0.0
+                    ),
+                    smooth_window=getattr(
+                        configs, "weak_period_residual_smooth_window", 24
+                    ),
                 )
             else:
                 self.weak_period_residual = WeakPeriodResidualHead(
