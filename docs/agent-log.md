@@ -4,6 +4,7 @@
 
 - 用户指出 H96 单 seed 初筛未呈现明确的性能—低秩/池化关联。确认该判断：上一轮同时改变 pool/rank、按原始 rank 而非相对容量比较、仅对三个 data-driven cell 测平滑，不能识别主效应。
 - 更新 `docs/PhaseFormer_pooled_lowrank_nlinear_experiment.md` 的 Controlled Follow-up Plan，并在 `EXPERIMENT_SEARCH_PLAN.md` 登记为当前优先计划。新设计新增 direct-NLinear 和 full-rank-factorized controls，以相对 rank `q` 建立 pool×capacity 全因子 validation-only 阶段，随后用跨 pool/低中容量的预注册平滑格点识别交互；冻结前禁止读取新的 test。
+- 用户要求缩减预算后，Phase A 改为 ETTh1/ETTm1 的 H96、三 seed、`p={1,2,4}` 与 `q={1/12,1/3,1}` 的 66-run 容量筛选；Phase B 改为两个 seed、六个预注册 pool/rank cell、仅 `.25/.50` 两档非零平滑的 48-run 交互筛选。`p=8` 只保留为已有探索性边界观察，H192 仅在 H96 效应通过门槛后作为复制。两阶段总预算从 336 降至 114 次训练。
 - 未修改模型或训练代码，未启动任何 follow-up 训练。实施前必须为 runner 增加不读取 test 的 validation-only 模式。
 
 ## 2026-09-10 — 联合池化低秩 NLinear H96 筛选完成

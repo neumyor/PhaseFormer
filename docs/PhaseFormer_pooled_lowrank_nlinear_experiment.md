@@ -88,8 +88,10 @@ and H96/one-seed results may reflect optimizer variance. The follow-up asks:
 3. Does smoothing have a main effect, or only an interaction with pooling and
    rank?
 
-The prior exploratory test results are retained for audit but are excluded
-from all follow-up configuration selection.
+The prior exploratory matrix is test-set-exposed and motivated this adaptive
+follow-up scope. Its numeric values are excluded from all future configuration
+ranking and selection, but every follow-up report must disclose this
+test-informed lineage and must not be described as blind evaluation.
 
 ### Controls And Factors
 
@@ -100,12 +102,14 @@ from all follow-up configuration selection.
   direct linear map with two linear layers.
 - `factorized_full`: pooled-low-rank head with `pool=1` and the maximum valid
   rank. This is the factorization-parameterization control.
-- Pool factor: `p in {1, 2, 4, 8}`.
+- Pool factor: `p in {1, 2, 4}`. The `p=8` condition remains recorded as an
+  exploratory boundary observation, but is outside the budgeted identification
+  range; it can be added only if the smaller-pool response is non-monotonic.
 - Relative rank:
-  `q in {1/24, 1/12, 1/6, 1/3, 2/3, 1}`. For each `(p, H)`, use
+  `q in {1/12, 1/3, 1}`. For each `(p, H)`, use
   `r = max(4, round_to_multiple_of_4(q * min(ceil(720 / p), H)))`, capped at
   the valid maximum. Results are analyzed by `q`, not by raw rank alone.
-- Smoothing ratio: `s in {0, .10, .25, .50, .75}` with the fixed 24-step
+- Smoothing ratio: `s in {0, .25, .50}` with the fixed 24-step
   replicated-boundary moving-average definition already used in the initial
   screen.
 
@@ -115,7 +119,7 @@ PhaseFormer path, residual path, and fusion gate.
 
 ### Phase A: Capacity Identification, Validation Only
 
-- Settings: `ETTh1` and `ETTm1`, H96 and H192, seeds `2021` and `2022`.
+- Settings: `ETTh1` and `ETTm1`, H96, seeds `2021`, `2022`, and `2023`.
 - Train `phase_only`, `direct_nlinear`, and the complete
   `p x q x s=0` factorial grid. Duplicate rank values created by capping are
   deduplicated but recorded.
@@ -130,7 +134,7 @@ PhaseFormer path, residual path, and fusion gate.
   failures; its analysis is recorded before this phase starts.
 - Settings: `ETTh1` and `ETTm1`, H96, seeds `2021` and `2022`.
 - Evaluate a predeclared balanced subset:
-  `p in {1, 2, 4, 8}` crossed with `q in {1/12, 1/3}`, and every smoothing
+  `p in {1, 2, 4}` crossed with `q in {1/12, 1/3}`, and every smoothing
   ratio `s`. The `s=0` points are reused only when the exact setting and seed
   match Phase A; all nonzero-smoothing cells are independently trained.
 - This grid measures smoothing at low and medium relative capacity across the
@@ -138,13 +142,13 @@ PhaseFormer path, residual path, and fusion gate.
 
 ### Budget And Stop Conditions
 
-- Phase A has at most 26 jointly trained models per dataset-horizon-seed
-  setting, or 208 runs before rank-capping deduplication.
-- Phase B reuses exact `s=0` Phase A runs and adds at most 32 nonzero-smoothing
-  runs per dataset-seed setting, or 128 additional runs.
-- Confirmation has at most two frozen shared candidates plus the two controls:
-  at most 48 full-train test runs across two datasets, two horizons, and three
-  seeds.
+- Phase A has 11 jointly trained models per dataset-seed setting, or 66 runs:
+  two controls plus nine `pool x relative-rank` cells.
+- Phase B reuses exact `s=0` Phase A runs and adds at most 12 nonzero-smoothing
+  runs per dataset-seed setting, or 48 additional runs: six pool/rank cells
+  times two nonzero smoothing ratios, across two datasets and two seeds.
+- Confirmation has one frozen shared candidate plus the two controls: at most
+  36 full-train test runs across two datasets, two horizons, and three seeds.
 - Stop after Phase A if neither MSE nor MAE yields a reproducible pool, rank,
   or pool-by-rank effect under the rules below. Stop after Phase B if smoothing
   has no reproducible conditional effect. In either case, retain the direct
@@ -158,15 +162,16 @@ PhaseFormer path, residual path, and fusion gate.
   Phase B, smoothing plus its interactions. Dataset and horizon remain
   explicitly reported strata; no dataset-specific mechanism is promoted from
   a single favorable cell.
-- A claimed main effect requires the same directional paired effect in at
-  least three of the four dataset-horizon settings and a pooled bootstrap
-  interval excluding zero for both MSE and MAE. Otherwise the result is
-  recorded as an interaction or as inconclusive.
+- A Phase A effect qualifies only for final H192 confirmation when its paired
+  direction agrees in both datasets for at least two of three seeds and its
+  pooled bootstrap interval excludes zero for both MSE and MAE. Otherwise it
+  is recorded as inconclusive rather than generalized.
 - A smoothing claim additionally requires its direction to be consistent in
-  both seeds at the affected `(p, q)` cells. A benefit limited to high rank is
-  described as a capacity-by-smoothing interaction, not a global smoothing
-  benefit.
-- Select at most two shared configurations only after these validation rules
+  both seeds at the affected `(p, q)` cells; H192 is evaluated only during
+  final confirmation and does not participate in selection. A benefit limited
+  to high rank is described as a
+  capacity-by-smoothing interaction, not a global smoothing benefit.
+- Select one shared configuration only after these validation rules
   are frozen. If neither passes, stop without a new test run or preset change.
 
 ### Confirmation And Test Boundary

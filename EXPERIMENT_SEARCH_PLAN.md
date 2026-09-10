@@ -6,7 +6,8 @@
 > 配对 `phase_only`、direct-NLinear 与 full-rank-factorized controls；冻结后才进行一次
 > 三 seed test。完整设计、停止条件和 test 边界见
 > `docs/PhaseFormer_pooled_lowrank_nlinear_experiment.md` 的
-> “Controlled Follow-up Plan”。本计划尚未启动训练，既有 exploratory test 结果不参与选择。
+> “Controlled Follow-up Plan”。本计划尚未启动训练；既有 exploratory test 数值不参与后续
+> 排名或选择，但本轮属于 test-informed 的自适应后续，不能称为盲测。
 
 > 当前用户指定实验：PhaseFormer 输入成分 H1/H3/H4 因果消融，预注册方案见
 > `docs/PhaseFormer_input_component_H1_H3_H4_plan.md`。比较 `original`、`weak_residual`、
