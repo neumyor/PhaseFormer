@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-09-10 — 实现冻结 Phase A 验证专用 runner
+
+- 新增 `scripts/run_joint_pooled_lowrank_phase_a.py`，预注册每个 dataset-seed 的
+  `phase_only`、`direct_nlinear` 和 `p={1,2,4} × q={1/12,1/3,1}` 共 11 个独立联合训练任务。
+- runner 复用 `search_phaseformer.py` 的 validation/best-checkpoint 协议，明确不传
+  `--evaluate-test`；支持 8 卡调度、失败重试、断点恢复、manifest 和完整性校验。
+- 秩按冻结计划计算为
+  `max(4, round_to_multiple_of_4(q * min(ceil(720/p), H)))`，只记录 validation 指标；
+  不启动 Phase B 或最终 test confirmation。
+- 轻量验证：runner 通过 Python 语法检查和差异空白检查；完整 CUDA 运行待远程执行。
+
 ## 2026-09-10 — 重规划池化低秩 NLinear 因素实验
 
 - 用户指出 H96 单 seed 初筛未呈现明确的性能—低秩/池化关联。确认该判断：上一轮同时改变 pool/rank、按原始 rank 而非相对容量比较、仅对三个 data-driven cell 测平滑，不能识别主效应。
