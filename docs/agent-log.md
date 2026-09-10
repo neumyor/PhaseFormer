@@ -1,5 +1,14 @@
 # Agent Maintenance Log
 
+## 2026-09-10 — 结构化重构 EXPERIMENT_SEARCH_PLAN.md
+
+- 建立了 `EXPERIMENT_SEARCH_PLAN.md` 的维护与排版规范，并保存至 auto-memory（`memory/experiment_search_plan_spec.md`）。
+- 依据规范重写 [EXPERIMENT_SEARCH_PLAN.md](EXPERIMENT_SEARCH_PLAN.md)：
+  1. 梳理“当前活跃实验看板”，明确当前分支优先执行的 Pooled Low-Rank Phase A (66 runs, validation-only) 与 Phase B (48 runs, validation-only) 的实验矩阵与 runner 对应关系；
+  2. 规范化全局 32 任务全域搜索协议（周期筛选 -> 共享机制 -> 超参 Halving -> 3 种子确认）；
+  3. 强调单模型端到端统一原则、严格 6 文件审计规范与测试集暴露披露准则；
+  4. 采用结构化表格归档历史实验结论，提升文档可读性与可维护性。
+
 ## 2026-09-10 — 修复仓库管理规范合规性与补充分析绘图脚本
 
 - 恢复根目录下意外处于删除状态的计划文件（`EXPERIMENT_SEARCH_PLAN.md` 等），保持与 `MANAGE_RULES.md` 和 `HOW_TO_DO_RESEARCH.md` 一致。
