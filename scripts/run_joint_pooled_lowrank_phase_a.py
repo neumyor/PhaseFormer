@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run the frozen, validation-only Phase A capacity matrix.
+"""Run the frozen Phase A capacity matrix.
 
-This launcher deliberately delegates model construction and validation
-evaluation to ``search_phaseformer.py`` without passing ``--evaluate-test``.
-Every cell is trained independently with the PhaseFormer path, residual path,
-and fusion gate jointly trainable.
+This launcher delegates model construction and evaluation to
+``search_phaseformer.py``. It is validation-only by default; passing
+``--evaluate-test`` performs exactly one test read per run. Every cell is
+trained independently with the PhaseFormer path, residual path, and fusion
+gate jointly trainable.
 """
 
 from __future__ import annotations
@@ -32,6 +33,14 @@ def relative_rank(pool_factor: int, q: float, horizon: int) -> int:
     return min(max_rank, round_to_multiple_of_4(q * max_rank))
 
 
+def exact_rank(pool_factor: int, q: float, horizon: int) -> int:
+    # The rank sweep uses q in {1, 1/4, 1/8, 1/16, 1/32}, whose products with
+    # the valid maximum are already integers; the multiple-of-4 rounding and
+    # floor in relative_rank would silently distort the q=1/16 and q=1/32 cells.
+    max_rank = min(math.ceil(720 / pool_factor), horizon)
+    return max(1, min(max_rank, int(round(q * max_rank))))
+
+
 def build_jobs(args: argparse.Namespace) -> list[dict]:
     jobs = [
         {"config_id": "phase_only", "mechanism": "no_residual", "overrides": {}},
@@ -43,9 +52,10 @@ def build_jobs(args: argparse.Namespace) -> list[dict]:
             },
         },
     ]
+    rank_rule = exact_rank if args.exact_rank else relative_rank
     for pool_factor in args.pool_factors:
         for q in args.relative_ranks:
-            rank = relative_rank(pool_factor, q, args.horizon)
+            rank = rank_rule(pool_factor, q, args.horizon)
             jobs.append(
                 {
                     "config_id": f"pool{pool_factor}_q{q:g}_r{rank}",
@@ -96,6 +106,8 @@ def command(args: argparse.Namespace, job: dict) -> list[str]:
         "--require-cuda",
         "--resume",
     ]
+    if args.evaluate_test:
+        cmd.append("--evaluate-test")
     if job["overrides"]:
         cmd.extend(["--overrides", json.dumps(job["overrides"], sort_keys=True)])
     return cmd
@@ -174,7 +186,13 @@ def write_manifest(args: argparse.Namespace, jobs: list[dict]) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"phase_a_{args.dataset}_h{args.horizon}_s{args.seed}_manifest.json"
     payload = {
-        "protocol": "Phase A validation-only; no test loader or trainer.test call",
+        "protocol": (
+            "Phase A capacity matrix; one test read per run"
+            if args.evaluate_test
+            else "Phase A validation-only; no test loader or trainer.test call"
+        ),
+        "evaluate_test": args.evaluate_test,
+        "exact_rank": args.exact_rank,
         "dataset": args.dataset,
         "horizon": args.horizon,
         "lookback": 720,
@@ -228,6 +246,8 @@ def summarize(args: argparse.Namespace, jobs: list[dict]) -> Path:
                 "smooth_ratio": hp.get("weak_period_residual_smooth_ratio", 0.0),
                 "val_mse": row.get("val_mse", ""),
                 "val_mae": row.get("val_mae", ""),
+                "test_mse": row.get("test_mse", ""),
+                "test_mae": row.get("test_mae", ""),
                 "best_val_loss": row.get("best_val_loss", ""),
                 "elapsed_sec": row.get("elapsed_sec", ""),
                 "run_id": row.get("run_id", ""),
@@ -235,11 +255,13 @@ def summarize(args: argparse.Namespace, jobs: list[dict]) -> Path:
             }
         )
     rows.sort(key=lambda row: row["config_id"])
-    out = root / f"phase_a_{args.dataset}_h{args.horizon}_s{args.seed}_validation.csv"
+    suffix = "results" if args.evaluate_test else "validation"
+    out = root / f"phase_a_{args.dataset}_h{args.horizon}_s{args.seed}_{suffix}.csv"
     fields = list(rows[0]) if rows else [
         "dataset", "horizon", "seed", "config_id", "mechanism",
         "pool_factor", "relative_rank", "rank", "smooth_ratio",
-        "val_mse", "val_mae", "best_val_loss", "elapsed_sec", "run_id", "run_dir",
+        "val_mse", "val_mae", "test_mse", "test_mae", "best_val_loss",
+        "elapsed_sec", "run_id", "run_dir",
     ]
     with out.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -257,7 +279,11 @@ def summarize(args: argparse.Namespace, jobs: list[dict]) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", required=True, choices=["ETTh1", "ETTm1"])
+    parser.add_argument(
+        "--dataset",
+        required=True,
+        choices=["ETTh1", "ETTh2", "ETTm1", "ETTm2", "Weather"],
+    )
     parser.add_argument("--horizon", type=int, default=96)
     parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument("--max-epochs", type=int, default=30)
@@ -265,6 +291,8 @@ def main() -> None:
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT)
     parser.add_argument("--pool-factors", default="1,2,4")
     parser.add_argument("--relative-ranks", default="0.08333333333333333,0.3333333333333333,1")
+    parser.add_argument("--exact-rank", action="store_true")
+    parser.add_argument("--evaluate-test", action="store_true")
     parser.add_argument("--gpus", default="0")
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--poll-seconds", type=int, default=5)
@@ -275,8 +303,8 @@ def main() -> None:
     args.gpus = [int(item) for item in args.gpus.split(",") if item]
     if not args.gpus:
         parser.error("--gpus must contain at least one device")
-    if args.horizon != 96:
-        parser.error("the frozen Phase A plan is H96 only")
+    if args.horizon not in {96, 192}:
+        parser.error("--horizon must be 96 or 192")
     jobs = build_jobs(args)
     manifest = write_manifest(args, jobs)
     if not args.summarize_only:
