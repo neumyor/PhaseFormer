@@ -1996,3 +1996,18 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - Validation: `/home/wangjing/miniconda3/envs/raft/bin/python -m py_compile src/models/frozen_nlinear_correction.py scripts/run_progressive_ib_stage1.py`; CPU-only ETTh1 H96 seed 2021 direct one-epoch smoke completed under `research_runs/progressive_ib_stage1_smoke_scratch/` (training, best-checkpoint restore, hash check, and sample metrics). This is not a formal result.
 - GPU probe found no usable NVIDIA driver/device. Formal Stage 1 commands require CUDA and have not been launched; temporary artifacts are kept below the ignored `research_runs/*_scratch/` roots.
 - Follow-up protocol correction: Treatment A now requires and freezes the learned fusion gate exported by the preceding Stage-0 control; its train objective is the PhaseFormer residual but its validation checkpoint is selected by final forecast error. Static forward/freeze/gate validation passed in `raft`.
+
+## 2026-09-10 — Joint Low-Rank Rank Sweep 实验计划登记
+
+- 按用户指定新增 `docs/PhaseFormer_joint_lowrank_rank_sweep_plan.md`：固定 `pool=1`、
+  `smooth=0`，仅扫描 NLinear 因子化相对秩 q ∈ {1, 1/4, 1/8, 1/16, 1/32}，覆盖
+  {ETTh1, ETTh2, ETTm1, ETTm2, Weather} × {96, 192}，单 seed 2021，联合训练 +
+  静态 gate 协议与前次 pooled low-rank screen 一致。
+- 矩阵 ≤70 runs（核心 50 + 控制组 20，含 `phase_only` 与 `direct_nlinear`）；
+  文档含秩/参数量映射表与全部待填充结果表（主矩阵、Golden/phase_only/因子化与
+  压缩效应 Δ%、响应曲线判定）。
+- 该计划取代 `PhaseFormer_pooled_lowrank_nlinear_experiment.md` 中 Controlled
+  Follow-up Plan 的活跃地位；结果将标注 single-seed、test-set-exposed。
+- 尚未训练任何模型；待办：上传 ETTh2/ETTm1/ETTm2/weather 数据到服务器、扩展
+  `run_joint_pooled_lowrank_phase_a.py`（dataset choices + `--evaluate-test`）、
+  A800 上按模板运行。
