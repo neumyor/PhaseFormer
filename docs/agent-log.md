@@ -1,5 +1,12 @@
 # Agent Maintenance Log
 
+## 2026-09-10 — 联合池化低秩 NLinear H96 筛选完成
+
+- 按用户要求在 NLinear 分支前加入可配置时间池化和低秩瓶颈；PhaseFormer 路径、池化低秩 NLinear 路径与静态融合 gate 均从随机初始化开始，在每个 `(pool factor, rank, smooth ratio)` 配置中联合训练，未冻结任何分支。
+- 使用 `time` conda 环境的 CUDA A800 完成 ETTh1 与 ETTm1 的 L720→H96、seed2021、Huber、30 epoch、lowest-validation-loss checkpoint 筛选。每个数据集完成 1 个 jointly trained original baseline、23 个无平滑 pool/rank 配置和 12 个验证集选出的平滑配置，共 72 次独立训练；所有矩阵单元均读取一次 test，因此结果明确标记为 test-set-exposed exploratory evidence。
+- ETTh1 的验证选中 `p=2, r=8, s=.75`，test MSE/MAE `0.362479/0.390818`，相对 Golden `+0.97%/+2.31%`；ETTm1 选中 `p=1, r=16, s=.25`，`0.299431/0.350440`，相对 Golden `+2.19%/+1.87%`。两者均未优于 Golden，未更新 preset。
+- 审计包位于 `research_runs/joint_pooled_lowrank_nlinear_h96_v1/`，严格包含六个文件和 `figures/`；含完整 `results.csv`、每样本误差、程序化案例、Golden MSE/MAE delta 热力图及可携带 ZIP。远程环境的 `pytest` 曾发生解释器段错误，但模型前向/反向 CUDA 冒烟与 72 个完整训练均成功完成。
+
 ## 2026-09-05 — 补充六种连续趋势提取的统一样本图与公式
 
 - 新增 `scripts/plot_six_trend_extraction_examples.py`，在 ETTh1 origin1046、Weather origin2073、ETTm1 origin9073 的既有 validation channel-0 history 上，以一图六子图方式绘制 global/recent linear、local/multiscale Gaussian、causal EMA、Holt 的实际末点锚定 A。相应图、统一公式及当前参数已加入 Global/EMA 路由角色审计报告并重打 ZIP。

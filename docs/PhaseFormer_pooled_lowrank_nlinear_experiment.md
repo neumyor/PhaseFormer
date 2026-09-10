@@ -1,6 +1,6 @@
 # Pooled Low-Rank NLinear Screen
 
-> Status: registered for execution on September 10, 2026. This is a
+> Status: completed on September 10, 2026. This is a
 > user-requested exploratory extension of Progressive IB Stage 2, not a
 > replacement for its single-variable causal protocol.
 
@@ -12,9 +12,9 @@
 - Candidate prediction: an original PhaseFormer path and a pooled low-rank
   NLinear path are both initialized randomly and jointly optimized with the
   existing learned static fusion gate.
-- Reference: the fixed PhaseFormer Golden table. Results also retain the
-  matched frozen-PhaseFormer metrics because the Golden environment is not
-  identical to the A800 execution environment.
+- Reference: the fixed PhaseFormer Golden table. Results also retain a matched
+  jointly trained original-PhaseFormer baseline because the Golden environment
+  is not identical to the A800 execution environment.
 
 ## Mechanism
 
@@ -43,6 +43,20 @@ smoothing ratio is a separate blend coefficient in `[0, 1]`.
    validation-selected checkpoint is restored, it receives one test evaluation.
    The test matrix is therefore test-set-exposed exploratory evidence;
    configuration selection remains based on validation only.
+
+## Results
+
+- Every dataset completed one original-PhaseFormer baseline, 23 no-smoothing
+  pool/rank configurations, and 12 smoothing configurations.
+- ETTh1 selected `pool=2, rank=8, smooth=0.75` by validation score. Its test
+  MSE/MAE was `0.362479/0.390818`, or `+0.97%/+2.31%` relative to Golden.
+- ETTm1 selected `pool=1, rank=16, smooth=0.25` by validation score. Its test
+  MSE/MAE was `0.299431/0.350440`, or `+2.19%/+1.87%` relative to Golden.
+- Neither selected candidate improves both Golden metrics. The experiment does
+  not change a PhaseFormer preset or establish a replacement mechanism.
+- The complete auditable result package is
+  `research_runs/joint_pooled_lowrank_nlinear_h96_v1/`, including pool/rank
+  and rank/smoothing Golden-delta heatmaps for MSE and MAE.
 
 ## Interpretation Limits
 
