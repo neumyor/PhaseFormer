@@ -13,3 +13,6 @@ docs/*.zip
 .DS_Store
 # Deprecated experiment plan/result documents retained locally for reference.
 /docs/deprecated/
+
+# Remote-server usage guide stays local only.
+/REMOTE_SERVER.md
