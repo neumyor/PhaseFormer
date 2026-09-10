@@ -29,7 +29,7 @@ Skill 对每个 `experiment_id` 使用严格白名单：根目录只允许六个
 ---
 
 ## 1. 核心工件
-> 现状说明：`docs/archive/iteration_brief.md` 与 `docs/archive/iteration_log.md` 记录了历史科研轮次，作为可追溯档案保留。当前分支的现行迭代计划与记录分别使用 `EXPERIMENT_SEARCH_PLAN.md`（任务网格/搜索/成本）与 `docs/agent-log.md`（追加式维护日志）；新的科研过程建议把关键结论写入 `docs/agent-log.md` 并在需要时引用归档日志。
+> 现状说明：`docs/archive/iteration_brief.md` 与 `docs/archive/iteration_log.md` 记录了历史科研轮次，作为可追溯档案保留。当前分支的现行迭代计划由 `docs/` 下的具体专项实验计划文档（如 `docs/PhaseFormer_pooled_lowrank_nlinear_experiment.md` 等）进行管理，实验与维护记录使用 `docs/agent-log.md`（追加式维护日志）；新的科研过程建议把关键结论写入 `docs/agent-log.md` 并在需要时引用归档日志。
 
 
 迭代过程中只维护两个核心文档工件，避免文档膨胀；实验结果与 bad case 证据按本节的严格目录组织，并在核心文档中引用。

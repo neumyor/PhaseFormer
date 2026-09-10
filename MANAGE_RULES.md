@@ -11,7 +11,7 @@
 - 金标准优先：所有模型提升声明必须使用 `docs/PhaseFormer_gold_standard.md` 中相同任务的原始 PhaseFormer 结果；matched rerun 仅用于协议诊断，不得静默替换金标准。
 - 允许测试集选择：用户指定或实验计划明确允许时，可以依据测试集结果调整模型、参数或机制；必须保留所有参与选择的配置与结果，并在报告中明确标注 test-set selection。此类结果不得表述为盲测或无偏泛化估计。
 - 不覆盖用户工作：发现未提交改动时，先确认其来源和影响；不得擅自回滚、删除或重置他人改动。
-- 当用户提出自主科研、持续迭代模型、自动寻找改进方案、实验驱动优化等请求时，必须先参考 `HOW_TO_DO_RESEARCH.md`，并按其中的 `iteration_brief.md` / `iteration_log.md` 机制（已归档于 `docs/archive/`）以及现行 `EXPERIMENT_SEARCH_PLAN.md` 组织工作。
+- 当用户提出自主科研、持续迭代模型、自动寻找改进方案、实验驱动优化等请求时，必须先参考 `HOW_TO_DO_RESEARCH.md`，并在 `docs/` 下对应的专项实验计划与 `docs/agent-log.md` 组织与记录工作。
 - 当用户给出明确模型设想，并要求实现、运行实验以及分析高误差或显著退化样本时，必须使用项目 Skill `experiment-and-error-analysis`。仅讨论设想、仅分析已有汇总结果、只做 smoke test 或用户明确要求不运行实验时不触发该 Skill。
 
 ## Git 管理

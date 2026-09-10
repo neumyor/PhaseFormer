@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Training-split-only period diagnostics required by EXPERIMENT_SEARCH_PLAN.md."""
+"""Training-split-only period diagnostics."""
 import csv
 import json
 import sys
