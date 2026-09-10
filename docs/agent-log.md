@@ -1,5 +1,23 @@
 # Agent Maintenance Log
 
+## 2026-09-10 — 修复仓库管理规范合规性与补充分析绘图脚本
+
+- 恢复根目录下意外处于删除状态的计划文件（`EXPERIMENT_SEARCH_PLAN.md` 等），保持与 `MANAGE_RULES.md` 和 `HOW_TO_DO_RESEARCH.md` 一致。
+- 清理 `research_runs/` 根目录下散落的临时图表与数据文件，更新 `plot_all_no_smoothing_lowrank_results.py` 与 `plot_pool1_no_smoothing_rank_results.py` 的默认输出路径至子目录 `figures/`，严格遵循六审计文件规范。
+- 更新 `README.md`，增加关于推荐使用的 Conda 环境（`py310` 及远程 `time` 环境）说明，将 `uv` 正确定位为 fallback 环境。
+- 提交新增的 pooled low-rank 分析脚本（`scripts/analyze_joint_pooled_lowrank_phase_a.py`）、绘图脚本（`plot_all_no_smoothing_lowrank_results.py`、`plot_pool1_no_smoothing_rank_results.py`）以及 Phase B runner（`scripts/run_joint_pooled_lowrank_phase_b.py`）。
+
+## 2026-09-10 — 准备执行 pooled low-rank Phase B
+
+- 新增 `scripts/analyze_joint_pooled_lowrank_phase_a.py`，只读取
+  `joint_pooled_lowrank_phase_a_scratch` 的 validation 汇总，计算同 seed
+  `direct_nlinear` 配对 delta、均值、标准差、bootstrap 95% 区间和描述性固定效应。
+- 新增 `scripts/run_joint_pooled_lowrank_phase_b.py`，严格复用 Phase A 的
+  `s=0` 结果，只独立训练 ETTh1/ETTm1、seed 2021/2022、`p={1,2,4}`、
+  `q={1/12,1/3}`、`s={.25,.50}` 的 48 个非零平滑 validation-only 配置。
+- runner 不传 `--evaluate-test`，并在启动前检查每个 Phase A setting 恰有 11 个
+  validation 配置。Phase B 结果在验证统计完成前不得用于最终候选或 test confirmation。
+
 ## 2026-09-10 — 实现冻结 Phase A 验证专用 runner
 
 - 新增 `scripts/run_joint_pooled_lowrank_phase_a.py`，预注册每个 dataset-seed 的

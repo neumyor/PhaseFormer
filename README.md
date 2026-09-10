@@ -17,15 +17,23 @@ Compared with traditional patch/segment-based paradigms, PhaseFormer models in t
 - PyTorch Lightning ≥ 2.1  
 - Other dependencies: `pandas`, `numpy`, `scikit-learn`, `easydict`
 
-The repository uses `uv` to lock a reproducible environment:
+### Conda Environment (Preferred)
+
+Per `MANAGE_RULES.md`, prefer using pre-configured local Conda environments with explicit binary paths:
+- Local primary: `/home/niuyiming/.conda/envs/py310/bin/python`
+- Remote server: `/home/yyk/yyk03/miniconda3/envs/time/bin/python` (refer to `REMOTE_SERVER.md`)
+
+Example:
+```bash
+/home/niuyiming/.conda/envs/py310/bin/python run_etth1.py --horizons 96 --mode latest
+```
+
+### Reproducible `uv` Environment (Fallback)
+
+The repository also maintains a `uv.lock` for environments where pre-built conda environments are unavailable:
 
 ```bash
 uv sync
-```
-
-Run commands through the locked environment:
-
-```bash
 uv run python run_etth1.py --horizons 96 --mode latest
 ```
 
