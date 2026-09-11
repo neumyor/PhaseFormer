@@ -108,7 +108,11 @@ def command(args: argparse.Namespace, job: dict) -> list[str]:
     ]
     if args.evaluate_test:
         cmd.append("--evaluate-test")
-    if job["overrides"]:
+    if args.overrides:
+        job_overrides = dict(job.get("overrides", {}))
+        job_overrides.update(json.loads(args.overrides))
+        cmd.extend(["--overrides", json.dumps(job_overrides, sort_keys=True)])
+    elif job["overrides"]:
         cmd.extend(["--overrides", json.dumps(job["overrides"], sort_keys=True)])
     return cmd
 
@@ -293,6 +297,12 @@ def main() -> None:
     parser.add_argument("--relative-ranks", default="0.08333333333333333,0.3333333333333333,1")
     parser.add_argument("--exact-rank", action="store_true")
     parser.add_argument("--evaluate-test", action="store_true")
+    parser.add_argument(
+        "--overrides",
+        default="",
+        help="JSON dict merged over every job's overrides (e.g. frozen "
+        "gate_init / learning_rate from a Stage 0 config check)",
+    )
     parser.add_argument("--gpus", default="0")
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--poll-seconds", type=int, default=5)
