@@ -235,7 +235,14 @@ def summarize(args: argparse.Namespace, jobs: list[dict]) -> Path:
             pool = int(hp["weak_period_residual_pool_factor"])
             rank = int(hp["weak_period_residual_rank"])
             max_rank = min(math.ceil(720 / pool), args.horizon)
-            q = rank / max_rank
+            if args.exact_rank:
+                # Rebuild the config_id with the same rank rule build_jobs
+                # used, so non-representable q values (e.g. r=22 at H720,
+                # r=10 at H336) match the expected ids exactly.
+                rank_rule = exact_rank
+            else:
+                rank_rule = relative_rank
+            q = rank_rule(pool, rank / max_rank, args.horizon) / max_rank
             config_id = f"pool{pool}_q{q:g}_r{rank}"
         rows.append(
             {
