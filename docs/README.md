@@ -123,6 +123,22 @@
      （登记表读写）。
   3. 选择轨迹核验：`verify_strict_t28_golden_goal.py` 等 `verify_*` 脚本。
 
+## 机制消融：弱周期残差低秩扫描（非保留结构）
+
+- 该族测试 **PhaseFormer + NLinear 弱周期残差支路、无 RCRF、无周期位置编码**，
+  属机制消融，不属于上表四结构，也不产生可对外声明的提升。
+- [`PhaseFormer_rank_sweep_conditioned_experiment.md`](PhaseFormer_rank_sweep_conditioned_experiment.md)
+  —— **第二轮条件性扫描结果登记报告（数值权威副本）**：显式登记所测模型、7 个
+  setting 与 test-set selection 披露、两阶段协议、表 1–5（Stage 0 冻结配置、
+  test 主结果、相对 Golden 与相对 direct 的 Δ）、结论/边界与复现产物。判定为
+  **"部分信号（3/7）"**，未推翻第一轮"无一致低秩效应"。
+- [`PhaseFormer_rank_sweep_conditioned_plan.md`](PhaseFormer_rank_sweep_conditioned_plan.md)
+  —— 同一实验的**预注册计划与判定规则**（保留规则推导；数值以报告文档为准）。
+- [`PhaseFormer_joint_lowrank_rank_sweep_plan.md`](PhaseFormer_joint_lowrank_rank_sweep_plan.md)
+  —— 第一轮全矩阵 sweep（5 数据集 × H96/H192，默认配置）。
+- 绘图：`scripts/plot_conditioned_rank_sweep.py`（7 setting × MSE/MAE 分轴折线，
+  Golden 为虚线基准；产物 `research_runs/rank_sweep_2_stage1/figures/`，gitignored）。
+
 ## 输入成分利用诊断（计划中）
 
 - [`PhaseFormer_input_component_H1_H3_H4_plan.md`](PhaseFormer_input_component_H1_H3_H4_plan.md)

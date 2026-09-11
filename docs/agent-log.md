@@ -2066,3 +2066,8 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   存在通用压缩档位的假设。第一轮三点结论均未被推翻。direct_nlinear（不压缩）
   在 7/7 setting 仍双指标优于 Golden——两轮中唯一稳健正向结果，披露约束沿用。
 - 全部结果依旧受"7 setting 按 test 挑选 + 单 seed"约束，只能表述为条件性扫描。
+- 新增结果登记报告 `docs/PhaseFormer_rank_sweep_conditioned_experiment.md`（数值
+  权威副本）：显式登记所测模型（PhaseFormer + NLinear 弱周期残差，**无 RCRF/无 PE**）、
+  7 个 setting 与选择披露、两阶段协议、表 1–5、结论与边界、复现命令与产物位置
+  （含 7 setting × 2 指标的 `compression_*.png` 折线图）。计划文档保留规则推导，
+  报告文档保留数值，二者互相引用。
