@@ -282,7 +282,7 @@ def main() -> None:
     parser.add_argument(
         "--dataset",
         required=True,
-        choices=["ETTh1", "ETTh2", "ETTm1", "ETTm2", "Weather"],
+        choices=["ETTh1", "ETTh2", "ETTm1", "ETTm2", "Weather", "Electricity"],
     )
     parser.add_argument("--horizon", type=int, default=96)
     parser.add_argument("--seed", type=int, default=2021)
@@ -303,8 +303,8 @@ def main() -> None:
     args.gpus = [int(item) for item in args.gpus.split(",") if item]
     if not args.gpus:
         parser.error("--gpus must contain at least one device")
-    if args.horizon not in {96, 192}:
-        parser.error("--horizon must be 96 or 192")
+    if args.horizon not in {96, 192, 336, 720}:
+        parser.error("--horizon must be one of 96, 192, 336, 720")
     jobs = build_jobs(args)
     manifest = write_manifest(args, jobs)
     if not args.summarize_only:
