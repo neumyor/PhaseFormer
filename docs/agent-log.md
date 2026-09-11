@@ -2029,3 +2029,13 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `scripts/__init__.py` 修复服务器 gguf 包遮蔽（`a004974`）；服务器同步前对
   既有未提交改动逐文件校验为内容一致并 stash 留档。服务器 20:07–次日 08:54
   不可达期间任务由 nohup 保护继续运行。
+
+## 2026-09-11 — Rank sweep 结果图表
+
+- 新增 `scripts/plot_rank_sweep_results.py`，从 `phase_a_*_results.csv` 生成 4 张图：
+  秩响应小面板（Δ vs q=1，含 ±1% 带与 direct_nlinear 参考线）、Δ vs phase_only 与
+  Δ vs Golden 双热力图（发散色板，单元标值）、val-best vs test-best 秩档位哑铃图。
+- 生成命令：`python scripts/plot_rank_sweep_results.py --results-dir research_runs/joint_lowrank_rank_sweep_v1`，
+  输出至 `research_runs/joint_lowrank_rank_sweep_v1/figures/`（gitignored，仅本地保留）。
+- 图表支撑 §13 结论：响应无一致方向、深压缩略差；NLinear 支线 dataset 家族方向
+  跨全部秩档位稳定；Golden 名义对比的档位分布；val→test 档位选择不转移（5/10 argmax 不一致）。
