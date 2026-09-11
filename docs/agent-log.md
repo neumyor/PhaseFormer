@@ -2039,3 +2039,30 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   输出至 `research_runs/joint_lowrank_rank_sweep_v1/figures/`（gitignored，仅本地保留）。
 - 图表支撑 §13 结论：响应无一致方向、深压缩略差；NLinear 支线 dataset 家族方向
   跨全部秩档位稳定；Golden 名义对比的档位分布；val→test 档位选择不转移（5/10 argmax 不一致）。
+
+## 2026-09-11 — Conditioned Low-Rank Sweep（第二轮）完成与回填
+
+- 动机：用户质疑第一轮 sweep 部分 setting 配置不当，要求对 7 个"名义双指标优于
+  Golden"的 setting（ETTh2-96/720、ETTm2-96/192、Weather-96/192、Electricity-336）
+  重扫。两阶段设计：Stage 0 配置核对（validation-only）→ Stage 1 冻结配置下低秩扫描。
+- Stage 0：`scripts/run_rank_sweep_stage0_config_check.py`，7 setting × 4 配置
+  （gate∈{0.2,0.5} × lr∈{1e-3,3e-4}），按 val MSE 冻结（并列取 val MAE）。结果：
+  gate_init 支配（4 setting 选 g0.5、2 选 g0.2，无 lr 单独决定）；**5/7 setting 冻结
+  配置 ≠ 第一轮（g0.2+lr1e-3）**——部分证实用户疑虑；但同 setting 内 4 配置 val MSE
+  极差全部 ≤0.9%，与单 seed 噪声同阶。冻结结果写入 `frozen_configs.json`。
+- Stage 1：`scripts/run_rank_sweep_2_stage1.sh`（服务器），7 setting × 7 档位
+  （phase_only, direct_nlinear, q∈{1,1/4,1/8,1/16,1/32}），`--exact-rank
+  --evaluate-test --overrides <冻结配置>`，seed 2021。
+- 工程改动：`run_joint_pooled_lowrank_phase_a.py` 新增 `--overrides` 透传（`f9a5e2c`）
+  与 Electricity/H336/H720 支持。**遗留 bug（未修）**：`summarize()` 在
+  `--exact-rank` 下由已舍入的 rank 反推 q 生成 config_id，对 H336/H720 非整除档位
+  （22.5→22、10.5→10）产生与 `build_jobs()` 不一致的 id，致 ETTh2-720/Electricity-336
+  的 summarize 收尾 `RuntimeError`。因 CSV 在 raise 之前已写盘，7 行数据完整可取；
+  修复方向是从 `args.relative_ranks` 直接派生期望 id，而非反演 rank。
+- 回填 `docs/PhaseFormer_rank_sweep_conditioned_plan.md` 表 2–5 与 §10 判定：
+  压缩档位双指标优于 direct 的 setting 数 = **3/7（ETTh2-720 q=1、ETTm2-192 q=1/8、
+  Weather-192 q=1/32）**，落入 §6 预注册的 3–4/7 **"部分信号"** 区间，未达 ≥5/7
+  "一致低秩效应"。test 最优档位高度分散（q=1×3、1/8×2、1/4×1、1/32×1），不支持
+  存在通用压缩档位的假设。第一轮三点结论均未被推翻。direct_nlinear（不压缩）
+  在 7/7 setting 仍双指标优于 Golden——两轮中唯一稳健正向结果，披露约束沿用。
+- 全部结果依旧受"7 setting 按 test 挑选 + 单 seed"约束，只能表述为条件性扫描。
