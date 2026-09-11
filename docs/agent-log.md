@@ -2011,3 +2011,21 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 尚未训练任何模型；待办：上传 ETTh2/ETTm1/ETTm2/weather 数据到服务器、扩展
   `run_joint_pooled_lowrank_phase_a.py`（dataset choices + `--evaluate-test`）、
   A800 上按模板运行。
+
+## 2026-09-11 — Joint Low-Rank Rank Sweep 完成与回填
+
+- 70/70 runs 于 2026-09-10 在 A800 完成（10 setting × {phase_only, direct_nlinear,
+  q∈{1,1/4,1/8,1/16,1/32}}，seed 2021，无失败；早停 19–30 epochs）。结果在
+  `research_runs/joint_lowrank_rank_sweep_v1/`（服务器）。
+- 回填 `docs/PhaseFormer_joint_lowrank_rank_sweep_plan.md` 表 1–5 与 §13 判定：
+  预注册标准下无可检测的一致低秩效应（压缩变差主导 4/10、变好 2/10、平坦 4/10；
+  q=1/32 深压缩 MSE 7/10、MAE 8/10 变差但中位幅度 <1%）；因子化满秩 vs
+  direct_nlinear 差异全部 ±1.9% 内（因子化本身中性）；低秩压缩不改变 NLinear
+  支线的 dataset 家族方向（ETTh2/ETTm2/Weather 受益、ETTh1/ETTm1 受损）。
+- 决策：null result，不追加多 seed/维度；低秩瓶颈不引入 preset，保留
+  direct_nlinear 默认参数化。
+- 运行环境：A800 `time` env（Python 3.10 / torch 2.6.0+cu124 / Lightning 2.6.5）。
+  runner 扩展 commit `2422a74`（exact-rank/--evaluate-test/数据集 choices）；
+  `scripts/__init__.py` 修复服务器 gguf 包遮蔽（`a004974`）；服务器同步前对
+  既有未提交改动逐文件校验为内容一致并 stash 留档。服务器 20:07–次日 08:54
+  不可达期间任务由 nohup 保护继续运行。
