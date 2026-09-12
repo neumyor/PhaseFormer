@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .asymmetric_trend_components import _causal_ema
+
 
 class RevIN(nn.Module):
     """
@@ -59,15 +61,30 @@ class WeakPeriodResidualHead(nn.Module):
     anchor.
     """
 
-    def __init__(self, seq_len: int, pred_len: int):
+    def __init__(
+        self,
+        seq_len: int,
+        pred_len: int,
+        *,
+        smooth_ratio: float = 0.0,
+        causal_ema_alpha: float = 0.08,
+    ):
         super().__init__()
+        if not 0.0 <= smooth_ratio <= 1.0:
+            raise ValueError("smooth_ratio must be in [0, 1]")
         self.linear = nn.Linear(seq_len, pred_len)
         nn.init.zeros_(self.linear.weight)
         nn.init.zeros_(self.linear.bias)
+        self.smooth_ratio = float(smooth_ratio)
+        self.causal_ema_alpha = float(causal_ema_alpha)
 
     def forward(self, x):  # x: (B, L, C), normalized scale
         last = x[:, -1:, :]
-        centered = (x - last).permute(0, 2, 1).contiguous()
+        centered = x - last
+        if self.smooth_ratio:
+            smoothed = _causal_ema(centered, self.causal_ema_alpha)
+            centered = (1.0 - self.smooth_ratio) * centered + self.smooth_ratio * smoothed
+        centered = centered.permute(0, 2, 1).contiguous()
         delta = self.linear(centered).permute(0, 2, 1).contiguous()
         return delta + last.expand(-1, delta.size(1), -1)
 

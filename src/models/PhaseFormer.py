@@ -1018,7 +1018,14 @@ class PhaseFormer(DefaultPLModule):
                 )
             else:
                 self.weak_period_residual = WeakPeriodResidualHead(
-                    self.seq_len, self.pred_len
+                    self.seq_len,
+                    self.pred_len,
+                    smooth_ratio=getattr(
+                        configs, "weak_period_residual_smooth_ratio", 0.0
+                    ),
+                    causal_ema_alpha=getattr(
+                        configs, "weak_period_residual_causal_ema_alpha", 0.08
+                    ),
                 )
             gate_init = float(getattr(configs, "weak_period_residual_gate_init", 0.2))
             if self.use_rcrf_fusion:
