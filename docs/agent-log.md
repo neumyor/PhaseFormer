@@ -2123,3 +2123,28 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   {0,0.25,0.5,0.75,1.0}` 网格、与 boxcar 扫描相同的预注册判定规则、结果占位。
 - 计划 7 setting × 5 档 = 35 runs，seed 2021。下一步：本地 `pytest`（在服务器
   env 里跑）+ 1-epoch smoke，确认无误后批量启动，完成后回填结果文档与本条目。
+
+## 2026-09-12 — Causal-EMA 平滑扫描（无低秩压缩）结果登记
+
+- 服务器 `pytest tests/ -q`：291 passed，6 warnings，262 subtests passed
+  （271.42s），无失败。数值 sanity check（`smooth_ratio=0` 与改动前逐位一致、
+  `smooth_ratio=1` 与手算 `_causal_ema` 参照一致）均通过。
+- 1-epoch smoke（ETTh2-96, s=0.5, `--gpus 0`）首次运行触发一个真实 bug：
+  `run_causal_ema_smooth_sweep.py` 的 `summarize()` 用
+  `hp.get("weak_period_residual_head_type") is not None` 过滤行，但
+  `search_phaseformer.py` 总是把该字段具体化为字符串 `"shared"`（从不是
+  `None`/缺失），导致所有全秩头的 run 都被误过滤，`summarize()` 抛
+  `RuntimeError: incomplete ... summary`。修复为
+  `not in (None, "shared")`（commit `2646db4`），本地 `py_compile` 通过，
+  `git bundle` 同步到服务器后用 `--summarize-only` 复用已有 checkpoint 重新
+  聚合，确认输出 1 行、`test_mse`/`test_mae` 非空，修复生效。
+- 全量 35 runs（7 setting × 5 档）在 8×A800 上以互不重叠的 GPU 子集并行启动
+  （6 个 setting 各占 1 张卡，Electricity-336 占 2 张卡），全部成功完成，无
+  重试、无失败；每份 `causal_ema_sweep_*_results.csv` 均恰好 5 行。
+- 判定结果：**3/7 部分信号**（ETTh2-96、ETTm2-96、Electricity-336，方向均为
+  "平滑越强越差"），高于 boxcar 扫描的 2/7（无可检测效应），但方向完全一致——
+  两轮实验全部 7×2=14 个 (setting, 算子) 组合中，未出现任何"平滑显著改善"的
+  信号。最优档位 6/7 聚集在 `s=0`。详见
+  `docs/PhaseFormer_residual_causal_ema_smooth_sweep_experiment.md` §6。
+- 提交：结果文档回填单独一次提交；生成 14 子图对比图并发给用户（复用
+  `scripts/plot_smooth_ratio_sweep.py` 画图逻辑，改用本轮数据）。
