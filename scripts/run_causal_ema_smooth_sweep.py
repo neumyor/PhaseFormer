@@ -198,7 +198,7 @@ def summarize(args: argparse.Namespace, jobs: list[dict]) -> Path:
             continue
         config = json.loads(path.with_name("config.json").read_text())
         hp = config["hyperparams"]
-        if hp.get("weak_period_residual_head_type") is not None:
+        if hp.get("weak_period_residual_head_type") not in (None, "shared"):
             continue
         if abs(float(hp.get("weak_period_residual_gate_init", -1)) - args.gate_init) > 1e-9:
             continue
