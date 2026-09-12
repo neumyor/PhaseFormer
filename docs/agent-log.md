@@ -2071,3 +2071,31 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   7 个 setting 与选择披露、两阶段协议、表 1–5、结论与边界、复现命令与产物位置
   （含 7 setting × 2 指标的 `compression_*.png` 折线图）。计划文档保留规则推导，
   报告文档保留数值，二者互相引用。
+
+## 2026-09-12 — 残差支路平滑因子（smooth_ratio）扫描完成与回填
+
+- 动机：`PhaseFormer_rank_sweep_conditioned_experiment.md` 判定低秩压缩仅"部分
+  信号"（3/7），最优档位分散。用户要求在同 7 个 setting 各自的（用户指定）test
+  最优 q 下，改为扫描残差支路平滑因子 `smooth_ratio ∈ {0,0.25,0.5,0.75,1.0}`。
+- 新增 `scripts/run_smooth_ratio_sweep.py`（commit `6031bd22`）与
+  `scripts/summarize_smooth_ratio_sweep.py`（commit `71205d35`，服务器端聚合
+  脚本，用于绕开下述工具限制）；计划/协议文档 commit `bca09ac5`。
+- 7 setting × 5 档 = **35 runs**，seed 2021，服务器 8×A800 `time` conda env，
+  全部一次成功，无失败/重试；每份 `smooth_sweep_*_results.csv` 核对恰好 5 行、
+  `test_mse`/`test_mae` 均非空。
+- 按 §5 预注册规则回填结果文档
+  `docs/PhaseFormer_residual_smooth_ratio_sweep_experiment.md` §6：**2/7 检测到
+  效应（ETTh2-96、ETTh2-720，均在 s=1 同向劣化 ≥1%）**，落入 `≤2/7` **"无可检测
+  效应"** 区间；test 最优档位分布 s=0×4、s=0.25×2、s=1×1，多数聚集于关闭平滑。
+  按止损条款不追加 seed/维度，不写入 preset 默认值。
+- **工具限制记录（影响本轮产物落地方式，供后续复现参考）**：本次 SSH 会话中，
+  凡命令自身 stdout 在无显式截断（非 `head -c`/`dd count=1` 等有界读取）情况下
+  自然到达 EOF、且总量超过约 700–1900 字节区间，就会挂起不返回（`rsync`、
+  `scp` 下载方向、`ssh 'cat ...'`、`ssh 'seq 1 500'` 均复现；`ssh 'seq 1 200'`
+  ~692 字节可正常返回；与文件内容、ControlMaster 配置、重定向与否均无关，
+  已逐一排除）。**因此本轮原始 7 份 `results.csv`/`manifest.json` 未通过
+  rsync 拉回本地**，改为让 `summarize_smooth_ratio_sweep.py` 在服务器侧完成
+  全部聚合计算，只把约 2.3KB 的文本摘要通过分块 `dd`（`bs=700 skip=N`）读回，
+  作为本节数值的权威来源；原始 CSV/manifest 目前只在服务器
+  `~/niuyiming/PhaseFormer/research_runs/smooth_ratio_sweep_v1/` 保留。如需
+  逐行原始数据，需另行用分块 `dd` 读取或待该 SSH 限制解决后再 rsync 补拉。
