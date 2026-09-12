@@ -2099,3 +2099,27 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   作为本节数值的权威来源；原始 CSV/manifest 目前只在服务器
   `~/niuyiming/PhaseFormer/research_runs/smooth_ratio_sweep_v1/` 保留。如需
   逐行原始数据，需另行用分块 `dd` 读取或待该 SSH 限制解决后再 rsync 补拉。
+
+## 2026-09-12 — Causal-EMA 平滑扫描（无低秩压缩）计划登记
+
+- 动机：上一轮 boxcar 平滑扫描判定"无可检测效应（2/7）"，讨论中提出假设——
+  低秩压缩近似中性可能因为不改变时间分辨率，平滑有害可能因为把残差分支从
+  `X-A` 式细节校正推向 `Only-A` 式趋势校正（参照
+  `Weak_residual_trend_component_study_closure.md`）。用户要求去掉低秩压缩、
+  改用之前 X-A/Only-A 研究中的 causal EMA 算子，在同 7 个 setting 上重新扫描。
+- 代码改动：`src/models/phase_adapters.py` 的 `WeakPeriodResidualHead` 新增
+  `smooth_ratio`/`causal_ema_alpha` 可选参数（默认值使行为与改动前完全一致），
+  复用 `src/models/asymmetric_trend_components.py:_causal_ema`；
+  `src/models/PhaseFormer.py` 第 1020 行 else 分支透传这两个 override。
+  `python -m py_compile` 通过；数值等价性/EMA 正确性验证留待服务器（本地无
+  torch 环境）。
+- 新增 `scripts/run_causal_ema_smooth_sweep.py`（fork 自
+  `run_smooth_ratio_sweep.py`，去掉 rank/pool_factor，固定
+  `causal_ema_alpha=0.08`——EMA 半衰期近似对应 boxcar 实验的
+  `smooth_window=24`，为 analogy 选择非本轮调参）。
+- 新增计划/协议文档
+  `docs/PhaseFormer_residual_causal_ema_smooth_sweep_experiment.md`：背景、
+  披露（含 alpha-analogy 披露）、冻结配置表（无 rank 列）、`smooth_ratio ∈
+  {0,0.25,0.5,0.75,1.0}` 网格、与 boxcar 扫描相同的预注册判定规则、结果占位。
+- 计划 7 setting × 5 档 = 35 runs，seed 2021。下一步：本地 `pytest`（在服务器
+  env 里跑）+ 1-epoch smoke，确认无误后批量启动，完成后回填结果文档与本条目。
