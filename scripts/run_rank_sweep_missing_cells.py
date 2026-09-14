@@ -41,24 +41,10 @@ RANKS = {
 # Frozen from the v4 audit.  This list is the only source of jobs for the
 # repair pass; complete cells are never resubmitted.
 MISSING_CELLS = [
-    ("ETTh2", 96, 2023, "q=0.03125"),
-    ("ETTh2", 720, 2023, "q=0.03125"),
-    *[
-        ("ETTm2", 96, 2023, config)
-        for config in ("direct", "q=0.25", "q=0.125", "q=0.0625", "q=0.03125")
-    ],
-    *[
-        ("ETTm2", 192, 2023, config)
-        for config in ("direct", "q=0.25", "q=0.125", "q=0.0625", "q=0.03125")
-    ],
     ("Weather", 96, 2022, "q=0.03125"),
     *[
-        ("Weather", 96, 2023, config)
-        for config in ("direct", "q=0.25", "q=0.125", "q=0.0625", "q=0.03125")
-    ],
-    *[
         ("Weather", 192, 2023, config)
-        for config in ("direct", "q=0.25", "q=0.125", "q=0.0625", "q=0.03125")
+        for config in ("q=0.125", "q=0.0625", "q=0.03125")
     ],
     *[
         ("Electricity", 336, seed, config)
@@ -173,8 +159,8 @@ def matches_job(run_dir: Path, job: dict) -> bool:
 
 def write_manifest(output_root: str) -> list[dict]:
     jobs = [expected_config(*cell) for cell in MISSING_CELLS]
-    if len(jobs) != 33:
-        raise RuntimeError(f"expected 33 explicit repair jobs, got {len(jobs)}")
+    if len(jobs) != 14:
+        raise RuntimeError(f"expected 14 explicit repair jobs, got {len(jobs)}")
     path = ROOT / output_root / "missing_cells_manifest.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
