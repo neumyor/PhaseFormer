@@ -5,7 +5,7 @@
 
 ---
 
-## 1. 背景与动机
+## 1. 实验目标
 
 `PhaseFormer_residual_smooth_ratio_sweep_experiment.md`（boxcar 平滑）与
 `PhaseFormer_residual_causal_ema_smooth_sweep_experiment.md`（causal EMA 平滑）
@@ -27,7 +27,9 @@ skill（假设讨论/已有聚合结果分析/不含新训练执行的请求不�
 
 ---
 
-## 2. 关键前提披露（不可省略）
+## 2. 实验设置
+
+### 2.1 关键前提披露（不可省略）
 
 1. **7 个 setting 及其 (gate_init, learning_rate) 组合仍是此前 test-exposed
    事后挑选的结果**（见 `PhaseFormer_rank_sweep_conditioned_experiment.md` §2），
@@ -44,9 +46,9 @@ skill（假设讨论/已有聚合结果分析/不含新训练执行的请求不�
 
 ---
 
-## 3. 方法（4 个实验）
+### 2.2 方法（4 个实验设计）
 
-### 实验 1：全秩权重矩阵 SVD 谱分析
+#### 实验 1：全秩权重矩阵 SVD 谱分析
 
 `scripts/analyze_weak_residual_svd_spectrum.py`。对 7 个 setting 各自的全秩
 （`head_type="shared"`，即 `direct_nlinear`/`weak_residual` 配置）checkpoint，
@@ -55,7 +57,7 @@ skill（假设讨论/已有聚合结果分析/不含新训练执行的请求不�
 `PR=(Σs)²/Σs²`、条件数。检验"低秩扫描性能曲线的拐点"是否对应"奇异值谱的拐点"。
 纯 CPU，无需数据集，不需要重建完整模型。
 
-### 实验 2：SVD 截断（不重新训练）+ 真实 test 评测
+#### 实验 2：SVD 截断（不重新训练）+ 真实 test 评测
 
 `scripts/analyze_weak_residual_svd_truncation_eval.py`。对每个 setting、每个
 该 setting 实际测试过的秩值 `r`：取全秩 checkpoint 的权重做 SVD 截断
@@ -65,7 +67,7 @@ skill（假设讨论/已有聚合结果分析/不含新训练执行的请求不�
 比较。三者接近 ⟹ 学到的映射本身已接近低秩，压缩没有丢掉多少东西；SVD截断显著
 差于实际训练的低秩模型 ⟹ 低秩训练学到了比截断更优的解。
 
-### 实验 3：训练出的低秩基向量 FFT 分析
+#### 实验 3：训练出的低秩基向量 FFT 分析
 
 `scripts/analyze_weak_residual_lowrank_basis_fft.py`。对每个 setting 的最小
 测试秩 checkpoint，取 `encoder.weight`（`rank×pooled_len`，"读取输入的时间
@@ -73,7 +75,7 @@ skill（假设讨论/已有聚合结果分析/不含新训练执行的请求不�
 向量，做 FFT，报告频谱质心与高频能量占比。验证"压缩后剩下的少数模式，是否仍
 覆盖高频/局部化模式"（预期：是），区别于平滑"直接删除高频成分"。
 
-### 实验 4：频段敏感性探针
+#### 实验 4：频段敏感性探针
 
 `scripts/analyze_weak_residual_freq_band_sensitivity.py`。每个 setting 取 3
 个模型变体：全秩基线、最小测试秩的低秩模型、causal-EMA 全平滑模型
@@ -86,12 +88,12 @@ skill（假设讨论/已有聚合结果分析/不含新训练执行的请求不�
 
 ---
 
-## 4. 结果
+## 3. 实验结果
 
 > 状态：**7 个 setting 全部跑完，以下为服务器实测结果回填。**
 > 原始数据：`research_runs/lowrank_mechanism_analysis_v1/*.csv`，图见同目录 `figures/`。
 
-### 4.1 实验 1：SVD 谱
+### 3.1 实验 1：SVD 谱
 
 `svd_spectrum_summary.csv`。90%/95%/99% 累计能量所需秩（`rank_90/95/99`）与
 实际测试过的秩网格（`tested_ranks`）对比：
@@ -115,7 +117,7 @@ participation ratio 160，谱衰减慢得多——全秩权重矩阵本身并不
 低于"保留原始权重矩阵 90% 能量所需的秩"——**任务相关的有效秩比原始权重矩阵
 的谱有效秩更低**，这是低秩压缩能中性生效的第一层证据。
 
-### 4.2 实验 2：SVD 截断 vs. 实际训练低秩
+### 3.2 实验 2：SVD 截断 vs. 实际训练低秩
 
 `svd_truncation_eval.csv`。多数 setting（ETTh2-96/720、ETTm2-96/192、
 Weather-96/192）上，"SVD 截断不重训"与"实际训练的低秩模型"的 test
@@ -132,7 +134,7 @@ rank=84 才基本追平。这与实验 1 的发现一致：Electricity 的全秩
 （或不仅是）因为"权重矩阵本来就是低秩的"，训练过程本身能在秩约束下重新
 分配权重、找到任务相关的低维子空间，而不是被动地丢弃截断掉的方向。
 
-### 4.3 实验 3：低秩基向量 FFT
+### 3.3 实验 3：低秩基向量 FFT
 
 `lowrank_basis_fft_summary.csv`。所有 7 个 setting 的 encoder 模式（"从输入
 读取的时间模式"）高频能量占比普遍在 0.18–0.46 之间，谱质心多在
@@ -144,7 +146,7 @@ horizon 更短、输出端天然更平滑一些，但仍非零、仍保留局部
 高频/局部化敏感的**，与"平滑=直接对输入做低通滤波"在性质上不同——这支持
 了"容量轴"假设的定性部分：压缩限制的是模式数量，不是模式的频率内容。
 
-### 4.4 实验 4：频段敏感性（核心探针，结果与预期不符）
+### 3.4 实验 4：频段敏感性（核心探针，结果与预期不符）
 
 `freq_band_sensitivity.csv`。**关键发现：本实验未能观察到"全平滑变体对高频
 段扰动明显更不敏感"的预期效应。** 以最高频段（band_index=5）的 ΔMSE% 为例：
@@ -178,7 +180,9 @@ attention 等）三个变体都是同一套架构、都直接吃未平滑的原�
 分支的内部输入（即分支自己看到的那份序列）上，而不是模型的公共输入 `x`——
 这是本轮遗留的方法学局限，留待后续单独设计探针验证，不在本轮结论中计入。
 
-### 结论
+## 4. 实验分析
+
+### 4.1 综合结论
 
 - 全秩权重矩阵谱衰减普遍较快（6/7 个 setting 的 90%-能量秩仅 4–35），
   但即使在谱衰减慢、参与比高的 Electricity-336 上，**训练出的低秩模型**
@@ -198,7 +202,7 @@ attention 等）三个变体都是同一套架构、都直接吃未平滑的原�
   主成分截断"。平滑之所以有害，本轮未能通过频段扰动探针直接量化验证，
   需要修正探针（作用于残差分支私有输入）后才能给出更可靠的因果证据。
 
-### 边界与披露（重申，见 §2）
+### 4.2 边界与披露（重申，见 §2.1）
 
 - 7 个 setting 及其 (gate_init, learning_rate) 组合均为用户指定的 test-exposed
   条件性配置，非盲测、非无偏泛化估计。
