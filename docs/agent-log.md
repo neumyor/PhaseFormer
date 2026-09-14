@@ -2216,3 +2216,46 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 注意：新版绘图脚本使用的旧文件名 `figures/compression_3seed_*.png`（8 个）
   由存在上述缺陷的旧脚本生成，未删除，已在新报告中不再引用；如需清理请用户
   确认。
+
+## 2026-09-14 — 秩压缩的容量代价与数据侧机制（最优秩 RRR 分析）
+
+- 用户提问"秩压缩能否基本保留性能、为什么能、保留的性能对应数据中的什么性质"。
+  按 `CLAUDE.md` 第 15 条界定，这是纯机制分析（不实现新设想、不训练、不改模型），
+  不触发 `experiment-and-error-analysis` Skill；做法沿用
+  `PhaseFormer_lowrank_mechanism_analysis.md` 的先例（训练无关的事后分析）。
+- 新增训练无关脚本 `scripts/analyze_optimal_lowrank_capture.py`：把 NLinear 分支的
+  任务精确写为 `W(x - x_last) → (y - x_last)`（逐窗口 RevIN 对这条支路**精确抵消**，
+  故分析在原始（scaler 后）尺度进行，`sigma * delta_n = W(x - x_last)`），并在训练集
+  二阶矩上求 **reduced-rank regression** 的全局最优解
+  `W_r = U_r U_r^T Szy^T Szz^{-1}`（`S = Szy^T Szz^{-1} Szy` 的前 r 特征子空间），
+  给出"任何秩-r NLinear 分支"的容量上界。脚本另设 `--save-moments` 落盘二阶矩，
+  便于离线重拟合任意秩。
+- 新增 `scripts/analyze_trained_gate_and_rank.py`：只读 570 个已有 checkpoint（无需数据、
+  不训练），提取 `sigmoid(weak_period_residual_gate)` 与训练所得映射的奇异谱，
+  用于量化"分支误差有多少能进入报告指标"，并新增
+  `scripts/verify_optimal_rank_identity.py` 复核 λ 恒等式。
+- 关键结果（7 个既有 test-selected setting，指标取 validation split）：
+  - 本轮测试的最深压缩档（q=1/32，分支参数为满秩头的 3.5%–6.1%）仍保留
+    **92.4%–101.9%** 的"相对 persistence 锚点的可实现提升"；r=1 单方向即保留
+    65.5%–86.2%，r=3 达 88.1%–99.3%。
+  - λ（预测）谱高度集中：90% 的可实现提升只需 2–4 个方向，"有效预测维数"
+    PR = 1.33–2.12；而最优映射**权重矩阵**的 95% 奇异值能量在 ETTh2-720 上需 418 维——
+    即"权重谱不低秩"与"预测结构低秩"并不矛盾（后者才是与压缩效应直接对应的量）。
+  - 最强预测方向是低频的"近期水平 + 局部趋势"方向（与末 24 步指示向量 |cos| =
+    0.44–0.72，高频占比 0.14–0.37 < 白噪声 0.5）；即使无约束映射也只读取窗口增量方差的
+    7.6%–60.7%（ETTh2-96 仅 13.3%），说明窗口增量的大部分能量不可预测。
+  - 融合 gate 实测 g = 0.207–0.507 ⇒ 报告指标只"看得到"分支平方误差的 g² = 4%–26%；
+    Electricity-336（预测维数需求最高、压缩在 test 上最一致偏害）是唯一出现系统性
+    gate 关闭的 setting（0.433 → 0.332@r=10，g² 降低 43%，r=84 恢复），为"模型绕行受损
+    分支"的倾向性证据（Δg = −0.101±0.091，3 seeds）。
+  - 逐通道拟合与通道共享拟合在同一秩下 capture 相当（多数 setting 相差 ≤3pp），
+    低维性是每个序列自身的性质；仅 ETTh2-96 在 r≤6 时共享明显更好。
+- 产物（`research_runs/` 在 `.gitignore` 内，本地产物仅本地/服务器保留）：
+  `research_runs/lowrank_data_property_v1/{optimal_rank_capture.csv,
+  optimal_rank_summary.csv|json, pass1_*, trained_gate_and_spectrum.csv}` 与服务器
+  `research_runs/lowrank_data_property_v2/{moments_*.npz, optimal_rank_*}`。
+- 报告：新增 `docs/PhaseFormer_rank_capacity_and_data_property_report.md`（方法与验证、
+  4 张结果表、三个问题的结论、边界披露、复现命令）。本分析**不修改**任何 preset 默认值，
+  也不改变任何历史结果口径；7 个 setting 仍受 test-set selection 约束，仅为条件性证据。
+- 环境：服务器 8×A800-80GB，conda env `time`；纯 CPU 任务，需 `OMP_NUM_THREADS=2`
+  （默认线程数下 720×720 小矩阵 BLAS 争用会把运行时放大数倍，首次运行已因此重启）。
