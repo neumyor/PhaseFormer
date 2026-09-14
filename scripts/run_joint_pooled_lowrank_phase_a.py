@@ -218,6 +218,14 @@ def write_manifest(args: argparse.Namespace, jobs: list[dict]) -> Path:
 
 def summarize(args: argparse.Namespace, jobs: list[dict]) -> Path:
     root = ROOT / args.output_root
+    lowrank_job_ids = {
+        (
+            int(job["pool_factor"]),
+            int(job["rank"]),
+        ): (job["config_id"], job["relative_rank"])
+        for job in jobs
+        if job["mechanism"] == "weak_residual" and "rank" in job
+    }
     rows = []
     for path in sorted((root / "runs").glob("*/metrics.csv")):
         with path.open(newline="") as handle:
@@ -239,16 +247,12 @@ def summarize(args: argparse.Namespace, jobs: list[dict]) -> Path:
         else:
             pool = int(hp["weak_period_residual_pool_factor"])
             rank = int(hp["weak_period_residual_rank"])
-            max_rank = min(math.ceil(720 / pool), args.horizon)
-            if args.exact_rank:
-                # Rebuild the config_id with the same rank rule build_jobs
-                # used, so non-representable q values (e.g. r=22 at H720,
-                # r=10 at H336) match the expected ids exactly.
-                rank_rule = exact_rank
-            else:
-                rank_rule = relative_rank
-            q = rank_rule(pool, rank / max_rank, args.horizon) / max_rank
-            config_id = f"pool{pool}_q{q:g}_r{rank}"
+            try:
+                config_id, q = lowrank_job_ids[(pool, rank)]
+            except KeyError as exc:
+                raise RuntimeError(
+                    f"unexpected low-rank job in metrics: pool={pool}, rank={rank}"
+                ) from exc
         rows.append(
             {
                 "dataset": args.dataset,
