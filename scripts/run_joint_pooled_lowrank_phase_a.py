@@ -42,16 +42,20 @@ def exact_rank(pool_factor: int, q: float, horizon: int) -> int:
 
 
 def build_jobs(args: argparse.Namespace) -> list[dict]:
-    jobs = [
-        {"config_id": "phase_only", "mechanism": "no_residual", "overrides": {}},
+    jobs = []
+    if not args.skip_phase_only:
+        jobs.append(
+            {"config_id": "phase_only", "mechanism": "no_residual", "overrides": {}}
+        )
+    jobs.append(
         {
             "config_id": "direct_nlinear",
             "mechanism": "weak_residual",
             "overrides": {
                 "weak_period_residual_head_type": "shared",
             },
-        },
-    ]
+        }
+    )
     rank_rule = exact_rank if args.exact_rank else relative_rank
     for pool_factor in args.pool_factors:
         for q in args.relative_ranks:
@@ -205,6 +209,7 @@ def write_manifest(args: argparse.Namespace, jobs: list[dict]) -> Path:
         "loss": "huber",
         "pool_factors": args.pool_factors,
         "relative_ranks": args.relative_ranks,
+        "skip_phase_only": args.skip_phase_only,
         "jobs": jobs,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -304,6 +309,11 @@ def main() -> None:
     parser.add_argument("--relative-ranks", default="0.08333333333333333,0.3333333333333333,1")
     parser.add_argument("--exact-rank", action="store_true")
     parser.add_argument("--evaluate-test", action="store_true")
+    parser.add_argument(
+        "--skip-phase-only",
+        action="store_true",
+        help="Do not train the phase_only control; reuse an existing Golden result.",
+    )
     parser.add_argument(
         "--overrides",
         default="",
