@@ -83,7 +83,7 @@ def expected_config(dataset: str, horizon: int, seed: int, config: str) -> dict:
     }
 
 
-def build_command(job: dict, output_root: str) -> list[str]:
+def build_command(job: dict, output_root: str, num_workers: int) -> list[str]:
     return [
         sys.executable,
         str(SEARCH),
@@ -108,11 +108,10 @@ def build_command(job: dict, output_root: str) -> list[str]:
         "--output-dir",
         output_root,
         "--num-workers",
-        "4",
+        str(num_workers),
         "--bad-case-limit",
         "0",
         "--require-cuda",
-        "--resume",
         "--evaluate-test",
         "--overrides",
         json.dumps(job["overrides"], sort_keys=True),
@@ -157,7 +156,11 @@ def matches_job(run_dir: Path, job: dict) -> bool:
         return False
 
 
-def write_manifest(output_root: str) -> list[dict]:
+def write_manifest(
+    output_root: str,
+    existing_roots: list[str],
+    num_workers: int,
+) -> list[dict]:
     jobs = [expected_config(*cell) for cell in MISSING_CELLS]
     if len(jobs) != 14:
         raise RuntimeError(f"expected 14 explicit repair jobs, got {len(jobs)}")
@@ -168,6 +171,9 @@ def write_manifest(output_root: str) -> list[dict]:
             {
                 "protocol": "explicit missing-cell repair; no shared runner",
                 "output_root": output_root,
+                "existing_roots": existing_roots,
+                "num_workers": num_workers,
+                "resume": False,
                 "jobs": jobs,
             },
             indent=2,
@@ -178,7 +184,14 @@ def write_manifest(output_root: str) -> list[dict]:
     return jobs
 
 
-def dispatch(jobs: list[dict], output_root: str, gpus: list[int], retries: int) -> None:
+def dispatch(
+    jobs: list[dict],
+    output_root: str,
+    existing_roots: list[str],
+    gpus: list[int],
+    retries: int,
+    num_workers: int,
+) -> None:
     pending = list(jobs)
     active: dict[int, tuple[dict, subprocess.Popen[str], int]] = {}
     attempts: dict[tuple, int] = {}
@@ -187,14 +200,16 @@ def dispatch(jobs: list[dict], output_root: str, gpus: list[int], retries: int) 
             gpu = next(gpu for gpu in gpus if gpu not in active)
             job = pending.pop(0)
             key = (job["dataset"], job["horizon"], job["seed"], job["config"])
-            root = ROOT / output_root / "runs"
-            existing = [
-                path / "metrics.csv"
-                for path in root.glob(
-                    f"confirm_{job['dataset'].lower()}_h{job['horizon']}_*s{job['seed']}_*/"
+            existing = []
+            for candidate_root in [*existing_roots, output_root]:
+                root = ROOT / candidate_root / "runs"
+                existing.extend(
+                    path / "metrics.csv"
+                    for path in root.glob(
+                        f"confirm_{job['dataset'].lower()}_h{job['horizon']}_*s{job['seed']}_*/"
+                    )
+                    if matches_job(path, job)
                 )
-                if matches_job(path, job)
-            ]
             if any(is_complete(path) for path in existing):
                 print(json.dumps({"event": "skip_complete", "key": key}), flush=True)
                 continue
@@ -218,7 +233,11 @@ def dispatch(jobs: list[dict], output_root: str, gpus: list[int], retries: int) 
             )
             active[gpu] = (
                 job,
-                subprocess.Popen(build_command(job, output_root), cwd=ROOT, env=env),
+                subprocess.Popen(
+                    build_command(job, output_root, num_workers),
+                    cwd=ROOT,
+                    env=env,
+                ),
                 attempts[key],
             )
         finished = []
@@ -245,19 +264,37 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output-root",
+        default="research_runs/rank_sweep_2_multiseed_stage1_20260914_repair_v1",
+    )
+    parser.add_argument(
+        "--existing-roots",
         default="research_runs/rank_sweep_2_multiseed_stage1_20260914_v4",
+        help="Comma-separated result roots checked before launching a cell.",
     )
     parser.add_argument("--manifest-only", action="store_true")
     parser.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
     parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--num-workers", type=int, default=0)
     args = parser.parse_args()
     gpus = [int(item) for item in args.gpus.split(",") if item]
+    existing_roots = [
+        item for item in args.existing_roots.split(",") if item
+    ]
     if not gpus:
         parser.error("--gpus must not be empty")
-    jobs = write_manifest(args.output_root)
+    if args.num_workers < 0:
+        parser.error("--num-workers must be non-negative")
+    jobs = write_manifest(args.output_root, existing_roots, args.num_workers)
     print(json.dumps({"jobs": len(jobs), "manifest": str(ROOT / args.output_root / "missing_cells_manifest.json")}), flush=True)
     if not args.manifest_only:
-        dispatch(jobs, args.output_root, gpus, args.retries)
+        dispatch(
+            jobs,
+            args.output_root,
+            existing_roots,
+            gpus,
+            args.retries,
+            args.num_workers,
+        )
 
 
 if __name__ == "__main__":
