@@ -2,7 +2,9 @@
 """Run the audited 14-setting, five-config multi-seed rank sweep.
 
 The setting table is deliberately explicit.  This avoids positional shell
-arguments silently shifting a seed into the gate or learning-rate slot.
+arguments silently shifting a seed into the gate or learning-rate slot.  The
+outer dispatcher is intentionally serial: one inner runner owns all GPUs at a
+time, so completion order cannot cause resource-group reuse.
 """
 
 from __future__ import annotations
@@ -99,7 +101,7 @@ def write_manifest(path: Path, output_root: str, gpu_groups: list[list[int]]) ->
         if len(job["expected_configs"]) != 5:
             raise RuntimeError(f"invalid config matrix for {job}")
     payload = {
-        "protocol": "v4 audited multi-seed low-rank sweep",
+        "protocol": "v5 audited multi-seed low-rank sweep",
         "output_root": output_root,
         "lookback": 720,
         "period": 24,
@@ -172,14 +174,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output-root",
-        default="research_runs/rank_sweep_2_multiseed_stage1_20260914_v4",
+        default="research_runs/rank_sweep_2_multiseed_stage1_20260914_v5",
     )
     parser.add_argument("--manifest-only", action="store_true")
     parser.add_argument("--poll-seconds", type=int, default=10)
     parser.add_argument("--retries", type=int, default=1)
     args = parser.parse_args()
-    gpu_groups = [[0, 1, 2, 3], [4, 5, 6, 7]]
-    manifest = ROOT / args.output_root / "v4_manifest.json"
+    gpu_groups = [list(range(8))]
+    manifest = ROOT / args.output_root / "v5_manifest.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)
     jobs = write_manifest(manifest, args.output_root, gpu_groups)
     print(json.dumps({"manifest": str(manifest), "jobs": len(jobs)}), flush=True)
