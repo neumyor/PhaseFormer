@@ -313,6 +313,31 @@ Golden 数值来自 [`PhaseFormer_gold_standard.md`](PhaseFormer_gold_standard.m
 - `research_runs/rank_sweep_2_multiseed_stage1_20260914_v3/` 因调度/结果完整性
   问题明确排除，不参与任何统计。
 
+### 7.6 三 seed 图表（MSE / MAE 分图）
+
+绘图脚本
+[`../scripts/plot_3seed_conditioned_rank_sweep.py`](../scripts/plot_3seed_conditioned_rank_sweep.py)
+读取 `three_seed_summary.csv`（3 seed 均值与样本标准差）与 `audited_results.csv`
+（105 个逐 seed 单元，仅用于背景散点），Golden 基准取
+[`PhaseFormer_gold_standard.md`](PhaseFormer_gold_standard.md)。产物位于
+`research_runs/rank_sweep_2_multiseed_stage1_20260914_summary/figures/`：
+
+| 文件 | 内容 |
+|---|---|
+| `three_seed_MSE_by_setting.png` | 7 setting × 1 指标（MSE）分面图；x 轴为压缩档位 `direct → q=1/32`（标注实际 rank），y 轴为 test MSE，折线为 3 seed 均值，半透明带为均值 ±1 样本标准差，虚线为该 setting 的 Golden MSE 基准 |
+| `three_seed_MAE_by_setting.png` | 同上，指标为 test MAE 与 Golden MAE |
+| `three_seed_<Dataset>_h<H>.png` | 逐 setting 双面板（左 MSE、右 MAE），共 7 张 |
+| `three_seed_figure_data.csv` | 图中全部数值的审计副本（均值、标准差、rank、Golden、seed 数） |
+
+重绘命令：`python scripts/plot_3seed_conditioned_rank_sweep.py`（`research_runs/`
+在 `.gitignore` 内，图表为本地产物；入库的是脚本与本报告）。
+
+**图读法（对 Golden，仅供参考）**：把 4 个压缩档的 3 seed 均值与 Golden 逐 setting
+对比，7 × 5 = 35 个档位单元中有 30 个在 MSE 与 MAE 上同时低于 Golden，未达标者
+为 ETTh2-96 `q=1/32`、Weather-96 `q=1/4` 与 `q=1/32`、Weather-192 `direct` 与
+`q=1/32`。多数差距（约 0.3%–3%）与 seed 标准差同阶，且本表与图同样受
+test-set selection 约束，**只能作为条件性、test-exposed 的图示**，不构成提升声明。
+
 ---
 
 ## 8. 复现与产物

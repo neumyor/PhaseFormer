@@ -2180,3 +2180,33 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   深压缩偏害，不存在统一的跨 setting 最优秩。
 - 环境：服务器 8×A800-80GB，conda env `time`；正式结果目录不纳入 git，
   审计脚本与报告文档分别提交。
+
+## 2026-09-14 — 三 seed 压缩曲线图表（MSE / MAE 分图）
+
+- 按用户要求重绘三 seed 图表：MSE 与 MAE 各一张分面图，x 轴为压缩档位
+  `direct → q=1/32`（刻度标注该 setting 的实际 rank），y 轴为该 setting 的
+  test 误差，折线为 seeds 2021/2022/2023 的均值，半透明带为均值 ±1 样本
+  标准差，每个 setting 画该指标对应的 Golden 水平虚线基准，并叠加 3 个
+  seed 的浅色散点。
+- 重写 `scripts/plot_3seed_conditioned_rank_sweep.py`：原未提交版本存在两个
+  缺陷——标准差按“第一个 q 档”取值被重复赋给所有档位，且用 `axhspan` 画出
+  横贯整个坐标区间的色带（不是沿折线的范围带）。新版本直接从
+  `three_seed_summary.csv` 按 (dataset, horizon, config) 取均值/标准差，
+  `audited_results.csv` 仅用于逐 seed 散点，并输出
+  `figures/three_seed_figure_data.csv` 作为图中数值的审计副本（35 行）。
+- 产物（本地产物，`research_runs/` 在 `.gitignore` 内）：
+  `figures/three_seed_MSE_by_setting.png`、`figures/three_seed_MAE_by_setting.png`、
+  逐 setting 双面板 `figures/three_seed_<Dataset>_h<H>.png`（7 张）。重绘命令
+  `python scripts/plot_3seed_conditioned_rank_sweep.py`。
+- 验证：脚本可运行并生成全部 10 个文件；用 renderer 逐面板检查文字未越界、
+  同面板文字无重叠、ylim 覆盖均值±标准差、逐 seed 散点与 Golden 值；并做像素
+  级检查确认色带只沿折线分布（面板左右边缘几乎无着色像素，中部数千像素），
+  排除了原 `axhspan` 缺陷。
+- 报告新增 §7.6 记录图表口径与产物；并补充“对 Golden”的指示性计数：
+  35 个（7 setting × 5 档位）三 seed 均值单元中 30 个在 MSE 与 MAE 上同时
+  低于 Golden，未达标者为 ETTh2-96 `q=1/32`、Weather-96 `q=1/4` 与 `q=1/32`、
+  Weather-192 `direct` 与 `q=1/32`。该计数与图同样受 test-set selection 约束，
+  仅为条件性、test-exposed 的图示，不构成提升声明。
+- 注意：新版绘图脚本使用的旧文件名 `figures/compression_3seed_*.png`（8 个）
+  由存在上述缺陷的旧脚本生成，未删除，已在新报告中不再引用；如需清理请用户
+  确认。
