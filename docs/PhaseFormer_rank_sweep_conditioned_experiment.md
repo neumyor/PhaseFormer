@@ -332,11 +332,21 @@ Golden 数值来自 [`PhaseFormer_gold_standard.md`](PhaseFormer_gold_standard.m
 重绘命令：`python scripts/plot_3seed_conditioned_rank_sweep.py`（`research_runs/`
 在 `.gitignore` 内，图表为本地产物；入库的是脚本与本报告）。
 
-**图读法（对 Golden，仅供参考）**：把 4 个压缩档的 3 seed 均值与 Golden 逐 setting
-对比，7 × 5 = 35 个档位单元中有 30 个在 MSE 与 MAE 上同时低于 Golden，未达标者
-为 ETTh2-96 `q=1/32`、Weather-96 `q=1/4` 与 `q=1/32`、Weather-192 `direct` 与
-`q=1/32`。多数差距（约 0.3%–3%）与 seed 标准差同阶，且本表与图同样受
+**图读法（对 Golden，仅供参考）**：把 5 个档（含 `direct`）的 3 seed 均值与 Golden
+逐 setting 对比，7 × 5 = 35 个档位单元中有 30 个在 MSE 与 MAE 上同时低于 Golden，
+未达标者为 ETTh2-96 `q=1/32`、Weather-96 `q=1/4` 与 `q=1/32`、Weather-192 `direct`
+与 `q=1/32`。多数差距（约 0.3%–3%）与 seed 标准差同阶，且本表与图同样受
 test-set selection 约束，**只能作为条件性、test-exposed 的图示**，不构成提升声明。
+
+**与 §5.6「direct 7/7 双指标优于 Golden」的关系（避免误读）**：该 7/7 是 seed 2021
+单 seed 读法（表 3 首列）。三 seed 均值下 `direct` 仍然 **7/7 在 MSE 上优于 Golden**，
+MAE 为 **6/7 严格优于 + 1 个舍入级持平**：Weather-192 `direct` 为
+`0.237048 ± 0.001068` vs Golden `0.237`（ΔMAE = −0.02%，且 3 个 seed 中 2 个仍双优），
+属于金标准仅保留三位小数导致的舍入差异，按
+[`PhaseFormer_gold_standard.md`](PhaseFormer_gold_standard.md) §4 不应计为退化。
+30/35 中未通过的 5 个单元里，4 个出现在压缩档（尤其 H96 的 `q=1/32` 与 Weather-96
+的 `q=1/4`），即压缩带来的相对退化；这**不改变**“不压缩的 `direct` 在该 7 个 setting
+上超过 Golden”这一既有观察。
 
 ---
 

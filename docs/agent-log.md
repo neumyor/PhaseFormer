@@ -2207,6 +2207,12 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   低于 Golden，未达标者为 ETTh2-96 `q=1/32`、Weather-96 `q=1/4` 与 `q=1/32`、
   Weather-192 `direct` 与 `q=1/32`。该计数与图同样受 test-set selection 约束，
   仅为条件性、test-exposed 的图示，不构成提升声明。
+- 用户复核提问“这 7 个 setting 不压缩是否都超过 Golden”，已逐 seed 重算确认：
+  seed 2021 单 seed 读法为 7/7 双指标优于 Golden（表 3）；三 seed 均值下 `direct`
+  MSE 7/7 优于 Golden，MAE 6/7 严格优于 + Weather-192 为 `0.237048±0.001068` vs
+  `0.237` 的舍入级持平（ΔMAE −0.02%，3 seed 中 2 个仍双优），按金标准 §4 不计退化。
+  原先 §7.6 “30/35” 仅统计压缩档位对 Golden，易被误读为 direct 未达标，已在文档中
+  补写澄清段落，说明 5 个未通过单元中 4 个属于压缩档的相对退化。
 - 注意：新版绘图脚本使用的旧文件名 `figures/compression_3seed_*.png`（8 个）
   由存在上述缺陷的旧脚本生成，未删除，已在新报告中不再引用；如需清理请用户
   确认。
