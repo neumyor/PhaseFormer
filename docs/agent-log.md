@@ -2148,3 +2148,35 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `docs/PhaseFormer_residual_causal_ema_smooth_sweep_experiment.md` §6。
 - 提交：结果文档回填单独一次提交；生成 14 子图对比图并发给用户（复用
   `scripts/plot_smooth_ratio_sweep.py` 画图逻辑，改用本轮数据）。
+
+## 2026-09-14 — Conditioned Low-Rank Sweep 三 seed 复核与执行接管
+
+- 按用户要求，在原 seed 2021 的 7 个 setting 上新增 seeds 2022/2023：
+  每个 setting 运行真正的 `direct_nlinear` 与 `q∈{1/4,1/8,1/16,1/32}`，
+  共 70 个新 run。`direct_nlinear` 为
+  `X-X_last → Linear(720,H) → +X_last`；q 是 `rank/H`，不是相对输入长度
+  720 的压缩率。复用 seed 2021 Stage 0 冻结的 gate/lr，不训练
+  `phase_only`，PhaseFormer 参照继续使用 Golden。
+- 前序自动调度产生的 v3 目录因运行编排和结果完整性问题被明确排除。v4 经逐
+  run `config.json`、run-root `metrics.csv` 与有限数值检查后保留 58 个唯一
+  有效单元；缺失项写入隔离的 `repair_v1`，最终补齐 12 个有效单元。禁止按
+  test 分数从重复项中挑选结果。
+- 接管时已有 60/70 个有效结果，剩余 10 个均为 Electricity-336。原修复调度
+  同时启动 8 个 `num_workers=0` 任务，服务器 load average 约 300，约 50 分钟
+  只完成 1 个 epoch。仅终止未完成 attempt 后，以 5 路并发和
+  `num_workers=4` 重启；速度恢复到约 1 分钟/epoch，10 个缺失单元均完成，
+  无失败或重试。被终止的 incomplete attempts 不含 run-root `metrics.csv`，
+  不进入审计。
+- 新增 `scripts/analyze_conditioned_rank_sweep_multiseed.py`，严格要求
+  7 × 3 × 5 = 105 个目标单元每格恰好一个，并核对 dataset/horizon/seed、
+  head type、rank、pool=1、smooth=0、冻结 gate/lr 及四项有限指标。最终
+  **105/105 通过，无缺失、无重复**。汇总位于
+  `research_runs/rank_sweep_2_multiseed_stage1_20260914_summary/`。
+- 多 seed 结论：单 seed 的 ETTm2-192 `q=1/8` 与 Weather-192 `q=1/32`
+  双指标优势未复现；只有 ETTh2-720 的 `q=1/4`、`q=1/8` 达到 3/3 seeds
+  双指标优于 direct。跨 21 个 setting-seed 单元，q=1/4、1/8、1/16、1/32
+  的宏平均 ΔMSE/ΔMAE 分别为 `-0.119/-0.292%`、`+0.068/-0.186%`、
+  `-0.320/-0.462%`、`-0.523/-0.810%`。结论修订为：中等压缩近中性，
+  深压缩偏害，不存在统一的跨 setting 最优秩。
+- 环境：服务器 8×A800-80GB，conda env `time`；正式结果目录不纳入 git，
+  审计脚本与报告文档分别提交。
