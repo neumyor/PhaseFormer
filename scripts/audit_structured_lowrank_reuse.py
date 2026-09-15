@@ -55,11 +55,23 @@ def generic_q(config_id: str) -> float:
     return float("nan")
 
 
+def _resolve_setting_file(scratch_root: Path, suffix: str, dataset: str, horizon: int, seed: int):
+    """Find ``*<dataset>_h<horizon>_s<seed>*`` regardless of filename casing."""
+
+    matches = sorted(scratch_root.glob(f"*{dataset}_h{horizon}_s{seed}{suffix}"))
+    if not matches:
+        matches = sorted(
+            scratch_root.glob(f"*{dataset.lower()}_h{horizon}_s{seed}{suffix}")
+        )
+    return matches[0] if matches else None
+
+
 def load_results(scratch_root: Path, dataset: str, horizon: int, seed: int):
-    tag = f"{dataset.lower()}_h{horizon}"
-    path = scratch_root / f"phase_a_{tag}_s{seed}_results.csv"
-    if not path.is_file():
-        raise SystemExit(f"missing result file: {path}")
+    path = _resolve_setting_file(scratch_root, "_results.csv", dataset, horizon, seed)
+    if path is None:
+        raise SystemExit(
+            f"missing result file for {dataset}-{horizon} seed {seed} under {scratch_root}"
+        )
     with path.open() as handle:
         return list(csv.DictReader(handle))
 
@@ -67,9 +79,13 @@ def load_results(scratch_root: Path, dataset: str, horizon: int, seed: int):
 def load_frozen(scratch_root: Path, dataset: str, horizon: int, seed: int):
     """Read the frozen ``(gate_init, learning_rate)`` from a matching run."""
 
-    tag = f"{dataset.lower()}_h{horizon}"
-    pattern = f"confirm_{tag}_weak_residual_*_s{seed}_*/config.json"
-    candidates = sorted(scratch_root.joinpath("runs").glob(pattern))
+    candidates = []
+    for tag in {f"{dataset}_h{horizon}", f"{dataset.lower()}_h{horizon}"}:
+        candidates = sorted(
+            scratch_root.joinpath("runs").glob(f"confirm_{tag}_weak_residual_*_s{seed}_*/config.json")
+        )
+        if candidates:
+            break
     if not candidates:
         return None
     with candidates[0].open() as handle:
