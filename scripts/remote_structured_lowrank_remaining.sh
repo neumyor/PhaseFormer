@@ -20,9 +20,13 @@ git log --oneline -1 > "$LOGDIR/remaining_head.txt"
 
 IFS=',' read -r -a CANDIDATES <<< "A_period_lowrank,A_period_lowrank_r8,B_segment_basis,C_level_shape,D_recent_sparse,E_separable,matched_A_period_lowrank,matched_A_period_lowrank_r8,matched_B_segment_basis,matched_C_level_shape,matched_D_recent_sparse,matched_E_separable"
 
+# Only a run for the requested setting counts as done: the scratch tree holds
+# every setting, so a plain status.json glob would treat another setting's run as
+# completing this candidate.
+SETTING_KEY=$(echo "$SETTING" | tr ':' '_' | tr '[:upper:]' '[:lower:]')
 pending=()
 for candidate in "${CANDIDATES[@]}"; do
-  if ! ls "$OUT/$candidate"/runs/*/status.json >/dev/null 2>&1; then
+  if ! ls "$OUT/$candidate"/runs/*"${SETTING_KEY}"*/status.json >/dev/null 2>&1; then
     pending+=("$candidate")
   fi
 done
