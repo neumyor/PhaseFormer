@@ -10,6 +10,34 @@
 > 这些名字**仅作历史记录**，不代表当前存在对应文档；③ D4–D7 与 Progressive-IB 计划在日志中
 > 只按主题描述、未写文件名，检索时请用 `docs/README.md` 的索引小节。
 
+## 2026-09-15 — 修正 "结构化候选实际训练成 direct_nlinear" 的两处缺陷
+
+Round 1 首次启动后的产物审计发现**两处独立缺陷**，都会让结构化候选静默退化成普通
+`direct_nlinear`（结构参数照样写入 config，因此单看表格无法察觉）；两处都已修复、补测试并重启。
+
+1. **`search_phaseformer.py`：显式 head 类型被 preset 覆盖回 `shared`。**
+   `build_hyperparams(..., "weak_residual")` 会**硬写**
+   `weak_period_residual_head_type = "shared"`，而 `build_spec` 把 CLI overrides 应用在
+   该 preset **之前**，于是任何请求其它已注册残差头的运行都会退回 `shared`。
+   修复：在 preset 展开后**仅**重新应用 `weak_period_residual_head_type` 这一个键
+   （其它 override 顺序不变，`pooled_lowrank` 等既有链路行为不动）。
+   回归测试 `tests/test_search_head_override.py` 同时钉住"override 生效"与"未传时默认值不变"。
+2. **`run_structured_lowrank_round1.py`：候选 job 根本没带 head 类型。**
+   候选分支从路由表构造 overrides，而路由表里只有 `residual_*`，因此候选 job 缺
+   `weak_period_residual_head_type`（只有 `matched_*` 分支通过 `build_override` 带上了它）。
+   修复：候选与匹配控制统一经 `build_override` 组合；回归测试
+   `tests/test_structured_lowrank_runner.py` 钉住"每个 job 都带已注册 head 类型""候选用自己的
+   路由头""匹配控制用控制头"。
+
+- 本机 `pytest tests/ -q`：**318 passed**（新增 17 + 3 + 4 项）。
+- 两次错误启动的 scratch 均已删除（`structured_lowrank_round1_scratch`、
+  `structured_lowrank_probe`），未进入任何报告；Round 1 已用修复后的代码重启，
+  重启后 config 审计确认为
+  `structured_period_lowrank / structured_segment_basis / structured_level_shape /
+  structured_recent_period / structured_separable / time_axis_matched_lowrank`。
+- 记录一条经验：**"结构化候选必须校验 config 里实际的 head 类型"**——只看 `residual_*`
+  字段或 run 名称不足以证明结构分支真的被启用。
+
 ## 2026-09-15 — 实现结构化低秩残差头并启动 Round 0/1
 
 - **实现**（`src/models/structured_residual_heads.py`，共 799 行）：按计划 §4 实现五条
