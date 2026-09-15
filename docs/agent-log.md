@@ -10,6 +10,41 @@
 > 这些名字**仅作历史记录**，不代表当前存在对应文档；③ D4–D7 与 Progressive-IB 计划在日志中
 > 只按主题描述、未写文件名，检索时请用 `docs/README.md` 的索引小节。
 
+## 2026-09-15 — 实现结构化低秩残差头并启动 Round 0/1
+
+- **实现**（`src/models/structured_residual_heads.py`，共 799 行）：按计划 §4 实现五条
+  路线的残差头 `structured_period_lowrank`（A）、`structured_segment_basis`（B）、
+  `structured_level_shape`（C）、`structured_recent_period`（D）、`structured_separable`（E），
+  外加计划 §3.3 的参数匹配控制头 `time_axis_matched_lowrank`，并在 `PhaseFormer.py` 注册
+  （新增分支 + 训练步中的 `last_orthogonality_loss` 辅助项）。所有头保持 NLinear 末值锚点、
+  输出投影零初始化，并各自持有 `residual_period_len`，**不触碰主干 `period_len`**。
+- **相位几何以 "lag" 显式定义**：`gather_segments(phase_convention=True)` 让第 `c` 列固定存放
+  "距观测窗口末端 `c` 步"的值，于是列索引与绝对相位一一对应，预测端等价于对第 `i` 步读取
+  lag `i`。这套定义是逐项数值验证的（ramp 输入 + 周期输入 + 三种分段），并且
+  `aligned / shifted / random` 三种分段共享同一相位约定，错位控制因此可比。
+- **参数量实测**（`scripts/report_structured_lowrank_params.py`）：控制头开销为
+  `r*(L+H+1)+H`，其 rank-1 下限在 H96 为 913、H720 为 2161。P=24 下除路线 A 外的结构化候选
+  都低于该下限（B 144、C 268、D 28、E 148 @H96），因此这些控制固定在 rank 1 并**记录实测
+  差距**，而不是强行塞进 5% 带（计划允许取最近可达秩并记录差异）；路线 A 按其实测预算匹配。
+- **Round 0（完成）**：`scripts/audit_structured_lowrank_reuse.py` 在服务器上对四个 pilot
+  setting 的三项控制做复用审计，全部判定为 `reused_exact`，零新增训练，产物落
+  `research_runs/structured_lowrank_round0_v1/`（`frozen_configs.json`、
+  `round0_controls.csv`、`round0_controls.md`）。逐 setting 冻结配置为
+  ETTh2-96/H720 与 Electricity-336 gate_init 0.5、ETTm2-192 gate_init 0.2，lr 均为 1e-3
+  （与 §2 表 1 一致）。
+- **校验**：新增 `tests/test_structured_residual_heads.py`（17 项：形状、锚点、相位对齐、
+  补齐/裁剪、参数匹配、分段变体、正交项暴露）；`python -m pytest tests/ -q` 全仓库
+  **313 passed, 262 subtests passed**。本地用 `uv` 临时 CPU torch 环境运行（`/tmp/pf_static_verify`）。
+- **Round 1（运行中）**：`scripts/run_structured_lowrank_round1.py` 按 frozen 配置在每个
+  pilot setting 上训练 6 个候选（A、A-r8 诊断点、B、C representative、D、E）与各自匹配控制，
+  共 48 次训练；由 `scripts/remote_structured_lowrank_round1.sh` 在 A800 上以
+  "每 setting 独占一卡" 并行（GPU 0–3，避开被他人 vLLM 占用的 6/7）。产物写
+  `research_runs/structured_lowrank_round1_scratch/`，日志在仓库外
+  `~/niuyiming/structured_lowrank_round1_logs/`。
+- **首次启动的插曲**：第一次启动后我误判 matched control 的 `gate_init` 为默认值而中止任务；
+  复核 `frozen_configs.json` 与日志后确认这是把 ETTm2 行错配到我看到的命令行所致，运行器
+  一直正确传递逐 setting 冻结值（ETTm2 确为 0.2），不是缺陷；任务已干净重启。
+
 ## 2026-09-15 — 建立 NLinear 结构化低秩宽度优先探索计划
 
 - 新增 `docs/PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md`。
