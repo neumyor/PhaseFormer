@@ -31,6 +31,7 @@ from src.models.periodic_residual_experts import (
 )
 from src.models.structured_residual_heads import (
     STRUCTURED_HEAD_BUILDERS,
+    TimeAxisMatchedLowRankHead,
     build_structured_residual_head,
 )
 from src.models.intercycle_patch import (
@@ -1019,6 +1020,15 @@ class PhaseFormer(DefaultPLModule):
                     smooth_window=getattr(
                         configs, "weak_period_residual_smooth_window", 24
                     ),
+                )
+            elif residual_head_type == "time_axis_matched_lowrank":
+                # Parameter-matched time-point-axis control (plan section 3.3):
+                # same head budget as a structured candidate, no coordinate
+                # change, pooling, basis or recent selection.
+                self.weak_period_residual = TimeAxisMatchedLowRankHead(
+                    self.seq_len,
+                    self.pred_len,
+                    rank=getattr(configs, "weak_period_residual_rank", 4),
                 )
             elif residual_head_type in STRUCTURED_HEAD_BUILDERS:
                 # Structured low-rank exploration heads.  They own a head-local
