@@ -1638,6 +1638,35 @@ class PhaseFormerPresetConfig:
         self.weak_period_residual_smooth_window = hyperparams.get(
             "weak_period_residual_smooth_window", 24
         )
+        # Structured low-rank residual heads (breadth-first exploration plan,
+        # section 10.1).  These are head-local: ``residual_period_len`` never
+        # changes the phase-path ``period_len``.  Every key must be forwarded
+        # here, otherwise the head silently falls back to its builder default
+        # and distinct candidates collapse onto the same architecture.
+        self.residual_period_len = hyperparams.get("residual_period_len", 24)
+        self.residual_period_rank = hyperparams.get("residual_period_rank", 4)
+        self.residual_basis_count = hyperparams.get("residual_basis_count", 4)
+        self.residual_basis_lambda_orth = hyperparams.get(
+            "residual_basis_lambda_orth", 0.0
+        )
+        self.residual_level_mode = hyperparams.get("residual_level_mode", "dense")
+        self.residual_level_rank = hyperparams.get("residual_level_rank", 1)
+        self.residual_shape_rank = hyperparams.get("residual_shape_rank", 4)
+        self.residual_recent_taps = hyperparams.get("residual_recent_taps", 7)
+        self.residual_recent_weighting = hyperparams.get(
+            "residual_recent_weighting", "hard"
+        )
+        self.residual_recent_decay = hyperparams.get("residual_recent_decay", 0.8)
+        self.residual_recent_rank = hyperparams.get("residual_recent_rank", None)
+        self.residual_separable_components = hyperparams.get(
+            "residual_separable_components", 1
+        )
+        self.residual_segment_alignment = hyperparams.get(
+            "residual_segment_alignment", "aligned"
+        )
+        self.residual_segment_seed = hyperparams.get("residual_segment_seed", None)
+        self.residual_segment_key = hyperparams.get("residual_segment_key", "")
+        self.residual_segment_offset = hyperparams.get("residual_segment_offset", None)
         self.weak_residual_asymmetric_component = hyperparams.get(
             "weak_residual_asymmetric_component", "none"
         )
