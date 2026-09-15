@@ -2311,3 +2311,37 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   （capture(1) 65.47–86.17、最深档 92.36–101.9、PR 1.33–2.12、λ₁ 份额 0.6618–0.8617、
   近端质量 0.53–0.703 / 0.709–0.895、输出常值 |cos| 0.892–0.989 且符号一致性 7/7 全 1.0）；
   文档内 11 张表列数一致性已用脚本检查（无问题）。
+
+## 2026-09-15 — 全量实验文档审计、agent-log 校对与表 1 勘误
+
+- 用户要求 review 全部实验文档（能否串起来）、校对 `agent-log.md`、并给出一份近期实验
+  日志。四条线（incumbent / 输入成分 / 趋势成分 / 低秩压缩）分头通读，41 份 Markdown 与
+  151 条日志全部覆盖；可疑数值回到 `research_runs/` 原始产物复核，未运行任何训练。
+- 新增 `docs/PhaseFormer_experiment_documentation_review.md`：链条图 + 四个断点、校对清单
+  （P0/P1/P2 共 19 条）、**近期实验一览**（09-02 → 09-15，按线分表：低秩压缩主线 /
+  平滑两轮 / 输入成分 D0+D4–D7 / 趋势成分结题 / incumbent 线摘要）、以及建议的最小修复集。
+- **发现并修正一处真实数值错误（表 1 MAE 列互换）**：`PhaseFormer_rank_sweep_conditioned_experiment.md`
+  表 1 与 `..._plan.md` §9 表 1 中，Weather-96 与 Electricity-336 两行的 **MAE 列被互换**
+  （MSE 列无误）。以服务器 `research_runs/rank_sweep_2_stage0/stage0_<Dataset>_<H>_validation.csv`
+  的逐配置原始值为准还原：Weather-96 MAE 应为 `0.2700/0.2713/0.2721/0.2745`，
+  Electricity-336 应为 `0.2290/0.2280/0.2274/0.2278`。两条独立旁证：原 Weather-96 行的 4 个
+  MAE 值恰为 Electricity-336 的真实值（四舍五入逐格一致）；Stage 1 CSV 中冻结配置下
+  `direct_nlinear` 的 `val_mae` 为 Weather-96 `0.2713`、Electricity-336 `0.2274`。
+  两行的 MSE 列正确，故**冻结配置与全部下游结果不变**；该错误同时造成 plan §9 中
+  "0.2721 vs 0.2713 冻结 MAE 更低者"的自相矛盾表述，已一并改写。两处文档均已加勘误注。
+- 附带澄清（非错误）：表 1 全表按**截断**而非四舍五入保留 4 位小数，故 Electricity-336 的
+  `0.137442`/`0.137456` 显示为 `0.1374/0.1374` 的"并列"假象；全精度下 `g0.5_lrdefault`
+  以更小 val MSE 唯一胜出，**从未触发并列规则**。
+- **修正两条日志条目日期**：`主导预测方向的精确刻画与早期表述修正` 与
+  `论文用强结论与图表方案写入报告（§4）` 实际提交于 2026-09-15 09:51/09:55（`d7173a4`、
+  `522eb25`），原写作 09-14；逐条比对 151 个条目与提交日期后确认仅此两条错。
+- **补拉历史产物**：09-12 日志记录因当时 SSH stdout 读取限制未落地的 14 份原始 CSV
+  （boxcar 7 份 + causal-EMA 7 份）已 rsync 到本地 `research_runs/{smooth_ratio,causal_ema}_smooth_sweep_v1/`，
+  该限制已不复现。
+- 审计要点（未修改，仅登记于 review 文档）：README 索引未覆盖 09-10 之后 9 份低秩/弱残差
+  文档与 11 份输入成分文档（最新容量报告此前为真孤儿）；README "输入成分…尚未实现或运行"
+  与事实相反（D0 已于 09-03 完成）；两篇平滑文档头部仍写"结果待回填"；conditioned 报告 §5
+  未指向 §7 三 seed 修订；输入成分线计划计数与 dangling 交付目录、interaction 聚合口径 bug、
+  `D1/D2/D3` 双含义；`strict_t28_master_table_configs/README.md` 称 12 cells 而磁盘为 20 cells；
+  "K4 当前最佳"与"A2 incumbent"表述冲突；服务器 `rank_sweep_2_multiseed_stage1_20260914_v5/`
+  （与 v4 同名 run_id、数值逐位相同）未登记。
