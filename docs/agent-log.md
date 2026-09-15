@@ -2355,3 +2355,41 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   `D1/D2/D3` 双含义；`strict_t28_master_table_configs/README.md` 称 12 cells 而磁盘为 20 cells；
   "K4 当前最佳"与"A2 incumbent"表述冲突；服务器 `rank_sweep_2_multiseed_stage1_20260914_v5/`
   （与 v4 同名 run_id、数值逐位相同）未登记。
+
+## 2026-09-15 — 执行审计建议的 P0/P1 修复（文档索引、状态标注、计数与 interaction 口径）
+
+- 按用户要求修复上一轮审计给出的 **P0（5 条）与 P1（7 条）**，**不改动任何结论或数值**。
+- **P1-10 代码修复（唯一涉及代码的一项）**：`summarize_input_component_ablation.py` 的
+  aggregate interaction 列原先建在 *sham-adjusted* 差值上，即
+  `[Δ(M,V)−Δ(M,sham)] − [Δ(M0,V)−Δ(M0,sham)] = Interaction(§8.1) − ShamInteraction`，
+  该恒等式精确复现 D0 报告记录偏差（+2.4 − (−33.7) = **+36.1 pp**）。
+  - 新建 `src/dataset/input_component_contrasts.py`（纯 pandas/numpy，无 torch）承载 §8.1 定义；
+    `summarize_input_component_ablation.py` 改用 `delta_*`/`relative_delta_*` 与 original 的原始
+    差值，旧值保留为显式命名的 `sham_adjusted_interaction_*`；宏平均改为**逐 dataset×horizon
+    等权**（原为按行均值，会被 seed 数不均衡加权），bootstrap CI 使用同一估计量。
+  - 新增 `tests/test_input_component_contrasts.py`（5 项，`python -m pytest` 本地通过，0.7s）：
+    验证 §8.1 定义、旧口径与 §8.1 的差值恒等式（即 D0 膨胀量）、缺列时报错/降级、逐 setting 等权、
+    rename 幂等。已核对仓库内无其他消费方使用这些列。
+  - **残留动作**：D0 的 `result_summary_d0_aggregate.csv` 需在 GPU 机器上用修复后的脚本重生成，
+    「Interaction ≥ +0.5% 且 CI 下界 > 0」门槛方可正式判定（命令写入 D0 报告 §8-1）。
+- **P0 文档修复**：① `docs/README.md` 重写"机制消融（含演化链条表 12 份文档）/输入成分诊断
+  （D0 已完成、D1 未收尾）/288-run 额外 mechanism（I0/I1/D1/D2/D3）/审计与日志"四节；
+  ② 两篇平滑扫描文档头部状态行由"结果待回填"改为已完成并给出判定；③ conditioned 报告 §5
+  第 2/4 条加"以 §7 三 seed 修订为准"指针；④ 机制分析 §3.3/§4.1 的频率判据加限定并指向
+  容量报告 §2.6 的修正声明。
+- **P1 文档修复**：⑤ conditioned 计划头部与 §10 标注（3/7）为单 seed 且三 seed 未复现；
+  ⑥ pooled 文档的 Controlled Follow-up Plan 标注 **superseded by joint 计划**；
+  ⑦ 输入成分计划计数更新为 v1.2（7 数据集 / 21 锚点 / 189 retrained / 399 单元 / 2520 Track R /
+  全矩阵 252+2268）并把 `--expected-count` 改为 189；⑧ D0 报告 §8-1 改为"已修复（代码层）"并
+  记录根因、残留动作与命令，§10 表与 §9 同步，另加 `D1/D2/D3` 双含义提醒；
+  ⑨ incumbent 状态统一：README 加"incumbent 状态注"、K4 小节改标题，`top5_test_models.md` 与
+  `periodic_residual_next_stage.md` 各加状态注（A2 = 最后的三 seed 统一 incumbent；K4 为其后
+  单-checkpoint 扩展线，12/20 setting 双指标优于 Golden 但其中 12 格为单 seed）；
+  ⑩ `strict_t28_master_table_configs/README.md` 计数 12→20 cells 并补 Weather 条目，
+  计划中"12 个有文件 cell"同步更正。
+- **顺带更正一条审计结论**：上一轮把"计划 §7/§12 的六文件交付目录从未生成"记为**悬空引用**，
+  复核发现计划 §12 已明确写出该报告包"尚未由本组 runner 自动生成"，属**已披露的已知限制**；
+  已在 review 文档中更正，真正待修的只有 v1.1 计数（本轮已修）。
+- 校验：`python3 -m pytest tests/test_input_component_contrasts.py -q` → 5 passed；
+  `py_compile` 通过；`git status` 干净。提交：`e000cac`（代码+测试）、`d836662`（文档）、
+  本次 review 文档更新随本条一并提交。

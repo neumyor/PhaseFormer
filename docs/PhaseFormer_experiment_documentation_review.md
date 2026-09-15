@@ -124,14 +124,23 @@
 8. `PhaseFormer_pooled_lowrank_nlinear_experiment.md` 内"Controlled Follow-up Plan"已被
    joint 计划取代，但文件头**无 superseded 标注**，读者无法从该文件得知。
 9. 输入成分线：计划计数 `8 数据集/24 锚点/216 retrained/456 单元` 应更新为 v1.2 实际
-   `7/21/189/399`（D0 报告 §8-2 已标记但未改计划）；计划 §7/§12 规定的交付目录
-   `research_runs/phaseformer_input_components_h134_v1/`（六文件审计包）**从未生成**，
-   属悬空产物引用。
+   `7/21/189/399`（D0 报告 §8-2 已标记但未改计划）。**已修正（2026-09-15）**。
+   *（更正本条初稿的一处过强表述：计划 §12 已明确写出"严格六文件报告包属于正式报告阶段，
+   尚未由本组 runner 自动生成，不能把 scratch 目录直接当作最终审计目录"，因此该交付目录
+   不是"悬空引用"，而是**已披露的已知限制**；真正待修的只有 v1.1 计数。）*
 10. 输入成分线：`summarize_input_component_ablation.py` 的 aggregate interaction 列与 §8.1
     口径不符（frozen H1 minus_A 的 M1−M0：长表重算 +2.4pp vs aggregate 记 +36.1pp），
     导致 D0 的"Interaction ≥ +0.5pp 且 CI 下界>0"门槛**从未被正式判定**；且 `D1/D2/D3`
     在本仓库有两套完全不同的含义（候选发现线 vs H1/H3/H4 的 horizon×seed 扩展），
     引用时必须带前缀。
+    **已修复代码层（2026-09-15）**：根因是 interaction 建在 sham-adjusted 差值上，即
+    `Interaction(§8.1) − ShamInteraction`，该恒等式精确复现观测偏差
+    （+2.4 − (−33.7) = +36.1 pp）。修复落在新建的
+    `src/dataset/input_component_contrasts.py` + 5 项单元测试
+    （`tests/test_input_component_contrasts.py`，本地通过，无需 torch）；宏平均同时改为
+    逐 dataset×horizon 等权。**残留动作**：用修复后的脚本在 GPU 机器上重生成
+    `result_summary_d0_aggregate.csv`，之后 Interaction 门槛才可正式判定
+    （命令见 D0 报告 §8-1）。
 11. incumbent 线"当前最佳"冲突：`docs/README.md` 称 K4（strict-T28）为当前最佳，而
     `top5_test_models.md`/`periodic_residual_next_stage.md`（09-02）称 A2 为 incumbent，
     且 K4 自己的登记文档写明"尚未超过 two-stage Full Repair，是本轮起点"。建议统一为
@@ -160,6 +169,20 @@
     Electricity-336 `0.164113` vs `0.164114`）；README 把 K3 同时指向两份文档但未指明权威值。
 19. `docs/README.md` 的通用协议声明"所有结构…seeds 2021/2022/2023"，但 K4 的 20 个已登记
     setting 中 12 个为单 seed（ETTh1/ETTm1/Weather）。
+
+### 2.3 本轮修复记录（2026-09-15）
+
+| 类别 | 改动 | 提交 |
+|---|---|---|
+| 数值权威副本 | conditioned 报告与计划表 1 的 Weather-96 / Electricity-336 MAE 列互换 → 还原并加勘误注 | `aaaa062` |
+| 日志 | 两条 09-14 标题改为 09-15（实际提交日）；头部加阅读说明（补记块、33 处历史引用的来源） | `39727d5`、`d836662` |
+| 产物 | 补拉 09-12 未落地的 14 份原始 CSV（boxcar 7 + causal-EMA 7） | `aaaa062` |
+| 代码 | input-component interaction 口径修复（新建 `src/dataset/input_component_contrasts.py`；`summarize_input_component_ablation.py` 改用 §8.1 定义并把宏平均改为逐 setting 等权）+ 5 项单元测试 | `e000cac` |
+| 文档（P0/P1） | README 四节重写；平滑两篇状态行；conditioned 报告 §5 / 计划头部与 §10；pooled follow-up 标注被取代；机制分析频率判据限定；输入成分计划计数 v1.2；D0 报告 §8-1 根因记录 + 命名提醒；strict-T28 registry 与计划计数 12→20；incumbent 状态统一 | `d836662` |
+
+> 所有改动均**不改动任何结论或数值**（表 1 勘误属纠错，interaction 修复属纠正聚合口径；
+> 其余为状态标注、索引补全与计数同步）。interaction 修复后仍需在 GPU 机器上重生成 D0
+> aggregate 文件，门槛判定才生效。
 
 ---
 
@@ -226,8 +249,9 @@ Full Repair，是本轮起点"。当代结论：**A2 是最后的 3-seed 统一 
 
 | 优先级 | 动作 | 影响面 |
 |---|---|---|
-| 已完成 | 表 1 MAE 勘误 + 两条日志日期 + 补拉 14 份原始 CSV | 数值权威副本正确性 |
-| 建议现在做 | 重写 `docs/README.md` 的两节（机制消融补 9 份、输入成分改状态并补 11 份）并在索引中加"近期实验一览"指针 | 决定新读者能否找到最新结论 |
-| 建议现在做 | 4 份文档加状态行/指针：两篇平滑文档头部、conditioned 报告 §5、pooled 文档 follow-up、机制分析 §3.3 | 消除"实验还没跑"与"旧结论仍是当前结论"的误读 |
-| 建议尽快 | 输入成分线三件事：计划计数更新为 7/21/189/399；删/建 dangling 交付目录引用；修 interaction 聚合口径并补宏 CI（否则 D0 的 Interaction 门槛无正式判定） | 该线唯一的量化门槛可判定性 |
-| 可选 | `agent-log.md` 头部加"历史引用说明"（33 处死链的来源）；v5 目录登记为"重复产物、不参与统计"；K4/A2"当前最佳"统一表述；registry README 计数 12→20 | 记录整洁度与可追溯性 |
+| ✅ 已完成 | 表 1 MAE 勘误 + 两条日志日期 + 补拉 14 份原始 CSV（`aaaa062`、`39727d5`） | 数值权威副本正确性 |
+| ✅ 已完成 | 重写 `docs/README.md` 的机制消融/输入成分/288-run mechanism/审计索引四节（新增索引 12 份文档 + 5 个 mechanism） | 决定新读者能否找到最新结论 |
+| ✅ 已完成 | 状态行/指针：两篇平滑文档头部、conditioned 报告 §5 第 2/4 条、conditioned 计划头部与 §10、pooled 文档 follow-up、机制分析 §3.3/§4.1 | 消除"实验还没跑"与"旧结论仍是当前结论"的误读 |
+| ✅ 已完成 | 输入成分线：计划计数 → v1.2（7/21/189/399、2520 Track R、全矩阵 252/2268）+ `--expected-count 189`；interaction 口径修复（代码 + 5 项测试）+ D0 报告 §8-1 记录根因与残留动作 | 该线唯一的量化门槛可判定性 |
+| ✅ 已完成 | incumbent 状态统一（README 注 + 两份登记文档状态注）；registry README 12→20 cells 并补 Weather；`agent-log.md` 头部加阅读说明（补记块 + 33 处历史引用来源） | 记录整洁度与可追溯性 |
+| 待办（本轮未做） | 服务器 `..._v5/` 目录登记为"重复产物、不参与统计"；`top5` 只列 5 行却称"前八模型"；ETTm2-96 RCRF MSE 三处小数差异 | P2：记录整洁度 |
