@@ -36,6 +36,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.models.structured_residual_heads import (  # noqa: E402
+    STRUCTURED_HEAD_BUILDERS,
     build_structured_residual_head,
     matched_control_rank,
 )
@@ -137,8 +138,15 @@ def load_frozen(path):
 
 
 def build_override(head, extra, matched_rank=None):
-    payload = {"weak_period_residual_head_type": head}
-    payload.update(extra)
+    """Compose one job's overrides, always carrying an explicit head type.
+
+    The head type must be part of every job: the ``weak_residual`` preset
+    hard-sets it to ``shared``, so a job without it silently trains the plain
+    direct NLinear head while still recording the structural overrides.
+    """
+
+    payload = dict(extra)
+    payload["weak_period_residual_head_type"] = head
     if matched_rank is not None:
         payload["weak_period_residual_head_type"] = "time_axis_matched_lowrank"
         payload["weak_period_residual_rank"] = matched_rank
@@ -226,8 +234,11 @@ def round1_jobs(args, frozen):
     jobs = []
     horizon = int(frozen["horizon"])
     for name, spec in {**ROUND1_ROUTES, **ROUND1_DIAGNOSTICS}.items():
-        overrides = dict(spec["overrides"])
-        overrides["weak_period_residual_gate_init"] = frozen["gate_init"]
+        overrides = build_override(
+            spec["head"],
+            spec["overrides"],
+            matched_rank=spec.get("matched_rank"),
+        ) | {"weak_period_residual_gate_init": frozen["gate_init"]}
         jobs.append((name, spec["head"], overrides))
         if not args.no_matched_controls:
             rank = spec.get(
