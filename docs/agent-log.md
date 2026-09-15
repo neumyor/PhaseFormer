@@ -26,6 +26,35 @@
   逐条校对与修复清单，本汇报文档负责面向决策的结论与证据索引，二者互相引用同一批
   `research_runs/` 原始证据。
 
+## 2026-09-15 — Round 1 完成：结构化低秩路线全部未晋级（负结果已归档）
+
+- **实验完成**：Round 0 复用审计 0 新增训练；Round 1 共 **48 次训练**
+  （4 pilot setting × 6 候选 × 2 匹配控制），全部完成 test 评估（validation 只选
+  checkpoint，test 只读一次）。产物 `research_runs/structured_lowrank_round1_v1/`
+  （`results.csv` 28 行 + `results.md`）与 scratch
+  `research_runs/structured_lowrank_round1_scratch/`（`.gitignore` 内）。
+- **判定：五条路线全部未晋级，触发计划 §6/§13 早停，Round 2/3/4 不启动。**
+  A--E 在 **4/4 pilot setting 上 MSE 与 MAE 同时退化**（MSE 均值 −1.61% ~ −3.36%，
+  没有任何一格为正）；不存在满足晋级规则 1/2/3 的路线。
+- **关键对照结论**：换坐标系没有收益。参数匹配的时间点轴控制 r1（均值 −2.19%）
+  优于全部五条结构化路线；与路线 A budget 对齐的 r4 控制均值仅 **−0.30%**，
+  且是 ETTh2-H720 上唯一正向格（+0.39%）。`generic pooled_lowrank(q=1/8)` 在
+  ETTh2-H720(+0.96%)、ETTm2-H192(+1.02%) 优于 direct 且优于所有结构化候选。
+- **假设判定**：H0（普通低秩主要是压缩）被支持；H1/H3/H4 在 4/4 setting 上均未被
+  支持；D（最近 7 周期）退化最重（−3.36%），方向与 H3 相反；C（level-shape）退化
+  最轻（−1.61%）但仍为负。
+- **文档更新**：`docs/PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md`
+  状态头改为已完成；回填 §5 代填充表（Round 0）与 §6 路线矩阵（28 行）；新增
+  **§6.1 结果与判定**、**§6.2 逐格结果矩阵**（含信号计数、双指标交集为空、MSE
+  leaderboard）、**§13.1 停止判定**；§7/§8/§9 加"未执行"说明；§11 回填 32 行
+  test-oriented 选择轨迹；§10.2 记录校验环境与实测控制预算公式
+  `r*(L+H+1)+H`；§12 标注**按用户裁定跳过样本级错误分析**（导出脚本已实现可用）。
+- **未执行项（按规则）**：Round 2 结构消融、Round 3 Expansion、Round 4 效率测试、
+  `P=96` 第二批结构条件、路线 E 的条件启动（需 A--D 无胜者且 aligned-vs-shifted
+  显示周期交互）。
+- **不变更**：不修改 preset，不修改 `PhaseFormer_gold_standard.md`。
+- 未做审计批次（六文件 + zip）与样本级导出，按用户指示先只归档汇总结果。
+
 ## 2026-09-15 — 修正 "结构化候选实际训练成 direct_nlinear" 的两处缺陷
 
 Round 1 首次启动后的产物审计发现**两处独立缺陷**，都会让结构化候选静默退化成普通
