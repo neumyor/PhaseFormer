@@ -29,6 +29,10 @@ from src.models.periodic_residual_experts import (
     DualReliabilityPeriodicFusion,
     PhaseErrorPeriodicMemoryHead,
 )
+from src.models.structured_residual_heads import (
+    STRUCTURED_HEAD_BUILDERS,
+    build_structured_residual_head,
+)
 from src.models.intercycle_patch import (
     CycleNetStyleResidualHead,
     InterCyclePatchResidualHead,
@@ -1015,6 +1019,23 @@ class PhaseFormer(DefaultPLModule):
                     smooth_window=getattr(
                         configs, "weak_period_residual_smooth_window", 24
                     ),
+                )
+            elif residual_head_type in STRUCTURED_HEAD_BUILDERS:
+                # Structured low-rank exploration heads.  They own a head-local
+                # ``residual_period_len``; the phase path keeps ``self.period_len``.
+                structured_segment_key = (
+                    f"{residual_head_type}:"
+                    f"{getattr(configs, 'dataset', '')}:"
+                    f"{self.seq_len}:{self.pred_len}:"
+                    f"{getattr(configs, 'residual_period_len', 24)}"
+                )
+                self.weak_period_residual = build_structured_residual_head(
+                    residual_head_type,
+                    self.seq_len,
+                    self.pred_len,
+                    configs,
+                    seed=int(getattr(configs, "seed", 2021) or 2021),
+                    key=structured_segment_key,
                 )
             else:
                 self.weak_period_residual = WeakPeriodResidualHead(
@@ -2404,6 +2425,17 @@ class PhaseFormer(DefaultPLModule):
 
         loss = self._compute_loss(outputs, target)
         fused_loss = loss
+
+        structured_orth_loss = getattr(
+            getattr(self, "weak_period_residual", None),
+            "last_orthogonality_loss",
+            None,
+        )
+        if structured_orth_loss is not None:
+            # Route-B basis orthogonality term (structured low-rank plan §4);
+            # ``lambda_orth`` is already folded in by the head.
+            loss = loss + structured_orth_loss
+            self.log("train_structured_orth_loss", structured_orth_loss, on_epoch=True)
 
         if self.use_triaxis_fusion:
             experts = self.triaxis_expert_outputs
