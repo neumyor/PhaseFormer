@@ -19,6 +19,11 @@ from scripts.run_input_component_ablation import (
     DATASETS, HORIZONS, SEEDS, expected_full_anchors,
     parse_dataset_scope, parse_scope,
 )
+from src.dataset.input_component_contrasts import (
+    add_plan_interaction_columns,
+    macro_mean_by_setting,
+    rename_sham_adjusted_interactions,
+)
 
 
 EXPECTED = {("none", "full")} | {
@@ -238,10 +243,15 @@ def main():
         result[result.model == "original"]
         [[
             "dataset", "horizon", "seed", "track", "input_hypothesis", "input_variant",
+            "delta_mse", "relative_delta_mse", "delta_mae", "relative_delta_mae",
             "sham_adjusted_delta_mse", "sham_adjusted_relative_mse",
             "sham_adjusted_delta_mae", "sham_adjusted_relative_mae",
         ]]
         .rename(columns={
+            "delta_mse": "original_delta_mse",
+            "relative_delta_mse": "original_relative_delta_mse",
+            "delta_mae": "original_delta_mae",
+            "relative_delta_mae": "original_relative_delta_mae",
             "sham_adjusted_delta_mse": "original_adjusted_delta_mse",
             "sham_adjusted_relative_mse": "original_adjusted_relative_mse",
             "sham_adjusted_delta_mae": "original_adjusted_delta_mae",
@@ -254,18 +264,12 @@ def main():
         how="left",
         validate="many_to_one",
     )
-    result["interaction_mse_vs_original"] = (
-        result.sham_adjusted_delta_mse - result.original_adjusted_delta_mse
-    )
-    result["interaction_relative_mse_vs_original"] = (
-        result.sham_adjusted_relative_mse - result.original_adjusted_relative_mse
-    )
-    result["interaction_mae_vs_original"] = (
-        result.sham_adjusted_delta_mae - result.original_adjusted_delta_mae
-    )
-    result["interaction_relative_mae_vs_original"] = (
-        result.sham_adjusted_relative_mae - result.original_adjusted_relative_mae
-    )
+    # Plan §8.1 Interaction = Delta(M) - Delta(M0), with no sham term.  Earlier
+    # revisions of this script built these columns from *sham-adjusted* deltas,
+    # which is a different contrast and inflated the aggregate (D0 §8-1).  The
+    # legacy values are kept under explicit `sham_adjusted_interaction_*` names.
+    result = rename_sham_adjusted_interactions(result)
+    result = add_plan_interaction_columns(result)
     result["qc_status"] = "ok"
     if "input_endpoint_max_abs" in result:
         result.loc[result.input_endpoint_max_abs > 1e-5, "qc_status"] = "endpoint_failed"
@@ -286,9 +290,11 @@ def main():
         "relative_delta_mse",
         "sham_adjusted_relative_mse",
         "interaction_relative_mse_vs_original",
+        "sham_adjusted_interaction_relative_mse",
         "relative_delta_mae",
         "sham_adjusted_relative_mae",
         "interaction_relative_mae_vs_original",
+        "sham_adjusted_interaction_relative_mae",
     ]
     grouping = ["track", "model", "input_hypothesis", "input_variant"]
     for group_key, group in result.groupby(grouping, dropna=False):
@@ -297,16 +303,16 @@ def main():
         row["settings"] = len(clusters)
         row["rows"] = len(group)
         for measure in measures:
-            values = group[measure].dropna().to_numpy(dtype=float)
-            row[f"mean_{measure}"] = float(values.mean()) if len(values) else np.nan
+            # Plan §8.1: equal weight per dataset x horizon, never per seed/row.
+            row[f"mean_{measure}"] = macro_mean_by_setting(group, measure)
             estimates = []
             if len(clusters) >= 2 and args.bootstrap_replicates > 0:
                 for _ in range(args.bootstrap_replicates):
                     selected = rng.integers(0, len(clusters), size=len(clusters))
                     sampled = pd.concat([clusters[index][1] for index in selected])
-                    sampled_measure_values = sampled[measure].dropna().to_numpy(dtype=float)
-                    if len(sampled_measure_values):
-                        estimates.append(sampled_measure_values.mean())
+                    block_mean = macro_mean_by_setting(sampled, measure)
+                    if not np.isnan(block_mean):
+                        estimates.append(block_mean)
             if estimates:
                 row[f"{measure}_ci_low"], row[f"{measure}_ci_high"] = np.quantile(
                     estimates, [0.025, 0.975]
