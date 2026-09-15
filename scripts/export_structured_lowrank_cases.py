@@ -84,11 +84,29 @@ def discover_runs(scratch_root):
     return found
 
 
-def best_run_per_setting(entries):
-    """Keep the run with the lowest validation loss for each setting."""
+def expected_rank(label):
+    """Residual rank a labelled candidate must have (``None`` = any)."""
 
+    if label == "A_period_lowrank":
+        return 4
+    if label == "A_period_lowrank_r8":
+        return 8
+    return None
+
+
+def best_run_per_setting(entries, label):
+    """Lowest-validation-loss run per setting, restricted to the label's rank.
+
+    A label's directory can also hold another configuration's run (a mislabelled
+    launch, or a differently ranked candidate sharing the directory), so picking
+    purely by validation loss would attribute the wrong numbers to the label.
+    """
+
+    rank = expected_rank(label)
     best = {}
     for config_path, config, hyper in entries:
+        if rank is not None and int(hyper.get("residual_period_rank", -1)) != rank:
+            continue
         metrics_path = config_path.with_name("metrics.csv")
         with metrics_path.open() as handle:
             metric = next(csv.DictReader(handle))
@@ -278,7 +296,7 @@ def main():
     best_by_label = {}
     settings = set()
     for label, entries in discovered.items():
-        best = best_run_per_setting(entries)
+        best = best_run_per_setting(entries, label)
         best_by_label[label] = best
         settings.update(best.keys())
 
