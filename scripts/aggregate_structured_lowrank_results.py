@@ -113,7 +113,11 @@ def main():
     parser.add_argument("--scratch-root", required=True)
     parser.add_argument("--round0-dir", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--head-params", help="JSON from report_structured_lowrank_params.py")
+    parser.add_argument(
+        "--head-params",
+        help="JSON from report_structured_lowrank_params.py, used to record the "
+        "head-only budget next to the total parameter count",
+    )
     args = parser.parse_args()
 
     scratch = Path(args.scratch_root)
@@ -138,6 +142,15 @@ def main():
             "source_run": row["source_run"],
         }
 
+    head_budgets = {}
+    if args.head_params:
+        payload = json.loads(Path(args.head_params).read_text())
+        for setting, per_candidate in payload.items():
+            # Keys look like ``ETTh2-H96``; results use ``ETTh2_h96_seed2021``.
+            dataset, _, horizon = setting.partition("-H")
+            for candidate, row in per_candidate.items():
+                head_budgets[(f"{dataset}_h{horizon}", candidate)] = row
+
     table = load_metrics(scratch)
     settings = sorted({setting for per in table.values() for setting in per})
 
@@ -150,8 +163,13 @@ def main():
             record = table.get(label, {}).get(setting)
             if record is None:
                 continue
+            setting_key = f"{record['dataset']}_h{record['horizon']}"
+            budget = head_budgets.get((setting_key, label), {})
             row = {
                 **record,
+                "head_params": budget.get("head_params", ""),
+                "matched_rank": budget.get("matched_rank", ""),
+                "control_head_params": budget.get("control_params", ""),
                 "delta_mse_vs_direct": delta(direct["test_mse"], record["test_mse"])
                 if direct
                 else float("nan"),
@@ -195,6 +213,9 @@ def main():
         "generic_test_mae",
         "phase_only_test_mse",
         "phase_only_test_mae",
+        "head_params",
+        "matched_rank",
+        "control_head_params",
         "params",
         "elapsed_sec",
         "peak_memory_bytes",
@@ -221,15 +242,16 @@ def main():
         "## Route matrix",
         "",
         "| setting | candidate | test MSE | test MAE | dMSE% vs direct | dMAE% vs direct | "
-        "dMSE% vs generic | dMAE% vs generic | params |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        "dMSE% vs generic | dMAE% vs generic | head params | matched rank | control head | total params |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
             f"| {row['setting']} | {row['candidate']} | {row['test_mse']:.6f} "
             f"| {row['test_mae']:.6f} | {row['delta_mse_vs_direct']:+.3f} "
             f"| {row['delta_mae_vs_direct']:+.3f} | {row['delta_mse_vs_generic']:+.3f} "
-            f"| {row['delta_mae_vs_generic']:+.3f} | {row['params']} |"
+            f"| {row['delta_mae_vs_generic']:+.3f} | {row['head_params']} "
+            f"| {row['matched_rank']} | {row['control_head_params']} | {row['params']} |"
         )
 
     lines += ["", "## MSE leaderboard per setting", "", "| setting | rank | candidate | test MSE |", "|---|---:|---|---:|"]
