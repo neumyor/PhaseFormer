@@ -2284,3 +2284,30 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   改为直接取 `Vᵀ` 行后，所有值落回 [0,1]，ETTh2-720 满秩为 1.000（符合满空间预期）。
 - 产物：`research_runs/lowrank_data_property_v2/{leading_direction.csv,
   trained_vs_optimal_alignment.csv}`（`research_runs/` 已 gitignore）。
+
+## 2026-09-14 — 论文用强结论与图表方案写入报告（§4）
+
+- 应用户（写论文）要求，把结论与实验证据整理成**论文投放版本**，写入记录文档
+  `docs/PhaseFormer_rank_capacity_and_data_property_report.md` 的新增 §4（原 §4/§5 顺延为
+  §5/§6，并修正文内交叉引用）：
+  - §4.1 一句话强结论（英文 abstract 句 + 中文同句 + Introduction 可用的通俗类比 +
+    范围限定句）：主张是 **"NLinear 残差支路 effectively one-dimensional：单一
+    input–output 模式独占 66–86% 的支路价值，因此最优秩-r 映射在 r=3–10
+    （3.5–6.1% 参数）仍保留 ≥92% 价值 ⇒ 容量中性"**。
+  - §4.2 证据链四条（P1 容量上界论证 / P2 低维性 / P3 训练头确实在用该方向 /
+    P4 gate 稀释），每条给出关键数字、出处与"为什么难以反驳"；另单列方法论贡献
+    "权重矩阵奇异谱 ≠ 预测能力"（418 维 vs 8 维）。
+  - §4.3 论文用结果表（Table 1 主结果、Table 2 机制表、Table 3 ETTh2-720 的 3 seed
+    正面发现）、§4.4 图表方案（Scree / capture 曲线 / 方向剖面双面板 / gate 柱状图，
+    并标注绘图数据来源）、§4.5 安全表述 vs 会被审稿人抓住的夸大（五条 ❌ 清单）、
+    §4.6 可成段的四条 Limitations、§4.7 Discussion 收尾句与可执行建议。
+- 本次仅整理已有数字，未新增实验；同时修正两处口径不精确的表述（不改变任何结论）：
+  ① `used_var_share` 原写"秩-r 行空间只覆盖 0.8–25.7%"，实测 r=1 为 0.8–12.3%、
+  各 setting 最深测试档为 3.6–39.3%，已按实测范围改写；
+  ② 满秩行空间覆盖面原写"7.6%–60.7%"，该范围仅适用于 H<720 的 6 个 setting
+  （H=720 时满秩行空间按构造即全空间），已在 §2.3/§3/§4.3 三处补上限定。
+- 校验：§4 全部数字逐项对回 `optimal_rank_summary_extended.json`、
+  `optimal_rank_capture_extended.csv`、`leading_direction.csv` 与既有三 seed 报告
+  （capture(1) 65.47–86.17、最深档 92.36–101.9、PR 1.33–2.12、λ₁ 份额 0.6618–0.8617、
+  近端质量 0.53–0.703 / 0.709–0.895、输出常值 |cos| 0.892–0.989 且符号一致性 7/7 全 1.0）；
+  文档内 11 张表列数一致性已用脚本检查（无问题）。

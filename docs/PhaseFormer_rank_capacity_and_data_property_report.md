@@ -13,6 +13,9 @@
 > 关联文档：[`PhaseFormer_rank_sweep_conditioned_experiment.md`](PhaseFormer_rank_sweep_conditioned_experiment.md)
 > （压缩扫描的数值权威副本）、[`PhaseFormer_lowrank_mechanism_analysis.md`](PhaseFormer_lowrank_mechanism_analysis.md)
 > （SVD 谱 / 截断 / 基向量 FFT / 频段探针）。
+>
+> **§4 是论文投放版本**（强结论表述、证据链、可抄表格、图表方案、措辞边界、Limitations），
+> 不引入新数字，全部可在 §2 表中逐项核对。
 
 ---
 
@@ -77,7 +80,7 @@ W_r = U_r U_r^T Szy^T Szz^{-1}      （W_H = 最小二乘解）
 1. **λ 恒等式**：`persistence_MSE - MSE(r) = Σ_{i≤r} λ_i`。用 `--save-moments` 落盘的
    二阶矩在 7 个 setting × r∈{1,2,3,6}（共 26 个单元）上重算右式并与 CSV 的
    `train_mse` 对比，**checked 26 cells; worst absolute difference 4.72e-09**
-   （`scripts/verify_optimal_rank_identity.py`，见 §5）。
+   （`scripts/verify_optimal_rank_identity.py`，见 §6）。
 2. **对照暴力解**：r=1 用交替最小二乘（8 次随机重启、400 步）求解，与 `W_r` 的
    MSE 完全相同（59.971509 vs 59.971509）；r≥2 时 ALS 因问题的病态性停在明显更差的
    局部解（例：r=2 时 ALS 102.1 vs `W_r` 22.4），故改用下面两条对照。
@@ -164,7 +167,8 @@ W_r = U_r U_r^T Szy^T Szz^{-1}      （W_H = 最小二乘解）
    为 0.14–0.37（白噪声为 0.5），r→H 时升至 0.49–0.51 —— 新增方向越来越像噪声方向。
    **注意这只是弱判据**，严格分频结果见 §2.6，据此"低频"一词已在本报告中被修正。
 3. **绝大部分窗口能量不可用**：即便无约束的 H×720 映射，其行空间也只覆盖
-   7.6%–60.7% 的中心化窗口方差（ETTh2-96 仅 13.3%，而它已拿到 100% 的可实现提升）。
+   7.6%–60.7% 的中心化窗口方差（此处指 H<720 的 6 个 setting；H=720 时满秩行空间
+   按构造覆盖全空间）——ETTh2-96 仅 13.3%，而它已拿到 100% 的可实现提升。
 
 ### 2.4 表 D：融合 gate 的"稀释"与"补偿"（105 个审计 checkpoint 实测）
 `y_hat = (1−g)·phase + g·residual`，故分支误差以约 `g²` 进入融合 MSE。实测
@@ -259,12 +263,12 @@ ETTh2/Weather/Electricity 一步=1 h，ETTm2 一步=15 min）：
 仅 0.00–0.44。
 
 **(f) 训练好的头是否真的用这个方向**（363 个 checkpoint，seeds 2021–2023）：
-`|cos|(训练头行空间, b_1)` = **0.81–0.98，5/7 个 setting**；与"最优秩-r 行空间"的
-子空间重合度 `trace(PP*)/r` 在 Weather 上最高（Weather-192 r=6：0.814；Weather-96 r=3：
-0.735），与这两个 setting"压缩几乎完全免费"的结论一致。**ETTh2 是例外**：压缩档位下
-训练头只部分读出 `b_1`（ETTh2-96 r=3：0.529；ETTh2-720 r=22：0.718），却仍拿到大部分
-收益——说明该数据集上存在若干"次优但够用"的替代子空间（与其 95% 预测维数需 8–9 维、
-逐通道 r=3 只有 81% capture 相吻合）。
+`|cos|(训练头行空间, b_1)` 在 **5/7 个 setting 的全部压缩档位上都 ≥0.81**（范围
+0.81–0.98）；与"最优秩-r 行空间"的子空间重合度 `trace(PP*)/r` 在 Weather 上最高
+（Weather-192 r=6：0.814；Weather-96 r=3：0.735），与这两个 setting"压缩几乎完全免费"的
+结论一致。**ETTh2 是例外**：压缩档位下训练头只部分读出 `b_1`（ETTh2-96 r=3：0.529；
+ETTh2-720 r=22：0.718），却仍拿到大部分收益——说明该数据集上存在若干"次优但够用"的替代
+子空间（与其 95% 预测维数需 8–9 维、逐通道 r=3 只有 81% capture 相吻合）。
 
 > **修正声明（对早期表述）**：我最初把该方向描述为"**低频的**近期水平 + 局部趋势"。
 > 按 (c)(d) 的严格测量，这一表述有两处夸大：①"低频"只在 5/7 个 setting 成立，
@@ -300,7 +304,8 @@ ETTh2/Weather/Electricity 一步=1 h，ETTm2 一步=15 min）：
    写成**整个预测区间上的恒定水平位移**（与常值形状 \|cos\|=0.89–0.99，符号在 horizon
    上 7/7 一致）——注意"低频/局部趋势"的早期描述已按 §2.6 修正；
    (c) **窗口增量的绝大部分能量不可预测**：即使无约束映射也只覆盖 7.6%–60.7% 的中心化
-   窗口方差（ETTh2-96 仅 13.3%）却已拿到 100% 可实现提升，因此"少读一些方向"几乎不损失；
+   窗口方差（H<720 的 6 个 setting；ETTh2-96 仅 13.3%）却已拿到 100% 可实现提升，
+   因此"少读一些方向"几乎不损失；
    (d) 该结构**跨通道共享与否都能达到同样的低秩**（逐通道拟合在同样秩下与共享拟合
    相当，多数 setting 相差 ≤3 个百分点），因此共享低秩瓶颈不是"利用通道共性"的
    必要条件，而只是与之一致的设计选择。
@@ -311,7 +316,149 @@ ETTh2/Weather/Electricity 一步=1 h，ETTm2 一步=15 min）：
 
 ---
 
-## 4. 边界与披露（不可省略）
+## 4. 论文用结论表述与图表方案
+
+> 本节是 §1–§3 结果的**论文投放版本**：结论表述、证据链、可抄表格、图方案与措辞边界。
+> 本节不引入任何新实验数字，所有数值均可在 §2 表中逐项核对；口径与 §5 的边界披露
+> 完全一致（机制数字一律为 **validation** 口径，唯一例外是引用既有报告的 3 seed
+> **test** 结果时会显式标注）。
+
+### 4.1 一句话强结论
+
+**英文（abstract 句 / contributions bullet）**
+
+> The NLinear residual branch is *effectively one-dimensional*: a single input–output
+> mode accounts for **66–86%** of everything the branch contributes over its
+> persistence anchor, and the analytically **optimal** rank-*r* map retains **≥92%**
+> of that contribution already at *r* = 3–10, i.e. at **3.5–6.1%** of the unfactored
+> head's parameters. Low-rank compression is therefore **capacity-neutral**, not merely
+> empirically harmless: no rank-*r* head can be blamed for more than this bound, while
+> the fusion gate exposes only **g² ≈ 4–26%** of any branch-side error to the reported
+> metric.
+
+**中文（同一句）**
+
+> NLinear 残差支路本质上只有**一个自由度**：读的是"最近一段的加权平均水平"，写的是
+> "把整个预测区间整体平移一个常数"；这条通路就买走了该支路相对 persistence 锚点全部
+> 价值的 **66%–86%**，因此把它压到 **3.5%–6.1%** 的参数（r=3–10）在**理论上界**意义下
+> 仍保留 **≥92%** 的价值——低秩压缩是**容量中性**的，而不是"碰巧没坏"。
+
+**通俗类比（Introduction 可用）**：这台机器有 720 个输入旋钮，但实际只有约 1 个旋钮接在
+有用的东西上，因此把旋钮拆到只剩 3 个、输出几乎不变。这与"对输入做低通滤波"性质不同：
+后者是直接把信号删掉（对应本项目"平滑一致有害、而秩压缩近中性"的既有结论）。
+
+**范围限定句（建议紧跟在强结论后）**：结论适用于 *NLinear-style residual branches
+trained jointly with a phase/backbone path through a per-channel convex gate, on
+standard long-horizon benchmarks*；不宣称"任意时序模型可压缩"。
+
+### 4.2 证据链（四根柱子）
+
+| # | 结论（人话） | 关键数字 | 出处 | 为什么难以反驳 |
+|---|---|---|---|---|
+| **P1** | 容量不是瓶颈：**秩-r 的全局最优解**在很深压缩下仍保住几乎全部价值 | 最深测试档 r=3/6/10/22（参数 3.5–6.1%）保留 **92.4–101.9%**；r=3 已 ≥88.1% | §2.1 表 A | 这是**上界**论证：任何秩-r 训练结果都不可能优于该最优解，因此"秩不够"不能解释观测差异 |
+| **P2** | 支路的价值是**低维**的 | 90% 可实现降幅只需 **2–4** 维；PR=**1.33–2.12**；第 1 维独占 **66–86%** | §2.1 表 A、§2.6(a) | 两条独立口径互证：训练集 λ 谱 vs validation 实测 `capture(1)`=65.5–86.2% |
+| **P3** | 训练出的模型**确实在用这条通路** | 5/7 个 setting 的**全部压缩档位** \|cos\|≥**0.81**（范围 0.81–0.98）；Weather-192(r=6) 子空间重合度 **0.814**、Weather-96(r=3) **0.735**；ETTh2 最低（压缩档位仅 0.53–0.72） | §2.6(f) | 排除"只有解析解成立"的可能：SGD 收敛方向与闭式最优方向基本一致 |
+| **P4** | 报告指标只看到一小部分分支误差，"近中性"可预期 | 实测 gate g=0.207–0.507 ⇒ **g²=4.3–25.7%**；Electricity-336 在 r=10 时训练**主动关小 gate**（0.433→0.332，g² −43%） | §2.4 表 D | 解释了"分支层确实变差、指标几乎不动"，而不是宣称分支没变差 |
+
+**附带的方法论贡献（建议单独强调，它是本项目最有"反直觉"价值的一点）**：
+
+> **权重矩阵的奇异谱不能代表预测能力。** ETTh2-720 的最优映射用 95% 奇异值能量需要
+> **418** 个方向，但**只有 8 个方向**贡献 95% 的可实现降幅（§1.3、§2.1）。用前者判断
+> "该数据不低秩"会得到与压缩实验相反的结论；与压缩效应直接对应的是 **MSE 加权的
+> 预测谱 λ**（即 `S = SzyᵀSzz⁻¹Szy` 的特征值）。
+
+### 4.3 论文用结果表
+
+**Table 1（主结果）**：`capture(r)` = 秩-r 最优映射保留的"相对 persistence 锚点的可实现降幅"比例（validation 口径；>100% 表示优于满秩最优）。
+
+| Setting | 支路价值（vs persistence） | capture @ r=1 | capture @ 最深测试档 | 最深档 r（参数占比） | 90% 预测维数 | PR |
+|---|---:|---:|---:|---:|---:|---:|
+| ETTh2-96 | 33.9% | 75.6 | **94.2** | 3 (3.5%) | 3 | 1.62 |
+| ETTh2-720 | 14.0% | 78.7 | **101.9** | 22 (6.1%) | 3 | 1.36 |
+| ETTm2-96 | 44.9% | 73.9 | **92.4** | 3 (3.5%) | 3 | 1.83 |
+| ETTm2-192 | 40.2% | 75.0 | **95.6** | 6 (4.0%) | 3 | 1.75 |
+| Weather-96 | 54.0% | 86.2 | **99.3** | 3 (3.5%) | 2 | 1.33 |
+| Weather-192 | 49.1% | 79.4 | **100.1** | 6 (4.0%) | 2 | 1.57 |
+| Electricity-336 | 90.2% | 65.5 | **96.5** | 10 (4.4%) | 4 | 2.12 |
+
+**Table 2（机制表）**
+
+| 量 | 观测 | 人话 |
+|---|---|---|
+| 近端质量 | b₁ 的 **53–70%** 能量在最后 24 步，71–90% 在最后 168 步 | 读的是"最近这段" |
+| 最佳单模板 | 指数衰减核 `exp(-lag/τ)`，τ=6–72 步，\|cos\|=**0.58–0.78** | 是"近端加权平均"，不是趋势滤波器 |
+| 输出形状 | 与全程常值形状 \|cos\|=**0.892–0.989**，符号在 horizon 上 **7/7** 一致 | 语义 = 把预测区间整体平移一个常数 |
+| 读取量 | 单方向（r=1）只覆盖窗口增量方差的 **0.8–12.3%**；各 setting 的**最深测试档**为 **3.6–39.3%**；即便无约束映射（H<720）也只有 **7.6–60.7%**（H=720 时满秩行空间按构造即全空间） | 窗口增量的大部分能量不可预测 |
+| gate 稀释 | g²=4.3–25.7%（ETTm2-192 最低 4.3%） | 指标看不全分支误差 |
+| 参数量级 | 该支路占全模型参数的 **92.5%–99.9%** | 因此这是"近乎整模型级"的参数压缩 |
+
+**Table 3（可选，正面发现）**：ETTh2-720 的长 horizon 场景下，中等压缩在 **3/3 seeds**
+上双指标优于满秩头（q=1/8 ⇒ r=90，平均 **+1.046% MSE / +0.432% MAE**）——可作为
+"秩约束在参数过剩时起正则化作用"的正面证据（test 口径，3 seed）。
+
+### 4.4 图表方案
+
+1. **Scree 图（最重要）**：x 轴秩 i，y 轴 λᵢ/Σλ 累积份额，7 条曲线。视觉要点：**第一根
+   柱子就占 66–86%**，曲线在 3–10 处压平。Caption："the branch's function is
+   effectively one-dimensional"。
+2. **Capture 曲线**：x 轴 r（对数刻度），y 轴 capture%，竖虚线标出 q=1/32 对应的实际
+   rank。视觉要点：**最深档仍 ≥92%，多档位 >100%**（满秩过拟合）。
+3. **方向剖面双面板**：(左) b₁ 随 lag 的权重剖面（近端集中 + 指数衰减）；(右) a₁ 随
+   horizon 的剖面（近乎平线）。这一张图即"近期水平 → 恒定位移"的全部证据。
+4. （可选）**gate 柱状图**：各 setting 的 `g²` 在 `direct` 与最深档之间的对比，突出
+   Electricity-336 的 −43%。
+
+绘图数据来源：`research_runs/lowrank_data_property_v2/optimal_rank_summary.json`
+（Scree/capture）、`.../leading_direction.csv`（方向剖面与频带）、
+`research_runs/lowrank_data_property_v1/trained_gate_and_spectrum.csv`（gate）。
+
+### 4.5 措辞边界：安全表述 vs 会被审稿人抓住的夸大
+
+**安全的强表述（建议采用）**
+
+- `capacity-neutral`、`provably retains ≥92% of the branch's contribution`、
+  `effectively one-dimensional`——都是上界式/定义式陈述，最强且最稳。
+- 从"秩"走到"参数预算"：支路占全模型参数 92.5%–99.9%，因此"近乎整模型级的压缩"
+  成立（依据 `metrics.csv` 的 `parameter_count`）。
+- 把 ETTh2-720 写成**正面发现**而非例外（见 Table 3）。
+- 归纳范围写成 "NLinear-style residual branches on standard long-horizon benchmarks"。
+
+**不要写**
+
+- ❌ "compression **improves** accuracy"：三 seed 四个档位的 test 宏平均为
+  −0.12 / +0.07 / −0.32 / −0.52（ΔMSE%），无一致增益，仅 ETTh2-720 可复现。
+- ❌ 把 validation 数字说成 test（本文机制数字全部为 val 口径；这反而是优点，可明写）。
+- ❌ "low-rank **weights**"（见 §1.3 的 418 vs 8 维反例）。
+- ❌ 隐藏深压缩代价：最优秩-10 映射在 Electricity-336 上分支残差仍比满秩高
+  26%(train)/32%(val)；MAE 宏平均在 q=1/16、q=1/32 为 −0.46%、−0.81%。写"容量中性"
+  可以，写"零代价"不行。
+- ❌ "low-frequency / local-trend"：严格分带后该表述仅在 5/7 成立（ETTh2-96/720 分别有
+  ~56%/54% 能量在周期 <12 步），纯 {常数, ramp} 字典 R² 仅 0.07–0.34（§2.6 已修正）。
+
+### 4.6 论文 Limitations（四条，可直接成段）
+
+1. 7 个 setting 来自既有的 test-set selection；本报告的机制数字取 validation split，
+   属条件性、test-exposed 探索性证据，不构成无偏泛化估计。
+2. 分析以分支自身平方误差为代理目标，真实训练是融合输出上的 Huber 损失；因此 P1 是
+   **容量上界**，不是训练动力学结论。
+3. `q=1`（满秩两层因子化）仅有单 seed，且它与 `direct` 的差异属**参数化效应**，不能计入
+   压缩效应。
+4. gate 偏移（Electricity-336、Weather-192）在 3 seed 下标准差与均值同阶，为倾向性证据。
+
+### 4.7 Discussion 收尾句（设计含义）
+
+> What a rank bottleneck must preserve is not the window's waveform but a single
+> quantity: a **recency-weighted estimate of the current level, applied as a constant
+> shift over the whole forecast horizon**. A rank-1 head with an exponential recency
+> kernel is therefore the natural minimal instantiation of this branch, and the
+> ablation baseline we recommend reporting alongside any full-rank NLinear residual head.
+
+（对应可执行建议：若需进一步省参数，保留 "近端加权水平 → 恒定位移" 这条通路即可；
+不要用输入侧低通滤波替换它。）
+
+---
+
+## 5. 边界与披露（不可省略）
 
 - 7 个 setting 仍来自既有的 **test-set selection**；本报告的指标全部取
   **validation split**（非 test），因此不再叠加一次 test 暴露，但仍**不是**无偏泛化估计，
@@ -331,7 +478,7 @@ ETTh2/Weather/Electricity 一步=1 h，ETTm2 一步=15 min）：
 
 ---
 
-## 5. 复现
+## 6. 复现
 
 ```bash
 # 1) 最优秩（RRR）容量分析：7 setting × 全秩与秩 1/2/3/5/6/10/12/21/22/24/42/45/48/84/90/180/336/720
