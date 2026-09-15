@@ -2393,3 +2393,10 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 校验：`python3 -m pytest tests/test_input_component_contrasts.py -q` → 5 passed；
   `py_compile` 通过；`git status` 干净。提交：`e000cac`（代码+测试）、`d836662`（文档）、
   本次 review 文档更新随本条一并提交。
+
+## 2026-09-15 — 决定不修 D0 报告的两行表头（用户裁定）
+
+- 审计中另发现 `PhaseFormer_input_component_H1_H3_H4_stage_report_D0.md` §3.1/§3.2 使用
+  "两行表头"（首行 5 列、子表头与数据行 8 列），GFM 渲染按 5 列处理会丢掉每行后 3 个数值。
+- **用户裁定：不修**。已在 review 文档 §4 的待办表中登记为"已知、决定不修"，并注明后续不要
+  顺手改动或重复上报。本轮 P0/P1 修复完结，无其他遗留改动。
