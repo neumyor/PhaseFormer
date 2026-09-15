@@ -46,11 +46,25 @@ def read_csv_rows(path):
         return list(csv.DictReader(handle))
 
 
+def expected_rank(label):
+    """Residual rank a labelled candidate must have (``None`` = any).
+
+    Run directories nest: a differently configured run can live under another
+    candidate's directory, so the label's own rank is part of its identity.
+    """
+
+    if label == "A_period_lowrank":
+        return 4
+    if label == "A_period_lowrank_r8":
+        return 8
+    return None
+
+
 def load_metrics(scratch_root):
     """candidate -> setting -> record for every finished run."""
 
     table = {}
-    for config_path in sorted(Path(scratch_root).glob("*/runs/*/config.json")):
+    for config_path in sorted(Path(scratch_root).rglob("config.json")):
         run_dir = config_path.parent
         metrics_path = run_dir / "metrics.csv"
         if not metrics_path.is_file():
@@ -62,6 +76,9 @@ def load_metrics(scratch_root):
         hyper = config["hyperparams"]
         head = hyper.get("weak_period_residual_head_type", "shared")
         label = classify(head, hyper, config["dataset"], int(config["horizon"]))
+        rank = expected_rank(label)
+        if rank is not None and int(hyper.get("residual_period_rank", -1)) != rank:
+            continue
         setting = f"{config['dataset']}_h{config['horizon']}_seed{config['seed']}"
         record = {
             "setting": setting,

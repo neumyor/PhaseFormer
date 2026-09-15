@@ -61,7 +61,7 @@ def discover_runs(scratch_root):
     """Map candidate label -> list of (config_path, hyperparams)."""
 
     found = {}
-    for config_path in sorted(Path(scratch_root).glob("*/runs/*/config.json")):
+    for config_path in sorted(Path(scratch_root).rglob("config.json")):
         config = read_json(config_path)
         hyper = config["hyperparams"]
         head_type = hyper.get("weak_period_residual_head_type", "shared")
