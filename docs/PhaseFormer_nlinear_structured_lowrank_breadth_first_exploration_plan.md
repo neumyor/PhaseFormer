@@ -1,8 +1,16 @@
 # PhaseFormer NLinear 结构化低秩宽度优先探索计划
 
-> 状态：**Round 0 与 Round 1 已完成（2026-09-15）**。五个结构化候选在
-> 4/4 pilot setting 上全部退化，无路线晋级，已按 §6 与 §13 早停：
-> Round 2/3/4 不启动。结论见 §6.1，停止判定见 §13.1，逐格结果见 §6.2。
+> 状态：**Round 0 完成；Round 1 已重跑（2026-09-15）**。
+>
+> ⚠️ **数据有效性**：本计划第一次 Round 1（52 个 run）**全部无效，已作废**。
+> 原因见 §6.3：`PhaseFormerPresetConfig` 从未把 `residual_*` override 透传给模型，
+> 所有结构化候选都按 builder 默认值建模，路线之间静默坍缩（r8 诊断点与 r4 的
+> 头完全相同、test MSE 逐位相同）。该批产物已归档为
+> `research_runs/structured_lowrank_round1_*_INVALID_defaults/`，**其数字不得引用**。
+>
+> 缺陷已修复（`phaseformer_presets.py` 补齐 16 个键 + 18 项透传回归测试，
+> 全仓 339 passed），Round 1 已用修复后的代码重跑。**当前结论以重跑结果为准**，
+> 见 §6.1（重跑后重写）。
 >
 > 本计划采用 **test-oriented exploratory search**：候选训练完成后读取 test，
 > 并使用 test MSE/MAE 选择下一轮探索方向。所有参与选择的候选、setting、
@@ -475,6 +483,33 @@ E 在 A--D 没有满足条件时才条件启动；因此默认 Round 1 为 A--D 
    周期/相位交互迹象时才启动 E；本轮 A--D 全部退化且无该诊断依据，因此不启动。
 6. **`P=96` 第二批结构条件不追加**：本节规定仅当 `P=24` 路线在至少两个
    pilot setting 有正向 test 信号时才追加，实际为 0 个。
+
+### 6.3 作废的第一批 Round 1 及其根因（必须随结论一起讲）
+
+第一次 Round 1 的 52 个 run 全部无效，根因是**配置未透传导致的静默架构坍缩**：
+
+- `src/models/phaseformer_presets.py` 的 `PhaseFormerPresetConfig` 只透传了既有键，
+  **没有** `residual_period_len`、`residual_period_rank`、`residual_basis_count`、
+  `residual_basis_lambda_orth`、`residual_level_mode`、`residual_level_rank`、
+  `residual_shape_rank`、`residual_recent_taps`、`residual_recent_weighting`、
+  `residual_recent_decay`、`residual_recent_rank`、`residual_separable_components`、
+  `residual_segment_alignment` 等结构化头专属键。
+- 因此每个候选都退回 `build_structured_residual_head` 的默认值
+  （`P=24, r=4, R=4, taps=7, J=1, level_mode="dense"`），**而 `config.json` 里
+  仍如实记录了请求的 override**，所以结果表看起来像不同候选。
+- 最硬的证据：`A_period_lowrank_r8` 与 `A_period_lowrank`（r4）在 4/4 setting 上
+  **test MSE 逐位相同**（如 ETTh2-H96 均为 `0.27685809602205025`），checkpoint 中
+  两个头的形状也都是 `(4,30)` / `(96,4)`。若不复核 checkpoint 形状，这一批会被
+  当成"r8 与 r4 表现一致"的正常结论。
+- 受影响的还有 `matched_*` 控制**之外**的全部结构化候选；匹配控制用的是
+  `weak_period_residual_rank`，该键本来就在透传列表中，因此控制头是**正确**的
+  ——这恰好解释了为什么作废批里控制反而"优于"所有候选。
+- 处置：该批 scratch 与聚合结果改名为 `..._INVALID_defaults` 归档，
+  **不进入任何结论**；补齐透传并新增 18 项回归测试
+  （`tests/test_structured_head_config_plumbing.py`，逐 head / 逐 rank /
+  逐 period / 逐 alignment 实例化真实模型）；随后整批重跑。
+- 教训（与 §6.4 的两次缺陷同类）：**新机制的实验必须校验"模型里真实生效的结构"，
+  而不只是 config 里写下的 override**。本计划的 §10.2 校验清单已因此补上"透传校验"。
 
 ### 6.2 Round 1 逐格结果矩阵
 
