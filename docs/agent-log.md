@@ -1,5 +1,15 @@
 # Agent Maintenance Log
 
+> 阅读说明（2026-09-15 补）：① 文件**开头 6 条为 2026-09-10 的补记块**，其后自
+> 2026-09-05 起才是按时间递增的主体；② 日志中有 33 处引用了**已不存在**的文档名：
+> 25 处属 2026-09-02 的 docs 清理（见 `docs/README.md` 顶部说明：TriAxis、M3/multi-anchor、
+> HPTC、ICPT 周期间头、纯/动态相位、残差拓扑、PCTF v1/v2 早期谱系被删除）与 2026-08-26 的
+> "实验计划并入闭环文档"整理，5 处为从未放在 `docs/` 下的产物/审计文件
+> （`ALL_COMPONENT_ROUTE_VALIDATION_METRICS.md`、`EXTRACTION_PARAMETERS.md` 等），
+> 3 处为已删除计划或笔误（`EXPERIMENT_SEARCH_PLAN.md`、`log.md`）；
+> 这些名字**仅作历史记录**，不代表当前存在对应文档；③ D4–D7 与 Progressive-IB 计划在日志中
+> 只按主题描述、未写文件名，检索时请用 `docs/README.md` 的索引小节。
+
 ## 2026-09-10 — 删除全局实验搜索计划并调整管理规范
 
 - 按用户要求删除根目录下 `EXPERIMENT_SEARCH_PLAN.md`。

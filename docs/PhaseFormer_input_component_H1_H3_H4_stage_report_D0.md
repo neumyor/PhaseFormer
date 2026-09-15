@@ -198,12 +198,27 @@ CI = summarizer 的宏 block-bootstrap（settings 分层，§8.2）。M0 等效�
 
 ## 8. 已知问题 / 数据工程债务
 
-1. **aggregate 的 interaction 列口径与 §8.1 不符（需修）**：该列不是「逐 setting 配对差再宏平均」。
-   示例：frozen H1 `minus_A` 的 M1−M0 宏 Interaction ≈ **+2.4 pp**（长表重算），aggregate 该列却
-   记 **+36.1 pp**；frozen H1 `sham` M1−M0 ≈ **−33.7 pp**，aggregate 亦异常。→ 本汇报所有
-   Interaction 一律从长表按 §8.1 配对重算，**无宏 CI**；须在 D1 汇总前修复
-   `summarize_input_component_ablation.py` 的 interaction 聚合，才能对「Interaction ≥ +0.5% 且
-   CI>0」作正式判定。
+1. **aggregate 的 interaction 列口径与 §8.1 不符 —— 已于 2026-09-15 修复（代码层）**。
+   原实现把 interaction 建在 **sham-adjusted** 差值上，即
+   `[Δ(M,V)−Δ(M,sham)] − [Δ(M0,V)−Δ(M0,sham)] = Interaction(§8.1) − ShamInteraction`，而 §8.1 的
+   Interaction 不含 sham 项。该恒等式**精确复现**了本报告观测到的偏差：frozen H1 `minus_A` 的
+   M1−M0 为 +2.4 pp（长表按 §8.1 重算），减去 ShamInteraction（−33.7 pp）即得 +36.1 pp（原
+   aggregate 值）。
+   修复内容：① 新增 `src/dataset/input_component_contrasts.py`（纯 pandas/numpy）承载 §8.1 定义；
+   ② `summarize_input_component_ablation.py` 改为 `delta_mse/relative_delta_mse` 与 original 的
+   **原始**差值（不再含 sham 项），旧值保留为显式命名的 `sham_adjusted_interaction_*`；
+   ③ 宏平均改为**逐 dataset×horizon 等权**（原来是对行取均值，会被 seed 数不均衡加权），
+   bootstrap CI 使用同一估计量；④ 新增 `tests/test_input_component_contrasts.py`（5 项，本地通过）。
+   **残留动作**：D0 的 `result_summary_d0_aggregate.csv` 需用修复后的脚本**重生成**（D0 长表在
+   GPU 机器上），随后才能对「Interaction ≥ +0.5% 且 CI 下界 > 0」作正式判定。命令：
+   ```bash
+   python scripts/summarize_input_component_ablation.py \
+     research_runs/input_components_h134_frozen_d0 \
+     research_runs/input_components_h134_retrained_test_d0 \
+     --horizons 192 --seeds 2021 --output /path/to/result_summary_d0.csv
+   ```
+   本报告 §3 的全部 Interaction 数值仍为**从长表按 §8.1 重算**的口径（无宏 CI），不因本次修复
+   而失效；修复只影响 aggregate 文件中的 interaction 列与新增的宏 CI。
 2. **计划文档 §7.2/§7.3/§13.0 正文仍保留 v1.1 的 8 数据集计数**（24 锚点 / 216 retrained / 456
    单元，§13.0 表头亦如此），与 v1.2 实际（7 数据集 / 21 锚点 / 189 retrained / 399 唯一单元）
    不一致。本次未静默改写计划，仅在此标记，建议以独立维护性小提交统一到 v1.2。
@@ -215,6 +230,9 @@ CI = summarizer 的宏 block-bootstrap（settings 分层，§8.2）。M0 等效�
 
 ## 9. D1 与下一步
 
+- ⚠️ **命名提醒**：本报告的 `D1/D2/D3` 指 **H1/H3/H4 的扩展范围**（其余 horizon×seed），
+  与 `PhaseFormer_input_candidate_discovery_ETTm1_H192_plan.md` 中同名的 D1/D2/D3
+  （频率陷波/尾部置零/轨迹成分）**含义完全不同**，跨文档引用时必须写前缀。
 - D1 supervisor pid 730056（GPU2/3，`--max-stage 3`）已运行：stage2（`h96/336/720 × s2021`，630
   jobs）快照 ≈216/630，stage3（`s2022/2023`，1680 jobs）随后。进度以
   `research_runs/input_components_h134_control/supervisor.json` 为准刷新。
@@ -227,7 +245,7 @@ CI = summarizer 的宏 block-bootstrap（settings 分层，§8.2）。M0 等效�
 
 | H | M0 equiv (D0) | M1 dep (D0) | M2 dep (D0) | Interaction (D0) | families covered in D0 | provisional grade |
 |---|---|---|---|---|---|---|
-| H1 | No（retrain minus ~84%, CI 远出 ±0.5%） | 名义有（retrain minus ~86% MSE, CI>0），但 MAE 上 sham≈minus、frozen sham>minus | 同 M1（~86%） | 弱正（`minus_A` MSE +2.2..+2.7 pp, MAE +1.7..+2.4 pp；frozen `sham` 负 −34/−38 pp）；宏 CI 待修 | 7/7（Exchange 反号 −19%） | 无法分级（OOD/confounded 为主，Model-shared 倾向）；不作 underuse 证据 |
+| H1 | No（retrain minus ~84%, CI 远出 ±0.5%） | 名义有（retrain minus ~86% MSE, CI>0），但 MAE 上 sham≈minus、frozen sham>minus | 同 M1（~86%） | 弱正（`minus_A` MSE +2.2..+2.7 pp, MAE +1.7..+2.4 pp；frozen `sham` 负 −34/−38 pp）；宏 CI 需用修复后脚本重生成 aggregate 后方可判定（§8-1） | 7/7（Exchange 反号 −19%） | 无法分级（OOD/confounded 为主，Model-shared 倾向）；不作 underuse 证据 |
 | H3 | No（retrain ~2.1%, frozen ~11.3%） | 边缘（retrain minus MSE ~1.9% CI>0），sham≥minus（6.7 vs 1.9） | 边缘（~2.9%），sham≥minus（4.1 vs 2.9） | 无稳定正（M1 −0.2 pp, M2 +0.8 pp retrain） | 7/7 | 无法分级（近 null + confound） |
 | H4 | No（retrain ~5.0%, frozen ~9.9%） | 名义 minus（~3.8% CI>0），sham≈minus | 名义 minus（~4.0% CI>0），sham≈minus | 负（−1.2/−1.1 pp `minus_A`） | 7/7 | 无法分级（confound；增强依赖证据为负） |
 

@@ -254,8 +254,8 @@ ETTm2 4/4、Weather 4/4）；另有 8 个 setting（Electricity/Traffic 各 4）
 
 ### 已登记 cell 的 config/commands 清单（docs/strict_t28_master_table_configs/）
 
-12 个有文件 cell（ETTh1/ETTm1 为另一台电脑拷入的最佳配置记录、ETTh2/ETTm2 取 seed-2021 代表、
-Weather 单 seed）的 `config.json` 与 `commands.sh` 位于
+**20 个有文件 cell**（ETTh1/ETTm1 为另一台电脑拷入的最佳配置记录、ETTh2/ETTm2 取 seed-2021 代表、
+Weather 单 seed；2026-09-15 核对磁盘为 5 数据集 × 4 horizon，原文"12 个"已过期）的 `config.json` 与 `commands.sh` 位于
 `docs/strict_t28_master_table_configs/<Dataset>/h<horizon>/`。布局与收录情况见该目录 `README.md`。
 
 - **ETTh1 / ETTm1**：文件从另一台电脑 `strict_t28_dataset_best/` 拷入

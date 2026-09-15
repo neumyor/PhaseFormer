@@ -71,9 +71,10 @@ smoothing ratio is a separate blend coefficient in `[0, 1]`.
 
 ## Controlled Follow-up Plan
 
-> Status: planned only on September 10, 2026. No follow-up model has been
-> trained and no further test prediction will be read until the selection is
-> frozen.
+> Status: **superseded on 2026-09-10** by
+> `PhaseFormer_joint_lowrank_rank_sweep_plan.md`, which took over this plan's
+> active role (see that document's header). Kept for traceability: no follow-up
+> model was trained under this document and no test prediction was read for it.
 
 ### Question
 

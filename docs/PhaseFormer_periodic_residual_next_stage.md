@@ -1,5 +1,12 @@
 # PhaseFormer 周期互补残差下一阶段实验
 
+> **状态注（2026-09-15）**：本文档编制于 2026-09-02，其"incumbent"指当时的 **A2
+> （`rcrf_pe_lff`）**——它仍是最后一个完成三 seed 正式验证的统一 incumbent。其后的
+> **strict-T28（K4）扩展线**在 20 个已登记 setting 中 12 个双指标优于 Golden（其中
+> ETTh1/ETTm1/Weather 共 12 格为单 seed 的 test-set selection，Electricity/Traffic 已取消），
+> 但 K4 自己的登记文档写明 T28"尚未超过 two-stage Full Repair，是本轮的起点"，因此
+> **尚无"全数据集最优"的既定结论**；`docs/README.md` 已同步该表述。
+
 > 状态：**288 个预注册正式 run 已全部完成（12 setting × 8 mode × 3 seed，lookback 720、period 24、full-train、best-val checkpoint、单次 test 读取），结果与决策已回填至 §3.2/§3.3。没有任何候选满足替换 A2 的统一门槛；I0 达到 8/12 双指标改善但被 ETTh2-96 的 +6.5% 回退挡在门外。** 本轮没有用少量 setting 提前淘汰任何预注册模型，正式汇总见 `research_runs/periodic_residual_next_stage_v1/formal_summary.csv` 与 `decision_summary.json`。
 
 ## 1. 实验要验证的设想

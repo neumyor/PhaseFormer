@@ -10,7 +10,7 @@
 > 与门槛冻结（§14），此后不再修改。
 >
 > 修订（执行顺序 v1.1，2026-09-02）：正式执行改为“决策范围优先”。`horizon=192, seed=2021`
-> （记 D0，8 数据集 × 3 模型 × 10 输入条件）不再是“只读 validation 的前置通过”，而是完整走完
+> （记 D0，**v1.2 口径为 7 数据集**（剔除 Traffic）× 3 模型 × 10 输入条件）不再是“只读 validation 的前置通过”，而是完整走完
 > Track R(validation) → 审计 → Track F → retrained test → 汇总，先形成 h192×seed2021 下的完整
 > 单 seed 结论；其余 horizon×seed 作为扩展范围 D1，在 D0 结论形成后按完全相同的冻结协议补跑并入
 > 三 seed 宏平均。本修订只改变执行顺序与结论汇报层级，不改任何提取公式、模型、超参、QC 阈值或
@@ -319,18 +319,18 @@ sham[k]       = Shift(X[k], delta_sham[k]-delta[k])
 3. **Stage 2：validation rehearsal**。在 ETTm2-96、ETTh2-720、Weather-96 上用完整训练集和
    seed 2021 对每个假设跑通四输入×三模型；只读 validation，用于发现训练/资源错误，不据此修改
    提取公式。
-4. **Stage 3a：D0 Track R（决策范围训练）**。冻结代码和配置后，先运行 8 数据集 × `horizon=192`
+4. **Stage 3a：D0 Track R（决策范围训练）**。冻结代码和配置后，先运行 7 数据集（v1.2 剔除 Traffic）× `horizon=192`
    × 单 seed `2021`（240 个 validation-only Track R 任务）；完成后按 §6/§7.3 做 validation
    审计（完整性、无泄漏、健康度），审计通过才进入 Stage 3a-F。
-5. **Stage 3a-F：D0 test 与机制分析**。对 D0 的 24 个 `none/full` 锚点 checkpoint 执行 Track F
-   （每个×10 输入 = 240 次评估，其中 24 次 `none/full` 同时作为 Track R 基线），再对 D0 的 216
+5. **Stage 3a-F：D0 test 与机制分析**。对 D0 的 **21** 个 `none/full` 锚点 checkpoint 执行 Track F
+   （每个×10 输入 = **210** 次评估，其中 21 次 `none/full` 同时作为 Track R 基线），再对 D0 的 **189**
    个非 full checkpoint 执行单次 matched-input retrained test；随后运行 D0 汇总，填 §13.0 的
    D0 表并给出 **h192×seed2021 单 seed 结论（provisional）**。注意：此即 D0 首次读取 test ——
    读取后本计划全部公式与门槛即冻结（§14）。
 6. **Stage 3b：D1 Track R（扩展范围训练）**。D0 结论形成后，扩展到其余
    `horizon{96,336,720}×seed2021` 与 `全部 horizon×seed{2022,2023}`（合计 2640 个
    validation-only Track R 任务），与 D0 的 240 个 run 构成完整 2880；先做 validation 审计。
-7. **Stage 3b-F：D1 test 与全矩阵汇总**。对全部 288 个 full 锚点执行 Track F、对 2592 个非
+7. **Stage 3b-F：D1 test 与全矩阵汇总**。对全部 252 个 full 锚点（v1.2）执行 Track F、对 2268 个非
    full checkpoint 执行 retrained test，运行全矩阵汇总，得到三 seed × 四 horizon 的宏平均与
    最终分级，并把 D0 单 seed 结论并入三 seed 复查。每个 checkpoint×input-condition 组合只评估
    一次 test、期间权重不更新；test 后不得回头修改 H1/H3/H4，任何后续版本使用新 experiment ID
@@ -348,9 +348,10 @@ Track F 对288个 full checkpoint 评估10种输入，其中288个 `none/full` �
 checkpoint×input-condition test。正式启动前必须记录 GPU、单 run 时间与预计总成本；可按数据集
 分批调度，但不能缩减某个模型或干预造成不平衡矩阵。
 
-按决策范围拆分，test 唯一单元为：**D0（h192×seed2021）= 24 锚点 full + 24×9 Track F 干预 +
-24×9 retrained = 456**；**D1（其余）= 264 锚点 full + 264×9 ×2 干预/retrained = 5016**；
-456 + 5016 = 5472。两个范围先后各自先完成 validation-only Track R 与审计、再读取本范围的
+按决策范围拆分，test 唯一单元为（**v1.2 口径，7 数据集**）：**D0（h192×seed2021）= 21 锚点 full +
+21×9 Track F 干预 + 21×9 retrained = 399**；D1 = 其余 setting，全矩阵共 **252 锚点 / 2268
+retrained**（对应 2520 个 Track R 任务）。*（原文此处为 v1.1 计数：D0 = 24/216/456、D1 = 264 锚点、
+合计 5472；计数差异仅来自剔除 Traffic，协议与门槛未变。完整 v1.2 推导见 D0 报告 §8-2。）*两个范围先后各自先完成 validation-only Track R 与审计、再读取本范围的
 test；D1 必须复用与 D0 完全相同的冻结提取、模型与 runner（含 checkpoint 哈希审计）。
 
 ### 7.3 复现命令
@@ -365,7 +366,7 @@ validation-only rehearsal（默认只打印 30 条命令，加 `--execute` 才�
 正式 Track R 训练严格 validation-only，完整默认矩阵生成 2880 条唯一训练命令，三个假设共享
 `none/full`；默认向每条命令传递 `--require-cuda`。
 
-D0（h192×seed2021）共 `8×3×10=240` 个 Track R 训练任务，是 D1 全矩阵（§7.2 Stage 3b）的前缀
+D0（h192×seed2021）共 `7×3×10=210` 个 Track R 训练任务（v1.2；原 v1.1 为 `8×3×10=240`），是 D1 全矩阵（§7.2 Stage 3b）的前缀
 而不是独立调参实验；代码默认启用 `--priority-first`，即使直接执行完整矩阵也会先调度
 `horizon=192, seed=2021`。D0 Track R（validation-only）：
 
@@ -393,7 +394,7 @@ D0 retrained test —— 只对 D0 的 216 个非 full checkpoint：
 python scripts/run_input_component_retrained_test_matrix.py \
   --track-r-dir research_runs/input_components_h134_scratch \
   --output-dir research_runs/input_components_h134_retrained_test_d0 \
-  --horizons 192 --seeds 2021 --expected-count 216 --execute
+  --horizons 192 --seeds 2021 --expected-count 189 --execute   # v1.2（原 v1.1 为 216）
 ```
 
 D0 汇总 —— 输出单 seed h192 表与 provisional 结论（§13.0）：
@@ -408,7 +409,7 @@ python scripts/summarize_input_component_ablation.py \
 > 实现说明（必做项，已在 D0 Track R 收尾前落地）：`run_input_component_frozen_matrix.py`、
 > `run_input_component_retrained_test_matrix.py` 与 `summarize_input_component_ablation.py` 均
 > 接受 `--horizons/--seeds` 范围过滤，`expected-count`/`expected-settings-per-track` 由范围自动
-> 推导（D0 = 24 锚点 / 216 retrained；全矩阵 = 288 / 2592）。retrained 入口在范围子集上只校验
+> 推导（v1.2：D0 = 21 锚点 / 189 retrained；全矩阵 = 252 / 2268。原 v1.1 为 D0 = 24 / 216、全矩阵 = 288 / 2592）。retrained 入口在范围子集上只校验
 > 该范围内的 validation Track R 完整性、无泄漏与 100% 采样，源目录中出现范围外（未完成的 D1）
 > 条件不会阻塞 D0 读取。D0 下游产物写入独立目录（`*_d0`），避免与 D1 全矩阵产物混用；D1 收尾
 > 再写全矩阵目录（不带过滤参数即为全矩阵默认）。

@@ -1,5 +1,12 @@
 # 当前正式 Test 表现最好的五个模型
 
+> **状态注（2026-09-15）**：本文档编制于 2026-09-02，其"incumbent"指当时的 **A2
+> （`rcrf_pe_lff`）**——它仍是最后一个完成三 seed 正式验证的统一 incumbent。其后的
+> **strict-T28（K4）扩展线**在 20 个已登记 setting 中 12 个双指标优于 Golden（其中
+> ETTh1/ETTm1/Weather 共 12 格为单 seed 的 test-set selection，Electricity/Traffic 已取消），
+> 但 K4 自己的登记文档写明 T28"尚未超过 two-stage Full Repair，是本轮的起点"，因此
+> **尚无"全数据集最优"的既定结论**；`docs/README.md` 已同步该表述。
+
 下表是目前覆盖最完整且可公平横向比较的一组结果：所有模型都使用 `lookback=720`、
 full-train、seeds 2021/2022/2023、最低 validation loss checkpoint，并在冻结训练后读取一次
 test。每格是三 seed 的 `MSE / MAE` 均值，越低越好；**粗体表示五个模型中的最低值**。

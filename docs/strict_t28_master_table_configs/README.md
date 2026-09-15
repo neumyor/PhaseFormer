@@ -2,9 +2,14 @@
 
 Layout: `<Dataset>/<h<horizon>>/config.json` + `commands.sh` for every cell of
 the strict-T28 master table. 20 settings registered (5 datasets x 4 horizons);
-12 cells carry on-disk config/command files here.
+**all 20 cells carry on-disk config/command files here** (ETTh1/ETTm1/ETTh2/ETTm2
+plus Weather; verified on disk 2026-09-15 — an earlier revision of this file said
+"12 cells" and omitted Weather).
 
-Collected (config.json + commands.sh, 12 cells):
+Collected (config.json + commands.sh, 20 cells):
+
+- `Weather/h96` `h192` `h336` `h720` — Weather shared best (W): cycle=24,
+  caps 0.60/0.24/0.12, MAE, lr multiplier 1.0, single seed test-set selection.
 
 - `ETTh1/h96` `h192` `h336` `h720` — ETTh1 shared best (`u_lr020`): cycle=24,
   caps 1.40/0.80/0.40, MAE, lr multiplier 0.20, ep50, seed 2021. Copied from
