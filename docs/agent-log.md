@@ -26,6 +26,37 @@
   逐条校对与修复清单，本汇报文档负责面向决策的结论与证据索引，二者互相引用同一批
   `research_runs/` 原始证据。
 
+## 2026-09-15 — 发现 Round 1 整批作废的透传缺陷并重跑
+
+- **缺陷**：`PhaseFormerPresetConfig` **从未透传**结构化头专属的 `residual_*` 键
+  （`residual_period_len` / `residual_period_rank` / `residual_basis_count` /
+  `residual_basis_lambda_orth` / `residual_level_mode` / `residual_level_rank` /
+  `residual_shape_rank` / `residual_recent_taps` / `residual_recent_weighting` /
+  `residual_recent_decay` / `residual_recent_rank` / `residual_separable_components` /
+  `residual_segment_*`）。因此每个结构化候选都退回 builder 默认值建模
+  （`P=24, r=4, R=4, taps=7, J=1, level_mode=dense`），而 `config.json` 仍如实记录
+  请求的 override，导致结果表看起来像不同候选。
+- **最硬证据**：`A_period_lowrank_r8` 与 `A_period_lowrank`(r4) 在 4/4 setting 上
+  **test MSE 逐位相同**（ETTh2-H96 均为 `0.27685809602205025`），checkpoint 中两者
+  头形状都是 `(4,30)`/`(96,4)`。**只看表格无法发现**，是复核 checkpoint 权重形状才暴露。
+- **影响面核对（重要，缩小了重跑范围）**：
+  - 真正受影响：r8 诊断点（实际训成 rank 4）；以及**尚未执行的 Round 2 消融**
+    （其全部消融轴正是被丢弃的键）。
+  - 不受影响：**matched 时间点轴控制全部有效**（用 `weak_period_residual_rank`，本就在
+    透传列表内）——这也解释了作废批里控制为何"优于"所有候选；B/D 的代表配置等于默认值；
+    C 代表配置即 `dense`；E 默认 `J=1` 即代表配置。
+- **修复**：`phaseformer_presets.py` 补齐 16 个键的透传；新增
+  `tests/test_structured_head_config_plumbing.py`（18 项），对每个 head / rank /
+  period / alignment / 控制秩**实例化真实模型**（走 `make_exp_args` +
+  `PhaseFormerPresetConfig` + `PhaseFormer`）断言生效结构。全仓 **339 passed**。
+  另在计划 §10.2 的校验清单里新增"配置透传校验"一项。
+- **处置**：第一批 52 个 run 的 scratch 与聚合结果改名为
+  `research_runs/structured_lowrank_round1_*_INVALID_defaults/` 归档，**数字不得引用**；
+  计划文档 §6.3 记录根因与证据，§6.1/§6.2/§11 标注为不可引用。Round 1 已用修复后的
+  代码重跑，并**逐候选核对 checkpoint 头形状**确认新架构真实生效（r8 现为 `(8,30)`/`(96,8)`）。
+- 补充：清理了旧批次在 `runs/` 下残留的 `metrics.csv`——它们会让 runner 的 `--resume`
+  误判为已完成而跳过该 run（同名的 `status.json` 残留也会让判定为"完成"）。
+
 ## 2026-09-15 — Round 1 完成：结构化低秩路线全部未晋级（负结果已归档）
 
 - **实验完成**：Round 0 复用审计 0 新增训练；Round 1 共 **48 次训练**
