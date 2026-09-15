@@ -20,13 +20,24 @@ git log --oneline -1 > "$LOGDIR/remaining_head.txt"
 
 IFS=',' read -r -a CANDIDATES <<< "A_period_lowrank,A_period_lowrank_r8,B_segment_basis,C_level_shape,D_recent_sparse,E_separable,matched_A_period_lowrank,matched_A_period_lowrank_r8,matched_B_segment_basis,matched_C_level_shape,matched_D_recent_sparse,matched_E_separable"
 
-# Only a run for the requested setting counts as done: the scratch tree holds
-# every setting, so a plain status.json glob would treat another setting's run as
-# completing this candidate.
-SETTING_KEY=$(echo "$SETTING" | tr ':' '_' | tr '[:upper:]' '[:lower:]')
+# Decide from the setting's own recorded artifacts, not from the setting string:
+# the scratch tree holds every setting, and a bare status.json glob would treat a
+# different setting's run as completing this candidate.  A run counts as done when
+# its metrics.csv exists and already carries a test number.
+DATASET="${SETTING%%:*}"
+HORIZON="${SETTING##*:}"
+DATASET_KEY=$(echo "$DATASET" | tr '[:upper:]' '[:lower:]')
 pending=()
 for candidate in "${CANDIDATES[@]}"; do
-  if ! ls "$OUT/$candidate"/runs/*"${SETTING_KEY}"*/status.json >/dev/null 2>&1; then
+  done_for_setting=0
+  for metrics in "$OUT/$candidate"/runs/*"${DATASET_KEY}_h${HORIZON}"*/metrics.csv; do
+    [ -f "$metrics" ] || continue
+    if head -2 "$metrics" | grep -q "test_mse"; then
+      done_for_setting=1
+      break
+    fi
+  done
+  if [ "$done_for_setting" -eq 0 ]; then
     pending+=("$candidate")
   fi
 done
