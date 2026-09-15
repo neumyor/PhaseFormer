@@ -1,16 +1,17 @@
 # PhaseFormer NLinear 结构化低秩宽度优先探索计划
 
-> 状态：**Round 0 完成；Round 1 已重跑（2026-09-15）**。
+> 状态：**Round 0 完成；Round 1 已用修复后的代码重跑并通过形状校验**。
+> 已完成 **3/4 pilot setting**（ETTh2-H96、ETTh2-H720、ETTm2-H192）；
+> Electricity-H336 仍在训练，本文件对它的行会标注 **待回填**。
 >
-> ⚠️ **数据有效性**：本计划第一次 Round 1（52 个 run）**全部无效，已作废**。
-> 原因见 §6.3：`PhaseFormerPresetConfig` 从未把 `residual_*` override 透传给模型，
-> 所有结构化候选都按 builder 默认值建模，路线之间静默坍缩（r8 诊断点与 r4 的
-> 头完全相同、test MSE 逐位相同）。该批产物已归档为
-> `research_runs/structured_lowrank_round1_*_INVALID_defaults/`，**其数字不得引用**。
+> ⚠️ **第一批 Round 1（52 run）已作废，数字不得引用**，根因见 §6.3：
+> `PhaseFormerPresetConfig` 未透传 `residual_*` override，所有结构化候选按默认值
+> 建模、路线静默坍缩（r8 与 r4 的头完全相同的）。作废产物归档于
+> `research_runs/structured_lowrank_round1_*_INVALID_defaults/`。
 >
-> 缺陷已修复（`phaseformer_presets.py` 补齐 16 个键 + 18 项透传回归测试，
-> 全仓 339 passed），Round 1 已用修复后的代码重跑。**当前结论以重跑结果为准**，
-> 见 §6.1（重跑后重写）。
+> 重跑数据经**逐 run checkpoint 形状校验**：34/34 已完成 run 的头形状与请求配置一致
+> （形状不符 0、缺失 0）。当前结果见 §6.1 与 §6.2，产物
+> `research_runs/structured_lowrank_round1_v2/`。
 >
 > 本计划采用 **test-oriented exploratory search**：候选训练完成后读取 test，
 > 并使用 test MSE/MAE 选择下一轮探索方向。所有参与选择的候选、setting、
@@ -414,31 +415,25 @@ E 在 A--D 没有满足条件时才条件启动；因此默认 Round 1 为 A--D 
 | A 周期轴低秩 | ETTh2-H96 | 0.276858 | 0.341764 | -1.749 | -2.680 | -1.669 | 604 | 913 | 0.50 | 否 | 退化 |
 | A 周期轴低秩 | ETTh2-H720 | 0.401989 | 0.438586 | -2.837 | -2.505 | -3.833 | 3724 | 3602 | 0.50 | 否 | 退化 |
 | A 周期轴低秩 | ETTm2-H192 | 0.218705 | 0.295566 | -1.400 | -2.605 | -2.448 | 1084 | 1105 | 0.20 | 否 | 退化 |
-| A 周期轴低秩 | Electricity-H336 | 0.168993 | 0.261404 | -4.492 | -2.626 | -3.729 | 1804 | 1393 | 0.50 | 否 | 退化 |
-| B segment basis | ETTh2-H96 | 0.282910 | 0.346283 | -3.973 | -4.038 | -3.891 | 144 | 913 | 0.50 | 否 | 退化 |
-| B segment basis | ETTh2-H720 | 0.400858 | 0.438845 | -2.548 | -2.566 | -3.541 | 274 | 2161 | 0.50 | 否 | 退化 |
-| B segment basis | ETTm2-H192 | 0.220520 | 0.296495 | -2.242 | -2.928 | -3.298 | 164 | 1105 | 0.20 | 否 | 退化 |
-| B segment basis | Electricity-H336 | 0.167044 | 0.259291 | -3.286 | -1.796 | -2.532 | 194 | 1393 | 0.50 | 否 | 退化 |
+| A 诊断点 r8 | ETTh2-H96 | 0.282264 | 0.346365 | -3.736 | -4.063 | -3.654 | 1112 | 913 | 0.50 | 否 | 退化 |
+| A 诊断点 r8 | ETTh2-H720 | 0.396254 | 0.435975 | -1.370 | -1.895 | -2.352 | 6728 | 6484 | 0.50 | 否 | 退化 |
+| B segment basis | ETTh2-H96 | 0.282834 | 0.346221 | -3.945 | -4.019 | -3.863 | 144 | 913 | 0.50 | 否 | 退化 |
+| B segment basis | ETTh2-H720 | 0.401163 | 0.438934 | -2.626 | -2.587 | -3.620 | 274 | 2161 | 0.50 | 否 | 退化 |
+| B segment basis | ETTm2-H192 | 0.222283 | 0.296930 | -3.059 | -3.079 | -4.124 | 164 | 1105 | 0.20 | 否 | 退化 |
 | C level-shape | ETTh2-H96 | 0.276092 | 0.340641 | -1.467 | -2.343 | -1.387 | 268 | 913 | 0.50 | 否 | 退化 |
 | C level-shape | ETTh2-H720 | 0.397620 | 0.436280 | -1.720 | -1.966 | -2.705 | 1204 | 2161 | 0.50 | 否 | 退化 |
 | C level-shape | ETTm2-H192 | 0.217271 | 0.292852 | -0.736 | -1.663 | -1.776 | 412 | 1105 | 0.20 | 否 | 退化 |
-| C level-shape | Electricity-H336 | 0.165809 | 0.259338 | -2.523 | -1.815 | -1.775 | 628 | 1393 | 0.50 | 否 | 退化 |
-| D 近期周期稀疏 | ETTh2-H96 | 0.282788 | 0.346697 | -3.928 | -4.163 | -3.846 | 28 | 913 | 0.50 | 否 | 退化 |
-| D 近期周期稀疏 | ETTh2-H720 | 0.403034 | 0.439916 | -3.105 | -2.816 | -4.103 | 106 | 2161 | 0.50 | 否 | 退化 |
-| D 近期周期稀疏 | ETTm2-H192 | 0.220849 | 0.297780 | -2.395 | -3.374 | -3.452 | 40 | 1105 | 0.20 | 否 | 退化 |
-| D 近期周期稀疏 | Electricity-H336 | 0.168192 | 0.260725 | -3.996 | -2.359 | -3.237 | 58 | 1393 | 0.50 | 否 | 退化 |
+| D 近期周期稀疏 | ETTh2-H96 | 0.278069 | 0.343265 | -2.194 | -3.131 | -2.113 | 28 | 913 | 0.50 | 否 | 退化 |
+| D 近期周期稀疏 | ETTh2-H720 | 0.402878 | 0.440222 | -3.065 | -2.888 | -4.063 | 106 | 2161 | 0.50 | 否 | 退化 |
+| D 近期周期稀疏 | ETTm2-H192 | 0.221096 | 0.297806 | -2.509 | -3.383 | -3.568 | 40 | 1105 | 0.20 | 否 | 退化 |
 | E 可分离 | ETTh2-H96 | 0.282277 | 0.346336 | -3.740 | -4.054 | -3.658 | 148 | 913 | 0.50 | 否 | 退化 |
 | E 可分离 | ETTh2-H720 | 0.398192 | 0.437091 | -1.866 | -2.156 | -2.852 | 954 | 2161 | 0.50 | 否 | 退化 |
 | E 可分离 | ETTm2-H192 | 0.217995 | 0.293999 | -1.071 | -2.061 | -2.115 | 272 | 1105 | 0.20 | 否 | 退化 |
-| E 可分离 | Electricity-H336 | 0.165980 | 0.258834 | -2.629 | -1.617 | -1.879 | 458 | 1393 | 0.50 | 否 | 退化 |
 | matched 时间点轴 r1 | ETTh2-H96 | 0.285104 | 0.344771 | -4.779 | -3.584 | -4.697 |  | — | 0.50 | 否 | 退化 |
 | matched 时间点轴 r1 | ETTh2-H720 | 0.398223 | 0.433137 | -1.874 | -1.232 | -2.860 |  | — | 0.50 | 否 | 退化 |
 | matched 时间点轴 r1 | ETTm2-H192 | 0.215819 | 0.292444 | -0.062 | -1.521 | -1.096 |  | — | 0.20 | 否 | 退化 |
-| matched 时间点轴 r1 | Electricity-H336 | 0.165001 | 0.258478 | -2.023 | -1.477 | -1.278 |  | — | 0.50 | 否 | 退化 |
 | matched 时间点轴 r4 | ETTh2-H96 | 0.272635 | 0.335414 | -0.197 | -0.772 | -0.118 |  | — | 0.50 | 否 | 退化 |
 | matched 时间点轴 r4 | ETTh2-H720 | 0.389380 | 0.428317 | +0.388 | -0.105 | -0.576 |  | — | 0.50 | 否 | 正向信号 |
-| matched 时间点轴 r4 | ETTm2-H192 | 0.217446 | 0.290769 | -0.817 | -0.940 | -1.858 |  | — | 0.20 | 否 | 退化 |
-| matched 时间点轴 r4 | Electricity-H336 | 0.162639 | 0.255381 | -0.563 | -0.261 | +0.171 |  | — | 0.50 | 否 | 退化 |
 
 ### 路线晋级规则
 
@@ -456,36 +451,34 @@ E 在 A--D 没有满足条件时才条件启动；因此默认 Round 1 为 A--D 
 未达到条件的路线保留为负结果，不追加该路线搜索。若 A--D 全部未达到，
 只有在 aligned-vs-shifted 已显示周期/相位交互迹象时才启动 E；否则停止。
 
-> ⚠️ **以下 §6.1 与 §6.2 由第一批（作废）Round 1 生成，数字不得引用**，
-> 保留仅为记录当时被推翻的判定过程。修正后重跑的结论将覆盖本节。
+### 6.1 结果与判定（2026-09-15，test-set selection）
 
-### 6.1 结果与判定（2026-09-15 完成，test-set selection）
+> 数字来源：重跑并**通过形状校验**的 Round 1（`structured_lowrank_round1_v2/results.csv`）。
+> 已完成 3/4 pilot setting；Electricity-H336 在跑，缺失行标注"待回填"。
+> 每个 run 的 validation 只用于选 checkpoint，test 只读一次；三项控制来自既有
+> test-exposed 谱系（`reused_exact`）。全部为探索性证据，不是盲测。
 
-> 本节全部数字来自 Round 1 的 48 次训练（4 setting × 6 候选 × 2 控制）与
-> Round 0 复用的 12 行控制。每个 run 的 validation 只用于选 checkpoint，
-> test 只读一次；控制来自既有 test-exposed 谱系（`reused_exact`）。
-> 全部为探索性证据，不是盲测、无偏泛化估计或 benchmark 提升。
+**判定（基于 3/4 setting）：五条路线全部未晋级，触发早停。**
 
-**判定：五条路线全部未晋级，触发早停。** 逐格结果见 §6.2，要点：
-
-1. **A--E 在 4/4 pilot setting 上 MSE 与 MAE 同时退化**，没有任何一格为正
-   （幅度 −0.74% ~ −4.49%）。按本节的晋级规则 1/2/3 全部不满足：不存在
-   “≥2/4 setting 同指标正向”，也不存在“3/4 setting 双指标平均不差于
-   −0.3%”（实际均值 −1.61% ~ −3.36%）。
-2. **换坐标系没有收益。** 参数匹配的时间点轴控制 r1 均值 −2.19%（MSE），
-   优于全部五条结构化路线；与路线 A budget 对齐的 r4 控制均值仅 −0.30%，
-   并且在 ETTh2-H720 上是唯一正向格（+0.39%）。
-3. **普通低秩仍然略优。** `generic pooled_lowrank(q=1/8)` 在 ETTh2-H720
-   (+0.96%) 与 ETTm2-H192 (+1.02%) 优于 direct，且优于所有结构化候选，
-   与既有 `pooled_lowrank` 结论一致：低秩本身近似中性，换坐标系没有额外收益。
-4. **假设判定**：H0（普通低秩主要是压缩）被支持；H1（周期轴低秩更适合
-   NLinear）、H3（周期块稀疏有用）、H4（basis 多样性比 rank 更重要）在
-   4/4 setting 上均未被支持。D（最近 7 个周期）退化最重（−3.36%），方向与
-   H3 相反；C（level-shape）退化最轻（−1.61%），但仍为负。
-5. **E 路线不启动**：本节规定只有 A--D 无胜者**且** aligned-vs-shifted 显示
-   周期/相位交互迹象时才启动 E；本轮 A--D 全部退化且无该诊断依据，因此不启动。
-6. **`P=96` 第二批结构条件不追加**：本节规定仅当 `P=24` 路线在至少两个
-   pilot setting 有正向 test 信号时才追加，实际为 0 个。
+1. **A--E 在 3/3 个已完成 setting 上 MSE 与 MAE 同时退化**，没有任何一格为正：
+   均值 ΔMSE 为 C −1.31%、A −2.00%、E −2.23%、D −2.59%、B −3.21%
+   （ΔMAE 同向，−1.99% ~ −3.23%）。晋级规则 1/2/3 全部不满足。
+2. **换坐标系没有收益。** 参数匹配的时间点轴控制 r1 均值 −2.24%（MSE），优于全部
+   五条结构化路线；与路线 A budget 对齐的 r4 控制均值 **+0.10%**（MSE），是唯一
+   不劣于 direct 的候选，并在 ETTh2-H720 上是唯一正向格（+0.39%，其余 2 个 setting
+   为 −0.20% / 待回填）。
+3. **提高 rank 没有帮助。** 预注册的中等容量诊断点（r8）在被正确训练后（形状校验
+   为 `(8,30)`）**没有优于 r4**：ETTh2-H720 −1.37% vs −2.84%、ETTh2-H96 −3.74%
+   vs −1.75%。即"路线 A 的退化不是 rank 太小导致的"。
+4. **普通低秩仍然略优。** `generic pooled_lowrank(q=1/8)` 在 ETTh2-H720 (+0.96%)、
+   ETTm2-H192 (+1.02%) 优于 direct，且优于所有结构化候选，与既有 pooled_lowrank
+   结论一致：低秩本身近似中性，换坐标系没有额外收益。
+5. **假设判定**：H0（普通低秩主要是压缩）被支持；H1（周期轴低秩更适合 NLinear）、
+   H3（周期块稀疏有用）、H4（basis 多样性比 rank 更重要）均未被支持。D（最近 7 个
+   周期）退化居前（−2.59%），方向与 H3 相反；C（level-shape）退化最轻（−1.31%）。
+6. **E 路线不启动**：本节规定只有 A--D 无胜者**且** aligned-vs-shifted 显示周期/相位
+   交互迹象时才启动；本轮 A--D 全部退化且无该诊断依据。`P=96` 第二批条件同理不追加
+   （要求至少两个 pilot setting 有正向信号，实际为 0）。
 
 ### 6.3 作废的第一批 Round 1 及其根因（必须随结论一起讲）
 
@@ -504,9 +497,14 @@ E 在 A--D 没有满足条件时才条件启动；因此默认 Round 1 为 A--D 
   **test MSE 逐位相同**（如 ETTh2-H96 均为 `0.27685809602205025`），checkpoint 中
   两个头的形状也都是 `(4,30)` / `(96,4)`。若不复核 checkpoint 形状，这一批会被
   当成"r8 与 r4 表现一致"的正常结论。
-- 受影响的还有 `matched_*` 控制**之外**的全部结构化候选；匹配控制用的是
-  `weak_period_residual_rank`，该键本来就在透传列表中，因此控制头是**正确**的
-  ——这恰好解释了为什么作废批里控制反而"优于"所有候选。
+- 影响面经逐候选核对后**比最初判断窄**：真正受影响的只有 r8 诊断点（实际训成 rank 4）
+  与**尚未执行的 Round 2 消融**（其消融轴正是被丢弃的键）。**匹配控制未受影响**
+  （用 `weak_period_residual_rank`，本就在透传列表内），B/D 的代表配置等于默认值，
+  C 的代表配置即 `dense`，E 的默认 `J=1` 即代表配置——这也是作废批里控制反而
+  "优于"所有候选的原因。
+- 重跑后**必须逐 run 校验 checkpoint 里的头形状**：本次 34 个已完成 run 全部一致
+  （见 §10.2 第 6 项）。同批 `A_period_lowrank_r8` 的形状由 `(4,30)` 变为 `(8,30)`，
+  是修复生效的实测证据。
 - 处置：该批 scratch 与聚合结果改名为 `..._INVALID_defaults` 归档，
   **不进入任何结论**；补齐透传并新增 18 项回归测试
   （`tests/test_structured_head_config_plumbing.py`，逐 head / 逐 rank /
@@ -556,20 +554,21 @@ E 在 A--D 没有满足条件时才条件启动；因此默认 Round 1 为 A--D 
 
 | 候选 | MSE 正向 setting 数 | MAE 正向 setting 数 | 双指标正向 setting 数 | 均值 delta MSE% | 均值 delta MAE% |
 |---|---:|---:|---:|---:|---:|
-| A 周期轴低秩 | 0/4 | 0/4 | 0/4 | -2.619 | -2.604 |
-| B segment basis | 0/4 | 0/4 | 0/4 | -3.012 | -2.832 |
-| C level-shape | 0/4 | 0/4 | 0/4 | -1.611 | -1.947 |
-| D 近期周期稀疏 | 0/4 | 0/4 | 0/4 | -3.356 | -3.178 |
-| E 可分离 | 0/4 | 0/4 | 0/4 | -2.327 | -2.472 |
-| matched 时间点轴 r1 | 0/4 | 0/4 | 0/4 | -2.185 | -1.953 |
-| matched 时间点轴 r4 | 1/4 | 0/4 | 0/4 | -0.297 | -0.520 |
+| A 周期轴低秩 | 0/3 | 0/3 | 0/3 | -1.995 | -2.597 |
+| A 诊断点 r8 | 0/2 | 0/2 | 0/2 | -2.553 | -2.979 |
+| B segment basis | 0/3 | 0/3 | 0/3 | -3.210 | -3.228 |
+| C level-shape | 0/3 | 0/3 | 0/3 | -1.307 | -1.991 |
+| D 近期周期稀疏 | 0/3 | 0/3 | 0/3 | -2.589 | -3.134 |
+| E 可分离 | 0/3 | 0/3 | 0/3 | -2.226 | -2.757 |
+| matched 时间点轴 r1 | 0/3 | 0/3 | 0/3 | -2.239 | -2.112 |
+| matched 时间点轴 r4 | 1/2 | 0/2 | 0/2 | +0.096 | -0.439 |
 
 #### MSE leaderboard（每 setting 前 3，含控制）
 
 - ETTh2-H96: matched_A_period_lowrank_r8(0.272635) < C_level_shape(0.276092) < A_period_lowrank(0.276858)
-- ETTh2-H720: matched_A_period_lowrank_r8(0.389380) < C_level_shape(0.397620) < E_separable(0.398192)
-- ETTm2-H192: matched_A_period_lowrank(0.215819) < C_level_shape(0.217271) < matched_A_period_lowrank_r8(0.217446)
-- Electricity-H336: matched_A_period_lowrank_r8(0.162639) < matched_A_period_lowrank(0.165001) < C_level_shape(0.165809)
+- ETTh2-H720: matched_A_period_lowrank_r8(0.389380) < A_period_lowrank_r8(0.396254) < C_level_shape(0.397620)
+- ETTm2-H192: matched_A_period_lowrank(0.215819) < C_level_shape(0.217271) < E_separable(0.217995)
+- Electricity-H336: 
 
 > 双指标交集（MSE 与 MAE 同时为正）在全部 4 个 setting 上均为空集；
 > 因此不存在任何可晋级为“机制创新”的候选。
@@ -780,9 +779,9 @@ Round 0 之前必须完成：
 
 每轮必须保留完整选择轨迹，不能只保留最终胜者：
 
-> ⚠️ **下表来自第一批（作废）Round 1**：其 32 行对应的是全部按默认值建模的
-> 坍缩架构，仅作「当时确实执行过这些 run」的记录，不得作为候选比较结论。
-> 修正后重跑的轨迹将替换本节。
+> 下表为**重跑并校验后**的轨迹（当前 22 行 = 8 候选 × 已完成 setting）。
+> Electricity-H336 的任务仍在训练，其行将在完成后追加；所有参与选择的候选
+> （含被淘汰者）都保留，不做筛选。
 >
 > Round 0 与 Round 1 的完整轨迹见下表：4 个 pilot setting × 8 个候选 = 32 行全部保留（含被淘汰者）。
 > `baseline` 列同时列出两个对照：policy A = 与 `direct_nlinear` 比较，policy B = 与 generic `q=1/8` 比较；
@@ -792,34 +791,28 @@ hostfile_replace_entries: mkstemp: Operation not permitted
 update_known_hosts: hostfile_replace_entries failed for /Users/yimingniu/.ssh/known_hosts: Operation not permitted
 | round | candidate id | setting | test MSE | test MAE | delta MSE% vs direct | baseline | action | reason | test-exposed |
 |---|---|---|---:|---:|---:|---|---|---|---|
-| 1 | A_period_lowrank | ETTh2-H96 | 0.276858 | 0.341764 | -1.749 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | A_period_lowrank | ETTh2-H720 | 0.401989 | 0.438586 | -2.837 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | A_period_lowrank | ETTm2-H192 | 0.218705 | 0.295566 | -1.400 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | A_period_lowrank | Electricity-H336 | 0.168993 | 0.261404 | -4.492 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | B_segment_basis | ETTh2-H96 | 0.282910 | 0.346283 | -3.973 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | B_segment_basis | ETTh2-H720 | 0.400858 | 0.438845 | -2.548 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | B_segment_basis | ETTm2-H192 | 0.220520 | 0.296495 | -2.242 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | B_segment_basis | Electricity-H336 | 0.167044 | 0.259291 | -3.286 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | C_level_shape | ETTh2-H96 | 0.276092 | 0.340641 | -1.467 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | C_level_shape | ETTh2-H720 | 0.397620 | 0.436280 | -1.720 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | C_level_shape | ETTm2-H192 | 0.217271 | 0.292852 | -0.736 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | C_level_shape | Electricity-H336 | 0.165809 | 0.259338 | -2.523 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | D_recent_sparse | ETTh2-H96 | 0.282788 | 0.346697 | -3.928 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | D_recent_sparse | ETTh2-H720 | 0.403034 | 0.439916 | -3.105 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | D_recent_sparse | ETTm2-H192 | 0.220849 | 0.297780 | -2.395 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | D_recent_sparse | Electricity-H336 | 0.168192 | 0.260725 | -3.996 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | E_separable | ETTh2-H96 | 0.282277 | 0.346336 | -3.740 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | E_separable | ETTh2-H720 | 0.398192 | 0.437091 | -1.866 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | E_separable | ETTm2-H192 | 0.217995 | 0.293999 | -1.071 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | E_separable | Electricity-H336 | 0.165980 | 0.258834 | -2.629 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | matched_A_period_lowrank | ETTh2-H96 | 0.285104 | 0.344771 | -4.779 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | matched_A_period_lowrank | ETTh2-H720 | 0.398223 | 0.433137 | -1.874 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | matched_A_period_lowrank | ETTm2-H192 | 0.215819 | 0.292444 | -0.062 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | matched_A_period_lowrank | Electricity-H336 | 0.165001 | 0.258478 | -2.023 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | matched_A_period_lowrank_r8 | ETTh2-H96 | 0.272635 | 0.335414 | -0.197 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | matched_A_period_lowrank_r8 | ETTh2-H720 | 0.389380 | 0.428317 | +0.388 | direct_nlinear (A) / generic q=1/8 (B) | keep | 出现正向信号，但不足以触发晋级规则 | yes |
-| 1 | matched_A_period_lowrank_r8 | ETTm2-H192 | 0.217446 | 0.290769 | -0.817 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
-| 1 | matched_A_period_lowrank_r8 | Electricity-H336 | 0.162639 | 0.255381 | -0.563 | direct_nlinear (A) / generic q=1/8 (B) | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | A_period_lowrank | ETTh2-H96 | 0.276858 | 0.341764 | -1.749 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | A_period_lowrank | ETTh2-H720 | 0.401989 | 0.438586 | -2.837 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | A_period_lowrank | ETTm2-H192 | 0.218705 | 0.295566 | -1.400 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | A_period_lowrank_r8 | ETTh2-H96 | 0.282264 | 0.346365 | -3.736 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | A_period_lowrank_r8 | ETTh2-H720 | 0.396254 | 0.435975 | -1.370 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | B_segment_basis | ETTh2-H96 | 0.282834 | 0.346221 | -3.945 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | B_segment_basis | ETTh2-H720 | 0.401163 | 0.438934 | -2.626 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | B_segment_basis | ETTm2-H192 | 0.222283 | 0.296930 | -3.059 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | C_level_shape | ETTh2-H96 | 0.276092 | 0.340641 | -1.467 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | C_level_shape | ETTh2-H720 | 0.397620 | 0.436280 | -1.720 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | C_level_shape | ETTm2-H192 | 0.217271 | 0.292852 | -0.736 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | D_recent_sparse | ETTh2-H96 | 0.278069 | 0.343265 | -2.194 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | D_recent_sparse | ETTh2-H720 | 0.402878 | 0.440222 | -3.065 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | D_recent_sparse | ETTm2-H192 | 0.221096 | 0.297806 | -2.509 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | E_separable | ETTh2-H96 | 0.282277 | 0.346336 | -3.740 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | E_separable | ETTh2-H720 | 0.398192 | 0.437091 | -1.866 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | E_separable | ETTm2-H192 | 0.217995 | 0.293999 | -1.071 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | matched_A_period_lowrank | ETTh2-H96 | 0.285104 | 0.344771 | -4.779 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | matched_A_period_lowrank | ETTh2-H720 | 0.398223 | 0.433137 | -1.874 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | matched_A_period_lowrank | ETTm2-H192 | 0.215819 | 0.292444 | -0.062 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | matched_A_period_lowrank_r8 | ETTh2-H96 | 0.272635 | 0.335414 | -0.197 | direct_nlinear | drop | MSE 与 MAE 同时退化 | yes |
+| 1 | matched_A_period_lowrank_r8 | ETTh2-H720 | 0.389380 | 0.428317 | +0.388 | direct_nlinear | keep | 出现正向信号，但不足 2/4，未触发晋级规则 | yes |
 
 排序优先级为：
 
