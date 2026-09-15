@@ -212,7 +212,12 @@ def _matched_rank(name, head_type, horizon, overrides):
 
     if name in AUTOMATCHED_ROUTES:
         budget = _candidate_head_params(head_type, horizon, AUTOMATCHED_OVERRIDES[name])
-        rank, _ = matched_control_rank(budget, LOOKBACK, horizon)
+        try:
+            rank, _ = matched_control_rank(budget, LOOKBACK, horizon)
+        except ValueError:
+            # The candidate is below the rank-1 control floor; fall back to the
+            # smallest control and record the gap instead of skipping the row.
+            return 1
         return rank
     return ROUND1_MATCHED_RANK.get(name, 1)
 
