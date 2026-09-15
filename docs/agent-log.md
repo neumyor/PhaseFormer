@@ -21,6 +21,23 @@
 - 文档为每一轮写入目的、setting、最大预算、晋级/停止规则、test-oriented 选择表、
   结果表、效率表和样本级错误分析要求；未修改模型 preset，尚未运行实验。
 
+## 2026-09-15 — 裁决结构化低秩探索计划的执行口径
+
+- 按用户确认，计划改为：validation 只选最低 validation loss checkpoint，
+  test 负责候选/路线排序；允许同一候选在不同 rank/P 配置下分别读取 test；
+  完全匹配的既有 test 结果优先复用；单指标改善即可作为正向信号。
+- 明确 `time_axis_matched_lowrank` 为 `Linear(720->r_match)` 加
+  `Linear(r_match->H)` 的时间点轴因子化 control，head 参数差异目标不超过 5%，
+  matched control 按唯一 `(setting, r_match)` 去重。
+- 明确 `residual_period_len` 只作用于新 residual head，主干 `period_len` 固定；
+ 规定周期分段的零补齐、直接未来映射、输出裁剪、aligned/shifted/random 控制；
+ 取消 Round 1 的高容量 `shape_direct` 代表配置。
+- 明确路线 E 仅条件启动；Round 2 按路线适用消融轴选择，base 不占新增名额；
+ 设定新 setting 只做单个默认超参 calibration，不运行额外 Stage 0 网格。
+- 本轮仍只更新计划，不修改模型代码、不启动服务器训练；后续先实现独立
+  `src/models/structured_residual_heads.py`、补 CPU shape/anchor/参数测试和
+  test 样本导出，再决定是否执行 Round 0/1。
+
 ## 2026-09-10 — 删除全局实验搜索计划并调整管理规范
 
 - 按用户要求删除根目录下 `EXPERIMENT_SEARCH_PLAN.md`。

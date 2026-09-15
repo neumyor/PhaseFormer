@@ -72,13 +72,36 @@ PhaseFormer 主干已经负责周期模板和相位形状。NLinear 分支更可
 
 本计划明确允许 test-oriented 搜索：
 
-- 每个候选训练完成后读取一次 test；
-- test MSE/MAE 可以用于候选排序、路线淘汰和下一轮方向选择；
+- validation 只用于选择每个训练 run 的 checkpoint；test 用于候选排序、
+  路线淘汰和下一轮方向选择；
+- 同一个候选在不同 rank、`P` 或结构配置下可以分别训练并分别读取 test；
+  这属于明确登记的多轮自适应 test search；
 - 所有参与选择的候选必须保留，不得只保留胜者；
 - 每份结果摘要必须写明 `test-set selection`；
 - 探索结果不得称为盲测、无偏泛化估计或最终 benchmark；
 - `PhaseFormer_gold_standard.md` 仍是固定参照，不因探索结果修改；
-- 只改善一个指标时，必须写成“单指标改善”。
+- 只改善一个指标即可记为正向信号，但必须明确写成“单指标改善”，
+  不得把它写成双指标或全面提升。
+
+#### 3.1.1 本轮裁决的执行口径
+
+1. **checkpoint 与路线选择分离**：每个 `(candidate, setting)` 训练后，
+   恢复 validation loss 最低的 checkpoint；只在此 checkpoint 上读取一次
+   test。validation 不决定路线晋级，test 决定路线晋级。
+2. **“一次 test”按配置单元计算**：一次是一个完整的
+   `(candidate, setting, seed, hyperparameter/config)` 单元。不同 rank 或
+   `P` 是不同配置，允许各自读取 test。跨轮次的选择必须登记到同一条
+   test-feedback 轨迹。
+3. **已有结果优先复用**：若已有结果在数据划分、`L/H`、seed、模型语义、
+   训练协议、checkpoint 规则和指标口径上完全匹配，则直接复用原始 test
+   数字，不重复训练或重复读取 test；标记为 `reused_exact`。若任何条件
+   不匹配，必须重训并标记为 `rerun_for_alignment`。
+4. **单候选判据**：定义 `positive_mse = delta_MSE > 0`、
+   `positive_mae = delta_MAE > 0`。任一指标为正即为正向信号；两者都为正
+   记为双指标改善，只有一个为正记为单指标改善，两个都不为正记为无改善。
+5. **路线晋级不强制双指标**：路线可凭 MSE 或 MAE 中任一指标在多个
+   setting 上的正向信号晋级，但必须保留另一指标并报告其退化。若某路线
+   只在一个 setting、只改善一个指标，则只能记为局部信号。
 
 ### 3.2 默认训练协议
 
@@ -93,17 +116,64 @@ PhaseFormer 主干已经负责周期模板和相位形状。NLinear 分支更可
 | split / normalization | 沿用当前仓库协议 |
 | PhaseFormer path | 接收完整 `X` |
 | residual path | 末值锚定的 `X - X_last` |
-| test | 每个候选只读取一次 |
+| test | 每个配置单元只读取一次；跨配置、跨轮次允许自适应选择 |
 
-必须包含两个对照：
+必须包含三个对照：
 
+- `phase_only`：`use_residual_head=False`，完全关闭 residual branch 的纯相位路径；
 - `direct_nlinear`：当前未因子化 NLinear；
 - `pooled_lowrank(q=1/8)`：现有非结构化低秩控制。
 
-所有结构化候选还应尽量加入参数量匹配的 shallow linear control，避免把
+所有结构化候选必须关联参数量匹配的时间点轴低秩 control，避免把
 “参数减少”误判成“坐标系利用”。
 
-### 3.3 探索 setting
+### 3.3 参数、计算量与复用规则
+
+#### 参数匹配 control 的固定定义
+
+文档中的 `matched shallow linear control` 统一改名为
+`time_axis_matched_lowrank`，定义为：
+
+```text
+centered = X - X_last
+delta = Linear(720 -> r_match)
+        followed by Linear(r_match -> H)
+output = delta + X_last
+```
+
+它不做 pooling、周期分段、basis、近期选择或 smoothing；encoder 保持默认
+初始化，decoder 零初始化，与现有 `pooled_lowrank` 的初始化语义一致。
+`r_match` 选择为使 residual head 参数量最接近结构化候选；主分析允许的
+head-parameter 差异为 **不超过 5%**。若无法达到 5%，选择不超过目标预算
+的最近整数 rank，并记录实际差异。
+
+参数口径固定为：
+
+- **主要公平性口径**：residual head 的可训练参数，包括 encoder、decoder、
+  level/shape/basis 参数；
+- **次要效率口径**：total trainable parameters、MACs、peak memory、
+  train/inference time；
+- static gate 计入 total parameters，但不单独用于参数匹配；
+- PhaseFormer 主干不参与 head 参数匹配，因为所有候选共享同一主干；
+- 参数匹配不是要求所有路线拥有完全相同的总参数，而是要求每个结构化
+  候选有一个相近 head budget 的 control。
+
+Round 1 只训练每个 setting 和每个**唯一 `r_match`** 的 control。若多个路线
+得到相同 `r_match`，复用同一个 control，避免为每条路线重复训练相同对照。
+
+#### 现有结果复用清单
+
+优先检查并复用：
+
+- `phase_only`；
+- `direct_nlinear`；
+- `pooled_lowrank(q=1/8)`；
+- 已经在完全相同配置下训练过的 generic 或 matched control。
+
+复用结果仍属于既有 test-exposed 谱系，必须在 `results.csv` 的 `source`
+列写明原始实验目录和 `reused_exact`。复用不能被写成新的独立确认结果。
+
+### 3.4 探索 setting
 
 **Pilot 四个 setting：**
 
@@ -114,16 +184,34 @@ PhaseFormer 主干已经负责周期模板和相位形状。NLinear 分支更可
 | ETTm2-H192 | 深压缩退化明显的反例 |
 | Electricity-H336 | 原始权重谱不低秩，但训练低秩能重组出好解 |
 
-**Expansion 三个 setting：**
+**Expansion 四个 setting：**
 
 | setting | 选择理由 |
 |---|---|
 | Weather-H192 | 周期较弱，检验结构方法的适用边界 |
 | ETTh1-H96 | 第一轮低秩表现不稳定，作为压力测试 |
 | ETTm1-H96 | 与 ETTm2 对比，检验同频率族迁移性 |
+| ETTh2-H336 | 若 pilot 信号主要来自 ETTh2-H720，用于同数据集不同 horizon 的独立检查 |
 
 不按 dataset/horizon 临时发明不同机制。只在单一 setting 有效的方案，
 记录为 setting-specific 信号，不晋级为统一路线。
+
+### 3.5 新 setting 的超参数与协议
+
+对每个 setting，先查找完全匹配的已有 `direct_nlinear`、generic
+low-rank 和 `phase_only` 结果：
+
+1. 有完全匹配结果：复用其 `(gate_init, learning_rate)` 和 test 数字；
+2. 没有完全匹配结果：只新增一个 `direct_nlinear` calibration run，使用
+   当前 preset 默认 `gate_init=0.2`、`learning_rate=1e-3`；
+3. 本轮不为新 setting 额外运行 Stage 0 的 gate/lr 网格，不通过 test 选择
+   新的训练超参数；
+4. 该 setting 的 structured candidate、generic control 和 matched control
+   使用同一组 calibration 超参数；
+5. 若 calibration run 失败或指标异常，先修复协议，不允许只为候选单独调参。
+
+这条规则优先效率和可归因性；未来若路线晋级为确认候选，才另立独立的
+超参数确认计划。
 
 ## 4. 宽度优先搜索树
 
@@ -153,10 +241,23 @@ S[:, 1:K, p] -> future_segments[:, 1:K_y, p]
 W_period = decoder(rank) @ encoder(K)
 ```
 
+结构定义：
+
+- `residual_period_len=P` 只作用于新 residual head；PhaseFormer 主干的
+  `period_len` 固定为当前 setting 的既有值，默认仍为 24；
+- `S` 的输入周期轴为 `K=ceil(L/P)`，对末值锚定后的 centered history
+  右侧用零补齐；在原始尺度上等价于用最后一个值复制补齐；
+- 对每个 phase slot `p` 共享同一个 `K -> K_y` 映射：
+  `Y[k_y,p] = sum_k W[k_y,k] S[k,p]`；
+- 映射是一次性直接预测，不递归、不把前一预测周期作为下一周期输入；
+- 输出先生成 `ceil(H/P) * P` 个点，再按时间顺序截取前 `H` 点；
+- 输出仍为 `delta + last`，并沿用当前归一化/反归一化链路。
+
 首轮配置：
 
-- `P ∈ {24, 96}`；
-- `r_period ∈ {1, 2, 4}`；
+- `P=24, r_period=4` 作为代表配置；
+- 若所有代表配置退化，追加一个预注册的中等容量诊断点
+  `r_period=8`，不进行开放式 rank 搜索；
 - 全部周期，不做近期裁剪；
 - 输出按未来 segment 展开；
 - 保留 NLinear last-value anchor。
@@ -168,11 +269,11 @@ B = E(S),       E: K -> R
 F = D(B),       D: R -> K_y
 ```
 
-将少量历史 basis 映射为未来 segments。首轮配置：
+将少量历史 basis 映射为未来 segments。`P` 只作用于 residual head，
+不改变 PhaseFormer 主干。首轮配置：
 
-- `P ∈ {24, 96}`；
-- `R ∈ {2, 4, 8}`；
-- `lambda_orth ∈ {0, 0.01}`；
+- `P=24, R=4, lambda_orth=0.01` 作为代表配置；
+- 若代表配置退化，追加 `R=8` 作为唯一中等容量诊断点；
 - 不加额外 smoothing；
 - basis 在变量间共享。
 
@@ -192,11 +293,16 @@ level path:  K -> K_y
 shape path:  K × P -> K_y × P
 ```
 
-首轮只比较：
+为避免 `shape_direct` 的约 29k 参数与 level-only 相差两个数量级，
+Round 1 不使用 `shape_direct`。首轮只比较：
 
 1. `level_only`；
-2. `level_lowrank + shape_direct`；
-3. `level_lowrank + shape_lowrank`。
+2. `level_dense + shape_period_lowrank(r_shape=4)`；
+3. `level_lowrank(r_level=1) + shape_period_lowrank(r_shape=4)`。
+
+`shape_period_lowrank` 仍只在周期轴上做 `K -> K_y` 映射，并对 phase slot
+共享；三个条件都继承末值锚点。`shape_direct` 只能作为 Round 2 的额外
+容量对照，不能作为 Round 1 的路线代表配置。
 
 ### 路线 D：近期周期稀疏选择
 
@@ -206,8 +312,10 @@ shape path:  K × P -> K_y × P
 recent_1, recent_3, recent_7, recent_15, all_30
 ```
 
-首轮只测试 hard recent window 和 fixed exponential weighting，不加入可学习
-gate，避免把额外门控参数误认为稀疏结构收益。
+路线 D 的代表配置固定为 `recent_7, P=24, fixed_exp`。首轮只测试 hard
+recent window 和 fixed exponential weighting，不加入可学习 gate，避免把
+额外门控参数误认为稀疏结构收益。若需要错位控制，使用与主路线相同的
+固定分段偏移，不另行改变窗口定义。
 
 ### 路线 E：separable / Kronecker map
 
@@ -217,8 +325,10 @@ gate，避免把额外门控参数误认为稀疏结构收益。
 W ≈ sum_j A_j(period) ⊗ B_j(phase)
 ```
 
-该路线表达能力和实现成本都更高。只在 A--D 没有明确胜者、但结构诊断
-显示周期/相位交互仍重要时启动。首轮仅测试 `J ∈ {1, 2}`。
+该路线表达能力和实现成本都更高。它不是 Round 1 的必跑路线：只有在
+A--D 没有明确胜者、但 Round 1 的 aligned-vs-shifted 结果显示周期/相位
+交互仍可能重要时才启动；如果 A--D 全部无信号且没有该诊断依据，则直接
+停止，不强行跑 E。启动时只测试 `P=24, J=1`，`J=2` 仅作为中等容量诊断点。
 
 ## 5. Round 0：控制、参数预算和实现校验
 
@@ -232,14 +342,14 @@ W ≈ sum_j A_j(period) ⊗ B_j(phase)
 - Pilot 四个 setting；
 - seed 2021；
 - `phase_only`、`direct_nlinear`、generic `q=1/8`；
-- parameter-matched shallow linear control；
+- `time_axis_matched_lowrank` control；已有完全匹配行优先复用；
 - 每个候选训练后读取一次 test；
 - 记录 head params、total params、MACs、训练时间、推理时间和显存峰值。
 
 ### 代填充表：Round 0
 
-| setting | phase_only MSE/MAE | direct MSE/MAE | generic q=1/8 MSE/MAE | matched control MSE/MAE | 最低参数量 | 备注 |
-|---|---|---|---|---|---:|---|
+| setting | phase_only MSE/MAE | direct MSE/MAE | generic q=1/8 MSE/MAE | matched control MSE/MAE | source | 新增训练数 | 备注 |
+|---|---|---|---|---|---|---:|---|
 | ETTh2-H96 | — | — | — | — | — | — |
 | ETTh2-H720 | — | — | — | — | — | — |
 | ETTm2-H192 | — | — | — | — | — | — |
@@ -247,11 +357,12 @@ W ≈ sum_j A_j(period) ⊗ B_j(phase)
 
 ### 退出规则
 
-若控制不能在四个 setting 全部完成，先修复协议或实现，不比较路线。若 generic
-low-rank 在全部 pilot setting 都明显优于 direct，则后续结构候选必须采用
-不高于 generic low-rank 的参数预算。
+若控制不能在四个 setting 全部完成，先修复协议或实现，不比较路线。已有
+完全匹配的控制结果直接复用；没有匹配结果才新增训练。若 generic low-rank
+在全部 pilot setting 都明显优于 direct，结构化候选仍可使用更低预算，但必须
+同时报告与其参数匹配的 control，不能只与 direct 比较。
 
-## 6. Round 1：五条路线宽搜
+## 6. Round 1：四条必跑路线宽搜，E 条件启动
 
 ### 实验目的
 
@@ -272,16 +383,17 @@ low-rank 在全部 pilot setting 都明显优于 direct，则后续结构候选�
 |---|---|
 | A | `P=24, r_period=4` |
 | B | `P=24, R=4, lambda_orth=0.01` |
-| C | `level_lowrank + shape_direct, P=24` |
+| C | `level_dense + shape_period_lowrank(r_shape=4), P=24` |
 | D | `recent_7, P=24, fixed_exp` |
 | E | `J=1, P=24` |
 
-`P=96` 作为第二批结构条件，只有当 `P=24` 路线在至少两个 pilot setting
-有正向 test 信号时才追加。
+E 在 A--D 没有满足条件时才条件启动；因此默认 Round 1 为 A--D 四条路线，
+不是无条件五条路线。`P=96` 作为第二批结构条件，只有当 `P=24` 路线在
+至少两个 pilot setting 有正向 test 信号时才追加。
 
 ### 代填充表：Round 1 路线矩阵
 
-| 路线 | setting | MSE | MAE | delta MSE% vs direct | delta MAE% vs direct | 参数量 | MACs | gate | 双指标改善 | 结论 |
+| 路线 | setting | MSE | MAE | delta MSE% vs direct | delta MAE% vs direct | 参数量 | MACs | gate | signal (MSE/MAE) | 结论 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---|---|
 | A 周期轴低秩 | ETTh2-H96 | — | — | — | — | — | — | — | — | — |
 | A 周期轴低秩 | ETTh2-H720 | — | — | — | — | — | — | — | — | — |
@@ -308,13 +420,17 @@ low-rank 在全部 pilot setting 都明显优于 direct，则后续结构候选�
 
 路线进入 Round 2，满足以下任一条件：
 
-1. 至少 2/4 个 pilot setting 同时改善 test MSE 和 MAE；
-2. 至少 3/4 个 setting 的双指标平均变化不差于 `-0.3%`，且平均参数量
-   至少减少 5 倍；
-3. 在 ETTh2-H720 或 Electricity-H336 上出现清晰双指标改善，同时其余
-   setting 没有超过 `1.5%` 的双指标退化。
+1. 至少 2/4 个 pilot setting 在同一个指标上有正向信号（MSE 或 MAE）；
+2. 至少 3/4 个 setting 在任一指标上有正向信号，且没有 setting 出现
+   MSE 与 MAE 同时超过 `1.5%` 的退化；
+3. 在 ETTh2-H720 或 Electricity-H336 上出现单指标或双指标改善，同时
+   其余 setting 没有两个指标同时超过 `1.5%` 的退化。
 
-未达到条件的路线保留为负结果，不追加该路线搜索。
+路线报告必须分别给出 MSE leaderboard、MAE leaderboard 和双指标交集，
+不能用双指标交集替代单指标结果。
+
+未达到条件的路线保留为负结果，不追加该路线搜索。若 A--D 全部未达到，
+只有在 aligned-vs-shifted 已显示周期/相位交互迹象时才启动 E；否则停止。
 
 ## 7. Round 2：晋级路线结构消融
 
@@ -325,20 +441,32 @@ low-rank 在全部 pilot setting 都明显优于 direct，则后续结构候选�
 
 ### 实验设置
 
-最多保留两条路线。每条路线最多六个消融条件，仍使用四个 pilot setting、
-seed 2021、每个候选读取 test。
+最多保留两条路线。每条路线最多新增六个消融条件，Round 1 的 base 配置
+直接复用、不占用六个名额。仍使用四个 pilot setting、seed 2021、每个
+配置单元读取一次 test。
 
-| 消融轴 | 条件 |
+| 路线 | 可用消融轴 |
 |---|---|
-| 周期长度 | `P=24` vs `P=96` |
-| 历史范围 | all vs recent-7 |
-| rank/basis | low vs medium |
-| 状态结构 | level-only vs level+shape |
-| 正交约束 | off vs on |
-| 周期伪结构控制 | aligned vs shifted/random segmentation |
+| A 周期轴低秩 | `P`、low/medium rank、all/recent-7、aligned/shifted |
+| B segment basis | `P`、low/medium basis、orth off/on、aligned/shifted |
+| C level-shape | level-only vs level+shape、level/shape rank、`P`、aligned/shifted |
+| D recent sparse | recent-1/3/7/15、hard vs fixed-exp、`P`、aligned/shifted |
+| E separable | `J`、`P`、period/phase rank、aligned/shifted |
 
-shifted/random segmentation 是必要控制。若其与 aligned 周期相同，不能
-声称模型利用了真实周期结构。
+每条路线只选择与其机制直接相关的六个条件，不强行套用无关轴。
+`base` 不占六个新增名额。
+
+### 错位/随机分段控制
+
+- `aligned`：从固定数据窗口边界按 `P` 分段；
+- `shifted`：固定偏移 `delta=P/2`，重新确定分段边界，超出历史范围的
+  centered 值用零补齐；
+- `random`：以 seed 2021 在每个 `(route, setting)` 生成一个固定 offset，
+  该 offset 对该 run 的所有 sample 共享，不对每个 sample 重新随机；
+- 不做周期维随机置换；周期顺序置换是另一个时间顺序实验，超出本轮；
+- 对路线 D，窗口仍按错位后的 segment 索引定义，保持稀疏预算不变。
+
+若 shifted/random 与 aligned 几乎相同，不能声称模型利用了真实周期结构。
 
 ### 代填充表：Round 2
 
@@ -354,7 +482,8 @@ shifted/random segmentation 是必要控制。若其与 aligned 周期相同，�
 路线只有同时满足以下条件，才可称为“利用结构化低秩性”：
 
 - 对齐周期优于 shifted/random segmentation；
-- 在相近参数量下优于 generic low-rank，或在相同性能下参数显著更少；
+- 在相近 head 参数量下优于 `time_axis_matched_lowrank`，或在相同性能
+  下参数显著更少；
 - 至少一个结构轴移除后出现 test 退化；
 - gate、level/shape 输出或 basis 权重显示分支确实被使用，而非近似关闭。
 
@@ -370,24 +499,31 @@ shifted/random segmentation 是必要控制。若其与 aligned 周期相同，�
 
 - 固定 Round 2 选出的结构和配置；
 - 不再按 setting 调 rank；
-- ETTh1-H96、ETTm1-H96、Weather-H192；
+- ETTh1-H96、ETTm1-H96、Weather-H192、ETTh2-H336；
 - seed 2021；
 - 同时运行 `direct_nlinear` 和 generic `q=1/8`；
 - 每个候选读取一次 test。
 
+ETTh2-H336 是为 ETTh2-H720 单独设置的 holdout：若路线的 pilot 正向信号
+主要来自 ETTh2-H720，必须保留该行，不能只在同一 setting 上继续调参。
+若路线在 ETTh2-H720 之外已经有至少两个 pilot 正向 setting，可将
+ETTh2-H336 作为补充行，但仍建议执行。
+
 ### 代填充表：Expansion
 
-| setting | direct MSE/MAE | generic q=1/8 MSE/MAE | structured MSE/MAE | delta MSE% vs direct | delta MAE% vs direct | 双指标改善 | 严重退化 |
+| setting | direct MSE/MAE | generic q=1/8 MSE/MAE | structured MSE/MAE | delta MSE% vs direct | delta MAE% vs direct | signal (MSE/MAE) | 严重退化 |
 |---|---|---|---|---:|---:|---|---|
 | ETTh1-H96 | — | — | — | — | — | — | — |
 | ETTm1-H96 | — | — | — | — | — | — | — |
 | Weather-H192 | — | — | — | — | — | — | — |
+| ETTh2-H336 | — | — | — | — | — | — | — |
 
 ### Expansion 决策
 
-- 至少 2/3 setting 双指标改善，且 pilot 无明显失败：列为值得有限确认；
-- 只有 1/3 改善：记录为 dataset-specific，不升级为统一机制；
-- 0/3 改善：停止路线扩展；
+- 至少 2/4 setting 在同一个指标上改善，且 pilot 无明显失败：列为值得
+  有限确认；
+- 只有 1/4 改善：记录为 dataset-specific，不升级为统一机制；
+- 0/4 改善：停止路线扩展；
 - 不因单个 setting 的 test 最优而改变已冻结结构。
 
 ## 9. 可选 Round 4：效率测试
@@ -400,7 +536,78 @@ shifted/random segmentation 是必要控制。若其与 aligned 周期相同，�
 | — | generic q=1/8 | — | — | — | — | — | — | — | — |
 | — | structured winner | — | — | — | — | — | — | — | — |
 
-## 10. Test-oriented 选择记录
+## 10. 工程实现与执行范围
+
+### 10.1 新 head 的代码落点
+
+新结构先放在独立模块：
+
+```text
+src/models/structured_residual_heads.py
+```
+
+由 `PhaseFormer.py` 或现有 head factory 统一注册，保留
+`src/models/phase_adapters.py` 中已有 `shared`、`pooled_lowrank` 等实现不变。
+新取值统一使用 `structured_` 前缀：
+
+| head type | 路线 |
+|---|---|
+| `structured_period_lowrank` | A |
+| `structured_segment_basis` | B |
+| `structured_level_shape` | C |
+| `structured_recent_period` | D |
+| `structured_separable` | E |
+
+每个新 head 都必须满足以下不变量：
+
+- 输入输出张量形状与现有 residual head 一致；
+- centered history 的最后值为零；
+- decoder 或最终 residual projection 零初始化；
+- forward 输出为 `delta + last`；
+- residual head 使用当前同一套 normalization / denormalization 链路；
+- `residual_period_len` 是 residual head 专属字段，不能复用或修改主干
+  `period_len`。
+
+### 10.2 本地校验先于服务器训练
+
+Round 0 之前必须完成：
+
+1. CPU shape test：覆盖 `P=24/96`、`H=96/192/336/720`，检查输出严格为
+   `(batch, H, channels)`；
+2. anchor test：零初始化时输出等于沿 horizon 复制的 `last`；
+3. padding/cropping test：检查 `ceil(L/P)`、`ceil(H/P)`、右侧 centered
+   zero padding 和输出前 `H` 点截取；
+4. parameter-count test：程序输出与手工公式一致，matched control 差异
+   不超过 5% 或明确记录 nearest-lower fallback；
+5. aligned/shifted offset test：同一 seed 下 offset 固定且跨 sample 一致；
+6. `py_compile`、相关 unit tests 和仓库要求的轻量 `pytest`。
+
+只有这些检查通过，才允许进入 A800/服务器训练。
+
+### 10.3 样本级 test 导出
+
+现有 validation top-k bad-case 导出不能直接满足本计划。Round 1 前新增一个
+非侵入式 test 导出/分析脚本，至少支持：
+
+- direct、generic、structured 三者逐样本逐变量的预测与误差；
+- 按 `candidate - direct` 的差值排序；
+- 按 MSE 改善、MAE 改善、双指标退化、周期水平偏移、周期错位和最大分歧
+  六类选择不超过 8 个案例；
+- 保存 level/shape/basis/period-weight 诊断；
+- 不改变训练、checkpoint 或 test metric 计算。
+
+### 10.4 实验批次与原始运行目录
+
+每个 Round 使用一个 audit `experiment_id`。原始 checkpoint、日志和逐 run
+目录写入同批次的 scratch 路径，不进入最终 audit 根目录；最终 audit 根目录
+严格保留第 15 节列出的六类文件和 `figures/`。已有运行目录可作为
+`reused_exact` 来源，不复制 checkpoint。
+
+本次用户裁决的执行范围为：**先冻结并更新计划，不立即修改代码或启动服务器
+训练**。下一步是按 10.1--10.3 实现新 head、完成本地 smoke/unit tests，
+然后再决定是否启动 Round 0/1。
+
+## 11. Test-oriented 选择记录
 
 每轮必须保留完整选择轨迹，不能只保留最终胜者：
 
@@ -410,18 +617,19 @@ shifted/random segmentation 是必要控制。若其与 aligned 周期相同，�
 
 排序优先级为：
 
-1. test MSE 与 MAE 是否同时改善；
-2. 跨 pilot setting 的双指标改善数量；
-3. 相对 generic low-rank 的改善；
-4. 参数量、MACs、训练/推理成本；
-5. bad-case 是否符合预期机制。
+1. MSE leaderboard 与 MAE leaderboard 分别排序；
+2. 跨 pilot setting 的同指标正向信号数量；
+3. 双指标交集作为附加信息，而不是唯一晋级条件；
+4. 相对 `time_axis_matched_lowrank` 和 generic low-rank 的改善；
+5. 参数量、MACs、训练/推理成本；
+6. bad-case 是否符合预期机制。
 
-## 11. 样本级错误分析
+## 12. 样本级错误分析
 
 Round 1 结束后，每条路线最多选择 8 个案例，覆盖：
 
-- structured 双指标显著优于 direct；
-- structured 双指标显著退化；
+- structured MSE 或 MAE 显著优于 direct；
+- structured MSE 与 MAE 同时退化；
 - 周期水平偏移；
 - 周期相位错位；
 - 突变或高频噪声；
@@ -432,29 +640,33 @@ Round 1 结束后，每条路线最多选择 8 个案例，覆盖：
 
 若不能导出样本级预测，路线不得晋级为机制创新；先补充非侵入式预测导出。
 
-## 12. 预算与停止规则
+## 13. 预算与停止规则
 
 ### 默认最大预算
 
 | 阶段 | 最大新增训练 |
 |---|---:|
-| Round 0 | 4 settings x 4 controls = 16 |
-| Round 1 | 5 routes x 4 settings = 20 |
+| Round 0 | 最多 4 settings x 4 controls = 16；完全匹配结果复用后通常更少 |
+| Round 1 | A--D 最多 4 routes x 4 settings = 16 候选，另加唯一 matched controls |
 | Round 2 | 最多 2 routes x 6 ablations x 4 settings = 48 |
-| Round 3 | 1 route x 3 settings + controls = 9 |
+| Round 3 | 1 route x 4 settings + controls = 12 |
 | Round 4 | 仅效率评估，不要求重新训练 |
 
-实际执行采用早停：Round 1 未晋级的路线不进入 Round 2。
+Round 1 的 matched controls 按唯一 `(setting, r_match)` 去重，理论上最多
+再增加 16 个 control，但已有结果复用后通常显著少于该上限。实际执行采用
+早停：Round 1 未晋级的路线不进入 Round 2。Round 0 完成后先记录单 run
+墙钟时间；若 Electricity-H336 的实测成本超过 pilot 中位数的 2 倍，必须
+先暂停并重新确认 Round 1 的服务器资源分配，不自动改变候选或选择规则。
 
 ### 立即停止
 
-- 某路线在四个 pilot setting 全部双指标退化；
+- 某路线在四个 pilot setting 的 MSE 和 MAE 均无正向信号且参数效率也不占优；
 - 结构化路线不优于 generic low-rank，且没有显著效率优势；
 - 所有路线都无法超过 direct，且没有路线在参数匹配下保持性能；
 - 收益只来自一个 setting，Expansion 失败；
 - 继续搜索只剩 dataset/horizon-specific 调参。
 
-## 13. 统一计算口径
+## 14. 统一计算口径
 
 相对 `direct_nlinear`：
 
@@ -473,7 +685,7 @@ delta MAE% = (MAE_golden - MAE_candidate) / MAE_golden * 100
 任何最终摘要必须同时报告 test MSE、test MAE、相对 direct、相对 Golden、
 seed、参数量和 test-set selection 边界。
 
-## 14. 实验产物
+## 15. 实验产物
 
 每个实验批次统一写入 `research_runs/<experiment_id>/`，至少包含：
 
@@ -487,23 +699,24 @@ seed、参数量和 test-set selection 边界。
 
 不得只保存最优 checkpoint 或最终表格。候选淘汰轨迹本身就是结果。
 
-## 15. 推荐执行顺序
+## 16. 推荐执行顺序
 
-1. 完成 Round 0 控制和参数/MACs 统计；
-2. 一次性横向测试 A--E 代表配置；
+1. 完成新 head 的本地 shape/anchor/parameter 单测和 Round 0 控制审计；
+2. 一次性横向测试 A--D 代表配置；只有满足条件时才启动 E；
 3. 只保留最多两条路线；
 4. 做周期长度、近期范围、level/shape、正交约束和错位控制；
-5. 用固定结构扩展到 ETTh1、ETTm1、Weather；
+5. 用固定结构扩展到 ETTh1、ETTm1、Weather、ETTh2-H336；
 6. 只有出现跨 setting 价值，才考虑后续少量多 seed 确认；
 7. 若无路线通过，保留“结构化低秩未被证实”的负结果。
 
-## 16. 结论模板
+## 17. 结论模板
 
 ### 结构路线成立
 
 > 在明确披露 test-set selection 的单 seed 探索中，`<route>` 在 `<x/y>`
-> 个 setting 上相对 `direct_nlinear` 同时改善 test MSE/MAE，并且在参数
-> 匹配 generic low-rank 和错位周期控制下仍保留优势。该结果支持
+> 个 setting 上至少一个 test 指标相对 `direct_nlinear` 改善，并且在参数
+> 匹配 control 和错位周期控制下仍保留该指标优势。若另一个指标没有同步
+> 改善，结果只能称为单指标路线。该结果支持
 > “`<coordinate system>` 能更有效利用 NLinear 的低维性”，但不构成
 > 无偏泛化结论。
 
@@ -514,11 +727,11 @@ seed、参数量和 test-set selection 边界。
 
 ### 路线不成立
 
-> 在本次 test-oriented 单 seed 探索范围内，`<route>` 未相对 direct 或
-> generic low-rank 显示一致优势，停止继续扩展。该结果不足以支持将其用于
-> PhaseFormer。
+> 在本次 test-oriented 单 seed 探索范围内，`<route>` 未在任一指标上相对
+> direct 或 generic low-rank 显示跨 setting 优势，停止继续扩展。该结果不足以
+> 支持将其用于 PhaseFormer。
 
-## 17. 依据文档
+## 18. 依据文档
 
 - `PhaseFormer_pooled_lowrank_nlinear_experiment.md`
 - `PhaseFormer_joint_lowrank_rank_sweep_plan.md`
