@@ -234,10 +234,11 @@ def round1_jobs(args, frozen):
     jobs = []
     horizon = int(frozen["horizon"])
     for name, spec in {**ROUND1_ROUTES, **ROUND1_DIAGNOSTICS}.items():
+        # The diagnostic entries carry ``matched_rank`` for their *control*, not
+        # for the candidate itself: passing it here would silently build the
+        # candidate job as ``time_axis_matched_lowrank``.
         overrides = build_override(
-            spec["head"],
-            spec["overrides"],
-            matched_rank=spec.get("matched_rank"),
+            spec["head"], spec["overrides"]
         ) | {"weak_period_residual_gate_init": frozen["gate_init"]}
         jobs.append((name, spec["head"], overrides))
         if not args.no_matched_controls:

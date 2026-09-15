@@ -94,3 +94,22 @@ def test_matched_control_rank_is_at_most_the_candidate_rank():
     assert (
         jobs["A_period_lowrank"]["residual_period_rank"] >= 1
     )
+
+
+def test_diagnostic_candidate_is_not_built_as_its_control():
+    """The r8 diagnostic must train its own structured head, not the control.
+
+    Regression guard: ``ROUND1_DIAGNOSTICS`` carries ``matched_rank`` for the
+    diagnostic's control, and forwarding it into the candidate override turned
+    the candidate job into ``time_axis_matched_lowrank``.
+    """
+
+    module = _runner()
+    jobs = {name: overrides for name, _, overrides in module.round1_jobs(_Args(), FROZEN)}
+    for name, spec in module.ROUND1_DIAGNOSTICS.items():
+        assert jobs[name]["weak_period_residual_head_type"] == spec["head"], name
+        assert (
+            jobs[f"matched_{name}"]["weak_period_residual_head_type"]
+            == "time_axis_matched_lowrank"
+        ), name
+        assert jobs[f"matched_{name}"]["weak_period_residual_rank"] == spec["matched_rank"]
