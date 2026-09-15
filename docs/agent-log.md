@@ -10,6 +10,17 @@
 > 这些名字**仅作历史记录**，不代表当前存在对应文档；③ D4–D7 与 Progressive-IB 计划在日志中
 > 只按主题描述、未写文件名，检索时请用 `docs/README.md` 的索引小节。
 
+## 2026-09-15 — 建立 NLinear 结构化低秩宽度优先探索计划
+
+- 新增 `docs/PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md`。
+- 按用户授权将下一阶段组织为 test-oriented 的宽度优先搜索：默认 seed 2021，
+  每个候选读取 test，完整保留 test-set selection 轨迹，探索期不默认做多 seed。
+- 搜索顺序为 Round 0 控制/参数校准 -> Round 1 横向比较周期轴低秩、
+  segment basis、level-shape、近期周期稀疏、separable map -> Round 2 结构消融
+  -> Round 3 固定路线扩展到未参与 pilot 的 setting -> 可选效率评估。
+- 文档为每一轮写入目的、setting、最大预算、晋级/停止规则、test-oriented 选择表、
+  结果表、效率表和样本级错误分析要求；未修改模型 preset，尚未运行实验。
+
 ## 2026-09-10 — 删除全局实验搜索计划并调整管理规范
 
 - 按用户要求删除根目录下 `EXPERIMENT_SEARCH_PLAN.md`。
