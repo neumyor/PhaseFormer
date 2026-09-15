@@ -377,6 +377,14 @@ def build_spec(args):
     if args.capacity == "compact":
         apply_compact(base)
     base.update(overrides)
+    # ``build_hyperparams`` is mechanism-specific and hard-sets the residual head
+    # type for the ``weak_residual`` family (``shared``).  Apply the explicit
+    # head-type override once more so a run can select another registered head
+    # without editing the shared preset; every other override key is untouched.
+    if "weak_period_residual_head_type" in overrides:
+        base["weak_period_residual_head_type"] = overrides[
+            "weak_period_residual_head_type"
+        ]
     spec = {
         "protocol_version": (
             "input-components-h134-v1"
