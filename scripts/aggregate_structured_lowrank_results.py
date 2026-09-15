@@ -28,18 +28,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 CANDIDATE_ORDER = (
     "A_period_lowrank",
+    "A_period_lowrank_r8",
     "B_segment_basis",
     "C_level_shape",
     "D_recent_sparse",
     "E_separable",
-    "A_period_lowrank_r8",
-    "matched_time_axis_lowrank",
+    "matched_A_period_lowrank",
+    "matched_A_period_lowrank_r8",
+    "matched_B_segment_basis",
+    "matched_C_level_shape",
+    "matched_D_recent_sparse",
+    "matched_E_separable",
 )
-
-MATCHED_FOR = {
-    "A_period_lowrank": "matched_time_axis_lowrank",
-}
-
 
 def read_csv_rows(path):
     with Path(path).open() as handle:
@@ -61,7 +61,7 @@ def load_metrics(scratch_root):
             continue
         hyper = config["hyperparams"]
         head = hyper.get("weak_period_residual_head_type", "shared")
-        label = classify(head, hyper)
+        label = classify(head, hyper, config["dataset"], int(config["horizon"]))
         setting = f"{config['dataset']}_h{config['horizon']}_seed{config['seed']}"
         record = {
             "setting": setting,
@@ -84,9 +84,21 @@ def load_metrics(scratch_root):
     return table
 
 
-def classify(head, hyper):
+# The matched control is shared per (setting, rank); name it after the candidate
+# whose budget it was matched to so the comparison pairs are explicit.
+MATCHED_NAME_BY_RANK = {
+    1: "matched_A_period_lowrank",
+    2: "matched_A_period_lowrank",
+    3: "matched_A_period_lowrank",
+    4: "matched_A_period_lowrank_r8",
+    8: "matched_A_period_lowrank_r8",
+}
+
+
+def classify(head, hyper, dataset=None, horizon=None):
     if head == "time_axis_matched_lowrank":
-        return "matched_time_axis_lowrank"
+        rank = int(hyper.get("weak_period_residual_rank", 1))
+        return MATCHED_NAME_BY_RANK.get(rank, f"matched_rank{rank}")
     named = {
         ("structured_period_lowrank", "residual_period_rank", 4): "A_period_lowrank",
         ("structured_segment_basis", "residual_basis_count", 4): "B_segment_basis",
@@ -94,11 +106,18 @@ def classify(head, hyper):
         ("structured_recent_period", "residual_recent_taps", 7): "D_recent_sparse",
         ("structured_separable", "residual_separable_components", 1): "E_separable",
     }
+    # Route A's medium-capacity diagnostic point is pre-registered, so it is a
+    # named candidate rather than a stray rank.
+    if head == "structured_period_lowrank":
+        rank = int(hyper.get("residual_period_rank", 4))
+        if rank == 8:
+            return "A_period_lowrank_r8"
+        if rank == 4:
+            return "A_period_lowrank"
+        return f"A_period_lowrank_r{rank}"
     for (head_type, key, value), label in named.items():
         if head == head_type and hyper.get(key) == value:
             return label
-    if head == "structured_period_lowrank":
-        return f"A_period_lowrank_r{hyper.get('residual_period_rank')}"
     return head
 
 
