@@ -32,6 +32,15 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.models.structured_residual_heads import (  # noqa: E402
+    build_structured_residual_head,
+    matched_control_rank,
+)
+
+LOOKBACK = 720
 
 # Round 1 routes.  ``head`` is the PhaseFormer head type; ``overrides`` are the
 # plan's pre-registered representative configuration per route (section 6).
@@ -83,15 +92,28 @@ ROUND1_ROUTES = {
     },
 }
 
-# Round 1 matched-control ranks.  ``matched_control_rank`` selects the largest r
-# whose head stays within the structured budget; route D and E are far cheaper
-# than the rank-1 control band, so their control uses the candidate's own rank.
+# Round 1 matched-control ranks, measured with
+# ``scripts/report_structured_lowrank_params.py``.  The time-axis control costs
+# ``r * (L + H + 1) + H`` head parameters, so its rank-1 floor is 913 parameters
+# at H96 and 2161 at H720.  Every P=24 structured route except A sits below that
+# floor, so for those the control is fixed at rank 1 and the measured gap is
+# recorded instead of being forced into the 5% band (plan section 3.3 allows the
+# nearest reachable rank with the difference documented).  Route A is matched
+# properly because its ``L -> rank -> K_y * P`` map is comparable in size.
 ROUND1_MATCHED_RANK = {
-    "A_period_lowrank": 4,
-    "B_segment_basis": 4,
-    "C_level_shape": 4,
-    "D_recent_sparse": 2,
+    "A_period_lowrank": 1,   # A_H96 = 604 params; rank-1 control = 913 (-51%)
+    "B_segment_basis": 1,    # rank-1 floor already exceeds B by ~6x
+    "C_level_shape": 1,
+    "D_recent_sparse": 1,
     "E_separable": 1,
+}
+
+# Route A is the only route whose budget is a meaningful parameter-matching
+# target; ``matched_rank_for_budget`` recomputes the control rank from the
+# candidate's measured head budget per setting instead of a fixed table entry.
+AUTOMATCHED_ROUTES = {"A_period_lowrank": "structured_period_lowrank"}
+AUTOMATCHED_OVERRIDES = {
+    "A_period_lowrank": {"residual_period_len": 24, "residual_period_rank": 4}
 }
 
 # Route A's pre-registered medium-capacity diagnostic point (plan section 4).
@@ -168,23 +190,50 @@ def round0_jobs(args, frozen):
     return []
 
 
+def _candidate_head_params(head_type, horizon, overrides):
+    class _Config:
+        def __init__(self, values):
+            for key, value in values.items():
+                setattr(self, key, value)
+
+    head = build_structured_residual_head(
+        head_type, LOOKBACK, horizon, _Config(dict(overrides)), seed=2021, key=head_type
+    )
+    return head.parameter_count()
+
+
+def _matched_rank(name, head_type, horizon, overrides):
+    """Rank of the time-axis control used for this candidate.
+
+    Route A is matched from its measured budget; the other routes are already
+    below the rank-1 control floor, so the control is pinned at rank 1 and the
+    measured gap is reported rather than hidden.
+    """
+
+    if name in AUTOMATCHED_ROUTES:
+        budget = _candidate_head_params(head_type, horizon, AUTOMATCHED_OVERRIDES[name])
+        rank, _ = matched_control_rank(budget, LOOKBACK, horizon)
+        return rank
+    return ROUND1_MATCHED_RANK.get(name, 1)
+
+
 def round1_jobs(args, frozen):
     jobs = []
+    horizon = int(frozen["horizon"])
     for name, spec in {**ROUND1_ROUTES, **ROUND1_DIAGNOSTICS}.items():
         overrides = dict(spec["overrides"])
         overrides["weak_period_residual_gate_init"] = frozen["gate_init"]
         jobs.append((name, spec["head"], overrides))
         if not args.no_matched_controls:
-            rank = spec.get("matched_rank", ROUND1_MATCHED_RANK.get(name))
+            rank = spec.get(
+                "matched_rank",
+                _matched_rank(name, spec["head"], horizon, overrides),
+            )
             jobs.append(
                 (
                     f"matched_{name}",
                     spec["head"],
-                    build_override(
-                        spec["head"],
-                        {},
-                        matched_rank=rank,
-                    )
+                    build_override(spec["head"], {}, matched_rank=rank)
                     | {"weak_period_residual_gate_init": frozen["gate_init"]},
                 )
             )

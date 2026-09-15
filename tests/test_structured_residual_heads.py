@@ -334,9 +334,10 @@ def test_matched_control_parameter_budget():
 
 
 def test_matched_control_rank_helpers():
-    # (720 + 96) * r <= 3264  ->  r = 4
+    # r * (720 + 96 + 1) + 96 <= 3264  ->  r = 3
     rank, actual = matched_control_rank(3264, 720, 96)
-    assert rank == 4 and actual == 4 * 816
+    assert rank == 3 and actual == 3 * (720 + 96 + 1) + 96
+    assert TimeAxisMatchedLowRankHead(720, 96, rank=rank).parameter_count() == actual
     # Route E's budget is far below a rank-1 control, which is reported as a
     # no-match instead of a silent larger control; see the plan's matched-control
     # accounting for the recorded fallback.

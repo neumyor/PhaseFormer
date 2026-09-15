@@ -700,20 +700,22 @@ def matched_control_rank(
 ) -> tuple[int, int]:
     """Nearest integer ``r_match`` for the matched time-axis control.
 
-    Returns ``(rank, parameter_count)``.  The nearest rank is chosen without
+    The control is ``Linear(seq_len -> r)`` followed by ``Linear(r -> pred_len)``,
+    so its head budget including biases is ``r * (seq_len + pred_len + 1) +
+    pred_len``.  Returns ``(rank, parameter_count)``.  The rank is chosen without
     exceeding ``target_head_params``, so the control never receives a larger
     budget than the structured candidate it is matched against.
     """
 
-    if target_head_params < seq_len + pred_len:
+    if target_head_params < seq_len + 2 * pred_len + 1:
         raise ValueError("target budget is too small for a rank-1 control")
     best = 1
     for rank in range(1, min(seq_len, pred_len) + 1):
-        if rank * (seq_len + pred_len) <= target_head_params:
+        if rank * (seq_len + pred_len + 1) + pred_len <= target_head_params:
             best = rank
         else:
             break
-    return best, best * (seq_len + pred_len)
+    return best, best * (seq_len + pred_len + 1) + pred_len
 
 
 STRUCTURED_HEAD_BUILDERS = {
