@@ -456,6 +456,9 @@ E 在 A--D 没有满足条件时才条件启动；因此默认 Round 1 为 A--D 
 未达到条件的路线保留为负结果，不追加该路线搜索。若 A--D 全部未达到，
 只有在 aligned-vs-shifted 已显示周期/相位交互迹象时才启动 E；否则停止。
 
+> ⚠️ **以下 §6.1 与 §6.2 由第一批（作废）Round 1 生成，数字不得引用**，
+> 保留仅为记录当时被推翻的判定过程。修正后重跑的结论将覆盖本节。
+
 ### 6.1 结果与判定（2026-09-15 完成，test-set selection）
 
 > 本节全部数字来自 Round 1 的 48 次训练（4 setting × 6 候选 × 2 控制）与
@@ -730,7 +733,11 @@ Round 0 之前必须完成：
 4. parameter-count test：程序输出与手工公式一致，matched control 差异
    不超过 5% 或明确记录 nearest-lower fallback；
 5. aligned/shifted offset test：同一 seed 下 offset 固定且跨 sample 一致；
-6. `py_compile`、相关 unit tests 和仓库要求的轻量 `pytest`。
+6. **配置透传校验**：对每个新 head / head 参数组合，实例化**真实模型**
+   （走 `make_exp_args` + `PhaseFormerPresetConfig` + `PhaseFormer`），断言模型里
+   真实生效的结构与 override 一致。仅检查 `config.json` 或 run 名称**不足**——
+   第一批 Round 1 正是因为缺这一步而整批作废（见 §6.3）；
+7. `py_compile`、相关 unit tests 和仓库要求的轻量 `pytest`。
 
 只有这些检查通过，才允许进入 A800/服务器训练。
 
@@ -773,6 +780,10 @@ Round 0 之前必须完成：
 
 每轮必须保留完整选择轨迹，不能只保留最终胜者：
 
+> ⚠️ **下表来自第一批（作废）Round 1**：其 32 行对应的是全部按默认值建模的
+> 坍缩架构，仅作「当时确实执行过这些 run」的记录，不得作为候选比较结论。
+> 修正后重跑的轨迹将替换本节。
+>
 > Round 0 与 Round 1 的完整轨迹见下表：4 个 pilot setting × 8 个候选 = 32 行全部保留（含被淘汰者）。
 > `baseline` 列同时列出两个对照：policy A = 与 `direct_nlinear` 比较，policy B = 与 generic `q=1/8` 比较；
 > 表内的 `delta MSE% vs direct` 为正表示候选更好。Round 2/3/4 未执行，故无后续行。
