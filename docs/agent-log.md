@@ -2260,7 +2260,7 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 环境：服务器 8×A800-80GB，conda env `time`；纯 CPU 任务，需 `OMP_NUM_THREADS=2`
   （默认线程数下 720×720 小矩阵 BLAS 争用会把运行时放大数倍，首次运行已因此重启）。
 
-## 2026-09-14 — 主导预测方向的精确刻画与早期表述修正
+## 2026-09-15 — 主导预测方向的精确刻画与早期表述修正
 
 - 用户追问"为什么可以认为该方向是低频的'近期水平+局部趋势'方向且是主导预测方向"。
   为此新增两个训练无关脚本并补齐两项此前缺失的测量：
@@ -2285,7 +2285,7 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 产物：`research_runs/lowrank_data_property_v2/{leading_direction.csv,
   trained_vs_optimal_alignment.csv}`（`research_runs/` 已 gitignore）。
 
-## 2026-09-14 — 论文用强结论与图表方案写入报告（§4）
+## 2026-09-15 — 论文用强结论与图表方案写入报告（§4）
 
 - 应用户（写论文）要求，把结论与实验证据整理成**论文投放版本**，写入记录文档
   `docs/PhaseFormer_rank_capacity_and_data_property_report.md` 的新增 §4（原 §4/§5 顺延为
