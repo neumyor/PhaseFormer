@@ -68,8 +68,38 @@ FROZEN = {
 }
 
 
-def find_run(root: Path, dataset, horizon, seed, arm):
-    """Locate the run directory for one cell by reading each config.json."""
+def load_reuse_index(root: Path):
+    """Map reused (dataset, horizon, seed, arm) cells to their run directories.
+
+    The audited ``direct_nlinear`` control lives in the experiment root that
+    produced it; its artifacts are never copied into this experiment.
+    """
+    index = {}
+    audit_path = root / "reuse_audit.json"
+    if not audit_path.exists():
+        return index
+    payload = json.loads(audit_path.read_text())
+    for entry in payload.get("runs", []):
+        run_dir = ROOT / entry["run_dir"]
+        if (run_dir / "metrics.csv").exists():
+            index[
+                (
+                    entry["dataset"],
+                    int(entry["horizon"]),
+                    int(entry["seed"]),
+                    "direct_nlinear",
+                )
+            ] = run_dir
+    return index
+
+
+def find_run(root: Path, dataset, horizon, seed, arm, reuse_index=None):
+    """Locate the run directory for one cell."""
+    if reuse_index and (dataset, horizon, seed, arm) in reuse_index:
+        run_dir = reuse_index[(dataset, horizon, seed, arm)]
+        config_path = run_dir / "config.json"
+        config = json.loads(config_path.read_text()) if config_path.exists() else {}
+        return run_dir, config
     for config_path in sorted((root / "runs").glob("*/config.json")):
         config = json.loads(config_path.read_text())
         hyper = config.get("hyperparams", {})
@@ -197,11 +227,11 @@ def resolve_checkpoint(record, run_dir: Path):
     return None
 
 
-def read_one(cell, root: Path, projector_dir: Path) -> dict:
+def read_one(cell, root: Path, projector_dir: Path, reuse_index=None) -> dict:
     from src.dataset.data_factory import data_provider
 
     dataset, horizon, seed, arm = cell
-    run_dir, config = find_run(root, dataset, horizon, seed, arm)
+    run_dir, config = find_run(root, dataset, horizon, seed, arm, reuse_index)
     if run_dir is None:
         return {"cell": f"{dataset}-{horizon}-s{seed}-{arm}", "status": "missing_run"}
     metrics_path = run_dir / "metrics.csv"
@@ -322,12 +352,16 @@ def main() -> None:
             for arm in ARMS
         ]
 
+    reuse_index = load_reuse_index(root)
     if args.gpus:
         results = parallel_read(cells, args, root, projector_dir)
+        for cell in cells:
+            if (cell[0], cell[1], cell[2], cell[3]) in reuse_index:
+                results.append(read_one(cell, root, projector_dir, reuse_index))
     else:
         results = []
         for cell in cells:
-            payload = read_one(cell, root, projector_dir)
+            payload = read_one(cell, root, projector_dir, reuse_index)
             results.append(payload)
             print("TOPTEST " + json.dumps(payload, sort_keys=True), flush=True)
 
