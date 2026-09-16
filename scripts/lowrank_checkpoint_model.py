@@ -192,7 +192,7 @@ def intervention_forward(intervention, audit_math=None):
             # can be compared with ``decoder(encoder(z))``.
             map64 = torch.nn.functional.linear(
                 pooled64, decoder64 @ self.encoder.weight.double()
-            ) + (decoder64 @ self.encoder.bias.double())[None, None, :]
+            ) + (decoder64 * self.encoder.bias.double()).sum(dim=1)[None, None, :]
             self.last_audit = {
                 "pooled64": pooled64,
                 "hidden64": hidden64,
