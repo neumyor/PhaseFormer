@@ -262,6 +262,9 @@ def main() -> None:
         encoder_weight = (
             state["weak_period_residual.encoder.weight"].detach().double().cpu().numpy()
         )
+        encoder_bias = (
+            state["weak_period_residual.encoder.bias"].detach().double().cpu().numpy()
+        )
         decoder_weight = (
             state["weak_period_residual.decoder.weight"].detach().double().cpu().numpy()
         )
