@@ -698,8 +698,8 @@ def main() -> None:
                 flush=True,
             )
 
-        del (features, cached, hidden, residual_abs, residual_norm, sigma, mu, gate,
-             phase_abs, target, correction_reference, last_abs, x_last_norm,
+        del (features, cached, hidden, residual_abs, residual_norm, sigma, mu,
+             gate, phase_abs, target, correction_reference, last_abs,
              semantic_full, semantic_small, pca, conditional, independent,
              random_metrics, arms)
         models.pop(group_key, None)
