@@ -119,6 +119,12 @@ def latent_input_pca_basis(hidden: np.ndarray, rank: int) -> np.ndarray:
 
 
 
+def read_cached_features(path: Path) -> dict:
+    """Load a feature cache written by an earlier pass."""
+    payload = np.load(path)
+    return {key: payload[key] for key in payload.files}
+
+
 def affine_bias(encoder_bias: np.ndarray, decoder_weight: np.ndarray, decoder_bias: np.ndarray) -> np.ndarray:
     """Constant term of the branch's effective affine map.
 
@@ -250,6 +256,189 @@ def random_drop_band(
     return mse, mae
 
 
+def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
+                  last_abs, encoder_weight, decoder_weight, decoder_bias,
+                  encoder_bias, setting, dataset, horizon, seed, cell, rank,
+                  selected_val_mse, selected_val_mae, repo_root, output_dir,
+                  args, intervention_rows) -> dict:
+    """Evaluate every intervention arm of one checkpoint from cached features.
+
+    Returns the invariant record (whether the untouched arm reproduces the
+    metric the training run recorded).  Kept separate from ``main`` so that a
+    cached cell can be re-evaluated without loading a model.
+    """
+    gate = cached["gate"]
+    phase_abs = cached["phase"]
+    target = cached["target"]
+    gate = cached["gate"]
+    phase_abs = cached["phase"]
+    target = cached["target"]
+    # The branch correction is ``decoder(h) + bias``, i.e. everything the
+    # low-rank branch writes except its persistence anchor.
+    correction_reference = (
+        np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+        + affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
+    ) * sigma
+
+    baseline = arm_metrics(
+        hidden, decoder_weight, decoder_bias, encoder_bias, gate, phase_abs,
+        target, correction_reference, last_abs, sigma, None, "identity",
+    )
+    # The untouched arm must reproduce the validation metric the training
+    # run recorded for this checkpoint.  The two numbers are computed from
+    # the same windows and the same scaling, so any material gap means the
+    # cached features, the batching or the masks are not what they claim.
+    recorded_val_mse = to_float_or(selected_val_mse, float("nan"))
+    original_gap = abs(baseline["fused_mse"] - recorded_val_mse)
+    original_reproduces = bool(
+        recorded_val_mse == recorded_val_mse  # not NaN
+        and original_gap <= max(1e-3, 1e-3 * abs(recorded_val_mse))
+    )
+    print(
+        f"  [invariant] {setting} seed={seed} {cell}: untouched fused MSE "
+        f"{baseline['fused_mse']:.6f} vs run val_mse {recorded_val_mse:.6f} "
+        f"(gap {original_gap:.2e}, samples {cached['gate'].shape[0]}, "
+        f"gate {float(cached['gate'].mean()):.4f})",
+        flush=True,
+    )
+    rank_dim = int(hidden.shape[-1])
+    rng = np.random.default_rng(RANDOM_SEED)
+    # Every mask lives in the head's latent space, because that is the space
+    # the interventions act on.  A z-space subspace is therefore converted to
+    # the latent span of its image under the encoder.
+    z_semantic = semantic_basis(dataset, rank_dim)
+    semantic_full = latent_image(z_semantic, encoder_weight, rank_dim)
+    semantic_small = np.ascontiguousarray(semantic_full[:, : min(args.semantic_rank, semantic_full.shape[1])])
+    pca = latent_input_pca_basis(hidden, rank_dim)
+    conditional = None
+    independent = None
+    subspace_path = (
+        repo_root / args.output_dir / "subspaces"
+        / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
+    )
+    if subspace_path.is_file():
+        payload = np.load(subspace_path)
+        if "conditional_basis" in payload.files:
+            conditional = latent_image(
+                payload["conditional_basis"].astype(np.float64),
+                encoder_weight,
+                rank_dim,
+            )
+        if "independent_basis" in payload.files:
+            independent = latent_image(
+                payload["independent_basis"].astype(np.float64),
+                encoder_weight,
+                rank_dim,
+            )
+
+    requested = {item for item in args.arms_limit.split(",") if item}
+    arms: list[tuple[str, np.ndarray | None, str]] = [
+        ("Original", None, "identity"),
+        ("Semantic-only", semantic_full, "only"),
+        ("Semantic-drop", semantic_full, "drop"),
+        ("Semantic8-only", semantic_small, "only"),
+        ("Semantic8-drop", semantic_small, "drop"),
+        ("Bias-off", None, "bias"),
+    ]
+    if pca is not None:
+        arms.append(("PCA-only", pca, "only"))
+        arms.append(("PCA-drop", pca, "drop"))
+    if conditional is not None:
+        arms.append(("Conditional-RRR-only", conditional, "only"))
+    if independent is not None:
+        arms.append(("Independent-RRR-only", independent, "only"))
+    if requested:
+        arms = [arm for arm in arms if arm[0] in requested]
+
+    random_mse, random_mae = random_drop_band(
+        hidden, decoder_weight, decoder_bias, encoder_bias, sigma, last_abs,
+        gate, phase_abs, target, rank_dim, args.random_repeats, rng,
+    )
+    random_count = int(args.random_repeats)
+
+    low_mse, high_mse = np.percentile(random_mse, RANDOM_QUANTILES)
+    low_mae, high_mae = np.percentile(random_mae, RANDOM_QUANTILES)
+
+    def summarise_against_random(arm_name: str, metrics: dict) -> dict:
+        """Rank one arm against the 100 same-dimension random subspaces.
+
+        The random controls are matched on dimension only, exactly as the
+        plan prescribes, so they are a calibration band for "how much does
+        removing an arbitrary eight-dimensional subspace hurt", not a
+        variance-matched control.
+        """
+        is_sensitivity_arm = arm_name.endswith("-drop")
+        return {
+            "random_mean_fused_mse": float(random_mse.mean()),
+            "random_mean_fused_mae": float(random_mae.mean()),
+            "random_low_fused_mse": float(low_mse),
+            "random_high_fused_mse": float(high_mse),
+            "random_low_fused_mae": float(low_mae),
+            "random_high_fused_mae": float(high_mae),
+            "random_fused_mse_percentile_of_arm": float(
+                100.0 * np.mean(random_mse <= metrics["fused_mse"])
+            ),
+            "random_fused_mae_percentile_of_arm": float(
+                100.0 * np.mean(random_mae <= metrics["fused_mae"])
+            ),
+            "worse_than_random_95pct_fused_mse": bool(
+                is_sensitivity_arm and metrics["fused_mse"] > high_mse
+            ),
+            "worse_than_random_95pct_fused_mae": bool(
+                is_sensitivity_arm and metrics["fused_mae"] > high_mae
+            ),
+            "reference_matches_random_band": bool(
+                is_sensitivity_arm
+                and low_mse <= metrics["fused_mse"] <= high_mse
+                and low_mae <= metrics["fused_mae"] <= high_mae
+            ),
+        }
+
+    for arm_name, basis, mode in arms:
+        metrics = arm_metrics(
+            hidden, decoder_weight, decoder_bias, encoder_bias, gate,
+            phase_abs, target, correction_reference, last_abs, sigma, basis,
+            mode,
+        )
+        record = {
+            "setting": setting,
+            "dataset": dataset,
+            "horizon": horizon,
+            "seed": seed,
+            "cell": cell,
+            "rank": rank,
+            "arm": arm_name,
+            "subspace_dimension": int(basis.shape[1]) if basis is not None else 0,
+            "random_repeats": int(random_count),
+            "baseline_branch_mse": baseline["branch_mse"],
+            "baseline_branch_mae": baseline["branch_mae"],
+            "baseline_fused_mse": baseline["fused_mse"],
+            "baseline_fused_mae": baseline["fused_mae"],
+            "delta_fused_mse_vs_checkpoint": metrics["fused_mse"] - baseline["fused_mse"],
+            "delta_fused_mae_vs_checkpoint": metrics["fused_mae"] - baseline["fused_mae"],
+            "untouched_arm_reproduces_run_metric": original_reproduces,
+            "untouched_arm_gap_vs_run_metric": original_gap,
+        }
+        record.update(metrics)
+        record.update(summarise_against_random(arm_name, metrics))
+        intervention_rows.append(record)
+        print(
+            f"  arm {arm_name:<22} branch={metrics['branch_mse']:.6f} "
+            f"fused={metrics['fused_mse']:.6f} R2={metrics['correction_reconstruction_r2']:.4f}",
+            flush=True,
+        )
+
+    del (features, cached, hidden, residual_abs, residual_norm, sigma, mu,
+         gate, phase_abs, target, correction_reference, last_abs,
+         semantic_full, semantic_small, pca, conditional, independent,
+         arms)
+
+    return {
+        "untouched_arm_reproduces_run_metric": original_reproduces,
+        "untouched_arm_gap_vs_run_metric": original_gap,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", default=".")
@@ -269,6 +458,13 @@ def main() -> None:
         help="comma separated arm names to evaluate (default: all)",
     )
     parser.add_argument("--audit-only", action="store_true")
+    parser.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="re-evaluate the arms of already-cached cells without any GPU work",
+    )
+    parser.add_argument("--reuse-cache", action="store_true",
+                        help="skip the sweep for cells that already have a cache")
     parser.add_argument("--debug-checks", action="store_true")
     parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument("--limit", type=int, default=0)
@@ -602,10 +798,58 @@ def main() -> None:
             features_dir
             / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
         )
+        if (args.cache_only or args.reuse_cache) and cache_path.is_file():
+            # Arms are closed-form functions of the cache, so a cached cell can
+            # be recomputed without loading a model or touching the GPU -- this
+            # is how the Conditional-RRR and Independent-RRR arms are filled in
+            # after Stage 3 has written the subspaces.
+            payload = read_cached_features(cache_path)
+            cached_only = {
+                key: payload[key].astype(np.float64)
+                for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
+            }
+            encoder_weight = payload["encoder_weight"].astype(np.float64)
+            encoder_bias = payload["encoder_bias"].astype(np.float64)
+            decoder_weight = payload["decoder_weight"].astype(np.float64)
+            decoder_bias = payload["decoder_bias"].astype(np.float64)
+            hidden_only = cached_only["hidden"]
+            sigma_only = cached_only["sigma"]
+            mu_only = cached_only["mu"]
+            head_map_only = np.einsum("ncr,hr->nhc", hidden_only, decoder_weight)
+            bias_only = affine_bias(
+                encoder_bias, decoder_weight, decoder_bias
+            )[None, :, None]
+            # ``x_last_norm`` is the head's own persistence anchor, cached
+            # directly so this path reproduces the original one exactly.
+            x_last_only = payload["x_last_norm"].astype(np.float64)
+            residual_norm_only = head_map_only + bias_only + x_last_only
+            residual_abs_only = residual_norm_only * sigma_only + mu_only
+            last_abs_only = x_last_only * sigma_only + mu_only
+            invariant = evaluate_arms(
+                cached_only, hidden_only, sigma_only, mu_only, residual_abs_only,
+                residual_norm_only, last_abs_only, encoder_weight,
+                decoder_weight, decoder_bias, encoder_bias, setting, dataset,
+                horizon, seed, cell, int(row["rank"]), row["selected_val_mse"],
+                row["selected_val_mae"], repo_root, output_dir, args,
+                intervention_rows,
+            )
+            print(
+                f"[cache] {setting} seed={seed} {cell}: arms recomputed "
+                f"(invariant {invariant['untouched_arm_reproduces_run_metric']})",
+                flush=True,
+            )
+            del payload, cached_only, hidden_only, sigma_only, mu_only
+            del residual_abs_only, residual_norm_only, last_abs_only, x_last_only
+            del head_map_only, bias_only
+            continue
         cached = {
             key: features[key].astype(np.float64)
             for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
         }
+        # ``x_last_norm`` is the branch's persistence anchor before it is scaled
+        # by the RevIN scale; caching it lets the arms be recomputed later with
+        # no model and no approximation.
+        cached["x_last_norm"] = x_last_norm
         # The cache is what lets the intervention arms be recomputed without a
         # second GPU sweep over the frozen checkpoints.
         np.savez_compressed(
@@ -621,168 +865,13 @@ def main() -> None:
             models.pop(group_key, None)
             continue
 
-        gate = cached["gate"]
-        phase_abs = cached["phase"]
-        target = cached["target"]
-        # The branch correction is ``decoder(h) + bias``, i.e. everything the
-        # low-rank branch writes except its persistence anchor.
-        correction_reference = (
-            np.einsum("ncr,hr->nhc", hidden, decoder_weight)
-            + affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
-        ) * sigma
-
-        baseline = arm_metrics(
-            hidden, decoder_weight, decoder_bias, encoder_bias, gate, phase_abs,
-            target, correction_reference, last_abs, sigma, None, "identity",
+        invariant = evaluate_arms(
+            cached, hidden, sigma, mu, residual_abs, residual_norm, last_abs,
+            encoder_weight, decoder_weight, decoder_bias, encoder_bias, setting,
+            dataset, horizon, seed, cell, int(row["rank"]),
+            row["selected_val_mse"], row["selected_val_mae"], repo_root,
+            output_dir, args, intervention_rows,
         )
-        # The untouched arm must reproduce the validation metric the training
-        # run recorded for this checkpoint.  The two numbers are computed from
-        # the same windows and the same scaling, so any material gap means the
-        # cached features, the batching or the masks are not what they claim.
-        recorded_val_mse = to_float_or(row["selected_val_mse"], float("nan"))
-        original_gap = abs(baseline["fused_mse"] - recorded_val_mse)
-        original_reproduces = bool(
-            recorded_val_mse == recorded_val_mse  # not NaN
-            and original_gap <= max(1e-3, 1e-3 * abs(recorded_val_mse))
-        )
-        print(
-            f"  [invariant] {setting} seed={seed} {cell}: untouched fused MSE "
-            f"{baseline['fused_mse']:.6f} vs run val_mse {recorded_val_mse:.6f} "
-            f"(gap {original_gap:.2e}, samples {features['z'].shape[0]}, "
-            f"gate {float(features['gate'].mean()):.4f})",
-            flush=True,
-        )
-        rank_dim = int(hidden.shape[-1])
-        rng = np.random.default_rng(RANDOM_SEED)
-        # Every mask lives in the head's latent space, because that is the space
-        # the interventions act on.  A z-space subspace is therefore converted to
-        # the latent span of its image under the encoder.
-        z_semantic = semantic_basis(dataset, rank_dim)
-        semantic_full = latent_image(z_semantic, encoder_weight, rank_dim)
-        semantic_small = np.ascontiguousarray(semantic_full[:, : min(args.semantic_rank, semantic_full.shape[1])])
-        pca = latent_input_pca_basis(hidden, rank_dim)
-        conditional = None
-        independent = None
-        subspace_path = (
-            repo_root / args.output_dir / "subspaces"
-            / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
-        )
-        if subspace_path.is_file():
-            payload = np.load(subspace_path)
-            if "conditional_basis" in payload.files:
-                conditional = latent_image(
-                    payload["conditional_basis"].astype(np.float64),
-                    encoder_weight,
-                    rank_dim,
-                )
-            if "independent_basis" in payload.files:
-                independent = latent_image(
-                    payload["independent_basis"].astype(np.float64),
-                    encoder_weight,
-                    rank_dim,
-                )
-
-        requested = {item for item in args.arms_limit.split(",") if item}
-        arms: list[tuple[str, np.ndarray | None, str]] = [
-            ("Original", None, "identity"),
-            ("Semantic-only", semantic_full, "only"),
-            ("Semantic-drop", semantic_full, "drop"),
-            ("Semantic8-only", semantic_small, "only"),
-            ("Semantic8-drop", semantic_small, "drop"),
-            ("Bias-off", None, "bias"),
-        ]
-        if pca is not None:
-            arms.append(("PCA-only", pca, "only"))
-            arms.append(("PCA-drop", pca, "drop"))
-        if conditional is not None:
-            arms.append(("Conditional-RRR-only", conditional, "only"))
-        if independent is not None:
-            arms.append(("Independent-RRR-only", independent, "only"))
-        if requested:
-            arms = [arm for arm in arms if arm[0] in requested]
-
-        random_mse, random_mae = random_drop_band(
-            hidden, decoder_weight, decoder_bias, encoder_bias, sigma, last_abs,
-            gate, phase_abs, target, rank_dim, args.random_repeats, rng,
-        )
-        random_count = int(args.random_repeats)
-
-        low_mse, high_mse = np.percentile(random_mse, RANDOM_QUANTILES)
-        low_mae, high_mae = np.percentile(random_mae, RANDOM_QUANTILES)
-
-        def summarise_against_random(arm_name: str, metrics: dict) -> dict:
-            """Rank one arm against the 100 same-dimension random subspaces.
-
-            The random controls are matched on dimension only, exactly as the
-            plan prescribes, so they are a calibration band for "how much does
-            removing an arbitrary eight-dimensional subspace hurt", not a
-            variance-matched control.
-            """
-            is_sensitivity_arm = arm_name.endswith("-drop")
-            return {
-                "random_mean_fused_mse": float(random_mse.mean()),
-                "random_mean_fused_mae": float(random_mae.mean()),
-                "random_low_fused_mse": float(low_mse),
-                "random_high_fused_mse": float(high_mse),
-                "random_low_fused_mae": float(low_mae),
-                "random_high_fused_mae": float(high_mae),
-                "random_fused_mse_percentile_of_arm": float(
-                    100.0 * np.mean(random_mse <= metrics["fused_mse"])
-                ),
-                "random_fused_mae_percentile_of_arm": float(
-                    100.0 * np.mean(random_mae <= metrics["fused_mae"])
-                ),
-                "worse_than_random_95pct_fused_mse": bool(
-                    is_sensitivity_arm and metrics["fused_mse"] > high_mse
-                ),
-                "worse_than_random_95pct_fused_mae": bool(
-                    is_sensitivity_arm and metrics["fused_mae"] > high_mae
-                ),
-                "reference_matches_random_band": bool(
-                    is_sensitivity_arm
-                    and low_mse <= metrics["fused_mse"] <= high_mse
-                    and low_mae <= metrics["fused_mae"] <= high_mae
-                ),
-            }
-
-        for arm_name, basis, mode in arms:
-            metrics = arm_metrics(
-                hidden, decoder_weight, decoder_bias, encoder_bias, gate,
-                phase_abs, target, correction_reference, last_abs, sigma, basis,
-                mode,
-            )
-            record = {
-                "setting": setting,
-                "dataset": dataset,
-                "horizon": horizon,
-                "seed": seed,
-                "cell": cell,
-                "rank": row["rank"],
-                "arm": arm_name,
-                "subspace_dimension": int(basis.shape[1]) if basis is not None else 0,
-                "random_repeats": int(random_count),
-                "baseline_branch_mse": baseline["branch_mse"],
-                "baseline_branch_mae": baseline["branch_mae"],
-                "baseline_fused_mse": baseline["fused_mse"],
-                "baseline_fused_mae": baseline["fused_mae"],
-                "delta_fused_mse_vs_checkpoint": metrics["fused_mse"] - baseline["fused_mse"],
-                "delta_fused_mae_vs_checkpoint": metrics["fused_mae"] - baseline["fused_mae"],
-                "untouched_arm_reproduces_run_metric": original_reproduces,
-                "untouched_arm_gap_vs_run_metric": original_gap,
-            }
-            record.update(metrics)
-            record.update(summarise_against_random(arm_name, metrics))
-            intervention_rows.append(record)
-            print(
-                f"  arm {arm_name:<22} branch={metrics['branch_mse']:.6f} "
-                f"fused={metrics['fused_mse']:.6f} R2={metrics['correction_reconstruction_r2']:.4f}",
-                flush=True,
-            )
-
-        del (features, cached, hidden, residual_abs, residual_norm, sigma, mu,
-             gate, phase_abs, target, correction_reference, last_abs,
-             semantic_full, semantic_small, pca, conditional, independent,
-             arms)
         models.pop(group_key, None)
         del model, val_loader
 
