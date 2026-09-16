@@ -504,18 +504,30 @@ def build_cells(
         raise RuntimeError(
             f"one realized rank assigned to several cells: {duplicated}"
         )
-    # The plan's exact-rank rule and the realized artifact disagree for a few
-    # cells of the seed-2021 sweep; that is recorded rather than hidden.
-    offsets = [
-        {
-            "setting": entry["setting"],
-            "seed": entry["seed"],
-            "cell": entry["cell"],
-            "rank": entry["rank"],
-            "how": entry["how"],
-        }
-        for entry in inferred
-    ]
+    # Labels resolved from a job manifest are recorded, and any cell whose
+    # realized rank differs from the plan's exact-rank rule is listed as an
+    # offset so the report can disclose it instead of hiding it.
+    offsets = [dict(entry) for entry in inferred]
+    for entry in offsets:
+        key = (
+            entry["setting"].split("-")[0],
+            entry["setting"].split("-")[1],
+            entry["seed"],
+            entry["cell"],
+        )
+        cell = next(
+            (
+                candidate_cell
+                for candidate_cell in cells.values()
+                if candidate_cell.setting == entry["setting"]
+                and candidate_cell.seed == entry["seed"]
+                and candidate_cell.cell == entry["cell"]
+            ),
+            None,
+        )
+        del key
+        entry["planned_rank"] = cell.rank if cell else None
+        entry["rank_matches_plan"] = bool(cell and cell.rank == entry["rank"])
     if unassigned:
         raise RuntimeError(
             "low-rank checkpoints whose realized rank carries no recorded "
@@ -607,11 +619,13 @@ def main() -> None:
     formal = [row for row in rows if not row["is_diagnostic_only"]]
     print(f"formal rows: {len(formal)}, diagnostic-only rows: {len(rows) - len(formal)}")
     print("relative ranks present:", sorted({row["relative_rank_q"] for row in rows}))
-    print(f"cells whose realized rank differs from the plan's exact rule: {len(offsets)}")
-    for entry in offsets:
+    resolved = [entry for entry in offsets if not entry["rank_matches_plan"]]
+    print(f"cells labelled from a job manifest instead of a runner summary: {len(offsets)}")
+    print(f"cells whose realized rank differs from the plan's exact-rank rule: {len(resolved)}")
+    for entry in resolved:
         print(
             "  OFFSET", entry["setting"], entry["seed"], entry["cell"],
-            f"rank={entry['rank']}", entry["how"],
+            f"realized={entry['rank']} planned={entry['planned_rank']}",
         )
     missing_q = sorted({row["relative_rank_q"] for row in rows})
     print("relative ranks present:", missing_q)
