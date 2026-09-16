@@ -625,6 +625,7 @@ def main() -> None:
         )
 
         set_seed(20260916)
+        sweep_started = time.time()
         chunks: dict[str, list] = {
             "z": [], "hidden": [], "phase": [], "phase_norm": [], "residual": [],
             "residual_norm": [], "mu": [], "sigma": [], "gate": [], "target": [],
@@ -758,6 +759,7 @@ def main() -> None:
         features = {key: np.concatenate(value, axis=0) for key, value in chunks.items()}
         del chunks, clean_out, patched_out, records, hidden, centered
 
+        sweep_seconds = time.time() - sweep_started
         rank_from_checkpoint = int(head.rank)
         # ``last_abs`` is the branch's own persistence anchor in the original
         # value space: the last step of its private normalized history, scaled
@@ -865,12 +867,18 @@ def main() -> None:
             models.pop(group_key, None)
             continue
 
+        arms_started = time.time()
         invariant = evaluate_arms(
             cached, hidden, sigma, mu, residual_abs, residual_norm, last_abs,
             encoder_weight, decoder_weight, decoder_bias, encoder_bias, setting,
             dataset, horizon, seed, cell, int(row["rank"]),
             row["selected_val_mse"], row["selected_val_mae"], repo_root,
             output_dir, args, intervention_rows,
+        )
+        print(
+            f"  [timing] {setting} seed={seed} {cell}: sweep {sweep_seconds:.1f}s "
+            f"arms {time.time() - arms_started:.1f}s",
+            flush=True,
         )
         models.pop(group_key, None)
         del model, val_loader
