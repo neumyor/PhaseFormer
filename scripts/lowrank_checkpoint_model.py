@@ -197,12 +197,15 @@ def intervention_forward(intervention, audit_math=None):
                 "pooled64": pooled64,
                 "hidden64": hidden64,
                 "map64": map64,
-                "anchor64": self.last_centered[:, :, -1:].permute(0, 2, 1).double(),
+                # The branch's persistence anchor is the *uncentered* last step of
+                # its normalized input; the last column of ``centered`` is zero by
+                # construction, so it cannot be used here.
+                "anchor64": last.permute(0, 2, 1).double(),
                 "head64": (
                     torch.nn.functional.linear(
                         hidden64, decoder64, self.decoder.bias.double()
                     ).permute(0, 2, 1)
-                    + self.last_centered[:, :, -1:].permute(0, 2, 1).double()
+                    + last.permute(0, 2, 1).double()
                 ),
                 "fp32_head": delta + last.expand(-1, self.pred_len, -1),
             }
