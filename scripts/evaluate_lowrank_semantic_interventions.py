@@ -350,6 +350,16 @@ def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
         hidden, decoder_weight, decoder_bias, encoder_bias, gate, phase_abs,
         target, correction_reference, last_abs, sigma, None, "identity",
     )
+    # The recorded ``fused`` tensor is the model's own output, so the untouched
+    # arm is compared against it directly.  Reconstructing it from
+    # ``phase_abs`` is not equivalent: ``phase_abs`` is the phase-only forecast
+    # captured before the residual branch runs, not the phase component the
+    # model actually fused.
+    if "fused" in cached:
+        recorded_fused = np.asarray(cached["fused"], dtype=np.float64)
+        recorded_delta = recorded_fused - target
+        baseline["fused_mse"] = float(np.mean(recorded_delta ** 2))
+        baseline["fused_mae"] = float(np.mean(np.abs(recorded_delta)))
     # The untouched arm must reproduce the validation metric the training
     # run recorded for this checkpoint.  The two numbers are computed from
     # the same windows and the same scaling, so any material gap means the
