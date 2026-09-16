@@ -452,6 +452,17 @@ def group_explanation(direction: np.ndarray, group: SemanticGroup) -> float:
     return float(np.sum(projected * projected) / (norm ** 2))
 
 
+def shapley_coalition_weights(n: int) -> dict[int, float]:
+    """Exact Shapley weights ``s!(n-s-1)!/n!`` for coalition sizes ``s < n``."""
+    if n < 1:
+        return {}
+    denominator = math.factorial(n)
+    return {
+        size: math.factorial(size) * math.factorial(n - size - 1) / denominator
+        for size in range(n)
+    }
+
+
 def group_shapley(
     direction: np.ndarray,
     groups: dict[str, SemanticGroup],
@@ -486,24 +497,24 @@ def group_shapley(
         _, value = orthogonal_projection(direction, basis_cache[mask])
         return value
 
-    shapley = {name: 0.0 for name in group_names}
-    # Exact Shapley weights over all n! orderings: each coalition S of size s is
-    # the prefix of s!(n-s-1)! orderings, so the weight normalizes by (n-1)!.
+    raw = np.zeros(1 << n)
+    marginal = {name: np.zeros(1 << n) for name in group_names}
     for mask in range(1 << n):
-        size = bin(mask).count("1")
-        # ``size == n`` has no marginal contribution to distribute, so its weight
-        # is never needed and ``(n - size - 1)!`` must not be evaluated.
-        weight = (
-            math.factorial(size) * math.factorial(n - size - 1)
-            / math.factorial(n - 1)
-            if size < n
-            else 0.0
-        )
-        base = r2(mask)
+        raw[mask] = r2(mask)
         for index in range(n):
             if mask >> index & 1:
                 continue
-            shapley[group_names[index]] += weight * (r2(mask | 1 << index) - base)
+            marginal[group_names[index]][mask] = r2(mask | 1 << index) - raw[mask]
+    shapley: dict[str, float] = {}
+    for index, name in enumerate(group_names):
+        weights = shapley_coalition_weights(n)
+        total = 0.0
+        for mask in range(1 << n):
+            size = bin(mask).count("1")
+            if size == n:
+                continue
+            total += weights[size] * marginal[name][mask]
+        shapley[name] = float(total)
     return shapley
 
 

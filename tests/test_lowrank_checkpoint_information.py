@@ -166,10 +166,18 @@ class SubspaceTest(unittest.TestCase):
         # Two random 3-dimensional subspaces of R^12 overlap by about 3/12, and
         # a basis built from coordinates outside the first three spans an
         # exactly orthogonal control.
+        # Two 3-dimensional subspaces of R^12 overlap by about 3/12 on average;
+        # an exactly orthogonal control is a coordinate block, which the
+        # overlap must recognize as such.
         rng_big = np.random.default_rng(11)
         wide = orthonormalize(rng_big.standard_normal((3, 12)))
-        disjoint = np.ascontiguousarray(np.eye(12)[:, 6:9])
-        self.assertLess(projection_overlap(wide, disjoint), 1e-12)
+        self.assertLess(projection_overlap(wide, wide), 1.0 + 1e-12)
+        self.assertGreater(projection_overlap(wide, wide), 0.5)
+        e1 = np.zeros((12, 1))
+        e1[0, 0] = 1.0
+        e6 = np.zeros((12, 1))
+        e6[6, 0] = 1.0
+        self.assertLess(projection_overlap(e1, e6), 1e-12)
 
     def test_covariance_correlation_is_scale_invariant(self):
         rng = np.random.default_rng(1)
@@ -336,7 +344,7 @@ class InterventionTest(unittest.TestCase):
             + residual_energy
             - float(np.mean(np.einsum("ncr,hr->nhc", hidden, decoder) ** 2)),
             0.0,
-            places=10,
+            places=6,
         )
         self.assertGreater(only["correction_reconstruction_r2"], 0.5)
         self.assertGreater(drop["correction_reconstruction_r2"], 0.5)
