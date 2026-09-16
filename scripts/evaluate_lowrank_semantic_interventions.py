@@ -300,13 +300,16 @@ def broadcast_per_sample(
     forward pass) or already expanded to ``(n, h, c)``; normalising here keeps
     the arm algebra independent of which writer produced the cache.
     """
-    flat = np.asarray(array, dtype=np.float64).reshape(samples, -1)
-    if flat.shape[1] != channels:
+    value = np.asarray(array, dtype=np.float64)
+    if value.shape[-1] != channels:
         raise ValueError(
-            f"per-sample vector has {flat.shape[1]} values, expected {channels}"
+            f"per-sample vector has {value.shape[-1]} values, expected {channels}"
         )
+    # Such a vector is constant over the horizon, so the first step is a
+    # faithful representative of the whole slice.
+    value = value.reshape(samples, -1, channels)[:, :1, :]
     del horizon
-    return flat.reshape(samples, 1, channels)
+    return value
 
 
 def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
