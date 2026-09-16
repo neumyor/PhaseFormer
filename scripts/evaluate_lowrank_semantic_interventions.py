@@ -218,9 +218,14 @@ def random_drop_band(
     rank: int,
     count: int,
     rng: np.random.Generator,
-    chunk: int = 256,
+    chunk: int = 32,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fused MSE/MAE of ``count`` random same-dimension drop arms.
+
+    The block size bounds the transient ``(n, h, c, arms)`` tensor: with the
+    largest validation split of this analysis (thousands of windows, hundreds of
+    channels) an unbounded block reached several gigabytes per process, which
+    exhausted the shared host when several shards ran at once.
 
     The arms are all linear projections of the same hidden state, so the whole
     band is evaluated with one blocked contraction over a stacked basis tensor.
