@@ -363,7 +363,7 @@ def main() -> None:
                 - (
                     residual_abs
                     - np.einsum("ncr,hr->nhc", hidden, decoder_weight)
-                    - decoder_bias
+                    - decoder_bias[None, :, None]
                 )
             ).max()
         )
