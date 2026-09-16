@@ -158,12 +158,17 @@
 | 弱残差前史（已结题） | [`Weak_residual_asymmetric_component_plan.md`](Weak_residual_asymmetric_component_plan.md)、[`Weak_residual_three_trend_components_experiment_plan.md`](Weak_residual_three_trend_components_experiment_plan.md)、[`Weak_residual_trend_component_study_closure.md`](Weak_residual_trend_component_study_closure.md) | A1–A6 趋势成分 + X-A/Only-A 路由；结论"A 是条件性校正而非完整表征"；2026-09-05 结题并交接给 NLinear 瓶颈研究 |
 | 信息瓶颈父计划 | [`PhaseFormer_NLinear_Progressive_IB_Experiment_Plan_v1.0.md`](PhaseFormer_NLinear_Progressive_IB_Experiment_Plan_v1.0.md) | 形式化 Stage 1–10 计划；Stage 2/3 命题已由上一行的容量报告实质回答；**该文件状态块尚未同步更新** |
 
-- **当前探索指导文档**：
+- **最近完成的探索（2026-09-16，判定：部分支持）**：
   [`PhaseFormer_direction1_neighborhood_experiment_plan.md`](PhaseFormer_direction1_neighborhood_experiment_plan.md)
-  —— 在已完成的前两方向负结果基础上，用训练集连续区块 bootstrap 构造方向 1 的
-  `Qcone1/Qcone2/Qcone4/Qcone8` 局部邻域；在 ETTh2、ETTm2、Weather 与
-  Electricity 的 7 个 setting 上直接执行完整 test sweep，并明确按数据集进行
-  test-set selection。
+  （§10 六张表已回填）+ 结果报告
+  [`PhaseFormer_direction1_neighborhood_report.md`](PhaseFormer_direction1_neighborhood_report.md)
+  —— 用训练集连续区块 bootstrap 构造方向 1 的 `Qcone1/Qcone2/Qcone4/Qcone8` 局部邻域，
+  在 7 个 setting 上执行 seed 2021 全量 test sweep（42 runs）与选择后稳定性复核（56 runs）。
+  **5 条预注册判据中 4 条成立**：邻域承载的可见输入方差随 k 单调上升
+  （Electricity-336 12.34% → 47.27%），但新增成分没有带来端到端收益——三 seed 口径下
+  7 个 setting 中只有 Weather-192 的被选 Cone-4 同时改善 MSE（-1.594%）与 MAE（-1.000%）
+  且 3/3 seed 一致。结论限定为**方向 1 邻域具有数据集条件性价值**，不构成
+  “加宽邻域是普遍改进”。本实验明确披露为 test-set selection。
 - 已完成的直接前置实验：
   [`PhaseFormer_top2_predictive_direction_retention_plan.md`](PhaseFormer_top2_predictive_direction_retention_plan.md)
   —— NLinear 仅保留 RRR 方向 1 或方向 1+2 的端到端验证，预注册判定为“不支持”。
@@ -178,6 +183,9 @@
   `analyze_trained_gate_and_rank.py`、`verify_optimal_rank_identity.py`、
   `describe_leading_direction.py`、`align_trained_and_optimal_direction.py`。
   产物均在 `research_runs/`（gitignored）。
+  方向 1 邻域系列的入口为 `scripts/compute_direction1_neighborhood_projectors.py`、
+  `scripts/run_direction1_neighborhood_matrix.py`、`scripts/select_direction1_neighborhood_width.py`、
+  `scripts/aggregate_direction1_neighborhood.py`。
 
 ## 输入成分利用诊断（D0 已完成，D1 未收尾）
 

@@ -2756,3 +2756,57 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   - 计划 §11.3–11.4 的样本级预测曲线未执行，已在报告 §10 明确标注为未做。
   - 本实验为 test 一次性读取、无 test-set selection；全部结论以本实验内配对 direct 为准，
     未使用金标准或其它协议的数字。
+
+## 2026-09-16 — 执行方向 1 邻域宽度实验并回填结果（判定：部分支持）
+
+- 按 `docs/PhaseFormer_direction1_neighborhood_experiment_plan.md` 全量执行：Stage 0
+  （训练集连续区块 bootstrap 生成 `Qrrr2` + `Qcone1/2/4/8` 与六项审计）、Stage T
+  （seed 2021 × 7 setting × 6 臂 = 42 runs）、按数据集宽度选择、Stage S
+  （seeds 2022/2023 × 7 setting × 4 臂 = 56 runs）。新增训练 **98 次**，累计 GPU 时间
+  **17.36 小时**，在远程 A800 的 GPU 0–5 上以“一卡一 run”完成（GPU 6/7 被他人的 vLLM
+  任务占用，未触碰）。98/98 `completed`，0 失败，0 重试。
+- 主要修改文件：
+  - 新增 `scripts/aggregate_direction1_neighborhood.py`：把 Stage 0 审计与 98 个 run 的
+    `metrics.csv` 汇总成计划 §10 的六张表（`table1`–`table6`）、`results.csv`、
+    `aggregate.json`，并额外输出上一轮 `Q1` 与本轮 `Qcone1` 的主夹角诊断表。
+  - 回填 `docs/PhaseFormer_direction1_neighborhood_experiment_plan.md`：状态块、§10 六张表、
+    新增 §11 执行状态与审计、新增 §12 披露合规与读法限制。
+  - 新增 `docs/PhaseFormer_direction1_neighborhood_report.md`（结果报告）。
+  - 更新 `docs/README.md` 的机制消融小节。
+- 关键命令与产物：
+  - 产物根目录 `research_runs/direction1_neighborhood_v1/`（`projectors/`、`runs/`、
+    `sweep_manifest.json`、`sweep_summary.json`、`confirm_manifest.json`、
+    `confirm_summary.json`、`test_selection.{json,md}`、`aggregation/`）。
+  - 运行环境：`/home/yyk/yyk03/miniconda3/envs/time`（Python 3.10、torch 2.6.0+cu124、
+    pytorch-lightning 2.6.5、numpy 1.26.4），与仓库记录的 4090 环境不同。
+- 验证结果：
+  - Stage 0 六项检查 28/28 PASS（train-only、正交、幂等、含全训练集方向 1、嵌套、有限）；
+    正交误差 ≤2.2e-16，嵌套误差与方向 1 恢复误差全为浮点级。
+  - 参数量审计：21 个 (setting, seed) 组合内各实验臂的 `parameter_count` /
+    `trainable_parameter_count` 完全一致，排除容量解释。
+  - `pytest tests/test_direction1_neighborhood.py -q` → 9 passed；完整 `pytest tests/ -q`
+    在服务器环境全绿（**348 passed / 262 subtests passed**，142 s；= 上一轮 339 + 本计划新增 9）。
+  - 方向 1 跨轮一致性：本轮 `Qcone1` 与上一轮 `top2_direction_retention_v1` 的 `Q1`
+    子空间主夹角最大 1.21e-06°（3 个 setting 为 0.0°），两轮 Cone-1/V1 几何等价。
+- 结果与结论（预注册判定 **部分支持**，5 条判据中 4 条成立）：
+  - Stage 0 显示方向 1 周围确有额外数据能量：`visible variance` 随 k 单调上升
+    （Electricity-336 12.34%→47.27%，Weather-192 7.86%→28.94%），而这些切向成分与全局
+    方向 2 基本不重合（多数 setting <6%）。
+  - 但新增能量没有转化为端到端性能。三 seed 均值口径下 7 个 setting 中只有
+    **Weather-192** 的被选 Cone-4 同时优于 direct（MSE -1.594%、MAE -1.000%），
+    且 3/3 seed 一致；另外 6 个 setting 即使换到各自最优的 k 仍劣于 direct。
+    seed 2021 的 35 个投影 cell 中只有 2 个双指标优于 direct。
+  - 宽度选择结果：ETTh2=8、ETTm2=2、Weather=4、Electricity=2（4/4 选 k>1），但这是
+    “四个投影宽度里取最优”，不是“相对 direct 有改善”——ETTh2/ETTm2/Electricity 所选
+    宽度的宏平均 ΔMSE/ΔMAE 仍为正。
+  - 判据 2（选择后的 Cone-k 在所有数据集宏平均 MSE 与 MAE 上优于 Cone-1）不成立：
+    Electricity-336 上宏平均反而变差（MSE +0.083%、MAE +0.049%）。
+  - 结论限定为“**方向 1 邻域具有数据集条件性价值**”，不支持“加宽方向 1 邻域是普遍改进”。
+- 已知风险/后续事项：
+  - 本实验是**明确披露的 test-set selection**：宽度与实验臂依据 seed 2021 test 指标选定；
+    Stage S 只是选择后稳定性复核，不得表述为独立确认集或无偏泛化估计。
+  - 未做样本级高误差/退化分析（本计划未要求）；未把 Electricity-336 的 bootstrap 邻域
+    与训练后有效滤波器做对齐比较。
+  - 表 2 的 `visible variance / independent predictive capture` 比值差是本轮最主要的机理
+    线索，指向下一轮应转向“按样本自适应选择子空间”或“显式建模被丢弃的补空间”，
+    而不是继续加宽固定基。
