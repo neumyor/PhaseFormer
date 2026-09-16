@@ -525,6 +525,54 @@ def main() -> None:
         batch_size = int(
             config.get("batch_size") or hyperparams.get("batch_size") or 256
         )
+        cache_path = (
+            features_dir
+            / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
+        )
+        if (args.cache_only or args.reuse_cache) and cache_path.is_file():
+            # Arms are closed-form functions of the cache, so a cached cell can
+            # be recomputed without loading a model or touching the GPU -- this
+            # is how the Conditional-RRR and Independent-RRR arms are filled in
+            # after Stage 3 has written the subspaces.
+            payload = read_cached_features(cache_path)
+            cached_only = {
+                key: payload[key].astype(np.float64)
+                for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
+            }
+            encoder_weight = payload["encoder_weight"].astype(np.float64)
+            encoder_bias = payload["encoder_bias"].astype(np.float64)
+            decoder_weight = payload["decoder_weight"].astype(np.float64)
+            decoder_bias = payload["decoder_bias"].astype(np.float64)
+            hidden_only = cached_only["hidden"]
+            sigma_only = cached_only["sigma"]
+            mu_only = cached_only["mu"]
+            head_map_only = np.einsum("ncr,hr->nhc", hidden_only, decoder_weight)
+            bias_only = affine_bias(
+                encoder_bias, decoder_weight, decoder_bias
+            )[None, :, None]
+            # ``x_last_norm`` is the head's own persistence anchor, cached
+            # directly so this path reproduces the original one exactly.
+            x_last_only = payload["x_last_norm"].astype(np.float64)
+            residual_norm_only = head_map_only + bias_only + x_last_only
+            residual_abs_only = residual_norm_only * sigma_only + mu_only
+            last_abs_only = x_last_only * sigma_only + mu_only
+            invariant = evaluate_arms(
+                cached_only, hidden_only, sigma_only, mu_only, residual_abs_only,
+                residual_norm_only, last_abs_only, encoder_weight,
+                decoder_weight, decoder_bias, encoder_bias, setting, dataset,
+                horizon, seed, cell, int(row["rank"]), row["selected_val_mse"],
+                row["selected_val_mae"], repo_root, output_dir, args,
+                intervention_rows,
+            )
+            print(
+                f"[cache] {setting} seed={seed} {cell}: arms recomputed "
+                f"(invariant {invariant['untouched_arm_reproduces_run_metric']})",
+                flush=True,
+            )
+            del payload, cached_only, hidden_only, sigma_only, mu_only
+            del residual_abs_only, residual_norm_only, last_abs_only, x_last_only
+            del head_map_only, bias_only
+            continue
         group_key = (dataset, horizon, seed)
         if group_key not in models:
             exp_args, handles = build_loaders(
@@ -794,54 +842,6 @@ def main() -> None:
                 f"| sigma mean {sigma.mean():.6f}",
                 flush=True,
             )
-        cache_path = (
-            features_dir
-            / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
-        )
-        if (args.cache_only or args.reuse_cache) and cache_path.is_file():
-            # Arms are closed-form functions of the cache, so a cached cell can
-            # be recomputed without loading a model or touching the GPU -- this
-            # is how the Conditional-RRR and Independent-RRR arms are filled in
-            # after Stage 3 has written the subspaces.
-            payload = read_cached_features(cache_path)
-            cached_only = {
-                key: payload[key].astype(np.float64)
-                for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
-            }
-            encoder_weight = payload["encoder_weight"].astype(np.float64)
-            encoder_bias = payload["encoder_bias"].astype(np.float64)
-            decoder_weight = payload["decoder_weight"].astype(np.float64)
-            decoder_bias = payload["decoder_bias"].astype(np.float64)
-            hidden_only = cached_only["hidden"]
-            sigma_only = cached_only["sigma"]
-            mu_only = cached_only["mu"]
-            head_map_only = np.einsum("ncr,hr->nhc", hidden_only, decoder_weight)
-            bias_only = affine_bias(
-                encoder_bias, decoder_weight, decoder_bias
-            )[None, :, None]
-            # ``x_last_norm`` is the head's own persistence anchor, cached
-            # directly so this path reproduces the original one exactly.
-            x_last_only = payload["x_last_norm"].astype(np.float64)
-            residual_norm_only = head_map_only + bias_only + x_last_only
-            residual_abs_only = residual_norm_only * sigma_only + mu_only
-            last_abs_only = x_last_only * sigma_only + mu_only
-            invariant = evaluate_arms(
-                cached_only, hidden_only, sigma_only, mu_only, residual_abs_only,
-                residual_norm_only, last_abs_only, encoder_weight,
-                decoder_weight, decoder_bias, encoder_bias, setting, dataset,
-                horizon, seed, cell, int(row["rank"]), row["selected_val_mse"],
-                row["selected_val_mae"], repo_root, output_dir, args,
-                intervention_rows,
-            )
-            print(
-                f"[cache] {setting} seed={seed} {cell}: arms recomputed "
-                f"(invariant {invariant['untouched_arm_reproduces_run_metric']})",
-                flush=True,
-            )
-            del payload, cached_only, hidden_only, sigma_only, mu_only
-            del residual_abs_only, residual_norm_only, last_abs_only, x_last_only
-            del head_map_only, bias_only
-            continue
         cached = {
             key: features[key].astype(np.float64)
             for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
