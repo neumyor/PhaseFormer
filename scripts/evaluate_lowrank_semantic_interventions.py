@@ -317,12 +317,17 @@ def main() -> None:
                     # must reproduce the normalized residual the model actually
                     # wrote.  Evaluated in float64 because the in-model float32
                     # matmul is TF32 on this platform.
-                    fp64_residual = torch.nn.functional.linear(
-                        centered.double(),
-                        torch.as_tensor(matrix, dtype=torch.float64, device=centered.device),
-                    ).permute(0, 2, 1) + torch.as_tensor(
-                        decoder_bias, dtype=torch.float64, device=centered.device
-                    )
+                    fp64_residual = (
+                        torch.nn.functional.linear(
+                            centered.double(),
+                            torch.as_tensor(
+                                matrix, dtype=torch.float64, device=centered.device
+                            ),
+                        )
+                        + torch.as_tensor(
+                            decoder_bias, dtype=torch.float64, device=centered.device
+                        )
+                    ).permute(0, 2, 1)
                     fp64_reference = records["residual_norm"].double()
                     equivalence_max = max(
                         equivalence_max, float((fp64_residual - fp64_reference).abs().max())
