@@ -495,14 +495,32 @@ def main() -> None:
                 f"| sigma mean {sigma.mean():.6f}",
                 flush=True,
             )
+        cache_path = (
+            features_dir
+            / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
+        )
+        cached = {
+            key: features[key].astype(np.float64)
+            for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
+        }
         if args.audit_only:
-            del features, hidden, residual_abs, residual_norm
+            # The cache is what lets the intervention pass run without spending a
+            # second GPU sweep over the frozen checkpoints.
+            np.savez_compressed(
+                cache_path,
+                encoder_weight=encoder_weight,
+                encoder_bias=encoder_bias,
+                decoder_weight=decoder_weight,
+                decoder_bias=decoder_bias,
+                **{key: value.astype(np.float32) for key, value in cached.items()},
+            )
+            del features, hidden, residual_abs, residual_norm, cached
             models.pop(group_key, None)
             continue
 
-        gate = features["gate"].astype(np.float64)
-        phase_abs = features["phase"].astype(np.float64)
-        target = features["target"].astype(np.float64)
+        gate = cached["gate"]
+        phase_abs = cached["phase"]
+        target = cached["target"]
         correction_reference = residual_abs - last_abs
 
         baseline = arm_metrics(
@@ -514,7 +532,10 @@ def main() -> None:
         rng = np.random.default_rng(RANDOM_SEED)
         semantic_full = semantic_basis(dataset, rank_dim)
         semantic_small = semantic_basis(dataset, min(args.semantic_rank, rank_dim))
-        moments_path = repo_root / args.output_dir / "train_moments" / f"{setting}.npz"
+        moments_path = (
+            repo_root / args.output_dir / "train_moments"
+            / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
+        )
         pca = pca_basis(moments_path, rank_dim) if moments_path.is_file() else None
         conditional_path = (
             repo_root / args.output_dir / "subspaces" / f"{setting}_seed{seed}.npz"
@@ -630,21 +651,7 @@ def main() -> None:
                 flush=True,
             )
 
-        np.savez_compressed(
-            features_dir / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz",
-            encoder_weight=encoder_weight,
-            decoder_weight=decoder_weight,
-            decoder_bias=decoder_bias,
-            hidden=hidden.astype(np.float32),
-            z=features["z"].astype(np.float32),
-            sigma=sigma.astype(np.float32),
-            gate=gate.astype(np.float32),
-            **{
-                key: features[key].astype(np.float32)
-                for key in ("phase", "target", "residual", "fused")
-            },
-        )
-        del (features, hidden, sigma, mu, gate, phase_abs, target,
+        del (features, cached, hidden, sigma, mu, gate, phase_abs, target,
              correction_reference, last_abs, x_last_norm, semantic_full,
              semantic_small, pca, conditional, independent, random_metrics, arms)
         models.pop(group_key, None)
