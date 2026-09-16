@@ -205,17 +205,35 @@ def read_one(cell, root: Path, projector_dir: Path) -> dict:
 
     model, exp_args = build_model(config, checkpoint)
     model.to("cuda" if torch.cuda.is_available() else "cpu")
-    test_set, test_loader = data_provider(exp_args.dataset_args, "test")
     head_gate = model.learned_residual_gate()
+    # Determinism guard: recompute validation first.  The value must reproduce
+    # the training run's own recorded val_mse, otherwise the test number this
+    # script produces would not belong to the audited protocol and the cell is
+    # reported as a mismatch instead of being silently accepted.
+    val_set, val_loader = data_provider(exp_args.dataset_args, "val")
+    val_result = evaluate_once(
+        model, val_loader, "val", model.target_var_index, head_gate
+    )
+    recorded_val_mse = float(record["val_mse"]) if record.get("val_mse") else None
+    val_reproduces = None
+    if recorded_val_mse:
+        val_reproduces = abs(val_result["val_mse"] - recorded_val_mse) / recorded_val_mse
+    test_set, test_loader = data_provider(exp_args.dataset_args, "test")
     result = evaluate_once(
         model, test_loader, "test", model.target_var_index, head_gate
     )
+    status = "read"
+    if val_reproduces is not None and val_reproduces >= 1e-6:
+        status = "val_mismatch"
     payload = {
         "cell": f"{dataset}-{horizon}-s{seed}-{arm}",
-        "status": "read",
+        "status": status,
         "run_dir": str(run_dir.relative_to(ROOT)),
         "checkpoint": record["checkpoint"],
         "test_size": len(test_set),
+        "recorded_val_mse": recorded_val_mse,
+        "recomputed_val_mse": val_result["val_mse"],
+        "val_relative_difference": val_reproduces,
         **{k: v for k, v in result.items() if k != "eval_count"},
         "eval_count": result["eval_count"],
     }
