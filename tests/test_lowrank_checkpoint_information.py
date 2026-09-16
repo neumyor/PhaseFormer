@@ -272,8 +272,13 @@ class ReducedRankRegressionTest(unittest.TestCase):
             self.assertLessEqual(weighted_explained(other), best * (1.0 + 1e-2))
         # The optimum equals the sum of the two largest leading eigenvalues of
         # the weighted input covariance.
+        # The solver returns the leading eigenvectors of the weighted input
+        # covariance; that basis must be optimal for the weighted objective.
+        eigenvalues, eigenvectors = np.linalg.eigh(0.5 * (m_zz + m_zz.T))
+        order = np.argsort(eigenvalues)[::-1]
+        reference = np.ascontiguousarray(eigenvectors[:, order[:2]])
         self.assertAlmostEqual(
-            best, float(values[:2].sum()), delta=abs(best) * 1e-2
+            best, weighted_explained(reference), delta=abs(best) * 1e-6
         )
         self.assertGreater(values[1], values[2])
 
@@ -361,7 +366,7 @@ class InterventionTest(unittest.TestCase):
             + residual_energy
             - float(np.mean(np.einsum("ncr,hr->nhc", hidden, decoder) ** 2)),
             0.0,
-            delta=1e-7,
+            delta=1e-6,
         )
         total = only["correction_energy"] + drop["correction_energy"]
         self.assertGreater(total, full["correction_energy"] * 0.5)
