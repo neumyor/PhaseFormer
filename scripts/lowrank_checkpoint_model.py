@@ -170,7 +170,7 @@ def intervention_forward(intervention, audit_math=None):
         # The persistence anchor in float64.  It is the head's own uncentered
         # last step, so this is the exact quantity the branch adds back.
         self.last_anchor64 = last.double()
-        if audit_math:
+        if audit_math and not audit_math.get("skip_math"):
             # Exact float64 evaluation of the *same* head applied to the *same*
             # private input.  The plan's 1e-6 equivalence bound cannot be met by
             # the in-model float32 matmul, which is TF32 on this platform

@@ -544,6 +544,13 @@ def main() -> None:
     parser.add_argument("--reuse-cache", action="store_true",
                         help="skip the sweep for cells that already have a cache")
     parser.add_argument("--debug-checks", action="store_true")
+    parser.add_argument(
+        "--skip-audit-math",
+        action="store_true",
+        help="skip the float64 head evaluation during the GPU sweep",
+    )
+    parser.add_argument("--full-audit-math", action="store_true",
+                        help="force the float64 head evaluation during the sweep")
     parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
@@ -727,7 +734,12 @@ def main() -> None:
                 with instrument_model(
                     model,
                     None,
-                    {"matrix": matrix64},
+                    # ``skip_math`` keeps the float64 head evaluation out of the
+                    # GPU cache sweep: it is CPU work over ``(N, C, L)`` arrays
+                    # and, on the widest setting of this analysis, it -- not the
+                    # forward pass -- was the sweep bottleneck.  The untested
+                    # equivalence is re-derived in Phase 2 from the cache.
+                    {"matrix": matrix64, "skip_math": args.skip_audit_math},
                 ) as instrumented:
                     patched_out, _, _ = instrumented(
                         x.float(), x_mark.float(), dec, y_mark.float()
