@@ -211,14 +211,41 @@ def requested_relative_ranks(
     return mapping
 
 
+def _flags_from_command(command: list) -> tuple[str | None, int | None, int | None]:
+    """Read ``--dataset/--horizon/--seed`` out of a bare command list."""
+
+    def value(flag: str):
+        if flag in command:
+            index = command.index(flag) + 1
+            if index < len(command):
+                return command[index]
+        return None
+
+    dataset = value("--dataset")
+    horizon = value("--horizon")
+    seed = value("--seed")
+    return (
+        str(dataset) if dataset is not None else None,
+        int(horizon) if horizon is not None else None,
+        int(seed) if seed is not None else None,
+    )
+
+
 def runner_ladders(
     repo_root: Path,
 ) -> dict[tuple[str, int, int], list[float]]:
     """``{(dataset, horizon, seed): [requested q, ...]}`` from job manifests.
 
     The multi-seed runner keeps the requested relative-rank ladder only in its
-    job manifests, so the ladder is recovered from ``--relative-ranks`` there
-    and unioned across every job that covers the same (dataset, horizon, seed).
+    job manifests, so the ladder is recovered from the job entries there and
+    unioned across every job that covers the same (dataset, horizon, seed).
+    Three shapes occur in this repository:
+
+    * ``--relative-ranks`` inside a job ``command`` (the v4 sweep);
+    * a ``config`` label such as ``q=0.03125`` plus an explicit ``overrides``
+      rank (the repair driver); and
+    * a top-level ``relative_ranks`` list covering every job (the seed-2021
+      sweep).
     """
     ladders: dict[tuple[str, int, int], set[float]] = {}
     for source in SOURCE_ROOTS:
@@ -228,20 +255,36 @@ def runner_ladders(
             except json.JSONDecodeError:
                 continue
             for job in payload.get("jobs") or []:
-                command = job.get("command") or []
-                ranks: list[float] = []
-                if "--relative-ranks" in command:
-                    raw = command[command.index("--relative-ranks") + 1]
-                    ranks = [float(item) for item in raw.split(",") if item]
-                elif payload.get("relative_ranks"):
-                    ranks = [float(item) for item in payload["relative_ranks"]]
-                dataset = job.get("dataset", payload.get("dataset"))
-                horizon = job.get("horizon", payload.get("horizon"))
-                seed = job.get("seed", payload.get("seed"))
-                if not ranks or dataset is None or horizon is None or seed is None:
+                if isinstance(job, dict):
+                    command = job.get("command") or []
+                    dataset = job.get("dataset", payload.get("dataset"))
+                    horizon = job.get("horizon", payload.get("horizon"))
+                    seed = job.get("seed", payload.get("seed"))
+                    if dataset is None and command:
+                        dataset, horizon, seed = _flags_from_command(command)
+                    ranks: set[float] = set()
+                    if "--relative-ranks" in command:
+                        raw = command[command.index("--relative-ranks") + 1]
+                        ranks.update(float(item) for item in raw.split(",") if item)
+                    config_label = str(job.get("config", ""))
+                    if config_label.startswith("q="):
+                        ranks.add(float(config_label[2:]))
+                    if not ranks and payload.get("relative_ranks"):
+                        ranks.update(float(item) for item in payload["relative_ranks"])
+                else:
+                    command = list(job)
+                    dataset, horizon, seed = _flags_from_command(command)
+                    ranks = set()
+                    if "--relative-ranks" in command:
+                        raw = command[command.index("--relative-ranks") + 1]
+                        ranks.update(float(item) for item in raw.split(",") if item)
+                if dataset is None or horizon is None or not ranks:
                     continue
-                key = (str(dataset), int(horizon), int(seed))
-                ladders.setdefault(key, set()).update(ranks)
+                # A manifest that does not name a seed covers every seed of its
+                # setting; the caller unions those ladders in anyway.
+                seeds = (seed,) if seed is not None else FORMAL_SEEDS
+                for item in seeds:
+                    ladders.setdefault((str(dataset), int(horizon), int(item)), set()).update(ranks)
     return {key: sorted(value) for key, value in ladders.items()}
 
 
