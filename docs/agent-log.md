@@ -2663,6 +2663,26 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - `docs/README.md` 的当前探索入口已指向本计划；原结构化宽度优先计划降为历史入口。
 - 验证：`git diff --check` 通过；计划中的 5 张 Markdown 表格列数检查通过；未运行模型或实验。
 
+## 2026-09-16 — 收窄前两方向实验的机制表述并修复 Stage A QC 标签
+
+- 根据三 seed 结果复核，修正
+  `PhaseFormer_top2_predictive_direction_retention_report.md`、
+  `PhaseFormer_top2_direction_retention_summary.md` 与已回填计划中的因果表述。
+- 保留预注册“不支持”判定及全部数值不变，但将结论限定为：前两个 RRR 方向在
+  **当前固定投影 + 联合训练目标**下不能作为通用输入瓶颈；不再把结果表述为方向 2
+  本质有害，或把退化唯一归因为“支路看不到足够信息”。
+- 明确区分两个目标：RRR 优化独立 NLinear 的 `y-x_last` 平方误差，实际模型优化
+  phase、NLinear 与 gate 融合后的 Huber 损失。当前实验未设置 phase/gate 冻结或
+  支路独立训练对照，因此不能在信息不足、联合优化干扰与有限样本泛化之间做唯一归因。
+- 补充 V2 表达空间包含 V1 的解释：V2 test 变差属于当前训练与泛化结果，不能解释为
+  方向 2 在信息论意义上必然有害。
+- 修复 `aggregate_top2_direction_retention.py` 的 Stage A QC 条件方向错误：低误差更优，
+  仅当 `direct val_mse >= phase_only val_mse` 时 retention 才应标记为 N/A。
+- 同步修正 ETTm2-192 的 Stage A 记录：`direct` MSE 0.1499 优于 `phase-only`
+  0.1545，retention 有定义，V1/V2 分别为 -68.0% / -66.7%。
+- 验证：重新运行聚合脚本后判定仍为“不支持”，宏平均 ΔMSE +1.9426%、
+  ΔMAE +1.9901%；`git diff --check`、脚本语法检查和四份 Markdown 表格列数检查通过。
+
 ## 2026-09-16 — 执行前两个预测方向的数据保留实验并回填结果（判定：不支持）
 
 - 按 `docs/PhaseFormer_top2_predictive_direction_retention_plan.md` 全量执行：Stage 0 投影器

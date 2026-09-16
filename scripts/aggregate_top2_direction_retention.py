@@ -227,7 +227,7 @@ def table_stage_a(rows):
         "",
         "| Setting | direct MSE/MAE | phase-only MSE/MAE | V1 MSE/MAE | V2 MSE/MAE | "
         "V1 retention | V2 retention | V2−V1 | QC |",
-        "|---|---|---|---|---:|---:|---:|---|",
+        "|---|---|---|---|---|---:|---:|---:|---|",
     ]
     for dataset, horizon in SETTINGS:
         cells = {}
@@ -259,12 +259,12 @@ def table_stage_a(rows):
             qc.append("missing arm")
         if direct is None or phase_only is None:
             qc.append("missing control")
-        if direct and phase_only and direct["val_mse"] <= phase_only["val_mse"]:
+        if direct and phase_only and direct["val_mse"] < phase_only["val_mse"]:
+            qc.append("validation: retention defined")
+        if direct and phase_only and direct["val_mse"] >= phase_only["val_mse"]:
             qc.append(
                 "validation: direct does not beat phase-only -> retention N/A"
             )
-        if direct and phase_only and direct["val_mse"] > phase_only["val_mse"]:
-            qc.append("validation: retention defined")
         lines.append(
             f"| {dataset}-{horizon} | {pair('direct_nlinear')} | {pair('phase_only')} | "
             f"{pair('keep_direction_1')} | {pair('keep_direction_1_2')} | "
@@ -323,7 +323,7 @@ def table_final_test(aggregated):
         "",
         "| Setting | Model | MSE mean±std | MAE mean±std | ΔMSE vs direct | ΔMAE vs direct | "
         "MSE retention | MAE retention |",
-        "|---|---|---|---:|---:|---:|---:|",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for dataset, horizon in SETTINGS:
         per_arm = aggregated[(dataset, horizon)]
