@@ -343,7 +343,7 @@ def main() -> None:
                     ).permute(0, 2, 1)
                     fp64_map = (
                         torch.nn.functional.linear(
-                            pooled.permute(0, 2, 1).double(),
+                            pooled.double(),
                             torch.as_tensor(
                                 matrix, dtype=torch.float64, device=pooled.device
                             ),
