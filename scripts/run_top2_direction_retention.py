@@ -68,6 +68,29 @@ def _projected_model_class(basis, source):
 
     class ProjectedPhaseFormer(original):  # type: ignore[misc,valid-type]
         def __init__(self, configs):
+            if os.environ.get("TOPDIR_DEBUG"):
+                print(
+                    json.dumps(
+                        {
+                            "event": "pre_construct",
+                            "use_residual_head": getattr(
+                                configs, "use_residual_head", "__absent__"
+                            ),
+                            "use_weak_period_residual": getattr(
+                                configs, "use_weak_period_residual", "__absent__"
+                            ),
+                            "head_type": getattr(
+                                configs, "weak_period_residual_head_type", "__absent__"
+                            ),
+                            "projection": getattr(
+                                configs, "weak_residual_projection", "__absent__"
+                            ),
+                            "seq_len": getattr(configs, "seq_len", -1),
+                        },
+                        default=str,
+                    ),
+                    flush=True,
+                )
             original.__init__(self, configs, projection_basis=basis)
             self.projection_basis_source = source
             print(
