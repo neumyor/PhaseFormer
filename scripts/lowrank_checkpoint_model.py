@@ -188,14 +188,6 @@ def intervention_forward(intervention, audit_math=None):
                 self.encoder.weight.double(),
                 self.encoder.bias.double(),
             )
-            print(
-                "DBG pooled", tuple(pooled64.shape), "encW",
-                tuple(self.encoder.weight.shape), "hid", tuple(hidden64.shape),
-                "decW", tuple(self.decoder.weight.shape), "decB",
-                tuple(self.decoder.bias.shape), "last", tuple(last.shape),
-                "centered", tuple(centered.shape), "delta", tuple(delta.shape),
-                flush=True,
-            )
             # All operands are float64 copies of the *checkpoint* tensors; the
             # composed map must be rebuilt here rather than reused from the
             # float32-effective matrix, because ``decoder @ encoder`` computed in
@@ -209,20 +201,12 @@ def intervention_forward(intervention, audit_math=None):
             map64 = torch.nn.functional.linear(
                 pooled64, decoder64 @ self.encoder.weight.double()
             ) + (decoder64 * self.encoder.bias.double()).sum(dim=1)[None, None, :]
-            print(
-                "AUDIT-SHAPES",
-                "pooled64", tuple(pooled64.shape),
-                "encoderW", tuple(self.encoder.weight.shape),
-                "encoderB", tuple(self.encoder.bias.shape),
-                "hidden64", tuple(hidden64.shape),
-                "decoderW", tuple(self.decoder.weight.shape),
-                "decoderB", tuple(self.decoder.bias.shape),
-                "last", tuple(last.shape),
-                flush=True,
+            head64_candidate = (
+                torch.nn.functional.linear(
+                    hidden64, decoder64, self.decoder.bias.double()
+                ).permute(0, 2, 1)
+                + last.double()
             )
-            head64_candidate = torch.nn.functional.linear(
-                hidden64, decoder64, self.decoder.bias.double()
-            ).permute(0, 2, 1) + last.permute(0, 2, 1).double()
             self.last_audit = {
                 "pooled64": pooled64,
                 "head64_candidate": head64_candidate,
@@ -231,7 +215,9 @@ def intervention_forward(intervention, audit_math=None):
                 # The branch's persistence anchor is the *uncentered* last step of
                 # its normalized input; the last column of ``centered`` is zero by
                 # construction, so it cannot be used here.
-                "anchor64": last.permute(0, 2, 1).double(),
+                # ``last`` is already ``(B, 1, C)``, the exact shape the head
+                # broadcasts over the horizon.
+                "anchor64": last.double(),
                 "head64": head64_candidate,
                 "shapes": (
                     tuple(pooled64.shape), tuple(hidden64.shape),
