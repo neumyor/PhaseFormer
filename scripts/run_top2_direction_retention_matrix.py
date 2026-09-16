@@ -147,7 +147,7 @@ def dispatch(cells, gpus, output_root, projector_dir, retries, poll,
             attempts[key] = attempts.get(key, 0) + 1
             argv = arm_command(
                 cell["arm"], cell["dataset"], cell["horizon"], cell["seed"],
-                projector_dir, args.evaluate_test,
+                projector_dir, evaluate_test,
             )
             env = dict(os.environ)
             env["CUDA_VISIBLE_DEVICES"] = str(gpu)
