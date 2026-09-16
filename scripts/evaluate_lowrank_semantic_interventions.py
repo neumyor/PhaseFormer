@@ -305,9 +305,11 @@ def broadcast_per_sample(
         raise ValueError(
             f"per-sample vector has {value.shape[-1]} values, expected {channels}"
         )
-    # Such a vector is constant over the horizon, so the first step is a
-    # faithful representative of the whole slice.
-    value = value.reshape(samples, -1, channels)[:, :1, :]
+    # Such a vector is *analytically* constant over the horizon, but a cache
+    # written from reconstructed float32 quantities carries a horizon spread of
+    # the same order as the rounding error.  Averaging instead of taking one
+    # step keeps the per-sample anchor accurate.
+    value = value.reshape(samples, -1, channels).mean(axis=1, keepdims=True)
     del horizon
     return value
 
@@ -849,12 +851,16 @@ def main() -> None:
             - head_map
             - affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
         )
-        last_abs = x_last_norm * sigma + mu
-        # The recovered anchor must be a single per-sample vector broadcast over
-        # the horizon, which is a direct consequence of the head's algebra.
+        # The anchor is analytically constant over the horizon; the residual
+        # spread of the reconstructed quantity is the float32 rounding floor of
+        # this cache and bounds how accurately the arms can reproduce the run.
         anchor_spread = float(
             np.abs(x_last_norm - x_last_norm.mean(axis=1, keepdims=True)).max()
         )
+        # The arms need the per-sample anchor, so the horizon average is used;
+        # one arbitrary step would inherit the full spread measured above.
+        x_last_norm = x_last_norm.mean(axis=1, keepdims=True)
+        last_abs = x_last_norm * sigma + mu
         denormalization_error = float(
             np.abs(residual_abs - (residual_norm * sigma + mu)).max()
         )
@@ -876,6 +882,7 @@ def main() -> None:
             "equivalence_pass": bool(equivalence_max < 1e-6),
             "head_decomposition_max_abs": decomposition_max,
             "head_decomposition_pass": bool(decomposition_max < 1e-6),
+            "anchor_horizon_spread_max_abs": anchor_spread,
             "fp32_tf32_deviation_max_abs": tf32_max,
             "rev_in_denormalization_max_abs": denormalization_error,
             "intervention_identity_max_abs": identity_max,
