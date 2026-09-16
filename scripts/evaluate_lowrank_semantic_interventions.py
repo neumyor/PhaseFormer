@@ -189,6 +189,59 @@ def arm_metrics(
     }
 
 
+def random_drop_band(
+    hidden: np.ndarray,
+    decoder_weight: np.ndarray,
+    decoder_bias: np.ndarray,
+    sigma: np.ndarray,
+    last_abs: np.ndarray,
+    gate: np.ndarray,
+    phase_abs: np.ndarray,
+    target: np.ndarray,
+    rank: int,
+    count: int,
+    rng: np.random.Generator,
+    chunk: int = 512,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fused MSE/MAE of ``count`` random same-dimension drop arms.
+
+    The arms are linear projections, so the whole band is evaluated with blocked
+    contractions over a stacked basis tensor instead of ``count`` separate
+    evaluations; this keeps the 100-repeat control affordable on the largest
+    validation split of the analysis.  Returns the per-arm fused MSE and MAE.
+    """
+    count = max(int(count), 1)
+    dimension = max(1, min(int(count) and rank, rank))
+    bases = np.stack(
+        [random_orthogonal_basis(rank, dimension, rng) for _ in range(count)],
+        axis=0,
+    ).astype(np.float64)  # (arms, r, k)
+    samples = hidden.shape[0]
+    mse = np.zeros(count)
+    mae = np.zeros(count)
+    for start in range(0, samples, chunk):
+        stop = min(start + chunk, samples)
+        hidden_chunk = hidden[start:stop]
+        full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight) + decoder_bias[
+            None, :, None
+        ]
+        coefficients = np.einsum("ncr,rkm->nckm", hidden_chunk, bases)
+        removed = np.einsum("nckm,hr->nhcm", coefficients, decoder_weight)
+        corrections = (full[:, :, :, None] - removed) * sigma[start:stop][
+            :, None, :, None
+        ]
+        branch = last_abs[start:stop][:, None, :, None] + corrections
+        fused = (1.0 - gate[start:stop])[:, None, :, None] * phase_abs[
+            start:stop
+        ][:, :, :, None] + gate[start:stop][:, None, :, None] * branch
+        delta = fused - target[start:stop][:, :, :, None]
+        weight = (stop - start) / samples
+        mse += weight * np.mean(delta ** 2, axis=(0, 1, 2))
+        mae += weight * np.mean(np.abs(delta), axis=(0, 1, 2))
+        del full, coefficients, removed, corrections, branch, fused, delta
+    return mse, mae
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", default=".")
@@ -615,20 +668,12 @@ def main() -> None:
         if requested:
             arms = [arm for arm in arms if arm[0] in requested]
 
-        random_metrics = []
-        random_count = 0
-        for repeat in range(args.random_repeats):
-            basis = random_orthogonal_basis(rank_dim, min(args.semantic_rank, rank_dim), rng)
-            random_metrics.append(
-                arm_metrics(
-                    hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
-                    correction_reference, last_abs, sigma, basis, "drop",
-                )
-            )
-            random_count += 1
+        random_mse, random_mae = random_drop_band(
+            hidden, decoder_weight, decoder_bias, sigma, last_abs, gate,
+            phase_abs, target, rank_dim, args.random_repeats, rng,
+        )
+        random_count = int(args.random_repeats)
 
-        random_mse = np.asarray([item["fused_mse"] for item in random_metrics])
-        random_mae = np.asarray([item["fused_mae"] for item in random_metrics])
         low_mse, high_mse = np.percentile(random_mse, RANDOM_QUANTILES)
         low_mae, high_mae = np.percentile(random_mae, RANDOM_QUANTILES)
 
@@ -701,7 +746,7 @@ def main() -> None:
         del (features, cached, hidden, residual_abs, residual_norm, sigma, mu,
              gate, phase_abs, target, correction_reference, last_abs,
              semantic_full, semantic_small, pca, conditional, independent,
-             random_metrics, arms)
+             arms)
         models.pop(group_key, None)
         del model, val_loader
 
