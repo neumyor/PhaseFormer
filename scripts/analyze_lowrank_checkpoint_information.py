@@ -181,7 +181,7 @@ def build_dictionary(
     input_groups = build_groups(raw_inputs)
     output_groups = build_groups(raw_outputs)
     moments = centered_moments(train_z)
-    dictionary = SettingDictionary(
+    return SettingDictionary(
         setting=setting,
         dataset=dataset,
         horizon=horizon,
@@ -196,7 +196,6 @@ def build_dictionary(
         output_shapley={},
         moments=moments,
     )
-    return dictionary
 
 
 def align_direction(
