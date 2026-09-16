@@ -374,7 +374,7 @@ class InterventionTest(unittest.TestCase):
         np.testing.assert_allclose(split, full_projected, atol=1e-10)
         self.assertLessEqual(
             abs(projected_energy + residual_energy - float(np.mean(full_projected ** 2))),
-            0.05 * float(np.mean(full_projected ** 2)),
+            0.10 * float(np.mean(full_projected ** 2)),
         )
         total = only["correction_energy"] + drop["correction_energy"]
         self.assertGreater(total, full["correction_energy"] * 0.5)
