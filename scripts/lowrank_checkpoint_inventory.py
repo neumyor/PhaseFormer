@@ -70,6 +70,7 @@ class Candidate:
     checkpoint: Path | None
     metrics_complete: bool
     checkpoint_bytes: int = 0
+    config_q: float | None = None
     requested_relative_rank: float | None = None
     assignment: str = ""
 
@@ -109,6 +110,9 @@ def sha256_of(path: Path, chunk: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
+CONFIG_Q_PATTERN = re.compile(r"pool(\d+)_q([0-9.eE+-]+)_r(\d+)")
+
+
 def classify_cell(mechanism: str, hyperparams: dict) -> tuple[str, int | None, int]:
     head = hyperparams.get("weak_period_residual_head_type", "shared")
     if mechanism == "no_residual":
@@ -120,6 +124,21 @@ def classify_cell(mechanism: str, hyperparams: dict) -> tuple[str, int | None, i
         rank = int(hyperparams.get("weak_period_residual_rank", 0))
         return "low_rank", rank, pool
     return f"other:{head}", None, 1
+
+
+def nearest_cell(requested_q: float, candidates: list[float]) -> float:
+    """Relative-rank cell whose planned q is closest to a requested q.
+
+    ``config_id`` in the runner summaries spells the requested fraction
+    explicitly (for example ``pool1_q0.0305556_r22``), which is the only place
+    that number survives: the checkpoint stores just the realized integer rank.
+    The seed-2021 sweep requested slightly different fractions for its smallest
+    cell (``22/720`` and ``10/336``), so the label is chosen by nearest planned
+    ``q`` rather than by exact equality.
+    """
+    if not candidates:
+        raise ValueError("no candidate relative ranks")
+    return min(candidates, key=lambda value: (abs(value - requested_q), -value))
 
 
 def max_rank(pool_factor: int, horizon: int) -> int:
@@ -357,7 +376,7 @@ def scan_candidates(repo_root: Path) -> list[Candidate]:
 def build_cells(
     repo_root: Path,
     include_diagnostic: bool = True,
-) -> tuple[dict[tuple[str, int, int, str], Cell], list[Candidate]]:
+) -> tuple[dict[tuple[str, int, int, str], Cell], list[Candidate], list[dict], list[dict]]:
     """Assign every low-rank checkpoint to exactly one planned analysis cell.
 
     A cell is ``(setting, seed, relative-rank cell)``.  Assignment uses the
@@ -414,6 +433,8 @@ def build_cells(
 
     unassigned: list[tuple[str, int, int, int]] = []
     inferred: list[dict] = []
+    cell_of_rank: dict[tuple[str, int, int, int], set[str]] = {}
+    planned_cells = sorted(RELATIVE_RANKS)
     for candidate in candidates:
         key = (
             candidate.dataset,
@@ -424,14 +445,15 @@ def build_cells(
         if candidate.pool_factor != 1:
             unassigned.append(key)
             continue
-        ladder = sorted(ladders.get((candidate.dataset, candidate.horizon, candidate.seed), ()))
-        exact_hits = requested.get(key, set())
-        if len(exact_hits) == 1:
-            relative_rank, how = next(iter(exact_hits)), "runner_summary"
-        elif exact_hits:
-            relative_rank = max(exact_hits)
-            how = "runner_summary_ambiguous_max"
+        summary_q = requested.get(key, set())
+        if summary_q:
+            relative_rank = nearest_cell(max(summary_q), planned_cells)
+            how = "runner_summary"
+            candidate.config_q = max(summary_q)
         else:
+            ladder = sorted(
+                ladders.get((candidate.dataset, candidate.horizon, candidate.seed), ())
+            )
             relative_rank = ladder_q_for_rank(
                 candidate.pool_factor, candidate.horizon, ladder, int(candidate.rank), "exact"
             )
@@ -441,18 +463,16 @@ def build_cells(
                     candidate.pool_factor, candidate.horizon, ladder, int(candidate.rank), "rounding"
                 )
                 how = "manifest_ladder_rounding_rank"
-        if relative_rank is None:
-            unassigned.append(key)
-            continue
         label = LABEL_OF_RELATIVE_RANK.get(relative_rank)
         cell = cells.get((candidate.dataset, candidate.horizon, candidate.seed, label))
-        if cell is None:
+        if relative_rank is None or cell is None:
             unassigned.append(key)
             continue
         candidate.assignment = how
         candidate.requested_relative_rank = relative_rank
         cell.candidates.append(candidate)
         cell.requested_relative_rank = relative_rank
+        cell_of_rank.setdefault((candidate.dataset, candidate.horizon, candidate.seed, int(candidate.rank or -1)), set()).add(cell.cell)
         if how != "runner_summary":
             inferred.append(
                 {
@@ -464,6 +484,17 @@ def build_cells(
                     "run_dir": str(candidate.run_dir.relative_to(repo_root)),
                 }
             )
+    # A realized rank that two different planned cells both claim is a genuine
+    # label collision.  It happens at horizon 720, where the plan's ``q=1/16``
+    # and ``q=1/32`` both realize rank 22; the requested fraction recorded in
+    # the runner summary resolves it above, and the collision is recorded so the
+    # report can disclose which artifact carries which label.
+    collisions = [
+        {"dataset": key[0], "horizon": key[1], "seed": key[2], "rank": key[3],
+         "cells": sorted(value)}
+        for key, value in cell_of_rank.items()
+        if len(value) > 1
+    ]
     for key, cell in cells.items():
         if not cell.candidates:
             continue
@@ -482,12 +513,15 @@ def build_cells(
             "low-rank checkpoints whose realized rank carries no recorded "
             f"requested relative rank: {sorted(set(unassigned))}"
         )
-    setattr(build_cells, "last_inferred", inferred)
-    return cells, candidates
+    return cells, candidates, inferred, collisions
 
 
-def inventory_rows(repo_root: Path, hash_checkpoints: bool = True) -> list[dict]:
-    cells, _ = build_cells(repo_root)
+def inventory_rows(
+    repo_root: Path,
+    hash_checkpoints: bool = True,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    cells, candidates, inferred, collisions = build_cells(repo_root)
+    del candidates
     rows = []
     for key in sorted(cells, key=lambda item: (item[0], item[1], item[2], item[3])):
         cell = cells[key]
@@ -530,7 +564,7 @@ def inventory_rows(repo_root: Path, hash_checkpoints: bool = True) -> list[dict]
         else:
             record["checkpoint_sha256_short"] = ""
         rows.append(record)
-    return rows
+    return rows, inferred, collisions
 
 
 def write_inventory(rows: list[dict], path: Path) -> None:
@@ -551,7 +585,9 @@ def main() -> None:
     parser.add_argument("--no-hash", action="store_true")
     args = parser.parse_args()
     repo_root = Path(args.repo_root).resolve()
-    rows = inventory_rows(repo_root, hash_checkpoints=not args.no_hash)
+    rows, inferred, collisions = inventory_rows(
+        repo_root, hash_checkpoints=not args.no_hash
+    )
     write_inventory(rows, repo_root / args.output)
     missing = [row for row in rows if not row["checkpoint_path"]]
     print(f"inventory rows: {len(rows)}")
@@ -567,6 +603,15 @@ def main() -> None:
     for row in inferred:
         print("  INFERRED", row["setting"], row["seed"], row["cell"], row["rank"], row["rank_assignment"])
     print("q values in the inventory:", sorted({row["relative_rank_q"] for row in rows}))
+    print(f"rank labels resolved from a manifest ladder: {len(inferred)}")
+    for entry in inferred:
+        print(
+            "  LADDER", entry["setting"], entry["seed"], entry["cell"],
+            f"rank={entry['rank']}", entry["how"],
+        )
+    print(f"realized ranks claimed by two cells: {len(collisions)}")
+    for entry in collisions:
+        print("  COLLISION", entry)
 
 
 if __name__ == "__main__":
