@@ -504,28 +504,29 @@ def build_cells(
         raise RuntimeError(
             f"one realized rank assigned to several cells: {duplicated}"
         )
+    for key, cell in cells.items():
+        del key
+        if not cell.candidates:
+            continue
+        # Duplicate training artifacts of one cell are ordered by the declared
+        # rule so the analysed checkpoint is reproducible.
+        cell.candidates.sort(
+            key=lambda item: item.sort_key(SOURCE_ROOTS.index(item.source))
+        )
+        cell.selected = cell.candidates[0]
     # Labels resolved from a job manifest are recorded, and any cell whose
     # realized rank differs from the plan's exact-rank rule is listed as an
     # offset so the report can disclose it instead of hiding it.
     offsets = [dict(entry) for entry in inferred]
     for entry in offsets:
-        key = (
-            entry["setting"].split("-")[0],
-            entry["setting"].split("-")[1],
-            entry["seed"],
-            entry["cell"],
-        )
-        cell = next(
+        cell = cells.get(
             (
-                candidate_cell
-                for candidate_cell in cells.values()
-                if candidate_cell.setting == entry["setting"]
-                and candidate_cell.seed == entry["seed"]
-                and candidate_cell.cell == entry["cell"]
-            ),
-            None,
+                entry["setting"].split("-")[0],
+                int(entry["setting"].split("-")[1]),
+                entry["seed"],
+                entry["cell"],
+            )
         )
-        del key
         entry["planned_rank"] = cell.rank if cell else None
         entry["rank_matches_plan"] = bool(cell and cell.rank == entry["rank"])
     if unassigned:
