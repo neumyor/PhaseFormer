@@ -356,6 +356,23 @@ def main() -> None:
                     chunks["target"].append(y.float().double().cpu().numpy())
                     chunks["fused"].append(patched_out.double().cpu().numpy())
                     if args.debug_checks:
+                        _zenc = torch.nn.functional.linear(
+                            centered, torch.as_tensor(
+                                encoder_weight, dtype=centered.dtype, device=centered.device
+                            ), torch.as_tensor(
+                                encoder_bias, dtype=centered.dtype, device=centered.device
+                            )
+                        )
+                        print(
+                            "  [enc-check] encoder(z) vs hidden err "
+                            f"{float((_zenc - hidden).abs().max()):.3e} "
+                            f"| z absmax {float(centered.abs().max()):.4f} "
+                            f"| hidden absmax {float(hidden.abs().max()):.4f} "
+                            f"| pool_factor {head.pool_factor} pooled_len {head.pooled_len} "
+                            f"| z shape {tuple(centered.shape)} hidden shape {tuple(hidden.shape)} "
+                            f"| residual_norm absmax {float(records['residual_norm'].abs().max()):.4f}",
+                            flush=True,
+                        )
                         branch = (
                             torch.nn.functional.linear(hidden, weight, bias).permute(0, 2, 1)
                             + centered[:, :, -1:].permute(0, 2, 1) * sigma
@@ -435,7 +452,7 @@ def main() -> None:
         print(
             f"[audit] {setting} seed={seed} {cell} rank={rank_from_checkpoint} "
             f"equiv={equivalence_max:.3e} identity={identity_max:.3e} "
-            f"anchor={anchor_error:.3e} n={audit['validation_samples']}",
+            f"head={head_identity_error:.3e} n={audit['validation_samples']}",
             flush=True,
         )
         if args.debug_checks:
