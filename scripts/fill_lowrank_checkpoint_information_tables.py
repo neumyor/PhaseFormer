@@ -67,7 +67,23 @@ def table_block(title: str, header: list[str], rows: list[list[str]], note: str 
     return "\n".join(lines)
 
 
+REQUIRED = (
+    "checkpoint_inventory.csv",
+    "stage0_audit.csv",
+    "canonical_modes.csv",
+    "cross_seed_alignment.csv",
+    "semantic_alignment.csv",
+    "conditional_rrr_alignment.csv",
+    "intervention_results.csv",
+)
+
+
 def build_tables() -> dict[int, str]:
+    # Refuse to run on an incomplete artifact set: filling the plan with empty
+    # tables would silently destroy the recorded results.
+    missing = [name for name in REQUIRED if not (RESULTS / name).is_file()]
+    if missing:
+        raise SystemExit(f"missing analysis artifacts: {missing}")
     inventory = read_csv(RESULTS / "checkpoint_inventory.csv")
     audit = read_csv(RESULTS / "stage0_audit.csv")
     canonical = read_csv(RESULTS / "canonical_modes.csv")
