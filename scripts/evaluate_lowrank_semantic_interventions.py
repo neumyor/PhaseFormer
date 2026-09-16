@@ -936,7 +936,13 @@ def main() -> None:
             )
         cached = {
             key: features[key].astype(np.float64)
-            for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
+            # ``fused`` is the model's own output for this checkpoint.  The
+            # untouched arm must compare against it rather than against a
+            # reconstruction from ``phase``, which is the phase-only forecast
+            # captured *before* the residual branch runs.
+            for key in (
+                "hidden", "z", "sigma", "mu", "gate", "phase", "target", "fused"
+            )
         }
         # ``x_last_norm`` is the branch's persistence anchor before it is scaled
         # by the RevIN scale; caching it lets the arms be recomputed later with
