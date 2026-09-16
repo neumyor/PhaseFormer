@@ -38,6 +38,7 @@ from scripts.lowrank_checkpoint_inventory import (
     rounding_rank,
 )
 from scripts.evaluate_lowrank_semantic_interventions import (
+    affine_bias,
     arm_metrics,
     latent_image,
     latent_input_pca_basis,
@@ -297,6 +298,7 @@ class InterventionTest(unittest.TestCase):
         samples, channels, rank, horizon = 12, 2, 3, 5
         return {
             "hidden": rng.standard_normal((samples, channels, rank)),
+            "encoder_bias": rng.standard_normal(rank) * 0.03,
             "decoder": rng.standard_normal((horizon, rank)) * 0.1,
             "bias": rng.standard_normal(horizon) * 0.05,
             "sigma": np.abs(rng.standard_normal((samples, 1, channels))) + 0.5,
@@ -313,13 +315,16 @@ class InterventionTest(unittest.TestCase):
             np.einsum(
                 "ncr,hr->nhc", fixture["hidden"], fixture["decoder"]
             )
-            + fixture["bias"][None, :, None]
+            + affine_bias(
+                fixture["encoder_bias"], fixture["decoder"], fixture["bias"]
+            )[None, :, None]
         ) * fixture["sigma"]
         reference = correction
         metrics = arm_metrics(
             fixture["hidden"], fixture["decoder"], fixture["bias"],
-            fixture["gate"], fixture["phase"], fixture["target"], reference,
-            fixture["anchor"], fixture["sigma"], None, "identity",
+            fixture["encoder_bias"], fixture["gate"], fixture["phase"],
+            fixture["target"], reference, fixture["anchor"], fixture["sigma"],
+            None, "identity",
         )
         branch = fixture["anchor"] + correction
         np.testing.assert_allclose(
@@ -334,10 +339,14 @@ class InterventionTest(unittest.TestCase):
             fixture["hidden"], fixture["decoder"], fixture["bias"]
         )
         sigma, basis = fixture["sigma"], fixture["basis"]
-        correction = (np.einsum("ncr,hr->nhc", hidden, decoder) + bias[None, :, None]) * sigma
+        correction = (
+            np.einsum("ncr,hr->nhc", hidden, decoder)
+            + affine_bias(fixture["encoder_bias"], decoder, bias)[None, :, None]
+        ) * sigma
         common = (
-            hidden, decoder, bias, fixture["gate"], fixture["phase"],
-            fixture["target"], correction, fixture["anchor"], sigma,
+            hidden, decoder, bias, fixture["encoder_bias"], fixture["gate"],
+            fixture["phase"], fixture["target"], correction, fixture["anchor"],
+            sigma,
         )
         full = arm_metrics(*common, None, "identity")
         only = arm_metrics(*common, basis, "only")
@@ -392,10 +401,14 @@ class InterventionTest(unittest.TestCase):
             fixture["hidden"], fixture["decoder"], fixture["bias"]
         )
         sigma = fixture["sigma"]
-        correction = (np.einsum("ncr,hr->nhc", hidden, decoder) + bias[None, :, None]) * sigma
+        correction = (
+            np.einsum("ncr,hr->nhc", hidden, decoder)
+            + affine_bias(fixture["encoder_bias"], decoder, bias)[None, :, None]
+        ) * sigma
         common = (
-            hidden, decoder, bias, fixture["gate"], fixture["phase"],
-            fixture["target"], correction, fixture["anchor"], sigma,
+            hidden, decoder, bias, fixture["encoder_bias"], fixture["gate"],
+            fixture["phase"], fixture["target"], correction, fixture["anchor"],
+            sigma,
         )
         full = arm_metrics(*common, None, "identity")
         off = arm_metrics(*common, None, "bias")
@@ -404,7 +417,9 @@ class InterventionTest(unittest.TestCase):
         np.testing.assert_allclose(
             off["correction_energy"], np.mean(expected ** 2), atol=1e-12
         )
-        scaled_bias = bias[None, :, None] * sigma
+        scaled_bias = affine_bias(
+            fixture["encoder_bias"], decoder, bias
+        )[None, :, None] * sigma
         self.assertAlmostEqual(
             full["correction_energy"] - off["correction_energy"],
             float(np.mean(2.0 * expected * scaled_bias + scaled_bias ** 2)),

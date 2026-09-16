@@ -119,10 +119,22 @@ def latent_input_pca_basis(hidden: np.ndarray, rank: int) -> np.ndarray:
 
 
 
+def affine_bias(encoder_bias: np.ndarray, decoder_weight: np.ndarray, decoder_bias: np.ndarray) -> np.ndarray:
+    """Constant term of the branch's effective affine map.
+
+    The head computes ``decoder(encoder(z)) + decoder_bias``, and
+    ``encoder(z) = encoder.weight @ z + encoder.bias``, so the input-independent
+    part of the correction is ``decoder.weight @ encoder.bias + decoder.bias``.
+    Dropping the mapped encoder bias silently shifts every arm.
+    """
+    return decoder_weight @ encoder_bias + decoder_bias
+
+
 def arm_metrics(
     hidden: np.ndarray,
     decoder_weight: np.ndarray,
     decoder_bias: np.ndarray,
+    encoder_bias: np.ndarray,
     gate: np.ndarray,
     phase_abs: np.ndarray,
     target: np.ndarray,
@@ -136,33 +148,31 @@ def arm_metrics(
 
     The branch writes, in the original value space,
 
-        r = last_abs + sigma * (decoder(h) + decoder_bias)
+        r = last_abs + sigma * (decoder(h) + decoder.weight @ encoder.bias
+                                + decoder.bias)
 
     with ``last_abs = sigma * x_last_norm + mu`` the persistence anchor.  The
-    arm's **correction** is everything except the anchor,
-
-        correction(h) = sigma * (decoder(h) + decoder_bias),
-
-    which is affine in ``h`` with slope ``sigma * decoder``.  Keeping the bias
-    inside the correction makes ``only`` and ``drop`` two independent
-    projections whose corrections sum back to the untouched one exactly;
-    ``Bias-off`` is the arm that removes the synthetic bias term.
+    arm's **correction** is everything except the anchor; keeping the bias inside
+    it makes ``only`` and ``drop`` two independent projections whose corrections
+    sum back to the untouched one, and ``Bias-off`` is the arm that removes the
+    synthetic bias term.
     """
+    bias_term = affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
     transformed = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
     if mode == "bias":
         correction = transformed * sigma
-    elif mode in ("identity",):
-        correction = (transformed + decoder_bias[None, :, None]) * sigma
+    elif mode == "identity":
+        correction = (transformed + bias_term) * sigma
     elif basis is None:
         correction = np.zeros_like(transformed)
     elif mode == "only":
         projected = np.einsum("ncr,rk->nck", hidden, basis)
         kept = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
-        correction = (kept + decoder_bias[None, :, None]) * sigma
+        correction = (kept + bias_term) * sigma
     elif mode == "drop":
         projected = np.einsum("ncr,rk->nck", hidden, basis)
         removed = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
-        correction = (transformed - removed + decoder_bias[None, :, None]) * sigma
+        correction = (transformed - removed + bias_term) * sigma
     else:
         raise ValueError(f"unknown arm mode {mode!r}")
     branch_abs = last_abs + correction
@@ -193,6 +203,7 @@ def random_drop_band(
     hidden: np.ndarray,
     decoder_weight: np.ndarray,
     decoder_bias: np.ndarray,
+    encoder_bias: np.ndarray,
     sigma: np.ndarray,
     last_abs: np.ndarray,
     gate: np.ndarray,
@@ -224,12 +235,12 @@ def random_drop_band(
         sl = slice(start, stop)
         reference = (
             np.einsum("ncr,hr->nhc", hidden[sl], decoder_weight)
-            + decoder_bias[None, :, None]
+            + affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
         ) * sigma[sl]
         weight = (stop - start) / samples
         for arm, basis in enumerate(bases):
             metrics = arm_metrics(
-                hidden[sl], decoder_weight, decoder_bias, gate[sl],
+                hidden[sl], decoder_weight, decoder_bias, encoder_bias, gate[sl],
                 phase_abs[sl], target[sl], reference, last_abs[sl], sigma[sl],
                 basis, "drop",
             )
@@ -615,12 +626,12 @@ def main() -> None:
         # low-rank branch writes except its persistence anchor.
         correction_reference = (
             np.einsum("ncr,hr->nhc", hidden, decoder_weight)
-            + decoder_bias[None, :, None]
+            + affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
         ) * sigma
 
         baseline = arm_metrics(
-            hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
-            correction_reference, last_abs, sigma, None, "identity",
+            hidden, decoder_weight, decoder_bias, encoder_bias, gate, phase_abs,
+            target, correction_reference, last_abs, sigma, None, "identity",
         )
         # The untouched arm must reproduce the validation metric the training
         # run recorded for this checkpoint.  The two numbers are computed from
@@ -689,8 +700,8 @@ def main() -> None:
             arms = [arm for arm in arms if arm[0] in requested]
 
         random_mse, random_mae = random_drop_band(
-            hidden, decoder_weight, decoder_bias, sigma, last_abs, gate,
-            phase_abs, target, rank_dim, args.random_repeats, rng,
+            hidden, decoder_weight, decoder_bias, encoder_bias, sigma, last_abs,
+            gate, phase_abs, target, rank_dim, args.random_repeats, rng,
         )
         random_count = int(args.random_repeats)
 
@@ -734,8 +745,9 @@ def main() -> None:
 
         for arm_name, basis, mode in arms:
             metrics = arm_metrics(
-                hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
-                correction_reference, last_abs, sigma, basis, mode,
+                hidden, decoder_weight, decoder_bias, encoder_bias, gate,
+                phase_abs, target, correction_reference, last_abs, sigma, basis,
+                mode,
             )
             record = {
                 "setting": setting,
