@@ -427,8 +427,14 @@ def table7(
 
 def merge_audit_shards(audit_dir: Path, output: Path) -> list[dict]:
     rows: list[dict] = []
-    for path in sorted(audit_dir.glob("shard*/stage0_audit.csv")):
-        rows.extend(read_csv(path))
+    # Shards write into their own output directory, so the audit table lands
+    # one level deeper than the shard root.
+    patterns = ("shard*/audit/stage0_audit.csv", "shard*/stage0_audit.csv")
+    for pattern in patterns:
+        for path in sorted(audit_dir.glob(pattern)):
+            rows.extend(read_csv(path))
+        if rows:
+            break
     if not rows:
         rows = read_csv(audit_dir / "stage0_audit.csv")
     if rows:
