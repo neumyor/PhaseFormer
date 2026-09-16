@@ -322,6 +322,9 @@ def main() -> None:
                         decoder_bias, dtype=hidden.dtype, device=hidden.device
                     )
                     audit_math_values = head.last_audit
+                    decoder_weight64 = torch.as_tensor(
+                        decoder_weight, dtype=torch.float64, device=device
+                    )
                     # 1) The plan's effective-map equivalence, in float64:
                     #    decoder(encoder(pool(z))) must equal ``M z + c`` on the
                     #    head's own private input.
@@ -329,16 +332,17 @@ def main() -> None:
                         equivalence_max,
                         float(
                             (
-                                audit_math_values["hidden64"] @ decoder_weight.T
+                                audit_math_values["hidden64"] @ decoder_weight64.T
                                 - audit_math_values["map64"]
                             )
                             .abs()
                             .max()
                         ),
                     )
-                    # 2) The head's full decomposition: the per-sample absolute
-                    #    residual plus the persistence anchor, which is what the
-                    #    model denormalizes and fuses.
+                    # 2) The head's full decomposition: the normalized residual
+                    #    the model actually wrote equals the mapped hidden state
+                    #    plus the mapped encoder bias, the decoder bias and the
+                    #    persistence anchor.
                     decomposition_max = max(
                         decomposition_max,
                         float(
