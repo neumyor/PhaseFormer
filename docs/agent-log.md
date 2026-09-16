@@ -2645,3 +2645,20 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   "两行表头"（首行 5 列、子表头与数据行 8 列），GFM 渲染按 5 列处理会丢掉每行后 3 个数值。
 - **用户裁定：不修**。已在 review 文档 §4 的待办表中登记为"已知、决定不修"，并注明后续不要
   顺手改动或重复上报。本轮 P0/P1 修复完结，无其他遗留改动。
+
+## 2026-09-16 — 预注册前两个预测方向的数据保留实验
+
+- 新增 `docs/PhaseFormer_top2_predictive_direction_retention_plan.md`，只规划、不实现、不运行训练。
+- 用户指定两个候选变体：V1 仅保留 RRR 方向 1，V2 仅保留方向 1+2。投影发生在 NLinear
+  的 `x_last` 中心化之后、线性层之前；投影器由各 setting 的 training split 单独计算并冻结，
+  模型其余部分端到端训练，确保只改变 NLinear 可见的输入信息。
+- 范围固定为已有方向证据覆盖的 6 个 setting：ETTh2-96/720、ETTm2-96/192、
+  Weather-96/192。对照为 matched `direct_nlinear` 与 `phase_only`；若既有 checkpoint
+  协议完全一致则复用，否则配对重训。
+- 计划采用 Stage 0 投影审计、Stage A 全 setting 单 seed validation、Stage B 三 seed
+  一次性 test，预计新增 36 次候选训练。主指标包括相对 direct 的 MSE/MAE、NLinear
+  贡献保留率和方向 2 对 V1→direct 差距的恢复率。
+- 已预注册强支持、部分支持和不支持门槛，并明确记录 λ2/λ3 eigengap，防止方向 2 接近
+  方向 3 时被事后重新定义。
+- `docs/README.md` 的当前探索入口已指向本计划；原结构化宽度优先计划降为历史入口。
+- 验证：`git diff --check` 通过；计划中的 5 张 Markdown 表格列数检查通过；未运行模型或实验。

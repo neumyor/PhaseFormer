@@ -158,10 +158,13 @@
 | 弱残差前史（已结题） | [`Weak_residual_asymmetric_component_plan.md`](Weak_residual_asymmetric_component_plan.md)、[`Weak_residual_three_trend_components_experiment_plan.md`](Weak_residual_three_trend_components_experiment_plan.md)、[`Weak_residual_trend_component_study_closure.md`](Weak_residual_trend_component_study_closure.md) | A1–A6 趋势成分 + X-A/Only-A 路由；结论"A 是条件性校正而非完整表征"；2026-09-05 结题并交接给 NLinear 瓶颈研究 |
 | 信息瓶颈父计划 | [`PhaseFormer_NLinear_Progressive_IB_Experiment_Plan_v1.0.md`](PhaseFormer_NLinear_Progressive_IB_Experiment_Plan_v1.0.md) | 形式化 Stage 1–10 计划；Stage 2/3 命题已由上一行的容量报告实质回答；**该文件状态块尚未同步更新** |
 
-- **当前探索指导文档**：[`PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md`](PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md)
-  —— 按用户授权采用 test-oriented、single-seed、宽度优先搜索，比较周期轴低秩、
-  segment basis、level-shape、近期周期稀疏和可分离映射，并为每轮提供实验设置、
-  test 选择规则、效率指标、bad-case 记录和代填充表格。
+- **当前探索指导文档**：[`PhaseFormer_top2_predictive_direction_retention_plan.md`](PhaseFormer_top2_predictive_direction_retention_plan.md)
+  —— 只构造两个数据瓶颈变体：NLinear 仅保留 RRR 方向 1，或保留方向 1+2；在
+  ETTh2-96/720、ETTm2-96/192、Weather-96/192 上进行端到端三 seed 配对验证，直接测量
+  前两个方向能够保留多少完整 NLinear 性能。
+- 上一轮结构化宽度优先计划
+  [`PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md`](PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md)
+  已完成其路线判断，保留为历史计划，不再作为当前执行入口。
 
 - 脚本：`scripts/plot_conditioned_rank_sweep.py`、
   `scripts/plot_3seed_conditioned_rank_sweep.py`、
