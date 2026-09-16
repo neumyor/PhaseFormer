@@ -46,6 +46,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.lowrank_checkpoint_core import (  # noqa: E402
+    adaptive_avg_pool_operator,
     build_groups,
     effective_map,
     input_templates,
@@ -310,12 +311,51 @@ def main() -> None:
                     from_map = (
                         torch.nn.functional.linear(centered, linear_weight) + bias
                     ).permute(0, 2, 1)
+                    # The default float32 matmul on this platform is TF32
+                    # (``torch.set_float32_matmul_precision("medium")`` inside
+                    # the training runner), so the in-model fp32 composition is
+                    # not a 1e-6 quantity.  The audit therefore re-evaluates the
+                    # exact operator in float64 from the *head's own* pooled
+                    # input, which is the strongest form of the plan's check.
+                    pooled = torch.nn.functional.adaptive_avg_pool1d(
+                        centered, head.pooled_len
+                    )
+                    fp64_hidden = torch.nn.functional.linear(
+                        pooled.double(),
+                        torch.as_tensor(
+                            encoder_weight, dtype=torch.float64, device=pooled.device
+                        ),
+                        torch.as_tensor(
+                            encoder_bias, dtype=torch.float64, device=pooled.device
+                        ),
+                    )
+                    fp64_out = torch.nn.functional.linear(
+                        fp64_hidden,
+                        torch.as_tensor(
+                            decoder_weight, dtype=torch.float64, device=pooled.device
+                        ),
+                        torch.as_tensor(
+                            decoder_bias, dtype=torch.float64, device=pooled.device
+                        ),
+                    ).permute(0, 2, 1)
+                    fp64_map = (
+                        torch.nn.functional.linear(
+                            pooled.permute(0, 2, 1).double(),
+                            torch.as_tensor(
+                                matrix, dtype=torch.float64, device=pooled.device
+                            ),
+                        )
+                        + torch.as_tensor(
+                            decoder_bias, dtype=torch.float64, device=pooled.device
+                        )
+                    ).permute(0, 2, 1)
                     equivalence_max = max(
-                        equivalence_max, float((from_hidden - from_map).abs().max())
+                        equivalence_max, float((fp64_out - fp64_map).abs().max())
                     )
                     identity_max = max(
                         identity_max, float((patched_out - clean_out).abs().max())
                     )
+                    del from_hidden, from_map
                     mu, sigma = records["stats"]
                     gate = records["gate"]
                     gate_full = gate.reshape(1, 1, -1).expand(x.shape[0], 1, gate.shape[-1])
