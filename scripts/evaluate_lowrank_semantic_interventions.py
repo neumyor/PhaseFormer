@@ -479,7 +479,13 @@ def main() -> None:
                     chunks["mu"].append(mu.double().cpu().numpy())
                     chunks["sigma"].append(sigma.double().cpu().numpy())
                     chunks["gate"].append(gate_full.double().cpu().numpy())
-                    chunks["target"].append(y.float().double().cpu().numpy())
+                    # ``y`` carries ``label_len + pred_len`` steps: the first
+                    # ``label_len`` are the decoder context, not targets.  The
+                    # model's own validation metric scores only the trailing
+                    # ``pred_len`` steps, so the cache keeps exactly those.
+                    chunks["target"].append(
+                        y.float()[:, -horizon:, :].double().cpu().numpy()
+                    )
                     chunks["fused"].append(patched_out.double().cpu().numpy())
                     if args.debug_checks:
                         print(
