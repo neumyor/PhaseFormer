@@ -102,52 +102,82 @@ def mean_std(values):
     return statistics.fmean(clean), statistics.stdev(clean)
 
 
-def load_runs(root: Path):
-    """Collect one row per (setting, seed, arm) from every metrics.csv."""
+def infer_arm(record, hyper):
+    """Map a run onto one of the four arms, including pre-arm-field controls."""
+    arm = hyper.get("weak_residual_projection_arm")
+    if arm:
+        return arm
+    if record.get("mechanism") == "no_residual":
+        return "phase_only"
+    if hyper.get("weak_period_residual_head_type") == "shared":
+        return "direct_nlinear"
+    return None
+
+
+def row_from_metrics(path: Path):
+    """Read one run's metrics.csv + config.json into a flat record."""
+    with path.open(newline="") as handle:
+        record = next(csv.DictReader(handle), None)
+    if record is None:
+        return None
+    config_path = path.with_name("config.json")
+    config = json.loads(config_path.read_text()) if config_path.exists() else {}
+    hyper = config.get("hyperparams", {})
+    arm = infer_arm(record, hyper)
+    if arm is None:
+        return None
+    try:
+        run_dir = str(path.parent.relative_to(ROOT))
+    except ValueError:
+        run_dir = str(path.parent)
+    return {
+        "dataset": record["dataset"],
+        "horizon": int(record["horizon"]),
+        "seed": int(record["seed"]),
+        "arm": arm,
+        "val_mse": float(record["val_mse"]) if record.get("val_mse") else None,
+        "val_mae": float(record["val_mae"]) if record.get("val_mae") else None,
+        "test_mse": float(record["test_mse"]) if record.get("test_mse") else None,
+        "test_mae": float(record.get("test_mae")) if record.get("test_mae") else None,
+        "parameter_count": record.get("parameter_count", ""),
+        "trainable_parameter_count": record.get("trainable_parameter_count", ""),
+        "epochs_completed": record.get("epochs_completed", ""),
+        "elapsed_sec": record.get("elapsed_sec", ""),
+        "peak_memory_bytes": record.get("peak_memory_bytes", ""),
+        "run_id": record.get("run_id", ""),
+        "run_dir": run_dir,
+        "reused": not bool(hyper.get("weak_residual_projection_arm")),
+        "gate_init": hyper.get("weak_period_residual_gate_init", ""),
+        "learning_rate": hyper.get("learning_rate", ""),
+    }
+
+
+def load_runs(root: Path, reuse_audit: Path | None = None):
+    """Collect one row per (setting, seed, arm).
+
+    New runs come from ``root/runs``.  The reused ``direct_nlinear`` control is
+    read from the run directories the reuse audit accepted, in place -- the
+    artifacts are never copied into this experiment's own directory, and the
+    ``reused`` flag keeps them distinguishable from freshly trained cells.
+    """
     rows = {}
-    for path in sorted(root.glob("runs/*/metrics.csv")):
-        with path.open(newline="") as handle:
-            record = next(csv.DictReader(handle), None)
-        if record is None:
+    paths: list[Path] = list(root.glob("runs/*/metrics.csv"))
+    if reuse_audit is not None and reuse_audit.exists():
+        payload = json.loads(reuse_audit.read_text())
+        for entry in payload.get("runs", []):
+            metrics = ROOT / entry["run_dir"] / "metrics.csv"
+            if metrics.exists():
+                paths.append(metrics)
+    for path in sorted(set(paths)):
+        row = row_from_metrics(path)
+        if row is None:
             continue
-        config_path = path.with_name("config.json")
-        config = json.loads(config_path.read_text()) if config_path.exists() else {}
-        hyper = config.get("hyperparams", {})
-        arm = hyper.get("weak_residual_projection_arm")
-        if arm is None:
-            # Legacy runs (the reused controls) predate the arm field.
-            if config.get("mechanism") == "no_residual":
-                arm = "phase_only"
-            elif hyper.get("weak_period_residual_head_type") == "shared":
-                arm = "direct_nlinear"
-            else:
-                continue
-        key = (
-            record["dataset"],
-            int(record["horizon"]),
-            int(record["seed"]),
-            arm,
-        )
-        rows[key] = {
-            "dataset": record["dataset"],
-            "horizon": int(record["horizon"]),
-            "seed": int(record["seed"]),
-            "arm": arm,
-            "val_mse": float(record["val_mse"]) if record.get("val_mse") else None,
-            "val_mae": float(record["val_mae"]) if record.get("val_mae") else None,
-            "test_mse": float(record["test_mse"]) if record.get("test_mse") else None,
-            "test_mae": float(record.get("test_mae")) if record.get("test_mae") else None,
-            "parameter_count": record.get("parameter_count", ""),
-            "trainable_parameter_count": record.get("trainable_parameter_count", ""),
-            "epochs_completed": record.get("epochs_completed", ""),
-            "elapsed_sec": record.get("elapsed_sec", ""),
-            "peak_memory_bytes": record.get("peak_memory_bytes", ""),
-            "run_id": record.get("run_id", ""),
-            "run_dir": str(path.parent.relative_to(ROOT)),
-            "reused": bool(hyper.get("weak_residual_projection_arm") is None),
-            "gate_init": hyper.get("weak_period_residual_gate_init", ""),
-            "learning_rate": hyper.get("learning_rate", ""),
-        }
+        key = (row["dataset"], row["horizon"], row["seed"], row["arm"])
+        existing = rows.get(key)
+        if existing is not None and existing["reused"] and row["reused"]:
+            # Duplicate reused candidate; keep the first audited one.
+            continue
+        rows[key] = row
     return rows
 
 
@@ -523,6 +553,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True)
     parser.add_argument("--projector-dir", default="")
+    parser.add_argument(
+        "--reuse-audit",
+        default="",
+        help="audit JSON listing the reused direct_nlinear control runs",
+    )
     parser.add_argument("--output", default="")
     args = parser.parse_args()
 
@@ -533,7 +568,10 @@ def main() -> None:
     output = Path(args.output) if args.output else root
     output.mkdir(parents=True, exist_ok=True)
 
-    rows = load_runs(root)
+    reuse_audit = Path(args.reuse_audit) if args.reuse_audit else root / "reuse_audit.json"
+    if not reuse_audit.is_absolute():
+        reuse_audit = ROOT / reuse_audit
+    rows = load_runs(root, reuse_audit)
     projector_index = {}
     index_path = projector_dir / "projectors.json"
     if index_path.exists():
