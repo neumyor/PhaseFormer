@@ -181,8 +181,10 @@ def _capture_forward():
 
         handle = self.revin.register_forward_pre_hook(pre_hook)
         try:
-            out = self._phaseformer_original_forward(
-                x_enc, x_mark_enc, x_dec, x_mark_dec, *args, **kwargs
+            # The stored attribute is the *unbound* original function, so it has
+            # to be called through the class to rebind ``self``.
+            out = type(self)._phaseformer_original_forward(
+                self, x_enc, x_mark_enc, x_dec, x_mark_dec, *args, **kwargs
             )
         finally:
             handle.remove()
