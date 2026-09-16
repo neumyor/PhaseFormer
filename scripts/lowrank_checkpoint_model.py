@@ -163,6 +163,7 @@ def intervention_forward(intervention, audit_math=None):
         effective = hidden if intervention is None else intervention(centered, hidden)
         delta = self.decoder(effective).permute(0, 2, 1).contiguous()
         self.last_centered = centered
+        self.last_pooled = pooled
         self.last_hidden = hidden
         self.last_hidden_used = effective
         self.last_forward_output = delta + last.expand(-1, self.pred_len, -1)
@@ -173,9 +174,7 @@ def intervention_forward(intervention, audit_math=None):
             # (``torch.set_float32_matmul_precision("medium")`` in the training
             # runner), so the audit uses this bit-faithful path and reports the
             # TF32 deviation separately.
-            pooled64 = torch.nn.functional.adaptive_avg_pool1d(
-                centered.double(), self.pooled_len
-            )
+            pooled64 = pooled.double()
             hidden64 = torch.nn.functional.linear(
                 pooled64,
                 self.encoder.weight.double(),
@@ -313,8 +312,8 @@ def instrument_model(model, intervention=None, audit_math=None):
         head.forward = original_head_forward
         type(model).forward = original_model_forward
         for attribute in (
-            "last_centered", "last_hidden", "last_hidden_used", "last_audit",
-            "last_forward_output",
+            "last_centered", "last_pooled", "last_hidden", "last_hidden_used",
+            "last_audit", "last_forward_output",
         ):
             if hasattr(head, attribute):
                 delattr(head, attribute)
