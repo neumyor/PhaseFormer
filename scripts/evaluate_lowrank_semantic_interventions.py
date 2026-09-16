@@ -626,13 +626,13 @@ def main() -> None:
             recorded_val_mse == recorded_val_mse  # not NaN
             and original_gap <= max(1e-3, 1e-3 * abs(recorded_val_mse))
         )
-        if not original_reproduces:
-            print(
-                f"  [WARNING] {setting} seed={seed} {cell}: untouched arm fused MSE "
-                f"{baseline['fused_mse']:.6f} vs recorded val_mse "
-                f"{recorded_val_mse:.6f} (gap {original_gap:.6f})",
-                flush=True,
-            )
+        print(
+            f"  [invariant] {setting} seed={seed} {cell}: untouched fused MSE "
+            f"{baseline['fused_mse']:.6f} vs run val_mse {recorded_val_mse:.6f} "
+            f"(gap {original_gap:.2e}, samples {features['z'].shape[0]}, "
+            f"gate {float(features['gate'].mean()):.4f})",
+            flush=True,
+        )
         rank_dim = int(hidden.shape[-1])
         rng = np.random.default_rng(RANDOM_SEED)
         # Every mask lives in the head's latent space, because that is the space
