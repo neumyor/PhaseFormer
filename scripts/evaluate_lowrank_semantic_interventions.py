@@ -616,6 +616,23 @@ def main() -> None:
             hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
             correction_reference, last_abs, sigma, None, "identity",
         )
+        # The untouched arm must reproduce the validation metric the training
+        # run recorded for this checkpoint.  The two numbers are computed from
+        # the same windows and the same scaling, so any material gap means the
+        # cached features, the batching or the masks are not what they claim.
+        recorded_val_mse = to_float_or(row["selected_val_mse"], float("nan"))
+        original_gap = abs(baseline["fused_mse"] - recorded_val_mse)
+        original_reproduces = bool(
+            recorded_val_mse == recorded_val_mse  # not NaN
+            and original_gap <= max(1e-3, 1e-3 * abs(recorded_val_mse))
+        )
+        if not original_reproduces:
+            print(
+                f"  [WARNING] {setting} seed={seed} {cell}: untouched arm fused MSE "
+                f"{baseline['fused_mse']:.6f} vs recorded val_mse "
+                f"{recorded_val_mse:.6f} (gap {original_gap:.6f})",
+                flush=True,
+            )
         rank_dim = int(hidden.shape[-1])
         rng = np.random.default_rng(RANDOM_SEED)
         # Every mask lives in the head's latent space, because that is the space
@@ -730,6 +747,8 @@ def main() -> None:
                 "baseline_fused_mae": baseline["fused_mae"],
                 "delta_fused_mse_vs_checkpoint": metrics["fused_mse"] - baseline["fused_mse"],
                 "delta_fused_mae_vs_checkpoint": metrics["fused_mae"] - baseline["fused_mae"],
+                "untouched_arm_reproduces_run_metric": original_reproduces,
+                "untouched_arm_gap_vs_run_metric": original_gap,
             }
             record.update(metrics)
             record.update(summarise_against_random(arm_name, metrics))
@@ -767,6 +786,13 @@ def main() -> None:
                 flush=True,
             )
     print(f"elapsed {time.time() - started:.1f}s", flush=True)
+
+
+def to_float_or(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
