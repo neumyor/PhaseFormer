@@ -148,7 +148,9 @@ def accumulate(seg, seq_len, pred_len, chunk):
         count += len(z)
     n = max(count, 1)
     return {
-        "n_windows": count,
+        # ``count`` counts window x channel pairs, because the branch's linear
+        # map is shared across channels and the moments are pooled over both.
+        "n_pairs": count,
         "szz": s_zz / n,
         "szy": s_zy / n,
         "syy": s_yy / n,
@@ -235,6 +237,9 @@ def run_setting(dataset, horizon, seq_len, ridge, chunk, data_root, output_dir):
     segments, borders = load_split(dataset, seq_len, data_root)
     train_seg = segments["train"]
     moments = accumulate(train_seg, seq_len, horizon, chunk)
+    # Sample count of the training split, i.e. how many (window, horizon)
+    # pairs per channel the repository's own split produces.
+    windows_per_channel = len(train_seg) - seq_len - horizon + 1
     vals, directions, _ = rrr_directions(moments["szz"], moments["szy"], ridge)
 
     total_lambda = float(vals.sum()) + 1e-12
@@ -269,8 +274,9 @@ def run_setting(dataset, horizon, seq_len, ridge, chunk, data_root, output_dir):
         "horizon": int(horizon),
         "seq_len": int(seq_len),
         "ridge": float(ridge),
-        "train_windows": int(moments["n_windows"]),
-        "expected_train_windows": int(
+        "train_windows_per_channel": int(windows_per_channel),
+        "train_window_channel_pairs": int(moments["n_pairs"]),
+        "expected_train_windows_per_channel": int(
             borders["border2s"][0] - borders["border1s"][0] - seq_len - horizon + 1
         ),
         "raw_rows": borders["raw_rows"],
@@ -313,7 +319,10 @@ def run_setting(dataset, horizon, seq_len, ridge, chunk, data_root, output_dir):
     }
     audit["checks"] = {
         "check_train_window_count": (
-            audit["train_windows"] == audit["expected_train_windows"]
+            audit["train_windows_per_channel"]
+            == audit["expected_train_windows_per_channel"]
+            and audit["train_window_channel_pairs"]
+            == audit["train_windows_per_channel"] * audit["n_channels"]
         ),
         "check_orthonormality": max(
             audit["q1_orthogonality_error"], audit["q12_orthogonality_error"]
@@ -360,7 +369,8 @@ def render_markdown(audits) -> str:
     ]
     for a in audits:
         lines.append(
-            "| {setting} | {train_windows} | {lambda1_share:.4f} | {lambda2_share:.4f} | "
+            "| {setting} | {train_windows_per_channel} | {lambda1_share:.4f} | "
+            "{lambda2_share:.4f} | "
             "{lambda3_share:.4f} | {lambda2_lambda3_gap:.3f} | "
             "{q1_orthogonality_error:.2e} | {q12_orthogonality_error:.2e} | "
             "{max_idem:.2e} | `{projector_hash}` | {passed} |".format(

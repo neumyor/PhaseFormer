@@ -1626,6 +1626,15 @@ class PhaseFormerPresetConfig:
         self.weak_period_residual_head_type = hyperparams.get(
             "weak_period_residual_head_type", "shared"
         )
+        # Frozen-direction retention variants (top-2 predictive direction plan):
+        # ``full`` keeps the direct NLinear route; ``frozen_subspace`` restricts
+        # the branch to a train-split RRR subspace installed by the caller.
+        self.weak_residual_projection = hyperparams.get(
+            "weak_residual_projection", "full"
+        )
+        self.weak_residual_projection_arm = hyperparams.get(
+            "weak_residual_projection_arm", ""
+        )
         self.weak_period_residual_pool_factor = hyperparams.get(
             "weak_period_residual_pool_factor", 1
         )
