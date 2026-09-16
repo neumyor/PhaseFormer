@@ -219,6 +219,7 @@ def random_drop_band(
     count: int,
     rng: np.random.Generator,
     chunk: int = 32,
+    block_elements: int = 40_000_000,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fused MSE/MAE of ``count`` random same-dimension drop arms.
 
@@ -243,8 +244,16 @@ def random_drop_band(
     mse = np.zeros(count)
     mae = np.zeros(count)
     bias_term = affine_bias(encoder_bias, decoder_weight, decoder_bias)
-    for start in range(0, samples, chunk):
-        stop = min(start + chunk, samples)
+    # The dominant transient is ``(block, horizon, channels, arms)``; cap it by
+    # element count so the peak stays bounded regardless of how wide or long the
+    # dataset is.  Several shards run at once on a shared host, so an unbounded
+    # block is not an option.
+    per_sample = max(
+        decoder_weight.shape[0] * hidden.shape[1] * count, 1
+    )
+    block = max(1, min(chunk, block_elements // per_sample))
+    for start in range(0, samples, block):
+        stop = min(start + block, samples)
         piece = np.ascontiguousarray(hidden[start:stop], dtype=np.float64)
         n = piece.shape[0]
         # ``full`` is the untouched correction of this block: (n, h, c)
