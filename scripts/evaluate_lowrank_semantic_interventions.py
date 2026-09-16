@@ -189,73 +189,10 @@ def arm_metrics(
     }
 
 
-def arm_fused_errors(
-    hidden_chunk: np.ndarray,
-    decoder_weight: np.ndarray,
-    sigma_chunk: np.ndarray,
-    last_abs_chunk: np.ndarray,
-    gate_chunk: np.ndarray,
-    phase_chunk: np.ndarray,
-    target_chunk: np.ndarray,
-    bases: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Fused MSE/MAE of every arm in ``bases`` on one sample block.
-
-    ``bases`` is ``(arms, r, k)``.  The arm axis is kept as a trailing dimension
-    so the whole band is evaluated without a Python loop over the arms.
-    """
-    hidden_chunk = np.ascontiguousarray(hidden_chunk, dtype=np.float64)
-    bases = np.ascontiguousarray(bases, dtype=np.float64)
-    samples, channels, rank = hidden_chunk.shape
-    horizon = decoder_weight.shape[0]
-    arms = bases.shape[0]
-    # ``hidden @ Q`` per arm: (n, c, arms, k)
-    coefficients = np.empty((samples, channels, arms, bases.shape[2]))
-    # ``Q Q^T h`` per arm, then decoded: (n, h, c, arms)
-    removed = np.empty((samples, horizon, channels, arms))
-    for arm in range(arms):
-        basis = bases[arm]
-        projected = hidden_chunk @ basis                 # (n, c, k)
-        coefficients[:, :, arm, :] = projected
-        back = projected @ basis.T                       # (n, c, r)
-        removed[:, :, :, arm] = np.einsum(
-            "ncr,hr->nhc", back, decoder_weight
-        )
-    del coefficients
-    full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight)
-    if full.ndim != 3 or removed.shape != (
-        hidden_chunk.shape[0], decoder_weight.shape[0], hidden_chunk.shape[1],
-        bases.shape[0],
-    ):
-        raise RuntimeError(
-            f"shape guard: hidden={hidden_chunk.shape} decoder={decoder_weight.shape} "
-            f"bases={bases.shape} full={full.shape} removed={removed.shape}"
-        )
-    corrections = (full[:, :, :, None] - removed) * sigma_chunk[:, None, :, None]
-    branch = last_abs_chunk[:, None, :, None] + corrections
-    fused = (1.0 - gate_chunk)[:, None, :, None] * phase_chunk[:, :, :, None] + (
-        gate_chunk[:, None, :, None]
-    ) * branch
-    delta = fused - target_chunk[:, :, :, None]
-    if delta.ndim != 4:
-        raise RuntimeError(
-            "unexpected arm tensor rank: "
-            f"hidden={hidden_chunk.shape} removed={removed.shape} "
-            f"corrections={corrections.shape} branch={branch.shape} "
-            f"fused={fused.shape} delta={delta.shape} "
-            f"sigma={sigma_chunk.shape} last_abs={last_abs_chunk.shape} "
-            f"gate={gate_chunk.shape} phase={phase_chunk.shape} "
-            f"target={target_chunk.shape} bases={bases.shape}"
-        )
-    return (
-        np.mean(delta ** 2, axis=(0, 1, 2)),
-        np.mean(np.abs(delta), axis=(0, 1, 2)),
-    )
-
-
 def random_drop_band(
     hidden: np.ndarray,
     decoder_weight: np.ndarray,
+    decoder_bias: np.ndarray,
     sigma: np.ndarray,
     last_abs: np.ndarray,
     gate: np.ndarray,
@@ -264,28 +201,41 @@ def random_drop_band(
     rank: int,
     count: int,
     rng: np.random.Generator,
-    chunk: int = 128,
+    chunk: int = 2048,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Fused MSE/MAE of ``count`` random same-dimension drop arms."""
+    """Fused MSE/MAE of ``count`` random same-dimension drop arms.
+
+    Every arm reuses the *same* closed-form statistics as the reported arms, so
+    the control band is exactly comparable with them.  The sample axis is
+    processed in blocks, which keeps the temporary tensors of the largest
+    validation split (Electricity: tens of thousands of windows, 321 channels)
+    inside a few gigabytes.
+    """
     count = max(int(count), 1)
     dimension = max(1, min(rank, 6))
-    bases = np.stack(
-        [random_orthogonal_basis(rank, dimension, rng) for _ in range(count)],
-        axis=0,
-    )
+    bases = [
+        random_orthogonal_basis(rank, dimension, rng) for _ in range(count)
+    ]
     samples = hidden.shape[0]
     mse = np.zeros(count)
     mae = np.zeros(count)
     for start in range(0, samples, chunk):
         stop = min(start + chunk, samples)
-        chunk_mse, chunk_mae = arm_fused_errors(
-            hidden[start:stop], decoder_weight, sigma[start:stop],
-            last_abs[start:stop], gate[start:stop], phase_abs[start:stop],
-            target[start:stop], bases,
-        )
+        sl = slice(start, stop)
+        reference = (
+            np.einsum("ncr,hr->nhc", hidden[sl], decoder_weight)
+            + decoder_bias[None, :, None]
+        ) * sigma[sl]
         weight = (stop - start) / samples
-        mse += weight * chunk_mse
-        mae += weight * chunk_mae
+        for arm, basis in enumerate(bases):
+            metrics = arm_metrics(
+                hidden[sl], decoder_weight, decoder_bias, gate[sl],
+                phase_abs[sl], target[sl], reference, last_abs[sl], sigma[sl],
+                basis, "drop",
+            )
+            mse[arm] += weight * metrics["fused_mse"]
+            mae[arm] += weight * metrics["fused_mae"]
+        del reference
     return mse, mae
 
 
