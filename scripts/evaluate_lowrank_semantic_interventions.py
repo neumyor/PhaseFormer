@@ -199,10 +199,13 @@ def main() -> None:
     audit_dir.mkdir(exist_ok=True)
 
     gpu = int(args.gpus.split(",")[0]) if args.gpus else 0
-    if not torch.cuda.is_available():
-        raise RuntimeError("this evaluator requires CUDA on the analysis server")
-    torch.cuda.set_device(gpu)
-    device = torch.device("cuda", gpu)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu)
+        device = torch.device("cuda", gpu)
+    else:
+        # Every arm is evaluated in closed form from the cached features, so a
+        # cache-only run needs no GPU at all.
+        device = torch.device("cpu")
     print(f"device: {device}", flush=True)
 
     rows, _, _ = inventory_rows(repo_root, hash_checkpoints=False)
