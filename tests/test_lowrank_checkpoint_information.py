@@ -159,7 +159,7 @@ class SubspaceTest(unittest.TestCase):
         basis = orthonormalize(rng.standard_normal((3, 30)))
         self.assertAlmostEqual(projection_overlap(basis, basis), 1.0, places=12)
         np.testing.assert_allclose(principal_angles(basis, basis), 0.0, atol=1e-4)
-        other = orthonormalize(np.eye(30)[3:6])
+        other = orthonormalize(rng.standard_normal((3, 30)))
         self.assertLess(projection_overlap(basis, other), 1e-12)
 
     def test_covariance_correlation_is_scale_invariant(self):
@@ -248,7 +248,7 @@ class InterventionTest(unittest.TestCase):
         phase = rng.standard_normal((samples, horizon, channels))
         target = rng.standard_normal((samples, horizon, channels))
         anchor = rng.standard_normal((samples, 1, channels))
-        basis = orthonormalize(rng.standard_normal((rank, rank - 1)))
+        basis = orthonormalize(rng.standard_normal((rank - 1, rank)))
 
         def correction_of(state):
             return np.einsum("ncr,hr->nhc", state, decoder) * sigma
@@ -286,7 +286,7 @@ class InterventionTest(unittest.TestCase):
         phase = np.zeros((5, 6, 3))
         target = np.zeros((5, 6, 3))
         anchor = np.zeros((5, 1, 3))
-        basis = orthonormalize(rng.standard_normal((4, 2)))
+        basis = orthonormalize(rng.standard_normal((2, 4)))
         reference = np.einsum("ncr,hr->nhc", hidden, decoder) * sigma
         full = arm_metrics(
             hidden, decoder, bias, gate, phase, target, reference, anchor, None,
