@@ -201,7 +201,12 @@ def intervention_forward(intervention, audit_math=None):
                 # its normalized input; the last column of ``centered`` is zero by
                 # construction, so it cannot be used here.
                 "anchor64": last.permute(0, 2, 1).double(),
-                "head64": None,
+                "head64": (
+                    torch.nn.functional.linear(
+                        hidden64, decoder64, self.decoder.bias.double()
+                    ).permute(0, 2, 1)
+                    + last.permute(0, 2, 1).double()
+                ),
                 "shapes": (
                     tuple(pooled64.shape), tuple(hidden64.shape),
                     tuple(decoder64.shape), tuple(self.decoder.bias.shape),
