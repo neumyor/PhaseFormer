@@ -201,7 +201,7 @@ def random_drop_band(
     rank: int,
     count: int,
     rng: np.random.Generator,
-    chunk: int = 512,
+    chunk: int = 256,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fused MSE/MAE of ``count`` random same-dimension drop arms.
 
@@ -211,7 +211,7 @@ def random_drop_band(
     validation split of the analysis.  Returns the per-arm fused MSE and MAE.
     """
     count = max(int(count), 1)
-    dimension = max(1, min(int(count) and rank, rank))
+    dimension = max(1, min(rank, 6))
     bases = np.stack(
         [random_orthogonal_basis(rank, dimension, rng) for _ in range(count)],
         axis=0,
@@ -222,11 +222,13 @@ def random_drop_band(
     for start in range(0, samples, chunk):
         stop = min(start + chunk, samples)
         hidden_chunk = hidden[start:stop]
-        full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight) + decoder_bias[
-            None, :, None
-        ]
-        coefficients = np.einsum("ncr,rkm->nckm", hidden_chunk, bases)
-        removed = np.einsum("nckm,hr->nhcm", coefficients, decoder_weight)
+        full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight)
+        # Project the hidden state onto each arm's subspace, then decode it with
+        # the same basis, i.e. the correction the projected state would write.
+        coefficients = np.einsum("ncr,mrk->nckm", hidden_chunk, bases)
+        # (n, c, r, arms): recombine the coefficients with the same basis.
+        reconstructed = np.einsum("nckm,mrk->ncrm", coefficients, bases)
+        removed = np.einsum("ncrm,hr->nhcm", reconstructed, decoder_weight)
         corrections = (full[:, :, :, None] - removed) * sigma[start:stop][
             :, None, :, None
         ]
@@ -238,7 +240,7 @@ def random_drop_band(
         weight = (stop - start) / samples
         mse += weight * np.mean(delta ** 2, axis=(0, 1, 2))
         mae += weight * np.mean(np.abs(delta), axis=(0, 1, 2))
-        del full, coefficients, removed, corrections, branch, fused, delta
+        del full, coefficients, reconstructed, removed, corrections, branch, fused, delta
     return mse, mae
 
 
