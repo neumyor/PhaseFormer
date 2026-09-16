@@ -43,10 +43,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import scripts.search_phaseformer as runner  # noqa: E402
-from src.models.PhaseFormer import PhaseFormer  # noqa: E402
+
 
 _STATE: dict = {"tensor": None, "source": None, "audit_path": None}
-_ORIGINAL_INIT = PhaseFormer.__init__
 
 
 def _load_basis(path: Path, seq_len: int) -> tuple[np.ndarray, str]:
@@ -57,22 +56,35 @@ def _load_basis(path: Path, seq_len: int) -> tuple[np.ndarray, str]:
     return basis, hashlib.sha256(basis.tobytes()).hexdigest()
 
 
-def _patched_init(self, configs, *args, **kwargs):
-    _ORIGINAL_INIT(self, configs, *args, **kwargs)
-    if _STATE["tensor"] is None:
-        return
-    count = self.install_projection_basis(_STATE["tensor"], source=_STATE["source"])
-    print(
-        json.dumps(
-            {
-                "event": "projection_installed",
-                "rank": int(count),
-                "basis": _STATE["source"],
-                "sha256": _STATE["basis_sha256"],
-            }
-        ),
-        flush=True,
-    )
+def _projected_model_class(basis, source):
+    """A PhaseFormer subclass whose NLinear branch is frozen onto ``basis``.
+
+    ``PhaseFormer.__init__`` takes an optional ``projection_basis`` keyword, so
+    the basis rides the real constructor instead of being injected afterwards.
+    The subclass adds no parameters, so capacity is identical to the direct
+    route; it only removes input information.
+    """
+    original = runner.PhaseFormer
+
+    class ProjectedPhaseFormer(original):  # type: ignore[misc,valid-type]
+        def __init__(self, configs):
+            original.__init__(self, configs, projection_basis=basis)
+            self.projection_basis_source = source
+            print(
+                json.dumps(
+                    {
+                        "event": "projection_installed",
+                        "rank": int(
+                            self.weak_period_residual.projection_basis.shape[1]
+                        ),
+                        "basis": source,
+                        "sha256": _STATE["basis_sha256"],
+                    }
+                ),
+                flush=True,
+            )
+
+    return ProjectedPhaseFormer
 
 
 def _visibility_audit(model, loader) -> dict:
@@ -189,7 +201,9 @@ def main() -> None:
         _STATE["source"] = str(basis_path)
         _STATE["basis_sha256"] = digest
         _STATE["audit_path"] = str(basis_path)
-        PhaseFormer.__init__ = _patched_init
+        runner.PhaseFormer = _projected_model_class(
+            _STATE["tensor"], _STATE["source"]
+        )
         _patch_trainer_audit()
 
     sys.argv = [sys.argv[0], *remainder]

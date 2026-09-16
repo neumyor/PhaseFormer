@@ -475,7 +475,7 @@ class PhaseFormer(DefaultPLModule):
     3) Reassemble to forecasting sequence and de-normalize
     """
 
-    def __init__(self, configs):
+    def __init__(self, configs, projection_basis=None):
         super().__init__(configs)
 
         # basic configs
@@ -1116,6 +1116,13 @@ class PhaseFormer(DefaultPLModule):
                 self.weak_period_residual_gate = nn.Parameter(
                     torch.full((1, 1, self.enc_in), float(gate_logit))
                 )
+
+        # Frozen-direction retention variants (V1 = direction 1, V2 = 1+2).
+        # ``projection_basis`` is an orthonormal (seq_len, k) data artifact, so
+        # it is installed here rather than through ``configs`` and never enters
+        # the optimizer or the state dict.
+        if projection_basis is not None:
+            self.install_projection_basis(projection_basis, source="__init__")
 
         if self.use_triaxis_fusion:
             cycle_period = getattr(configs, "triaxis_cycle_period_len", 24)
