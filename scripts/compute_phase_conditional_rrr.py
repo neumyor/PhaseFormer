@@ -259,12 +259,11 @@ def main() -> None:
 
         for cell, payload in sorted(per_checkpoint.items()):
             learned = payload["learned_basis"]
-            overlap_independent = projection_overlap(
-                learned, independent_basis[: learned.shape[1]]
-            )
-            overlap_conditional = projection_overlap(
-                learned, conditional_basis[: learned.shape[1]]
-            )
+            # Both RRR bases live in the 720-dimensional input space and have
+            # the same rank as the learned row space, so the overlap is
+            # dimension matched without any truncation.
+            overlap_independent = projection_overlap(learned, independent_basis)
+            overlap_conditional = projection_overlap(learned, conditional_basis)
             alignment_rows.append(
                 {
                     "setting": setting,
@@ -284,7 +283,15 @@ def main() -> None:
                     "independent_ridge": RIDGE,
                     "train_pairs": int(count),
                     "gate_mean": float(
-                        np.mean(accumulators["wzy"] * 0.0) + 0.0
+                        np.mean(
+                            np.sqrt(
+                                np.clip(
+                                    np.diag(m_zz) / np.maximum(np.diag(szz), 1e-30),
+                                    0.0,
+                                    None,
+                                )
+                            )
+                        )
                     ),
                     "checkpoint_path": next(
                         entry["checkpoint_path"]
