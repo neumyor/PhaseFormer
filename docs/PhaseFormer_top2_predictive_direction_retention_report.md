@@ -6,6 +6,8 @@
 >
 > 计划：`docs/PhaseFormer_top2_predictive_direction_retention_plan.md`
 >
+> 面向快速阅读的结论报告：`docs/PhaseFormer_top2_direction_retention_summary.md`
+>
 > 产物根目录：`research_runs/top2_direction_retention_v1/`（本机与服务器同名同结构）
 >
 > 代码提交：`26359ff`（Stage 0 与训练链路）、`da3cf10`（报告生成）

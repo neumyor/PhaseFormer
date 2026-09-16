@@ -1,7 +1,8 @@
 # PhaseFormer 前两预测方向数据保留实验计划
 
 > 状态：**已执行完毕，结果已回填（2026-09-16）**。预注册判定为 **不支持**。
-> 实验报告见 `docs/PhaseFormer_top2_predictive_direction_retention_report.md`，
+> 面向快速阅读的结论报告见 `docs/PhaseFormer_top2_direction_retention_summary.md`，
+> 完整技术报告见 `docs/PhaseFormer_top2_predictive_direction_retention_report.md`，
 > 产物见 `research_runs/top2_direction_retention_v1/`。
 >
 > 日期：2026-09-16
