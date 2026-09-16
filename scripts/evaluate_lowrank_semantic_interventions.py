@@ -492,10 +492,11 @@ def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
             flush=True,
         )
 
-    del (features, cached, hidden, residual_abs, residual_norm, sigma, mu,
-         gate, phase_abs, target, correction_reference, last_abs,
-         semantic_full, semantic_small, pca, conditional, independent,
-         arms)
+    # ``cached`` belongs to the caller; only the arm-local temporaries are
+    # released here.
+    del (hidden, residual_abs, residual_norm, gate, phase_abs, target,
+         correction_reference, last_abs, semantic_full, semantic_small, pca,
+         conditional, independent)
 
     return {
         "untouched_arm_reproduces_run_metric": original_reproduces,
