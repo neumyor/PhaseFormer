@@ -316,9 +316,10 @@ def main() -> None:
                     )
                     # 1) The plan's effective-map equivalence.  ``centered`` is
                     #    the head's fully centered private input, so the composed
-                    #    map must reproduce ``decoder(encoder(centered))`` with no
-                    #    extra centering.  Evaluated in float64 because the
-                    #    in-model float32 matmul is TF32 on this platform.
+                    #    map must reproduce the head's own first term,
+                    #    ``decoder(encoder(centered))``, with no extra centering.
+                    #    Evaluated in float64 because the in-model float32 matmul
+                    #    is TF32 on this platform.
                     fp64_hidden = torch.nn.functional.linear(
                         centered.double(),
                         torch.as_tensor(encoder_weight, dtype=torch.float64,
@@ -340,18 +341,19 @@ def main() -> None:
                         equivalence_max,
                         float((fp64_from_hidden - fp64_from_map).abs().max()),
                     )
-                    # 2) The head's own decomposition, i.e. the absolute-space
-                    #    residual is the map plus the mapped encoder bias plus the
-                    #    decoder bias plus the persistence anchor.
+                    # 2) The head's own decomposition: the normalized absolute
+                    #    residual written by the model is the mapped encoder
+                    #    output, the mapped encoder bias, the decoder bias and
+                    #    the persistence anchor.
                     fp64_residual = (
                         fp64_from_hidden
                         + torch.as_tensor(
                             decoder_weight @ encoder_bias, dtype=torch.float64,
                             device=centered.device,
-                        )[None, None, :]
+                        )[None, :, None]
                         + torch.as_tensor(
                             decoder_bias, dtype=torch.float64, device=centered.device
-                        )[None, None, :]
+                        )[None, :, None]
                         + centered[:, :, -1:].permute(0, 2, 1).double()
                     )
                     decomposition_max = max(
