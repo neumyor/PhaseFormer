@@ -276,8 +276,8 @@ def main() -> None:
 
         set_seed(20260916)
         chunks: dict[str, list] = {
-            "z": [], "hidden": [], "phase": [], "phase_norm": [], "mu": [],
-            "sigma": [], "gate": [], "target": [], "residual": [], "residual_norm": [],
+            "z": [], "hidden": [], "phase": [], "phase_norm": [], "residual": [],
+            "residual_norm": [], "mu": [], "sigma": [], "gate": [], "target": [],
             "fused": [],
         }
         equivalence_max = 0.0
@@ -300,68 +300,36 @@ def main() -> None:
                     records = instrumented.last_lowrank_records
                     hidden = records["hidden"]
                     centered = records["z"]
+                    mu, sigma = records["stats"]
+                    gate = records["gate"]
                     weight = torch.as_tensor(
                         decoder_weight, dtype=hidden.dtype, device=hidden.device
                     )
                     bias = torch.as_tensor(
                         decoder_bias, dtype=hidden.dtype, device=hidden.device
                     )
-                    linear_weight = torch.as_tensor(
-                        matrix, dtype=centered.dtype, device=centered.device
-                    )
-                    from_hidden = (
-                        torch.nn.functional.linear(hidden, weight) + bias
-                    ).permute(0, 2, 1)
-                    from_map = (
-                        torch.nn.functional.linear(centered, linear_weight) + bias
-                    ).permute(0, 2, 1)
-                    # The default float32 matmul on this platform is TF32
-                    # (``torch.set_float32_matmul_precision("medium")`` inside
-                    # the training runner), so the in-model fp32 composition is
-                    # not a 1e-6 quantity.  The audit therefore re-evaluates the
-                    # exact operator in float64 from the *head's own* pooled
-                    # input, which is the strongest form of the plan's check.
-                    pooled = torch.nn.functional.adaptive_avg_pool1d(
-                        centered, head.pooled_len
-                    )
-                    fp64_hidden = torch.nn.functional.linear(
-                        pooled.double(),
-                        torch.as_tensor(
-                            encoder_weight, dtype=torch.float64, device=pooled.device
-                        ),
-                        torch.as_tensor(
-                            encoder_bias, dtype=torch.float64, device=pooled.device
-                        ),
-                    )
-                    fp64_out = torch.nn.functional.linear(
-                        fp64_hidden,
-                        torch.as_tensor(
-                            decoder_weight, dtype=torch.float64, device=pooled.device
-                        ),
-                        torch.as_tensor(
-                            decoder_bias, dtype=torch.float64, device=pooled.device
-                        ),
-                    ).permute(0, 2, 1)
-                    fp64_map = (
-                        torch.nn.functional.linear(
-                            pooled.double(),
-                            torch.as_tensor(
-                                matrix, dtype=torch.float64, device=pooled.device
-                            ),
+                    if records["residual_norm"] is None:
+                        raise RuntimeError(
+                            "the model never denormalized a residual forecast; "
+                            "the audited cells must use the plain R4 fusion path"
                         )
-                        + torch.as_tensor(
-                            decoder_bias, dtype=torch.float64, device=pooled.device
-                        )
-                    ).permute(0, 2, 1)
+                    # The plan's equivalence check: the branch's *effective map*
+                    # must reproduce the normalized residual the model actually
+                    # wrote.  Evaluated in float64 because the in-model float32
+                    # matmul is TF32 on this platform.
+                    fp64_residual = torch.nn.functional.linear(
+                        centered.double(),
+                        torch.as_tensor(matrix, dtype=torch.float64, device=centered.device),
+                    ).permute(0, 2, 1) + torch.as_tensor(
+                        decoder_bias, dtype=torch.float64, device=centered.device
+                    )
+                    fp64_reference = records["residual_norm"].double()
                     equivalence_max = max(
-                        equivalence_max, float((fp64_out - fp64_map).abs().max())
+                        equivalence_max, float((fp64_residual - fp64_reference).abs().max())
                     )
                     identity_max = max(
                         identity_max, float((patched_out - clean_out).abs().max())
                     )
-                    del from_hidden, from_map
-                    mu, sigma = records["stats"]
-                    gate = records["gate"]
                     gate_full = gate.reshape(1, 1, -1).expand(x.shape[0], 1, gate.shape[-1])
                     chunks["z"].append(centered.permute(0, 2, 1).double().cpu().numpy())
                     chunks["hidden"].append(hidden.double().cpu().numpy())
@@ -372,36 +340,29 @@ def main() -> None:
                         instrumented.last_residual_forecast.double().cpu().numpy()
                     )
                     chunks["phase_norm"].append(
-                        (
-                            instrumented.last_phase_forecast - mu
-                        ).div(sigma).double().cpu().numpy()
+                        records["phase_norm"].double().cpu().numpy()
                     )
                     chunks["residual_norm"].append(
-                        (
-                            instrumented.last_residual_forecast - mu
-                        ).div(sigma).double().cpu().numpy()
+                        records["residual_norm"].double().cpu().numpy()
                     )
-                    chunks["fused"].append(patched_out.double().cpu().numpy())
                     chunks["mu"].append(mu.double().cpu().numpy())
                     chunks["sigma"].append(sigma.double().cpu().numpy())
                     chunks["gate"].append(gate_full.double().cpu().numpy())
                     chunks["target"].append(y.float().double().cpu().numpy())
+                    chunks["fused"].append(patched_out.double().cpu().numpy())
                     if args.debug_checks:
-                        _res = instrumented.last_residual_forecast
-                        _lastn = centered[:, :, -1:].permute(0, 2, 1)
-                        del _lastn
-                        _recon = (
-                            torch.nn.functional.linear(
-                                hidden, weight, bias
-                            ).permute(0, 2, 1)
+                        branch = (
+                            torch.nn.functional.linear(hidden, weight, bias).permute(0, 2, 1)
+                            + centered[:, :, -1:].permute(0, 2, 1) * sigma
                             + mu
                         )
                         print(
-                            "  [debug-batch] res absmax "
-                            f"{float(_res.abs().max()):.6f} recon {float(_recon.abs().max()):.6f} "
-                            f"diff {float((_res-_recon).abs().max()):.6f} "
-                            f"| asym {getattr(model.args, 'weak_residual_asymmetric_component', '?')} "
-                            f"| mu {float(mu.mean()):.6f} sigma {float(sigma.mean()):.6f}",
+                            "  [debug-batch] residual fp32 vs branch absmax "
+                            f"{float(instrumented.last_residual_forecast.abs().max()):.6f}/"
+                            f"{float(branch.abs().max()):.6f} diff "
+                            f"{float((instrumented.last_residual_forecast - branch).abs().max()):.6f} "
+                            f"| fp64 map diff {equivalence_max:.3e} | "
+                            f"mu {float(mu.mean()):.6f} sigma {float(sigma.mean()):.6f}",
                             flush=True,
                         )
                 batches += 1
@@ -409,25 +370,30 @@ def main() -> None:
         del chunks, clean_out, patched_out, records, hidden, centered
 
         rank_from_checkpoint = int(head.rank)
-        # ``x_last_norm`` is the last step of the head's private normalized
-        # history; scaling it by sigma and adding mu gives the branch's own
-        # persistence anchor in the original value space.  The identity below is
-        # an independent arithmetic check of the whole cache.
+        # ``last_abs`` is the branch's own persistence anchor in the original
+        # value space: the last step of its private normalized history, scaled
+        # back with the exact RevIN statistics of this forward pass.  The
+        # identity ``residual_norm == decoder(hidden) + bias + z_last`` is the
+        # algebraic form of the head's own forward, so it is audited too.
         hidden = features["hidden"].astype(np.float64)
         sigma = features["sigma"].astype(np.float64)
         mu = features["mu"].astype(np.float64)
         residual_abs = features["residual"].astype(np.float64)
-        x_last_norm = features["z"].astype(np.float64)[:, -1, :][:, None, :]
-        last_abs = x_last_norm * sigma + mu
-        anchor_error = float(
+        residual_norm = features["residual_norm"].astype(np.float64)
+        z_last_norm = features["z"].astype(np.float64)[:, -1, :][:, None, :]
+        last_abs = z_last_norm * sigma + mu
+        head_identity_error = float(
             np.abs(
-                last_abs
+                residual_norm
                 - (
-                    residual_abs
-                    - np.einsum("ncr,hr->nhc", hidden, decoder_weight)
-                    - decoder_bias[None, :, None]
+                    np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+                    + decoder_bias[None, :, None]
+                    + z_last_norm
                 )
             ).max()
+        )
+        denormalization_error = float(
+            np.abs(residual_abs - (residual_norm * sigma + mu)).max()
         )
         audit = {
             "setting": setting,
@@ -445,10 +411,11 @@ def main() -> None:
             "smooth_ratio_is_zero": bool(float(head.smooth_ratio) == 0.0),
             "effective_map_equivalence_max_abs": equivalence_max,
             "equivalence_pass": bool(equivalence_max < 1e-6),
+            "head_decomposition_max_abs": head_identity_error,
+            "head_decomposition_pass": bool(head_identity_error < 1e-9),
+            "rev_in_denormalization_max_abs": denormalization_error,
             "intervention_identity_max_abs": identity_max,
             "intervention_identity_pass": bool(identity_max < 1e-9),
-            "anchor_reconstruction_max_abs": anchor_error,
-            "anchor_reconstruction_pass": bool(anchor_error < 1e-9),
             "validation_batches": batches,
             "validation_samples": int(features["z"].shape[0]),
             "gate_mean": float(features["gate"].mean()),
@@ -480,7 +447,7 @@ def main() -> None:
                 flush=True,
             )
         if args.audit_only:
-            del features, hidden, residual_abs
+            del features, hidden, residual_abs, residual_norm
             models.pop(group_key, None)
             continue
 
@@ -493,7 +460,7 @@ def main() -> None:
             hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
             correction_reference, last_abs, None, "identity",
         )
-        del residual_abs
+        del residual_abs, residual_norm, phase_abs, target
         rank_dim = int(hidden.shape[-1])
         rng = np.random.default_rng(RANDOM_SEED)
         semantic_full = semantic_basis(dataset, rank_dim)
