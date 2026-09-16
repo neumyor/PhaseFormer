@@ -28,7 +28,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -248,6 +251,11 @@ def main() -> None:
     parser.add_argument("--projector-dir", default="")
     parser.add_argument("--cell", default="", help="dataset:horizon:seed:arm")
     parser.add_argument("--cells-file", default="")
+    parser.add_argument(
+        "--gpus", default="",
+        help="comma-separated GPUs; one cell at a time per GPU via subprocesses",
+    )
+    parser.add_argument("--poll-seconds", type=int, default=5)
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -274,11 +282,14 @@ def main() -> None:
             for arm in ARMS
         ]
 
-    results = []
-    for cell in cells:
-        payload = read_one(cell, root, projector_dir)
-        results.append(payload)
-        print("TOPTEST " + json.dumps(payload, sort_keys=True), flush=True)
+    if args.gpus:
+        results = parallel_read(cells, args, root, projector_dir)
+    else:
+        results = []
+        for cell in cells:
+            payload = read_one(cell, root, projector_dir)
+            results.append(payload)
+            print("TOPTEST " + json.dumps(payload, sort_keys=True), flush=True)
 
     summary_path = root / "test_read_summary.json"
     existing = []
@@ -291,7 +302,9 @@ def main() -> None:
         "protocol": "top2-direction-retention-test-read-v1",
         "note": (
             "one test read per frozen checkpoint; no configuration, projector "
-            "or structure change is permitted after this step"
+            "or structure change is permitted after this step.  Reused "
+            "direct_nlinear cells report the test numbers their own audited run "
+            "already recorded and are never re-read."
         ),
         "cells": [merged[key] for key in sorted(merged)],
     }
@@ -301,6 +314,66 @@ def main() -> None:
     print(json.dumps({"read": len(results), "problems": bad}, indent=2))
     if bad:
         raise SystemExit(f"test read had problems: {bad}")
+
+
+def parallel_read(cells, args, root: Path, projector_dir: Path):
+    """One subprocess per GPU, each walking a disjoint share of the cells."""
+    gpus = [g.strip() for g in args.gpus.split(",") if g.strip()]
+    queues: dict[str, list[tuple]] = {gpu: [] for gpu in gpus}
+    for index, cell in enumerate(cells):
+        queues[gpus[index % len(gpus)]].append(cell)
+
+    log_dir = root / "_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    processes = []
+    results = []
+    for gpu, queue in queues.items():
+        if not queue:
+            continue
+        cells_file = log_dir / f"test_read_gpu{gpu}.txt"
+        cells_file.write_text(
+            "\n".join(":".join(str(part) for part in cell) for cell in queue) + "\n"
+        )
+        env = dict(os.environ)
+        env["CUDA_VISIBLE_DEVICES"] = gpu
+        log = open(log_dir / f"test_read_gpu{gpu}.log", "w")
+        process = subprocess.Popen(
+            [
+                sys.executable, str(Path(__file__).resolve()),
+                "--root", str(root),
+                "--projector-dir", str(projector_dir),
+                "--cells-file", str(cells_file),
+            ],
+            cwd=ROOT,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        processes.append((gpu, process, log))
+        print(json.dumps({"event": "test_read_launch", "gpu": gpu, "cells": len(queue)}))
+
+    for gpu, process, log in processes:
+        output, _ = process.communicate()
+        log.write(output)
+        log.close()
+        for line in output.splitlines():
+            if line.startswith("TOPTEST "):
+                results.append(json.loads(line[len("TOPTEST "):]))
+        print(
+            json.dumps(
+                {
+                    "event": "test_read_done",
+                    "gpu": gpu,
+                    "return_code": process.returncode,
+                    "cells_reported": sum(
+                        1 for line in output.splitlines() if line.startswith("TOPTEST ")
+                    ),
+                }
+            ),
+            flush=True,
+        )
+    return results
 
 
 if __name__ == "__main__":
