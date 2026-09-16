@@ -366,7 +366,8 @@ class InterventionTest(unittest.TestCase):
             + residual_energy
             - float(np.mean(np.einsum("ncr,hr->nhc", hidden, decoder) ** 2)),
             0.0,
-            delta=1e-6,
+            delta=1e-9
+            * float(np.mean(np.einsum("ncr,hr->nhc", hidden, decoder) ** 2)),
         )
         total = only["correction_energy"] + drop["correction_energy"]
         self.assertGreater(total, full["correction_energy"] * 0.5)
