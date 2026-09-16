@@ -366,11 +366,12 @@ class InterventionTest(unittest.TestCase):
         # do not partition exactly.  The identity that does hold is the
         # complementarity of the projections themselves.
         full_projected = np.einsum("ncr,hr->nhc", hidden, decoder)
-        split = (
-            np.einsum("nck,hr,rk->nhc", projected, decoder, basis)
-            + np.einsum("ncr,hr->nhc", back, decoder)
-        )
-        np.testing.assert_allclose(split, full_projected, atol=1e-7)
+        # ``hidden`` splits exactly into its projection and complement, and the
+        # decoder is linear, so the two decoded parts sum back to the whole.
+        split = np.einsum(
+            "nck,hr,rk->nhc", projected, decoder, basis
+        ) + np.einsum("ncr,hr->nhc", residual, decoder)
+        np.testing.assert_allclose(split, full_projected, atol=1e-10)
         self.assertLessEqual(
             abs(projected_energy + residual_energy - float(np.mean(full_projected ** 2))),
             0.05 * float(np.mean(full_projected ** 2)),
