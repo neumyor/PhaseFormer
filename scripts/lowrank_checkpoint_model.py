@@ -165,6 +165,7 @@ def intervention_forward(intervention, audit_math=None):
         self.last_centered = centered
         self.last_hidden = hidden
         self.last_hidden_used = effective
+        self.last_forward_output = delta + last.expand(-1, self.pred_len, -1)
         if audit_math:
             # Exact float64 evaluation of the *same* head applied to the *same*
             # private input.  The plan's 1e-6 equivalence bound cannot be met by
@@ -265,6 +266,13 @@ def _capture_forward(module, original_forward):
         calls = captured["denorm"]
         phase_norm = calls[1][0] if len(calls) > 1 else None
         residual_norm = calls[2][0] if len(calls) > 2 else None
+        head = getattr(self, "weak_period_residual", None)
+        head_out = getattr(head, "last_forward_output", None) if head else None
+        residual_consistency = None
+        if head_out is not None and residual_norm is not None:
+            residual_consistency = float(
+                (head_out.float() - residual_norm).abs().max()
+            )
         self.last_lowrank_records = {
             "stats": captured["stats"],
             "gate": gate,
@@ -272,6 +280,8 @@ def _capture_forward(module, original_forward):
             "z": getattr(self.weak_period_residual, "last_centered", None),
             "phase_norm": phase_norm,
             "residual_norm": residual_norm,
+            "head_forward_output": head_out,
+            "residual_consistency_max_abs": residual_consistency,
             "denormalize_calls": len(calls),
         }
         return out
@@ -299,7 +309,8 @@ def instrument_model(model, intervention=None, audit_math=None):
         head.forward = original_head_forward
         type(model).forward = original_model_forward
         for attribute in (
-            "last_centered", "last_hidden", "last_hidden_used", "last_audit"
+            "last_centered", "last_hidden", "last_hidden_used", "last_audit",
+            "last_forward_output",
         ):
             if hasattr(head, attribute):
                 delattr(head, attribute)
