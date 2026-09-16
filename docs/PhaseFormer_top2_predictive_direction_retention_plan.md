@@ -1,6 +1,8 @@
 # PhaseFormer 前两预测方向数据保留实验计划
 
-> 状态：预注册计划，尚未实现、尚未训练、尚无结果
+> 状态：**已执行完毕，结果已回填（2026-09-16）**。预注册判定为 **不支持**。
+> 实验报告见 `docs/PhaseFormer_top2_predictive_direction_retention_report.md`，
+> 产物见 `research_runs/top2_direction_retention_v1/`。
 >
 > 日期：2026-09-16
 >
@@ -260,73 +262,114 @@ V2 明显优于 V1，但未达到上述接近 direct 的门槛；结论写为“
 此时结论应是：RRR 的前两方向能够解释固定数据分布上的线性最优收益，但不足以约束
 端到端训练时 NLinear 所需的全部输入信息。
 
-## 10. 待填充表格
+## 10. 结果表格（已回填）
 
 ### 表 1：投影器审计
 
 | Setting | train windows | λ1 share | λ2 share | λ3 share | λ2/λ3 gap | Q1 正交误差 | Q12 正交误差 | 幂等误差 | projector hash | 通过 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
-| ETTh2-96 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTh2-720 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-96 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-192 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-96 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-192 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| ETTh2-96 | 7825 | 0.7793 | 0.0669 | 0.0566 | 0.153 | 0.00e+00 | 2.22e-16 | 5.55e-17 | `1c95a680d7afcdb8` | PASS |
+| ETTh2-720 | 7201 | 0.8570 | 0.0373 | 0.0350 | **0.063** | 2.22e-16 | 2.22e-16 | 1.11e-16 | `56157e7328048c83` | PASS |
+| ETTm2-96 | 33745 | 0.7251 | 0.1267 | 0.0579 | 0.543 | 0.00e+00 | 1.11e-16 | 5.55e-17 | `cabb2b9e879b636a` | PASS |
+| ETTm2-192 | 33649 | 0.7462 | 0.0959 | 0.0620 | 0.354 | 2.22e-16 | 8.88e-16 | 1.11e-16 | `112ea213cc9f5ac8` | PASS |
+| Weather-96 | 36072 | 0.8617 | 0.1065 | 0.0244 | 0.771 | 2.22e-16 | 1.11e-16 | 1.11e-16 | `44f3d4774d9423ca` | PASS |
+| Weather-192 | 35976 | 0.7833 | 0.1300 | 0.0673 | 0.482 | 2.22e-16 | 2.22e-16 | 5.55e-17 | `cd74cda3ca572425` | PASS |
+
+六项检查全部通过。**ETTh2-720（gap 0.063）与 ETTh2-96（gap 0.153）已按 §5 标注
+“方向 2 的单独朝向可能不稳定”**；其余四个 setting 的 gap 较宽。`train windows` 为逐通道
+训练样本数，已与既有分析的 `n_train_windows` 逐格核对；特征值另用
+`research_runs/lowrank_data_property_v2/moments_*.npz` 独立复算，top-5 最大相对差 3.8e-06。
 
 ### 表 2：Stage A validation
 
 | Setting | direct MSE/MAE | phase-only MSE/MAE | V1 MSE/MAE | V2 MSE/MAE | V1 retention | V2 retention | V2−V1 | QC |
 |---|---|---|---|---|---:|---:|---:|---|
-| ETTh2-96 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTh2-720 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-96 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-192 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-96 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-192 | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| ETTh2-96 | 0.2040 / 0.3116 | 0.2169 / 0.3238 | 0.2084 / 0.3185 | 0.2080 / 0.3179 | 66.0% | 69.4% | -0.000442 | validation: retention defined |
+| ETTh2-720 | 0.6095 / 0.5424 | 0.6787 / 0.5853 | 0.6298 / 0.5590 | 0.6255 / 0.5583 | 70.7% | 76.8% | -0.004259 | validation: retention defined |
+| ETTm2-96 | 0.1119 / 0.2281 | 0.1199 / 0.2402 | 0.1165 / 0.2361 | 0.1160 / 0.2351 | 42.7% | 48.6% | -0.000473 | validation: retention defined |
+| ETTm2-192 | 0.1499 / 0.2649 | 0.1545 / 0.2711 | 0.1577 / 0.2748 | 0.1576 / 0.2735 | N/A | N/A | -0.000058 | validation: direct 未优于 phase-only → retention N/A |
+| Weather-96 | 0.3869 / 0.2713 | 0.3916 / 0.2739 | 0.3828 / 0.2696 | 0.3926 / 0.2780 | 186.5% | -21.6% | +0.009823 | validation: retention defined |
+| Weather-192 | 0.4454 / 0.3109 | 0.4538 / 0.3157 | 0.4460 / 0.3137 | 0.4448 / 0.3129 | 92.8% | 106.8% | -0.001183 | validation: retention defined |
+
+QC：18/18 训练稳定收敛、无异常终止；投影器逐 run 哈希一致；`TOPDIR_AUDIT` 确认
+V1/V2 的 NLinear 输入与输出均不同于 direct；V1/V2 保留能量（ETTh2-96：0.0095 / 0.0245）
+与 Stage 0 解析值（0.0108 / 0.0261）同量级。Stage A 结果未用于修改方向、不新增变体、
+不按数据集调参。ETTm2-192 在 validation 上 direct 未优于 phase-only，按 §8.2 记为 N/A。
 
 ### 表 3：三 seed 正式 test 结果
 
 | Setting | Model | MSE mean±std | MAE mean±std | ΔMSE vs direct | ΔMAE vs direct | MSE retention | MAE retention |
 |---|---|---|---|---:|---:|---:|---:|
-| ETTh2-96 | direct / phase-only / V1 / V2 | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTh2-720 | direct / phase-only / V1 / V2 | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-96 | direct / phase-only / V1 / V2 | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-192 | direct / phase-only / V1 / V2 | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-96 | direct / phase-only / V1 / V2 | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-192 | direct / phase-only / V1 / V2 | TBD | TBD | TBD | TBD | TBD | TBD |
+| ETTh2-96 | phase-only | 0.2818 ± 0.0009 | 0.3434 ± 0.0011 | 3.15% | 3.01% | 0.0% | 0.0% |
+| ETTh2-96 | direct | 0.2732 ± 0.0030 | 0.3334 ± 0.0014 | 0.00% | 0.00% | 100.0% | 100.0% |
+| ETTh2-96 | V1 | 0.2733 ± 0.0017 | 0.3385 ± 0.0022 | 0.02% | 1.53% | 99.4% | 49.0% |
+| ETTh2-96 | V2 | 0.2740 ± 0.0031 | 0.3388 ± 0.0031 | 0.29% | 1.64% | 90.7% | 45.6% |
+| ETTh2-720 | phase-only | 0.4161 ± 0.0085 | 0.4491 ± 0.0057 | 6.02% | 4.81% | 0.0% | 0.0% |
+| ETTh2-720 | direct | 0.3925 ± 0.0018 | 0.4285 ± 0.0019 | 0.00% | 0.00% | 100.0% | 100.0% |
+| ETTh2-720 | V1 | 0.4060 ± 0.0027 | 0.4431 ± 0.0014 | 3.46% | 3.39% | 42.6% | 29.5% |
+| ETTh2-720 | V2 | 0.4079 ± 0.0059 | 0.4428 ± 0.0039 | **3.94%** | **3.35%** | 34.5% | 30.5% |
+| ETTm2-96 | phase-only | 0.1743 ± 0.0018 | 0.2653 ± 0.0012 | 9.57% | 6.75% | 0.0% | 0.0% |
+| ETTm2-96 | direct | 0.1591 ± 0.0005 | 0.2485 ± 0.0005 | 0.00% | 0.00% | 100.0% | 100.0% |
+| ETTm2-96 | V1 | 0.1641 ± 0.0014 | 0.2559 ± 0.0014 | 3.19% | 2.98% | 66.6% | 55.9% |
+| ETTm2-96 | V2 | 0.1642 ± 0.0009 | 0.2557 ± 0.0013 | 3.25% | 2.89% | 66.1% | 57.2% |
+| ETTm2-192 | phase-only | 0.2282 ± 0.0005 | 0.2998 ± 0.0019 | 6.25% | 4.16% | 0.0% | 0.0% |
+| ETTm2-192 | direct | 0.2148 ± 0.0008 | 0.2878 ± 0.0002 | 0.00% | 0.00% | 100.0% | 100.0% |
+| ETTm2-192 | V1 | 0.2204 ± 0.0014 | 0.2969 ± 0.0016 | 2.63% | 3.14% | 57.9% | 24.6% |
+| ETTm2-192 | V2 | 0.2206 ± 0.0023 | 0.2959 ± 0.0010 | 2.69% | 2.79% | 56.9% | 32.9% |
+| Weather-96 | phase-only | 0.1501 ± 0.0004 | 0.1968 ± 0.0012 | 2.48% | 1.47% | 0.0% | 0.0% |
+| Weather-96 | direct | 0.1465 ± 0.0004 | 0.1939 ± 0.0001 | 0.00% | 0.00% | 100.0% | 100.0% |
+| Weather-96 | V1 | 0.1479 ± 0.0008 | 0.1955 ± 0.0019 | 0.94% | 0.82% | 62.0% | 43.9% |
+| Weather-96 | V2 | 0.1499 ± 0.0020 | 0.1968 ± 0.0028 | 2.30% | 1.46% | 7.2% | 0.4% |
+| Weather-192 | phase-only | 0.1952 ± 0.0016 | 0.2401 ± 0.0016 | 1.57% | 1.30% | 0.0% | 0.0% |
+| Weather-192 | direct | 0.1921 ± 0.0013 | 0.2370 ± 0.0011 | 0.00% | 0.00% | 100.0% | 100.0% |
+| Weather-192 | V1 | 0.1912 ± 0.0007 | 0.2372 ± 0.0008 | -0.47% | 0.07% | 130.1% | 94.9% |
+| Weather-192 | V2 | 0.1906 ± 0.0008 | 0.2366 ± 0.0009 | **-0.82%** | **-0.19%** | 152.2% | 114.4% |
 
 ### 表 4：方向 2 增量
 
 | Setting | λ2 share | V1→V2 ΔMSE | V1→V2 ΔMAE | MSE gap recovery | MAE gap recovery | 三 seed 方向一致 |
 |---|---:|---:|---:|---:|---:|---|
-| ETTh2-96 | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTh2-720 | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-96 | TBD | TBD | TBD | TBD | TBD | TBD |
-| ETTm2-192 | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-96 | TBD | TBD | TBD | TBD | TBD | TBD |
-| Weather-192 | TBD | TBD | TBD | TBD | TBD | TBD |
+| ETTh2-96 | 0.0669 | -0.000744 | -0.000339 | -1348.6% | -6.6% | 1/3 |
+| ETTh2-720 | 0.0373 | -0.001910 | +0.000208 | -14.1% | 1.4% | 1/3 |
+| ETTm2-96 | 0.1267 | -0.000088 | +0.000218 | -1.7% | 2.9% | 2/3 |
+| ETTm2-192 | 0.0959 | -0.000133 | +0.001001 | -2.4% | 11.1% | 1/3 |
+| Weather-96 | 0.1065 | -0.001992 | -0.001239 | -144.4% | -77.5% | 0/3 |
+| Weather-192 | 0.1300 | +0.000668 | +0.000600 | N/A（V1 不差于 direct） | 381.0% | 1/3 |
+
+`V1→V2 ΔMSE` 为正表示 V2 更优。三 seed 均值上 V2 的 MSE 仅 **1/6** 优于 V1、
+双指标同时更好仅 **1/6**（Weather-192）；MAE 口径 V2 赢 4/6，但两处优势仅 ~2e-4。
 
 ### 表 5：最终决策
 
 | 判定项 | 预注册门槛 | 实测 | 通过 |
 |---|---|---|---|
-| V2 宏平均 MSE vs direct | ≤ +0.5% | TBD | TBD |
-| V2 宏平均 MAE vs direct | ≤ +0.5% | TBD | TBD |
-| V2 MSE retention 中位数 | ≥ 90% | TBD | TBD |
-| V2 MAE retention 中位数 | ≥ 90% | TBD | TBD |
-| V2 双指标优于 V1 | ≥ 4/6 settings | TBD | TBD |
-| V2 最坏单格退化 | ≤ 2% | TBD | TBD |
-| 最终结论 | 强支持 / 部分支持 / 不支持 | TBD | TBD |
+| V2 宏平均 MSE vs direct | ≤ +0.5% | 1.94% | **FAIL** |
+| V2 宏平均 MAE vs direct | ≤ +0.5% | 1.99% | **FAIL** |
+| V2 MSE retention 中位数 | ≥ 90% | 61.5% | **FAIL** |
+| V2 MAE retention 中位数 | ≥ 90% | 39.3% | **FAIL** |
+| V2 双指标优于 V1 | ≥ 4/6 settings | 1/6 | **FAIL** |
+| V2 最坏单格退化 | ≤ 2% | MSE 3.94%（ETTh2-720）、MAE 3.35%（ETTh2-720） | **FAIL** |
+| 最终结论 | 强支持 / 部分支持 / 不支持 | **不支持** | — |
+
+“不支持”的三条硬性触发条件全部命中：V2 在 5/6 setting 上双指标不优于 V1（≥3/6）；
+V2 贡献保留率中位数 MSE 61.5%、MAE 39.3%（<80%）；V2 在 4 个 setting 上相对 direct 的
+MSE 或 MAE 退化超过 2%（≥2 个）。按 §9 预设，结论为：**RRR 的前两方向能够解释固定
+数据分布上的线性最优收益，但不足以约束端到端训练时 NLinear 所需的全部输入信息。**
 
 ## 11. 后续可视化
 
-训练完成后再补充，不在计划阶段预造结果：
+训练完成后已补充前两项（`research_runs/top2_direction_retention_v1/figures/`）；
+第 3、4 项未执行，理由见实验报告 §10：
 
 1. 六个 setting 的 direct、V1、V2 MSE/MAE 对比图；
 2. V1/V2 的 NLinear 贡献保留率图；
 3. 每个 setting 选取 V2 相对 V1 改善最大和退化最大的真实样本预测曲线；
 4. 在曲线中同时显示历史、真实未来、direct、V1、V2 和 phase-only；
 5. 样本选择必须由程序化误差排序产生，并记录 sample/channel 索引，不能人工挑图。
+
+已交付：`arms_test_metrics.png`（第 1 项）、`retention.png`（第 2 项）、
+`spectrum_vs_retention.png`（补充的谱结构诊断）。
+未交付：第 3、4 项样本级预测曲线，报告 §10 中已明确标注为未做，而不是以聚合图替代。
 
 ## 12. 结果解释边界
 

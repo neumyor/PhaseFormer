@@ -29,6 +29,30 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib import font_manager  # noqa: E402
+
+
+def _use_cjk_font():
+    """Prefer an installed CJK font so Chinese axis labels render.
+
+    Matplotlib's default DejaVu Sans has no CJK glyphs and would silently emit
+    empty boxes.  Falls back to the default font when none is installed, in
+    which case the figure text stays ASCII-safe.
+    """
+    candidates = [
+        "Hiragino Sans GB", "STHeiti", "Songti SC", "Arial Unicode MS",
+        "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Zen Hei",
+    ]
+    installed = {f.name for f in font_manager.fontManager.ttflist}
+    for name in candidates:
+        if name in installed:
+            matplotlib.rcParams["font.sans-serif"] = [name, "DejaVu Sans"]
+            matplotlib.rcParams["axes.unicode_minus"] = False
+            return True
+    return False
+
+
+CJK_OK = _use_cjk_font()
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:

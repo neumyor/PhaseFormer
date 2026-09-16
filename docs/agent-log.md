@@ -2662,3 +2662,49 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   方向 3 时被事后重新定义。
 - `docs/README.md` 的当前探索入口已指向本计划；原结构化宽度优先计划降为历史入口。
 - 验证：`git diff --check` 通过；计划中的 5 张 Markdown 表格列数检查通过；未运行模型或实验。
+
+## 2026-09-16 — 执行前两个预测方向的数据保留实验并回填结果（判定：不支持）
+
+- 按 `docs/PhaseFormer_top2_predictive_direction_retention_plan.md` 全量执行：Stage 0 投影器
+  与审计、Stage A（seed 2021）、Stage B（seed 2022/2023）、冻结 checkpoint 后一次性读取 test。
+  新增训练 **54 次**（V1/V2 36 次 + `phase_only` 三 seed 18 次），累计 GPU 时间 6.39 小时，
+  在远程 A800 的 GPU 0–5 上以“一卡一 run”完成（GPU 6/7 被用户 vLLM 服务占用，未触碰）。
+- 主要修改文件：
+  - `src/models/phase_adapters.py`：`WeakPeriodResidualHead` 增加可选冻结正交基投影
+    (`set_projection_basis`)，在 `x_last` 中心化之后、线性层之前生效，非训练属性、不入
+    `state_dict`，不改变参数量。
+  - `src/models/PhaseFormer.py`：`__init__` 新增可选 `projection_basis` 关键字并暴露
+    `install_projection_basis` / `learned_residual_gate`。
+  - `src/models/phaseformer_presets.py`：透传 `weak_residual_projection(_arm)`，避免
+    sanitizer 剥掉 `use_weak_period_residual`。
+  - `scripts/compute_top2_direction_projectors.py`（Stage 0 + 六项审计）、
+    `scripts/run_top2_direction_retention.py`（投影器安装 + 可见性审计）、
+    `scripts/run_top2_direction_retention_matrix.py`（一卡一 run 矩阵调度，可断点续跑）、
+    `scripts/audit_top2_direction_retention_reuse.py`（对照复用审计）、
+    `scripts/read_top2_direction_retention_test.py`（一次性 test 读取 + 可复现性守卫）、
+    `scripts/aggregate_top2_direction_retention.py`（计划表 1–6）、
+    `scripts/plot_top2_direction_retention.py`（图）。
+- 关键命令与产物：
+  - 产物根目录 `research_runs/top2_direction_retention_v1/`（`report_tables.md`、
+    `results.csv`、`projectors/stage0_audit.md`、`reuse_audit.md`、`test_read_summary.json`、
+    `figures/`）。
+  - 报告：`docs/PhaseFormer_top2_predictive_direction_retention_report.md`；计划 §10 五张
+    表的 TBD 已全部回填。
+- 验证结果：
+  - Stage 0 六项审计 6/6 PASS；特征值与 `lowrank_data_property_v2` 存档独立复算，
+    top-5 最大相对差 3.8e-06；窗口数与既有 `n_train_windows` 逐格相等。
+  - `direct_nlinear` 对照复用审计 **18/18** 通过（4 个候选因 gate/lr 不符被拒）；
+    `phase_only` 在本实验内三 seed 重训以保持同源。
+  - 54/54 训练完成，无异常终止；test 读取 72/72 无问题；每个新 checkpoint 读出 test 前
+    先在 validation 上复算，最大相对偏差 3.8e-05（浮点级），无 `val_mismatch`。
+  - 四个实验臂参数量逐格相等（V1/V2 与 direct 完全相同），排除容量解释。
+- 结论（预注册判定：**不支持**）：V2 相对 direct 宏平均 MSE +1.94%、MAE +1.99%；
+  V2 贡献保留率中位数 MSE 61.5%、MAE 39.3%；V2 双指标优于 V1 仅 1/6 setting；
+  最坏单格退化 MSE +3.94%。三条“不支持”硬性触发条件全部命中。
+  方向 2 的增量在 test 上不成立：MSE 口径 V2 仅 1/6 优于 V1，三格反而更差。
+- 已知风险/后续事项：
+  - ETTh2-720（λ2/λ3 gap 0.063）与 ETTh2-96（gap 0.153）的方向 2 朝向按 §5 标注为可能
+    不稳定，未做事后加维。
+  - 计划 §11.3–11.4 的样本级预测曲线未执行，已在报告 §10 明确标注为未做。
+  - 本实验为 test 一次性读取、无 test-set selection；全部结论以本实验内配对 direct 为准，
+    未使用金标准或其它协议的数字。
