@@ -387,10 +387,24 @@ def table_diagnostics(rows, aggregated, stage0, projector_index):
                     nlin_mse.append(record["nlinear_mse"])
                     nlin_mae.append(record["nlinear_mae"])
             gate_mean, gate_std = mean_std(gates)
-            gate_text = (
-                "N/A（无 NLinear 门控）" if arm == "phase_only"
-                else f"{fmt(gate_mean, 4)} ± "
-                     f"{fmt(gate_std, 4) if gate_std is not None else '—'}"
+            if arm == "phase_only":
+                gate_text = "N/A（无 NLinear 门控）"
+            elif not gates:
+                gate_text = "N/A（复用 run 未记录）"
+            else:
+                gate_text = (
+                    f"{fmt(gate_mean, 4)} ± "
+                    f"{fmt(gate_std, 4) if gate_std is not None else '—'}"
+                )
+            nlin_text_mse = (
+                fmt(mean_std(nlin_mse)[0], 6) if nlin_mse
+                else ("N/A（无 NLinear 支路）" if arm == "phase_only"
+                      else "N/A（复用 run 未记录）")
+            )
+            nlin_text_mae = (
+                fmt(mean_std(nlin_mae)[0], 6) if nlin_mae
+                else ("N/A（无 NLinear 支路）" if arm == "phase_only"
+                      else "N/A（复用 run 未记录）")
             )
             if arm == "keep_direction_1":
                 var_share = entry.get("used_var_share_v1")
@@ -410,13 +424,20 @@ def table_diagnostics(rows, aggregated, stage0, projector_index):
             params = stats.get("params") or []
             peaks = stats.get("peak") or []
             elapsed = stats.get("elapsed") or []
+            epoch_mean, epoch_std = mean_std(
+                [float(e) for e in (stats.get("epochs") or []) if e not in ("", None)]
+            )
+            epoch_text = (
+                f"{fmt(epoch_mean, 1)} ± {fmt(epoch_std, 1)}"
+                if epoch_std is not None else fmt(epoch_mean, 1)
+            )
             lines.append(
                 f"| {dataset}-{horizon} | {ARM_LABEL[arm]} | {gate_text} | "
-                f"{fmt(mean_std(nlin_mse)[0], 6)} | {fmt(mean_std(nlin_mae)[0], 6)} | "
+                f"{nlin_text_mse} | {nlin_text_mae} | "
                 f"{fmt(var_share, 4) if var_share is not None else 'N/A'} | "
                 f"{fmt(b1_std, 4) if b1_std is not None else 'N/A'} | "
                 f"{b2_std_text} | "
-                f"{stats.get('epochs')} | {fmt(mean_std(elapsed)[0], 0)} | "
+                f"{epoch_text} | {fmt(mean_std(elapsed)[0], 0)} | "
                 f"{params[0] if params else ''} | "
                 f"{fmt(mean_std(peaks)[0] / 1e6, 1) if peaks else 'N/A'} |"
             )
