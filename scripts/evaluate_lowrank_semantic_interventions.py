@@ -273,6 +273,17 @@ def main() -> None:
             state["weak_period_residual.decoder.bias"].detach().double().cpu().numpy()
         )
         matrix, _ = effective_map(encoder_weight, decoder_weight, head.pooled_len)
+        # The composed map used for the equivalence audit is rebuilt in float64
+        # from the checkpoint tensors.  ``decoder @ encoder`` evaluated in
+        # float32 and then widened to float64 keeps a TF32-level rounding error
+        # of ~1e-3, which would masquerade as an equivalence failure.
+        matrix64 = torch.as_tensor(
+            encoder_weight, dtype=torch.float64, device=device
+        )
+        matrix64 = (
+            torch.as_tensor(decoder_weight, dtype=torch.float64, device=device)
+            @ matrix64
+        )
 
         set_seed(20260916)
         chunks: dict[str, list] = {
@@ -298,9 +309,7 @@ def main() -> None:
                 with instrument_model(
                     model,
                     None,
-                    {"matrix": torch.as_tensor(
-                        matrix, dtype=torch.float64, device=device
-                    )},
+                    {"matrix": matrix64},
                 ) as instrumented:
                     patched_out, _, _ = instrumented(
                         x.float(), x_mark.float(), dec, y_mark.float()
