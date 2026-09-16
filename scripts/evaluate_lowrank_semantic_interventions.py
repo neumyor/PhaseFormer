@@ -389,18 +389,18 @@ def main() -> None:
                     if args.debug_checks:
                         _res = instrumented.last_residual_forecast
                         _lastn = centered[:, :, -1:].permute(0, 2, 1)
+                        del _lastn
                         _recon = (
                             torch.nn.functional.linear(
                                 hidden, weight, bias
                             ).permute(0, 2, 1)
-                            + _lastn * sigma
                             + mu
                         )
                         print(
                             "  [debug-batch] res absmax "
                             f"{float(_res.abs().max()):.6f} recon {float(_recon.abs().max()):.6f} "
                             f"diff {float((_res-_recon).abs().max()):.6f} "
-                            f"| lastn {float(_lastn.abs().max()):.6f} "
+                            f"| asym {getattr(model.args, 'weak_residual_asymmetric_component', '?')} "
                             f"| mu {float(mu.mean()):.6f} sigma {float(sigma.mean()):.6f}",
                             flush=True,
                         )
