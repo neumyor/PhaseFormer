@@ -386,6 +386,24 @@ def main() -> None:
                     chunks["sigma"].append(sigma.double().cpu().numpy())
                     chunks["gate"].append(gate_full.double().cpu().numpy())
                     chunks["target"].append(y.float().double().cpu().numpy())
+                    if args.debug_checks:
+                        _res = instrumented.last_residual_forecast
+                        _lastn = centered[:, :, -1:].permute(0, 2, 1)
+                        _recon = (
+                            torch.nn.functional.linear(
+                                hidden, weight, bias
+                            ).permute(0, 2, 1)
+                            + _lastn * sigma
+                            + mu
+                        )
+                        print(
+                            "  [debug-batch] res absmax "
+                            f"{float(_res.abs().max()):.6f} recon {float(_recon.abs().max()):.6f} "
+                            f"diff {float((_res-_recon).abs().max()):.6f} "
+                            f"| lastn {float(_lastn.abs().max()):.6f} "
+                            f"| mu {float(mu.mean()):.6f} sigma {float(sigma.mean()):.6f}",
+                            flush=True,
+                        )
                 batches += 1
         features = {key: np.concatenate(value, axis=0) for key, value in chunks.items()}
         del chunks, clean_out, patched_out, records, hidden, centered
