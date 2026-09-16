@@ -282,6 +282,7 @@ def main() -> None:
         }
         equivalence_max = 0.0
         decomposition_max = 0.0
+        tf32_max = 0.0
         identity_max = 0.0
         batches = 0
         with torch.inference_mode():
@@ -294,7 +295,13 @@ def main() -> None:
                 x, y, x_mark, y_mark = batch
                 dec = model._build_decoder_input(y.float())
                 clean_out, _, _ = model(x.float(), x_mark.float(), dec, y_mark.float())
-                with instrument_model(model, None) as instrumented:
+                with instrument_model(
+                    model,
+                    None,
+                    {"matrix": torch.as_tensor(
+                        matrix, dtype=torch.float64, device=device
+                    )},
+                ) as instrumented:
                     patched_out, _, _ = instrumented(
                         x.float(), x_mark.float(), dec, y_mark.float()
                     )
@@ -314,52 +321,42 @@ def main() -> None:
                     bias = torch.as_tensor(
                         decoder_bias, dtype=hidden.dtype, device=hidden.device
                     )
-                    # 1) The plan's effective-map equivalence.  ``centered`` is
-                    #    the head's fully centered private input, so the composed
-                    #    map must reproduce the head's own first term,
-                    #    ``decoder(encoder(centered))``, with no extra centering.
-                    #    Evaluated in float64 because the in-model float32 matmul
-                    #    is TF32 on this platform.
-                    fp64_hidden = torch.nn.functional.linear(
-                        centered.double(),
-                        torch.as_tensor(encoder_weight, dtype=torch.float64,
-                                        device=centered.device),
-                        torch.as_tensor(encoder_bias, dtype=torch.float64,
-                                        device=centered.device),
-                    )
-                    fp64_from_hidden = torch.nn.functional.linear(
-                        fp64_hidden,
-                        torch.as_tensor(decoder_weight, dtype=torch.float64,
-                                        device=centered.device),
-                    ).permute(0, 2, 1)
-                    fp64_from_map = torch.nn.functional.linear(
-                        centered.double(),
-                        torch.as_tensor(matrix, dtype=torch.float64,
-                                        device=centered.device),
-                    ).permute(0, 2, 1)
+                    audit_math_values = head.last_audit
+                    # 1) The plan's effective-map equivalence, in float64:
+                    #    decoder(encoder(pool(z))) must equal ``M z + c`` on the
+                    #    head's own private input.
                     equivalence_max = max(
                         equivalence_max,
-                        float((fp64_from_hidden - fp64_from_map).abs().max()),
+                        float(
+                            (
+                                audit_math_values["hidden64"] @ decoder_weight.T
+                                - audit_math_values["map64"]
+                            )
+                            .abs()
+                            .max()
+                        ),
                     )
-                    # 2) The head's own decomposition: the normalized absolute
-                    #    residual written by the model is the mapped encoder
-                    #    output, the mapped encoder bias, the decoder bias and
-                    #    the persistence anchor.
-                    fp64_residual = (
-                        fp64_from_hidden
-                        + torch.as_tensor(
-                            decoder_weight @ encoder_bias, dtype=torch.float64,
-                            device=centered.device,
-                        )[None, :, None]
-                        + torch.as_tensor(
-                            decoder_bias, dtype=torch.float64, device=centered.device
-                        )[None, :, None]
-                        + centered[:, :, -1:].permute(0, 2, 1).double()
-                    )
+                    # 2) The head's full decomposition: the per-sample absolute
+                    #    residual plus the persistence anchor, which is what the
+                    #    model denormalizes and fuses.
                     decomposition_max = max(
                         decomposition_max,
                         float(
-                            (fp64_residual - records["residual_norm"].double())
+                            (
+                                audit_math_values["head64"]
+                                - records["residual_norm"].double()
+                            )
+                            .abs()
+                            .max()
+                        ),
+                    )
+                    tf32_max = max(
+                        tf32_max,
+                        float(
+                            (
+                                audit_math_values["fp32_head"].double()
+                                - audit_math_values["head64"]
+                            )
                             .abs()
                             .max()
                         ),
@@ -389,14 +386,12 @@ def main() -> None:
                     chunks["fused"].append(patched_out.double().cpu().numpy())
                     if args.debug_checks:
                         print(
-                            "  [check] map equiv "
-                            f"{float((fp64_from_hidden - fp64_from_map).abs().max()):.3e} "
-                            f"decomposition "
-                            f"{float((fp64_residual - records['residual_norm'].double()).abs().max()):.3e} "
+                            "  [check] fp64 equiv "
+                            f"{float((audit_math_values['hidden64'] @ decoder_weight.T - audit_math_values['map64']).abs().max()):.3e} "
+                            f"decomposition {decomposition_max:.3e} "
+                            f"tf32 deviation {tf32_max:.3e} "
                             f"| residual_norm absmax "
-                            f"{float(records['residual_norm'].abs().max()):.4f} "
-                            f"| M@centered absmax "
-                            f"{float(fp64_from_map.abs().max()):.4f}",
+                            f"{float(records['residual_norm'].abs().max()):.4f}",
                             flush=True,
                         )
                 batches += 1
@@ -451,6 +446,7 @@ def main() -> None:
             "equivalence_pass": bool(equivalence_max < 1e-6),
             "head_decomposition_max_abs": decomposition_max,
             "head_decomposition_pass": bool(decomposition_max < 1e-6),
+            "fp32_tf32_deviation_max_abs": tf32_max,
             "rev_in_denormalization_max_abs": denormalization_error,
             "intervention_identity_max_abs": identity_max,
             "intervention_identity_pass": bool(identity_max < 1e-9),

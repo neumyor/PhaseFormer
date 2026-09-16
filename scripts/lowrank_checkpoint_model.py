@@ -131,13 +131,16 @@ def _residual_head(model):
     return head
 
 
-def intervention_forward(intervention):
+def intervention_forward(intervention, audit_math=None):
     """Build a replacement ``forward`` for the residual head.
 
     ``intervention`` maps ``(z, hidden)`` to an intervened ``hidden``; ``None``
     keeps the original value.  The replacement also records the head's private
     input, the hidden state, and the gate so that later analyses can work
     entirely from cached tensors.
+
+    ``audit_math`` optionally carries the float64 effective map; when given, an
+    exact float64 evaluation of the head is recorded alongside the float32 one.
     """
 
     def forward(self, x):  # noqa: D401 - mirrors the head signature
@@ -162,6 +165,38 @@ def intervention_forward(intervention):
         self.last_centered = centered
         self.last_hidden = hidden
         self.last_hidden_used = effective
+        if audit_math:
+            # Exact float64 evaluation of the *same* head applied to the *same*
+            # private input.  The plan's 1e-6 equivalence bound cannot be met by
+            # the in-model float32 matmul, which is TF32 on this platform
+            # (``torch.set_float32_matmul_precision("medium")`` in the training
+            # runner), so the audit uses this bit-faithful path and reports the
+            # TF32 deviation separately.
+            pooled64 = torch.nn.functional.adaptive_avg_pool1d(
+                centered.double(), self.pooled_len
+            )
+            hidden64 = torch.nn.functional.linear(
+                pooled64,
+                self.encoder.weight.double(),
+                self.encoder.bias.double(),
+            )
+            map64 = torch.nn.functional.linear(
+                pooled64, audit_math["matrix"]
+            )
+            self.last_audit = {
+                "pooled64": pooled64,
+                "hidden64": hidden64,
+                "map64": map64,
+                "head64": (
+                    torch.nn.functional.linear(
+                        hidden64,
+                        self.decoder.weight.double(),
+                        self.decoder.bias.double(),
+                    ).permute(0, 2, 1)
+                    + self.last_centered[:, :, -1:].permute(0, 2, 1).double()
+                ),
+                "fp32_head": delta + last.expand(-1, self.pred_len, -1),
+            }
         return delta + last.expand(-1, self.pred_len, -1)
 
     return forward
@@ -241,7 +276,7 @@ def _capture_forward(module, original_forward):
 
 
 @contextlib.contextmanager
-def instrument_model(model, intervention=None):
+def instrument_model(model, intervention=None, audit_math=None):
     """Patch the residual head and the top-level forward for one context."""
     head = _residual_head(model)
     if not isinstance(head, PooledLowRankWeakPeriodResidualHead):
@@ -250,14 +285,18 @@ def instrument_model(model, intervention=None):
         )
     original_head_forward = head.forward
     original_model_forward = type(model).forward
-    head.forward = types.MethodType(intervention_forward(intervention), head)
+    head.forward = types.MethodType(
+        intervention_forward(intervention, audit_math), head
+    )
     type(model).forward = _capture_forward(model, original_model_forward)
     try:
         yield model
     finally:
         head.forward = original_head_forward
         type(model).forward = original_model_forward
-        for attribute in ("last_centered", "last_hidden", "last_hidden_used"):
+        for attribute in (
+            "last_centered", "last_hidden", "last_hidden_used", "last_audit"
+        ):
             if hasattr(head, attribute):
                 delattr(head, attribute)
 
