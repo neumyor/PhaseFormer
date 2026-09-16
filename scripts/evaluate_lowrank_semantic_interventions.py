@@ -666,8 +666,8 @@ def main() -> None:
             arms = [arm for arm in arms if arm[0] in requested]
 
         random_mse, random_mae = random_drop_band(
-            hidden, decoder_weight, sigma, last_abs, gate, phase_abs, target,
-            rank_dim, args.random_repeats, rng,
+            hidden, decoder_weight, decoder_bias, sigma, last_abs, gate,
+            phase_abs, target, rank_dim, args.random_repeats, rng,
         )
         random_count = int(args.random_repeats)
 
