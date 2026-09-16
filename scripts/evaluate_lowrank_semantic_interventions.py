@@ -226,12 +226,17 @@ def main() -> None:
         cell = row["cell"]
         run_dir = repo_root / row["selected_run_dir"]
         config = json.loads((run_dir / "config.json").read_text())
-        hyperparams = config["hyperparams"]
+        hyperparams = dict(config["hyperparams"])
+        # ``batch_size`` lives in the run spec, not in ``hyperparams``; keep it
+        # explicit so the validation batches match the training protocol.
+        batch_size = int(
+            config.get("batch_size") or hyperparams.get("batch_size") or 256
+        )
         group_key = (dataset, horizon, seed)
         if group_key not in models:
             exp_args, handles = build_loaders(
-                dataset, 720, horizon, hyperparams,
-                int(hyperparams.get("batch_size", 256)), repo_root, splits=("val",),
+                dataset, 720, horizon, hyperparams, batch_size, repo_root,
+                splits=("val",),
             )
             models[group_key] = {
                 "loader": handles["val"][1],
