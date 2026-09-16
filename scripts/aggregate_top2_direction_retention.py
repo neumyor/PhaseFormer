@@ -130,6 +130,27 @@ def row_from_metrics(path: Path):
         run_dir = str(path.parent.relative_to(ROOT))
     except ValueError:
         run_dir = str(path.parent)
+    # The test numbers of freshly trained cells live in ``test_read.json``:
+    # test is read exactly once, after every checkpoint is frozen, by a
+    # separate step that never rewrites metrics.csv.  Reused controls keep the
+    # test numbers their own audited run recorded.
+    gate_value = None
+    nlinear_mse = None
+    nlinear_mae = None
+    val_relative_difference = None
+    test_read_status = ""
+    test_read_path = path.with_name("test_read.json")
+    if test_read_path.exists():
+        payload = json.loads(test_read_path.read_text())
+        test_read_status = payload.get("status", "")
+        gate_value = payload.get("gate_value")
+        nlinear_mse = payload.get("nlinear_mse")
+        nlinear_mae = payload.get("nlinear_mae")
+        val_relative_difference = payload.get("val_relative_difference")
+        if payload.get("test_mse") is not None:
+            record = {**record,
+                      "test_mse": payload["test_mse"],
+                      "test_mae": payload["test_mae"]}
     return {
         "dataset": record["dataset"],
         "horizon": int(record["horizon"]),
@@ -149,6 +170,12 @@ def row_from_metrics(path: Path):
         "reused": not bool(hyper.get("weak_residual_projection_arm")),
         "gate_init": hyper.get("weak_period_residual_gate_init", ""),
         "learning_rate": hyper.get("learning_rate", ""),
+        "gate_value": gate_value,
+        "nlinear_mse": nlinear_mse,
+        "nlinear_mae": nlinear_mae,
+        "test_read_status": test_read_status or ("reused" if not hyper.get(
+            "weak_residual_projection_arm") else ""),
+        "val_relative_difference": val_relative_difference,
     }
 
 
@@ -537,8 +564,10 @@ def write_results_csv(rows, aggregated, path: Path):
     fields = [
         "dataset", "horizon", "setting", "seed", "arm", "reused", "gate_init",
         "learning_rate", "val_mse", "val_mae", "test_mse", "test_mae",
-        "parameter_count", "trainable_parameter_count", "epochs_completed",
-        "elapsed_sec", "peak_memory_bytes", "run_id", "run_dir",
+        "nlinear_mse", "nlinear_mae", "gate_value", "test_read_status",
+        "val_relative_difference", "parameter_count",
+        "trainable_parameter_count", "epochs_completed", "elapsed_sec",
+        "peak_memory_bytes", "run_id", "run_dir",
     ]
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
