@@ -64,13 +64,14 @@ class Candidate:
     cell: str
     rank: int | None
     pool_factor: int
-    relative_rank: float | None
     status: str
     val_mse: float | None
     val_mae: float | None
     checkpoint: Path | None
     metrics_complete: bool
     checkpoint_bytes: int = 0
+    requested_relative_rank: float | None = None
+    assignment: str = ""
 
     def sort_key(self, source_priority: int):
         """Prefer completed runs, then lower validation MSE, then the root order."""
@@ -121,33 +122,64 @@ def classify_cell(mechanism: str, hyperparams: dict) -> tuple[str, int | None, i
     return f"other:{head}", None, 1
 
 
-def relative_rank_of(rank: int, horizon: int, pool_factor: int) -> float:
-    """Recover the planned relative rank q from the realized integer rank."""
-    max_rank = min(-(-720 // pool_factor), horizon)
-    return rank / float(max_rank)
+def max_rank(pool_factor: int, horizon: int) -> int:
+    return min(-(-720 // pool_factor), horizon)
 
 
 def planned_rank(pool_factor: int, relative_rank: float, horizon: int) -> int:
     """The plan's exact-rank rule: ``round(q * min(ceil(720/pool), H))``.
 
-    The rank-sweep runner uses this rule for the multi-seed rounds and a
-    multiple-of-4 variant for the seed-2021 round.  Both land on the same
-    integer for every planned ``q``, so the mapping below is single-valued and
-    is verified against the realized checkpoints by :func:`rank_lookup`.
+    The multi-seed rank-sweep runner uses this rule; the seed-2021 round uses a
+    multiple-of-4 variant of the same formula.  The two agree on every planned
+    ``q`` except the smallest one at horizon 720, where they differ by one
+    integer step -- which is why :func:`rank_ladder` accepts both.
     """
-    max_rank = min(-(-720 // pool_factor), horizon)
-    return max(1, min(max_rank, int(round(relative_rank * max_rank))))
+    ceiling = max_rank(pool_factor, horizon)
+    return max(1, min(ceiling, int(round(relative_rank * ceiling))))
 
 
-def rank_lookup(pool_factor: int, horizon: int) -> dict[int, str]:
-    """``{realized rank: planned cell label}`` for one (pool, horizon) pair."""
-    lookup: dict[int, str] = {}
-    for relative_rank in RELATIVE_RANKS:
-        lookup.setdefault(
-            planned_rank(pool_factor, relative_rank, horizon),
-            LABEL_OF_RELATIVE_RANK[relative_rank],
-        )
-    return lookup
+def rounding_rank(pool_factor: int, relative_rank: float, horizon: int) -> int:
+    """The seed-2021 variant: round ``q * ceiling`` to a multiple of four."""
+    ceiling = max_rank(pool_factor, horizon)
+    value = relative_rank * ceiling
+    return max(4, min(ceiling, int(4 * round(value / 4))))
+
+
+def rank_ladder(pool_factor: int, horizon: int, ranks: list[float]) -> dict[float, int]:
+    """``{requested q: realized rank}`` for one (pool, horizon, q-set)."""
+    ladder = {}
+    for relative_rank in ranks:
+        if relative_rank < 1.0:
+            ladder[relative_rank] = planned_rank(pool_factor, relative_rank, horizon)
+        else:
+            ladder[relative_rank] = max_rank(pool_factor, horizon)
+    return ladder
+
+
+def ladder_q_for_rank(
+    pool_factor: int,
+    horizon: int,
+    ranks: list[float],
+    realized: int,
+    strategy: str = "exact",
+) -> float | None:
+    """Which requested ``q`` realizes ``realized`` under one rank rule."""
+    if strategy == "exact":
+        ladder = rank_ladder(pool_factor, horizon, ranks)
+    elif strategy == "rounding":
+        ladder = {
+            q: rounding_rank(pool_factor, q, horizon)
+            for q in ranks
+            if q < 1.0
+        }
+        if 1.0 in ranks:
+            ladder[1.0] = max_rank(pool_factor, horizon)
+    else:
+        raise ValueError(f"unknown rank strategy {strategy!r}")
+    hits = [q for q, rank in ladder.items() if rank == realized]
+    if not hits:
+        return None
+    return max(hits)
 
 
 def requested_relative_ranks(
@@ -179,6 +211,40 @@ def requested_relative_ranks(
     return mapping
 
 
+def runner_ladders(
+    repo_root: Path,
+) -> dict[tuple[str, int, int], list[float]]:
+    """``{(dataset, horizon, seed): [requested q, ...]}`` from job manifests.
+
+    The multi-seed runner keeps the requested relative-rank ladder only in its
+    job manifests, so the ladder is recovered from ``--relative-ranks`` there
+    and unioned across every job that covers the same (dataset, horizon, seed).
+    """
+    ladders: dict[tuple[str, int, int], set[float]] = {}
+    for source in SOURCE_ROOTS:
+        for path in sorted((repo_root / source).glob("*manifest.json")):
+            try:
+                payload = json.loads(path.read_text())
+            except json.JSONDecodeError:
+                continue
+            for job in payload.get("jobs") or []:
+                command = job.get("command") or []
+                ranks: list[float] = []
+                if "--relative-ranks" in command:
+                    raw = command[command.index("--relative-ranks") + 1]
+                    ranks = [float(item) for item in raw.split(",") if item]
+                elif payload.get("relative_ranks"):
+                    ranks = [float(item) for item in payload["relative_ranks"]]
+                dataset = job.get("dataset", payload.get("dataset"))
+                horizon = job.get("horizon", payload.get("horizon"))
+                seed = job.get("seed", payload.get("seed"))
+                if not ranks or dataset is None or horizon is None or seed is None:
+                    continue
+                key = (str(dataset), int(horizon), int(seed))
+                ladders.setdefault(key, set()).update(ranks)
+    return {key: sorted(value) for key, value in ladders.items()}
+
+
 def scan_candidates(repo_root: Path) -> list[Candidate]:
     rows: list[Candidate] = []
     for source in SOURCE_ROOTS:
@@ -196,7 +262,6 @@ def scan_candidates(repo_root: Path) -> list[Candidate]:
             )
             if cell != "low_rank":
                 continue
-            relative = relative_rank_of(rank, int(config["horizon"]), pool)
             metrics_path = run_dir / "metrics.csv"
             row = {
                 "val_mse": None,
@@ -235,7 +300,6 @@ def scan_candidates(repo_root: Path) -> list[Candidate]:
                     cell=cell,
                     rank=rank,
                     pool_factor=pool,
-                    relative_rank=relative,
                     status=status,
                     val_mse=row["val_mse"],
                     val_mae=row["val_mae"],
@@ -254,16 +318,24 @@ def build_cells(
     """Assign every low-rank checkpoint to exactly one planned analysis cell.
 
     A cell is ``(setting, seed, relative-rank cell)``.  Assignment uses the
-    *requested* relative rank recorded in the runner summaries, because equal
-    relative ranks can share one realized integer rank: with ``H = 96`` the
-    planned ``q=1`` and ``q=1/4`` cells both realize rank 24 for ETTh2-96, and
-    with ``H = 720`` the planned ``q=1/16`` and ``q=1/32`` cells both realize
-    rank 22.  Without this lookup the two cells would be silently merged or
-    mislabelled, so a checkpoint whose realized rank carries no recorded
-    requested value is reported instead of being renamed.
+    *requested* relative rank, which is recovered in two steps because equal
+    relative ranks can share one realized integer rank:
+
+    * per-run, from the runner's ``*_results.csv`` when it exists (seed 2021 and
+      a few multi-seed cells);
+    * otherwise from the runner job manifests, which record the requested
+      ``--relative-ranks`` ladder for the whole (dataset, horizon, seed) job.
+
+    The realized rank is then mapped back through the *exact-rank* rule of the
+    plan first and through the seed-2021 rounding variant second, because the
+    multi-seed rounds and the seed-2021 round used those two rules.  Both rules
+    agree on every planned ``q`` except ``q=1/32`` at horizon 720 (22 versus 23),
+    so the fallback is recorded as an inferred label rather than silently
+    merged; a realized rank that matches no ladder at all is reported.
     """
     candidates = scan_candidates(repo_root)
     requested = requested_relative_ranks(repo_root)
+    ladders = runner_ladders(repo_root)
     cells: dict[tuple[str, int, int, str], Cell] = {}
     for (dataset, horizon) in FORMAL_SETTINGS:
         for seed in FORMAL_SEEDS:
@@ -291,12 +363,14 @@ def build_cells(
                 horizon=horizon,
                 seed=2021,
                 cell=label,
-                rank=planned_rank(1, DIAGNOSTIC_RELATIVE_RANK, horizon),
+                rank=max_rank(1, horizon),
                 pool_factor=1,
                 relative_rank=DIAGNOSTIC_RELATIVE_RANK,
                 is_diagnostic=True,
             )
+
     unassigned: list[tuple[str, int, int, int]] = []
+    inferred: list[dict] = []
     for candidate in candidates:
         key = (
             candidate.dataset,
@@ -304,23 +378,49 @@ def build_cells(
             candidate.seed,
             int(candidate.rank or -1),
         )
-        ladder = requested.get(key)
-        if candidate.pool_factor != 1 or not ladder:
+        if candidate.pool_factor != 1:
             unassigned.append(key)
             continue
-        matched = False
-        for relative_rank in sorted(ladder):
-            label = LABEL_OF_RELATIVE_RANK.get(relative_rank)
-            if label is None:
-                continue
-            cell = cells.get((candidate.dataset, candidate.horizon, candidate.seed, label))
-            if cell is None:
-                continue
-            cell.candidates.append(candidate)
-            cell.requested_relative_rank = relative_rank
-            matched = True
-        if not matched:
+        ladder = sorted(ladders.get((candidate.dataset, candidate.horizon, candidate.seed), ()))
+        exact_hits = requested.get(key, set())
+        if len(exact_hits) == 1:
+            relative_rank, how = next(iter(exact_hits)), "runner_summary"
+        elif exact_hits:
+            relative_rank = max(exact_hits)
+            how = "runner_summary_ambiguous_max"
+        else:
+            relative_rank = ladder_q_for_rank(
+                candidate.pool_factor, candidate.horizon, ladder, int(candidate.rank), "exact"
+            )
+            how = "manifest_ladder_exact_rank"
+            if relative_rank is None:
+                relative_rank = ladder_q_for_rank(
+                    candidate.pool_factor, candidate.horizon, ladder, int(candidate.rank), "rounding"
+                )
+                how = "manifest_ladder_rounding_rank"
+        if relative_rank is None:
             unassigned.append(key)
+            continue
+        label = LABEL_OF_RELATIVE_RANK.get(relative_rank)
+        cell = cells.get((candidate.dataset, candidate.horizon, candidate.seed, label))
+        if cell is None:
+            unassigned.append(key)
+            continue
+        candidate.assignment = how
+        candidate.requested_relative_rank = relative_rank
+        cell.candidates.append(candidate)
+        cell.requested_relative_rank = relative_rank
+        if how != "runner_summary":
+            inferred.append(
+                {
+                    "setting": cell.setting,
+                    "seed": cell.seed,
+                    "cell": cell.cell,
+                    "rank": candidate.rank,
+                    "how": how,
+                    "run_dir": str(candidate.run_dir.relative_to(repo_root)),
+                }
+            )
     for key, cell in cells.items():
         if not cell.candidates:
             continue
@@ -339,6 +439,7 @@ def build_cells(
             "low-rank checkpoints whose realized rank carries no recorded "
             f"requested relative rank: {sorted(set(unassigned))}"
         )
+    setattr(build_cells, "last_inferred", inferred)
     return cells, candidates
 
 
@@ -361,6 +462,9 @@ def inventory_rows(repo_root: Path, hash_checkpoints: bool = True) -> list[dict]
                 f"{cell.relative_rank:.6f}" if cell.relative_rank is not None else ""
             ),
             "n_duplicate_candidates": len(cell.candidates),
+            "rank_assignment": (
+                cell.selected.assignment if cell.selected else ""
+            ),
             "selected_source": selected.source if selected else "",
             "selected_run_dir": str(selected.run_dir.relative_to(repo_root)) if selected else "",
             "selected_status": selected.status if selected else "",
@@ -378,8 +482,6 @@ def inventory_rows(repo_root: Path, hash_checkpoints: bool = True) -> list[dict]
                 else ""
             ),
         }
-        if record["relative_rank_q"] == "":
-            record["relative_rank_q"] = ""
         if selected and selected.checkpoint and record["checkpoint_sha256"]:
             record["checkpoint_sha256_short"] = record["checkpoint_sha256"][:16]
         else:
@@ -415,6 +517,13 @@ def main() -> None:
         print("  MISSING", row["setting"], row["seed"], row["cell"])
     duplicates = sum(1 for row in rows if int(row["n_duplicate_candidates"]) > 1)
     print(f"cells with duplicate training artifacts: {duplicates}")
+    formal = [row for row in rows if not row["is_diagnostic_only"]]
+    print(f"formal rows: {len(formal)}, diagnostic-only rows: {len(rows) - len(formal)}")
+    inferred = [row for row in rows if row["rank_assignment"] not in ("runner_summary", "")]
+    print(f"rows whose q was inferred from a manifest ladder: {len(inferred)}")
+    for row in inferred:
+        print("  INFERRED", row["setting"], row["seed"], row["cell"], row["rank"], row["rank_assignment"])
+    print("q values in the inventory:", sorted({row["relative_rank_q"] for row in rows}))
 
 
 if __name__ == "__main__":
