@@ -285,6 +285,30 @@ def random_drop_band(
     return mse, mae
 
 
+def target_shape(phase: np.ndarray) -> tuple[int, int, int]:
+    """``(samples, horizon, channels)`` of the cached phase/absolute predictions."""
+    phase = np.asarray(phase)
+    return int(phase.shape[0]), int(phase.shape[1]), int(phase.shape[2])
+
+
+def broadcast_per_sample(
+    array: np.ndarray, samples: int, horizon: int, channels: int
+) -> np.ndarray:
+    """Return a per-sample quantity shaped ``(n, 1, c)``.
+
+    The cache can hold these vectors either as ``(n, 1, c)`` (fresh from a
+    forward pass) or already expanded to ``(n, h, c)``; normalising here keeps
+    the arm algebra independent of which writer produced the cache.
+    """
+    flat = np.asarray(array, dtype=np.float64).reshape(samples, -1)
+    if flat.shape[1] != channels:
+        raise ValueError(
+            f"per-sample vector has {flat.shape[1]} values, expected {channels}"
+        )
+    del horizon
+    return flat.reshape(samples, 1, channels)
+
+
 def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
                   last_abs, encoder_weight, decoder_weight, decoder_bias,
                   encoder_bias, setting, dataset, horizon, seed, cell, rank,
@@ -296,10 +320,18 @@ def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
     metric the training run recorded).  Kept separate from ``main`` so that a
     cached cell can be re-evaluated without loading a model.
     """
-    gate = cached["gate"]
+    samples, horizon, channels = target_shape(cached["phase"])
+    gate = broadcast_per_sample(cached["gate"], samples, horizon, channels)
+    sigma = broadcast_per_sample(sigma, samples, horizon, channels)
+    mu = broadcast_per_sample(mu, samples, horizon, channels)
+    last_abs = broadcast_per_sample(last_abs, samples, horizon, channels)
     phase_abs = cached["phase"]
     target = cached["target"]
-    gate = cached["gate"]
+    samples, horizon, channels = target_shape(cached["phase"])
+    gate = broadcast_per_sample(cached["gate"], samples, horizon, channels)
+    sigma = broadcast_per_sample(sigma, samples, horizon, channels)
+    mu = broadcast_per_sample(mu, samples, horizon, channels)
+    last_abs = broadcast_per_sample(last_abs, samples, horizon, channels)
     phase_abs = cached["phase"]
     target = cached["target"]
     # The branch correction is ``decoder(h) + bias``, i.e. everything the
