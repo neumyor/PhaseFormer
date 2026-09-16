@@ -2824,3 +2824,17 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 明确计划 §7 的五条规则只是预注册计分，不是机制成立的充分条件；“选择 k>1”和“优于
   RRR-2”均不要求超过 direct，不能据此推出邻域具有特殊预测价值。
 - 同步更新结果报告、已回填计划和 `docs/README.md`；未修改聚合脚本、实验结果或原始产物。
+
+## 2026-09-16 — 规划低秩 checkpoint 信息保留分析
+
+- 新增 `docs/PhaseFormer_lowrank_checkpoint_information_analysis_plan.md`，下一阶段不再用
+  独立 RRR 方向代替训练结果，而是直接分解既有低秩 checkpoint 的有效映射
+  `decoder.weight @ encoder.weight`。
+- 计划覆盖条件性秩扫描的 7 个 setting、3 个 seed、4 个压缩档，共 84 个低秩 checkpoint，
+  并使用 21 个 direct checkpoint 作配对参照；`q=1` 单 seed 仅作诊断。
+- 为消除低秩隐藏维的旋转不确定性，先对有效映射做规范 SVD，再成对解释“输入读取方向 →
+  输出修正形状”；单个方向只有在奇异值间隙和跨 seed 稳定性通过时才允许命名。
+- 新增 Phase 条件性 RRR、语义字典归因和残差支路私有输入的
+  Semantic-only/Semantic-drop/PCA/Random 干预设计，用于区分真实信息保留、无预测价值信息
+  删除，以及 gate/主干对分支损失的绕行。
+- 本轮只制定计划，未实现脚本、未运行分析、未新增训练，也未重新读取 test。
