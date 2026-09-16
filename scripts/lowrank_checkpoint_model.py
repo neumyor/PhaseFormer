@@ -168,14 +168,6 @@ def intervention_forward(intervention, audit_math=None):
         self.last_hidden_used = effective
         self.last_forward_output = delta + last.expand(-1, self.pred_len, -1)
         if audit_math:
-            print(
-                "AUDIT SHAPES",
-                tuple(centered.shape), tuple(pooled.shape), tuple(hidden.shape),
-                tuple(self.encoder.weight.shape), tuple(self.encoder.bias.shape),
-                tuple(self.decoder.weight.shape), tuple(self.decoder.bias.shape),
-                tuple(last.shape), tuple(delta.shape),
-                flush=True,
-            )
             # Exact float64 evaluation of the *same* head applied to the *same*
             # private input.  The plan's 1e-6 equivalence bound cannot be met by
             # the in-model float32 matmul, which is TF32 on this platform
