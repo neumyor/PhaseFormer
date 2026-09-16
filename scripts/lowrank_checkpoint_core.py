@@ -482,9 +482,14 @@ def group_shapley(
         return value
 
     shapley = {name: 0.0 for name in group_names}
+    # Exact Shapley weights over all n! orderings: each coalition S of size s is
+    # the prefix of s!(n-s-1)! orderings, so the weight normalizes by (n-1)!.
     for mask in range(1 << n):
         size = bin(mask).count("1")
-        weight = math.factorial(size) * math.factorial(n - size - 1) / math.factorial(n)
+        weight = (
+            math.factorial(size) * math.factorial(n - size - 1)
+            / math.factorial(n - 1)
+        )
         base = r2(mask)
         for index in range(n):
             if mask >> index & 1:

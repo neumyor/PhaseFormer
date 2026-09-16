@@ -105,44 +105,53 @@ def arm_metrics(
     target: np.ndarray,
     correction_reference: np.ndarray,
     last_abs: np.ndarray,
+    sigma: np.ndarray,
     basis: np.ndarray | None,
     mode: str,
 ) -> dict:
-    """Branch, fused and reconstruction metrics of one arm."""
-    if mode == "bias":
-        delta_hidden = np.einsum(
-            "ncr,hr->nhc", hidden, decoder_weight
-        )
-    elif mode == "identity":
-        delta_hidden = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+    """Branch, fused and reconstruction metrics of one arm.
+
+    The low-rank branch writes, in the original value space,
+
+        r = last_abs + sigma * (decoder(h) + decoder_bias)
+
+    where ``last_abs = sigma * x_last_norm + mu`` is the persistence anchor.
+    Everything except the anchor is scaled by the per-sample RevIN scale, so the
+    arm's *correction* is ``sigma * (decoder(Q_Q^T h) + decoder_bias)`` for
+    whatever hidden state the arm produces.  ``correction_reference`` is the same
+    quantity for the untouched checkpoint, which makes ``only`` and ``drop`` two
+    independent projections whose corrections sum back to the original exactly.
+    """
+    transformed = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+    bias_scaled = decoder_bias[None, :, None] * sigma
+    if mode in ("identity", "bias"):
+        correction = (transformed + decoder_bias[None, :, None]) * sigma
     elif basis is None:
-        delta_hidden = np.zeros((hidden.shape[0], decoder_weight.shape[0], hidden.shape[1]))
-    else:
+        correction = np.zeros_like(transformed)
+    elif mode == "only":
         projected = np.einsum("ncr,rk->nck", hidden, basis)
-        if mode == "only":
-            delta_hidden = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
-        elif mode == "drop":
-            full = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
-            delta_hidden = full - np.einsum(
-                "nck,hr,rk->nhc", projected, decoder_weight, basis
-            )
-        else:
-            raise ValueError(f"unknown arm mode {mode!r}")
-    if mode == "bias":
-        # The synthetic bias ``c`` is the affine part of the synthetic map; with
-        # it removed the branch writes only the input-driven correction.
-        branch_abs = last_abs + delta_hidden
-        correction_abs = branch_abs - last_abs
+        correction = (
+            np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
+            + decoder_bias[None, :, None]
+        ) * sigma
+    elif mode == "drop":
+        projected = np.einsum("ncr,rk->nck", hidden, basis)
+        removed = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
+        correction = (
+            transformed + decoder_bias[None, :, None] - removed
+        ) * sigma
     else:
-        # ``decoder_bias`` is ``(H,)`` and has to broadcast over channels.
-        branch_abs = last_abs + delta_hidden + decoder_bias[None, :, None]
-        correction_abs = branch_abs - last_abs
+        raise ValueError(f"unknown arm mode {mode!r}")
+    if mode == "bias":
+        correction = correction - bias_scaled
+    branch_abs = last_abs + correction
     branch_delta = branch_abs - target
     fused = (1.0 - gate) * phase_abs + gate * branch_abs
     fused_delta = fused - target
-    recon = correction_abs - correction_reference
-    count = branch_delta.size
-    reference_energy = float(np.sum((correction_reference - correction_reference.mean()) ** 2))
+    recon = correction - correction_reference
+    reference_energy = float(
+        np.sum((correction_reference - correction_reference.mean()) ** 2)
+    )
     return {
         "correction_reconstruction_r2": (
             float(1.0 - np.sum(recon ** 2) / reference_energy)
@@ -150,12 +159,12 @@ def arm_metrics(
             else 0.0
         ),
         "correction_rmse": float(np.sqrt(np.mean(recon ** 2))),
-        "branch_mse": float(np.sum(branch_delta ** 2) / count),
-        "branch_mae": float(np.sum(np.abs(branch_delta)) / count),
-        "fused_mse": float(np.sum(fused_delta ** 2) / count),
-        "fused_mae": float(np.sum(np.abs(fused_delta)) / count),
-        "correction_energy": float(np.sum(correction_abs ** 2) / count),
-        "pair_count": int(count),
+        "branch_mse": float(np.mean(branch_delta ** 2)),
+        "branch_mae": float(np.mean(np.abs(branch_delta))),
+        "fused_mse": float(np.mean(fused_delta ** 2)),
+        "fused_mae": float(np.mean(np.abs(fused_delta))),
+        "correction_energy": float(np.mean(correction ** 2)),
+        "pair_count": int(branch_delta.size),
     }
 
 
@@ -522,11 +531,16 @@ def main() -> None:
         gate = cached["gate"]
         phase_abs = cached["phase"]
         target = cached["target"]
-        correction_reference = residual_abs - last_abs
+        # The branch correction is ``decoder(h) + bias``, i.e. everything the
+        # low-rank branch writes except its persistence anchor.
+        correction_reference = (
+            np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+            + decoder_bias[None, :, None]
+        ) * sigma
 
         baseline = arm_metrics(
             hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
-            correction_reference, last_abs, None, "identity",
+            correction_reference, last_abs, sigma, None, "identity",
         )
         del residual_abs, residual_norm, phase_abs, target
         rank_dim = int(hidden.shape[-1])
@@ -576,7 +590,7 @@ def main() -> None:
             random_metrics.append(
                 arm_metrics(
                     hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
-                    correction_reference, last_abs, basis, "drop",
+                    correction_reference, last_abs, sigma, basis, "drop",
                 )
             )
             random_count += 1
@@ -624,7 +638,7 @@ def main() -> None:
         for arm_name, basis, mode in arms:
             metrics = arm_metrics(
                 hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
-                correction_reference, last_abs, basis, mode,
+                correction_reference, last_abs, sigma, basis, mode,
             )
             record = {
                 "setting": setting,

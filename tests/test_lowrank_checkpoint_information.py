@@ -163,8 +163,10 @@ class SubspaceTest(unittest.TestCase):
         basis = orthonormalize(rng.standard_normal((3, 30)))
         self.assertAlmostEqual(projection_overlap(basis, basis), 1.0, places=12)
         np.testing.assert_allclose(principal_angles(basis, basis), 0.0, atol=1e-3)
-        other = orthonormalize(rng.standard_normal((3, 30)))
-        self.assertLess(projection_overlap(basis, other), 1e-12)
+        # Two random 3-dimensional subspaces of R^30 overlap by about 3/30, so
+        # the orthogonal control has to be built from disjoint coordinates.
+        other = orthonormalize(np.eye(30)[:, 3:6].T)
+        self.assertLess(projection_overlap(basis, other), 1e-10)
 
     def test_covariance_correlation_is_scale_invariant(self):
         rng = np.random.default_rng(1)
@@ -255,77 +257,87 @@ class InterventionTest(unittest.TestCase):
         self.assertEqual(basis.shape, (9, 4))
         np.testing.assert_allclose(basis.T @ basis, np.eye(4), atol=1e-12)
 
-    def test_arm_metrics_closed_form_matches_brute_force(self):
-        rng = np.random.default_rng(6)
+    def _fixture(self, seed=6):
+        rng = np.random.default_rng(seed)
         samples, channels, rank, horizon = 12, 2, 3, 5
-        hidden = rng.standard_normal((samples, channels, rank))
-        decoder = rng.standard_normal((horizon, rank)) * 0.1
-        bias = rng.standard_normal(horizon) * 0.05
-        sigma = np.abs(rng.standard_normal((samples, 1, channels))) + 0.5
-        gate = np.abs(rng.standard_normal((samples, 1, channels))) * 0.3
-        phase = rng.standard_normal((samples, horizon, channels))
-        target = rng.standard_normal((samples, horizon, channels))
-        anchor = rng.standard_normal((samples, 1, channels))
-        basis = orthonormalize(rng.standard_normal((rank - 1, rank)))
+        return {
+            "hidden": rng.standard_normal((samples, channels, rank)),
+            "decoder": rng.standard_normal((horizon, rank)) * 0.1,
+            "bias": rng.standard_normal(horizon) * 0.05,
+            "sigma": np.abs(rng.standard_normal((samples, 1, channels))) + 0.5,
+            "gate": np.abs(rng.standard_normal((samples, 1, channels))) * 0.3,
+            "phase": rng.standard_normal((samples, horizon, channels)),
+            "target": rng.standard_normal((samples, horizon, channels)),
+            "anchor": rng.standard_normal((samples, 1, channels)),
+            "basis": orthonormalize(rng.standard_normal((rank - 1, rank))),
+        }
 
-        def correction_of(state):
-            return np.einsum("ncr,hr->nhc", state, decoder) * sigma
-
-        reference = correction_of(hidden)
+    def test_identity_arm_reproduces_the_branch(self):
+        fixture = self._fixture()
+        correction = (
+            np.einsum(
+                "ncr,hr->nhc", fixture["hidden"], fixture["decoder"]
+            )
+            + fixture["bias"][None, :, None]
+        ) * fixture["sigma"]
+        reference = correction
         metrics = arm_metrics(
-            hidden, decoder, bias, gate, phase, target, reference, anchor,
-            basis, "drop",
+            fixture["hidden"], fixture["decoder"], fixture["bias"],
+            fixture["gate"], fixture["phase"], fixture["target"], reference,
+            fixture["anchor"], fixture["sigma"], None, "identity",
         )
-        projected = np.einsum("ncr,rk->nck", hidden, basis)
-        back = np.einsum("nck,rk->ncr", projected, basis)
-        dropped = correction_of(hidden - back)
-        branch = dropped + bias[None, :, None] + anchor
-        fused = (1.0 - gate) * phase + gate * branch
-        self.assertAlmostEqual(
-            metrics["branch_mse"], float(np.mean((branch - target) ** 2)), places=10
+        branch = fixture["anchor"] + correction
+        np.testing.assert_allclose(
+            metrics["branch_mse"], np.mean((branch - fixture["target"]) ** 2),
+            atol=1e-12,
         )
-        self.assertAlmostEqual(
-            metrics["fused_mse"], float(np.mean((fused - target) ** 2)), places=10
-        )
-        self.assertAlmostEqual(
-            metrics["fused_mae"], float(np.mean(np.abs(fused - target))), places=10
-        )
-        self.assertAlmostEqual(
-            metrics["branch_mae"], float(np.mean(np.abs(branch - target))), places=10
-        )
+        self.assertAlmostEqual(metrics["correction_reconstruction_r2"], 1.0, places=10)
 
-    def test_only_plus_drop_reproduces_the_original_correction(self):
-        rng = np.random.default_rng(7)
-        hidden = rng.standard_normal((5, 3, 4))
-        decoder = rng.standard_normal((6, 4)) * 0.1
-        bias = np.zeros(6)
-        sigma = np.ones((5, 1, 3))
-        gate = np.full((5, 1, 3), 0.4)
-        phase = np.zeros((5, 6, 3))
-        target = np.zeros((5, 6, 3))
-        anchor = np.zeros((5, 1, 3))
-        basis = orthonormalize(rng.standard_normal((2, 4)))
-        reference = np.einsum("ncr,hr->nhc", hidden, decoder) * sigma
-        full = arm_metrics(
-            hidden, decoder, bias, gate, phase, target, reference, anchor, None,
-            "identity",
+    def test_only_and_drop_partition_the_correction(self):
+        fixture = self._fixture()
+        hidden, decoder, bias = (
+            fixture["hidden"], fixture["decoder"], fixture["bias"]
         )
-        only = arm_metrics(
-            hidden, decoder, bias, gate, phase, target, reference, anchor, basis,
-            "only",
+        sigma, basis = fixture["sigma"], fixture["basis"]
+        correction = (np.einsum("ncr,hr->nhc", hidden, decoder) + bias[None, :, None]) * sigma
+        common = (
+            hidden, decoder, bias, fixture["gate"], fixture["phase"],
+            fixture["target"], correction, fixture["anchor"], sigma,
         )
-        drop = arm_metrics(
-            hidden, decoder, bias, gate, phase, target, reference, anchor, basis,
-            "drop",
-        )
-        # ``only`` and ``drop`` are complementary parts of the same correction,
-        # so their sum reproduces the untouched correction exactly.
+        full = arm_metrics(*common, None, "identity")
+        only = arm_metrics(*common, basis, "only")
+        drop = arm_metrics(*common, basis, "drop")
+        # ``only`` and ``drop`` are complementary orthogonal projections of the
+        # same hidden state, so their corrections sum to the original one.
         self.assertAlmostEqual(
             only["correction_energy"] + drop["correction_energy"],
             full["correction_energy"],
-            places=10,
+            places=12,
         )
-        self.assertAlmostEqual(only["correction_reconstruction_r2"], 1.0, places=10)
+        self.assertAlmostEqual(
+            only["correction_rmse"] ** 2 + drop["correction_rmse"] ** 2,
+            0.0,
+            places=12,
+        )
+
+    def test_bias_off_removes_only_the_synthetic_bias(self):
+        fixture = self._fixture()
+        hidden, decoder, bias = (
+            fixture["hidden"], fixture["decoder"], fixture["bias"]
+        )
+        sigma = fixture["sigma"]
+        correction = (np.einsum("ncr,hr->nhc", hidden, decoder) + bias[None, :, None]) * sigma
+        common = (
+            hidden, decoder, bias, fixture["gate"], fixture["phase"],
+            fixture["target"], correction, fixture["anchor"], sigma,
+        )
+        full = arm_metrics(*common, None, "identity")
+        off = arm_metrics(*common, None, "bias")
+        expected = np.einsum("ncr,hr->nhc", hidden, decoder) * sigma
+        np.testing.assert_allclose(
+            off["correction_energy"], np.mean(expected ** 2), atol=1e-12
+        )
+        self.assertLess(off["correction_energy"], full["correction_energy"])
 
     def test_semantic_basis_has_the_requested_truncation(self):
         basis = semantic_basis("ETTh2", 8)
