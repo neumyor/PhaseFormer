@@ -167,8 +167,13 @@ def intervention_forward(intervention):
     return forward
 
 
-def _capture_forward():
-    """Wrap ``PhaseFormer.forward`` so the recorded quantities can be collected."""
+def _capture_forward(original_forward):
+    """Wrap ``PhaseFormer.forward`` so the recorded quantities can be collected.
+
+    ``original_forward`` is passed in explicitly: storing the original on the
+    instance would shadow the class attribute and re-entering the wrapper would
+    recurse.
+    """
 
     def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, *args, **kwargs):
         captured = {}
@@ -181,9 +186,7 @@ def _capture_forward():
 
         handle = self.revin.register_forward_pre_hook(pre_hook)
         try:
-            # The stored attribute is the *unbound* original function, so it has
-            # to be called through the class to rebind ``self``.
-            out = type(self)._phaseformer_original_forward(
+            out = original_forward(
                 self, x_enc, x_mark_enc, x_dec, x_mark_dec, *args, **kwargs
             )
         finally:
@@ -221,16 +224,12 @@ def instrument_model(model, intervention=None):
     original_head_forward = head.forward
     original_model_forward = type(model).forward
     head.forward = types.MethodType(intervention_forward(intervention), head)
-    model._phaseformer_original_forward = original_model_forward
-    type(model).forward = _capture_forward()
+    type(model).forward = _capture_forward(original_model_forward)
     try:
         yield model
     finally:
         head.forward = original_head_forward
         type(model).forward = original_model_forward
-        for attribute in ("_phaseformer_original_forward",):
-            if hasattr(model, attribute):
-                delattr(model, attribute)
         for attribute in ("last_centered", "last_hidden", "last_hidden_used"):
             if hasattr(head, attribute):
                 delattr(head, attribute)
