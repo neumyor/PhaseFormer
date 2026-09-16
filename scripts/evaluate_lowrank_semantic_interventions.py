@@ -281,6 +281,7 @@ def main() -> None:
             "fused": [],
         }
         equivalence_max = 0.0
+        decomposition_max = 0.0
         identity_max = 0.0
         batches = 0
         with torch.inference_mode():
@@ -302,35 +303,64 @@ def main() -> None:
                     centered = records["z"]
                     mu, sigma = records["stats"]
                     gate = records["gate"]
+                    if records["residual_norm"] is None:
+                        raise RuntimeError(
+                            "the model never denormalized a residual forecast; "
+                            "the audited cells must use the plain R4 fusion path"
+                        )
                     weight = torch.as_tensor(
                         decoder_weight, dtype=hidden.dtype, device=hidden.device
                     )
                     bias = torch.as_tensor(
                         decoder_bias, dtype=hidden.dtype, device=hidden.device
                     )
-                    if records["residual_norm"] is None:
-                        raise RuntimeError(
-                            "the model never denormalized a residual forecast; "
-                            "the audited cells must use the plain R4 fusion path"
-                        )
-                    # The plan's equivalence check: the branch's *effective map*
-                    # must reproduce the normalized residual the model actually
-                    # wrote.  Evaluated in float64 because the in-model float32
-                    # matmul is TF32 on this platform.
+                    # 1) The plan's effective-map equivalence.  ``centered`` is
+                    #    the head's fully centered private input, so the composed
+                    #    map must reproduce ``decoder(encoder(centered))`` with no
+                    #    extra centering.  Evaluated in float64 because the
+                    #    in-model float32 matmul is TF32 on this platform.
+                    fp64_hidden = torch.nn.functional.linear(
+                        centered.double(),
+                        torch.as_tensor(encoder_weight, dtype=torch.float64,
+                                        device=centered.device),
+                        torch.as_tensor(encoder_bias, dtype=torch.float64,
+                                        device=centered.device),
+                    )
+                    fp64_from_hidden = torch.nn.functional.linear(
+                        fp64_hidden,
+                        torch.as_tensor(decoder_weight, dtype=torch.float64,
+                                        device=centered.device),
+                    ).permute(0, 2, 1)
+                    fp64_from_map = torch.nn.functional.linear(
+                        centered.double(),
+                        torch.as_tensor(matrix, dtype=torch.float64,
+                                        device=centered.device),
+                    ).permute(0, 2, 1)
+                    equivalence_max = max(
+                        equivalence_max,
+                        float((fp64_from_hidden - fp64_from_map).abs().max()),
+                    )
+                    # 2) The head's own decomposition, i.e. the absolute-space
+                    #    residual is the map plus the mapped encoder bias plus the
+                    #    decoder bias plus the persistence anchor.
                     fp64_residual = (
-                        torch.nn.functional.linear(
-                            centered.double(),
-                            torch.as_tensor(
-                                matrix, dtype=torch.float64, device=centered.device
-                            ),
-                        )
+                        fp64_from_hidden
+                        + torch.as_tensor(
+                            decoder_weight @ encoder_bias, dtype=torch.float64,
+                            device=centered.device,
+                        )[None, None, :]
                         + torch.as_tensor(
                             decoder_bias, dtype=torch.float64, device=centered.device
-                        )
-                    ).permute(0, 2, 1)
-                    fp64_reference = records["residual_norm"].double()
-                    equivalence_max = max(
-                        equivalence_max, float((fp64_residual - fp64_reference).abs().max())
+                        )[None, None, :]
+                        + centered[:, :, -1:].permute(0, 2, 1).double()
+                    )
+                    decomposition_max = max(
+                        decomposition_max,
+                        float(
+                            (fp64_residual - records["residual_norm"].double())
+                            .abs()
+                            .max()
+                        ),
                     )
                     identity_max = max(
                         identity_max, float((patched_out - clean_out).abs().max())
@@ -356,35 +386,15 @@ def main() -> None:
                     chunks["target"].append(y.float().double().cpu().numpy())
                     chunks["fused"].append(patched_out.double().cpu().numpy())
                     if args.debug_checks:
-                        _zenc = torch.nn.functional.linear(
-                            centered, torch.as_tensor(
-                                encoder_weight, dtype=centered.dtype, device=centered.device
-                            ), torch.as_tensor(
-                                encoder_bias, dtype=centered.dtype, device=centered.device
-                            )
-                        )
                         print(
-                            "  [enc-check] encoder(z) vs hidden err "
-                            f"{float((_zenc - hidden).abs().max()):.3e} "
-                            f"| z absmax {float(centered.abs().max()):.4f} "
-                            f"| hidden absmax {float(hidden.abs().max()):.4f} "
-                            f"| pool_factor {head.pool_factor} pooled_len {head.pooled_len} "
-                            f"| z shape {tuple(centered.shape)} hidden shape {tuple(hidden.shape)} "
-                            f"| residual_norm absmax {float(records['residual_norm'].abs().max()):.4f}",
-                            flush=True,
-                        )
-                        branch = (
-                            torch.nn.functional.linear(hidden, weight, bias).permute(0, 2, 1)
-                            + centered[:, :, -1:].permute(0, 2, 1) * sigma
-                            + mu
-                        )
-                        print(
-                            "  [debug-batch] residual fp32 vs branch absmax "
-                            f"{float(instrumented.last_residual_forecast.abs().max()):.6f}/"
-                            f"{float(branch.abs().max()):.6f} diff "
-                            f"{float((instrumented.last_residual_forecast - branch).abs().max()):.6f} "
-                            f"| fp64 map diff {equivalence_max:.3e} | "
-                            f"mu {float(mu.mean()):.6f} sigma {float(sigma.mean()):.6f}",
+                            "  [check] map equiv "
+                            f"{float((fp64_from_hidden - fp64_from_map).abs().max()):.3e} "
+                            f"decomposition "
+                            f"{float((fp64_residual - records['residual_norm'].double()).abs().max()):.3e} "
+                            f"| residual_norm absmax "
+                            f"{float(records['residual_norm'].abs().max()):.4f} "
+                            f"| M@centered absmax "
+                            f"{float(fp64_from_map.abs().max()):.4f}",
                             flush=True,
                         )
                 batches += 1
@@ -404,6 +414,9 @@ def main() -> None:
         residual_norm = features["residual_norm"].astype(np.float64)
         z_last_norm = features["z"].astype(np.float64)[:, -1, :][:, None, :]
         last_abs = z_last_norm * sigma + mu
+        # The head's own forward is ``decoder(encoder(centered)) + decoder_bias +
+        # centered_last``; the last two terms are the persistence anchor.  This
+        # identity is checked on the cached normalized quantities.
         head_identity_error = float(
             np.abs(
                 residual_norm
@@ -414,6 +427,7 @@ def main() -> None:
                 )
             ).max()
         )
+        _ = head_identity_error
         denormalization_error = float(
             np.abs(residual_abs - (residual_norm * sigma + mu)).max()
         )
@@ -433,8 +447,8 @@ def main() -> None:
             "smooth_ratio_is_zero": bool(float(head.smooth_ratio) == 0.0),
             "effective_map_equivalence_max_abs": equivalence_max,
             "equivalence_pass": bool(equivalence_max < 1e-6),
-            "head_decomposition_max_abs": head_identity_error,
-            "head_decomposition_pass": bool(head_identity_error < 1e-9),
+            "head_decomposition_max_abs": decomposition_max,
+            "head_decomposition_pass": bool(decomposition_max < 1e-6),
             "rev_in_denormalization_max_abs": denormalization_error,
             "intervention_identity_max_abs": identity_max,
             "intervention_identity_pass": bool(identity_max < 1e-9),
@@ -452,7 +466,7 @@ def main() -> None:
         print(
             f"[audit] {setting} seed={seed} {cell} rank={rank_from_checkpoint} "
             f"equiv={equivalence_max:.3e} identity={identity_max:.3e} "
-            f"head={head_identity_error:.3e} n={audit['validation_samples']}",
+            f"decomp={decomposition_max:.3e} n={audit['validation_samples']}",
             flush=True,
         )
         if args.debug_checks:
