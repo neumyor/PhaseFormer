@@ -197,6 +197,7 @@ def intervention_forward(intervention, audit_math=None):
                 "pooled64": pooled64,
                 "hidden64": hidden64,
                 "map64": map64,
+                "anchor64": self.last_centered[:, :, -1:].permute(0, 2, 1).double(),
                 "head64": (
                     torch.nn.functional.linear(
                         hidden64, decoder64, self.decoder.bias.double()
