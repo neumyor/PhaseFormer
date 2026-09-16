@@ -177,6 +177,7 @@ def main() -> None:
         help="comma separated arm names to evaluate (default: all)",
     )
     parser.add_argument("--audit-only", action="store_true")
+    parser.add_argument("--debug-checks", action="store_true")
     parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
@@ -447,6 +448,19 @@ def main() -> None:
             f"anchor={anchor_error:.3e} n={audit['validation_samples']}",
             flush=True,
         )
+        if args.debug_checks:
+            recomputed = np.einsum(
+                "ncr,hr->nhc", hidden, decoder_weight
+            ) + decoder_bias[None, :, None] + last_abs
+            stored = residual_abs
+            print(
+                "  [debug] residual absmax stored/recomputed "
+                f"{np.abs(stored).max():.6f}/{np.abs(recomputed).max():.6f} "
+                f"| diff {np.abs(stored - recomputed).max():.6f} "
+                f"| last_abs absmax {np.abs(last_abs).max():.6f} "
+                f"| sigma mean {sigma.mean():.6f}",
+                flush=True,
+            )
         if args.audit_only:
             del features, hidden, residual_abs
             models.pop(group_key, None)
