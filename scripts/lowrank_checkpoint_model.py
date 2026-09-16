@@ -180,8 +180,14 @@ def intervention_forward(intervention, audit_math=None):
                 self.encoder.weight.double(),
                 self.encoder.bias.double(),
             )
+            # All operands are float64 copies of the *checkpoint* tensors; the
+            # composed map must be rebuilt here rather than reused from the
+            # float32-effective matrix, because ``decoder @ encoder`` computed in
+            # float32 and then widened to float64 carries a TF32-level rounding
+            # error that would masquerade as an equivalence failure.
+            decoder64 = self.decoder.weight.double()
             map64 = torch.nn.functional.linear(
-                pooled64, audit_math["matrix"]
+                pooled64, decoder64 @ self.encoder.weight.double()
             )
             self.last_audit = {
                 "pooled64": pooled64,
@@ -189,9 +195,7 @@ def intervention_forward(intervention, audit_math=None):
                 "map64": map64,
                 "head64": (
                     torch.nn.functional.linear(
-                        hidden64,
-                        self.decoder.weight.double(),
-                        self.decoder.bias.double(),
+                        hidden64, decoder64, self.decoder.bias.double()
                     ).permute(0, 2, 1)
                     + self.last_centered[:, :, -1:].permute(0, 2, 1).double()
                 ),
