@@ -343,13 +343,17 @@ class InterventionTest(unittest.TestCase):
         )
         full = arm_metrics(*common, None, "identity")
         off = arm_metrics(*common, None, "bias")
+        # Bias-off keeps the input-driven part and drops the synthetic bias.
         expected = np.einsum("ncr,hr->nhc", hidden, decoder) * sigma
         np.testing.assert_allclose(
             off["correction_energy"], np.mean(expected ** 2), atol=1e-12
         )
-        # Removing the synthetic bias must never *increase* the correction energy
-        # beyond the identity arm's, since the bias is an additive term.
-        self.assertLessEqual(off["correction_energy"], full["correction_energy"] + 1e-12)
+        scaled_bias = bias[None, :, None] * sigma
+        self.assertAlmostEqual(
+            full["correction_energy"] - off["correction_energy"],
+            float(np.mean(2.0 * expected * scaled_bias + scaled_bias ** 2)),
+            places=10,
+        )
 
     def test_semantic_basis_has_the_requested_truncation(self):
         basis = semantic_basis("ETTh2", 8)

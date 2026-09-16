@@ -111,39 +111,37 @@ def arm_metrics(
 ) -> dict:
     """Branch, fused and reconstruction metrics of one arm.
 
-    The low-rank branch writes, in the original value space,
+    The branch writes, in the original value space,
 
         r = last_abs + sigma * (decoder(h) + decoder_bias)
 
-    where ``last_abs = sigma * x_last_norm + mu`` is the persistence anchor.
-    Everything except the anchor is scaled by the per-sample RevIN scale, so the
-    arm's *correction* is ``sigma * (decoder(Q_Q^T h) + decoder_bias)`` for
-    whatever hidden state the arm produces.  ``correction_reference`` is the same
-    quantity for the untouched checkpoint, which makes ``only`` and ``drop`` two
-    independent projections whose corrections sum back to the original exactly.
+    with ``last_abs = sigma * x_last_norm + mu`` the persistence anchor.  The
+    arm's **correction** is everything except the anchor,
+
+        correction(h) = sigma * (decoder(h) + decoder_bias),
+
+    which is affine in ``h`` with slope ``sigma * decoder``.  Keeping the bias
+    inside the correction makes ``only`` and ``drop`` two independent
+    projections whose corrections sum back to the untouched one exactly;
+    ``Bias-off`` is the arm that removes the synthetic bias term.
     """
     transformed = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
-    bias_scaled = decoder_bias[None, :, None] * sigma
-    if mode in ("identity", "bias"):
+    if mode == "bias":
+        correction = transformed * sigma
+    elif mode in ("identity",):
         correction = (transformed + decoder_bias[None, :, None]) * sigma
     elif basis is None:
         correction = np.zeros_like(transformed)
     elif mode == "only":
         projected = np.einsum("ncr,rk->nck", hidden, basis)
-        correction = (
-            np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
-            + decoder_bias[None, :, None]
-        ) * sigma
+        kept = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
+        correction = (kept + decoder_bias[None, :, None]) * sigma
     elif mode == "drop":
         projected = np.einsum("ncr,rk->nck", hidden, basis)
         removed = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
-        correction = (
-            transformed + decoder_bias[None, :, None] - removed
-        ) * sigma
+        correction = (transformed - removed + decoder_bias[None, :, None]) * sigma
     else:
         raise ValueError(f"unknown arm mode {mode!r}")
-    if mode == "bias":
-        correction = correction - bias_scaled
     branch_abs = last_abs + correction
     branch_delta = branch_abs - target
     fused = (1.0 - gate) * phase_abs + gate * branch_abs
