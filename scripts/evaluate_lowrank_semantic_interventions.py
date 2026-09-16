@@ -391,7 +391,7 @@ def main() -> None:
                     if args.debug_checks:
                         print(
                             "  [check] fp64 equiv "
-                            f"{float((audit_math_values['hidden64'] @ decoder_weight.T - audit_math_values['map64']).abs().max()):.3e} "
+                            f"{float((audit_math_values['hidden64'] @ torch.as_tensor(decoder_weight, dtype=torch.float64, device=device).T - audit_math_values['map64']).abs().max()):.3e} "
                             f"decomposition {decomposition_max:.3e} "
                             f"tf32 deviation {tf32_max:.3e} "
                             f"| residual_norm absmax "
