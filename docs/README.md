@@ -158,10 +158,15 @@
 | 弱残差前史（已结题） | [`Weak_residual_asymmetric_component_plan.md`](Weak_residual_asymmetric_component_plan.md)、[`Weak_residual_three_trend_components_experiment_plan.md`](Weak_residual_three_trend_components_experiment_plan.md)、[`Weak_residual_trend_component_study_closure.md`](Weak_residual_trend_component_study_closure.md) | A1–A6 趋势成分 + X-A/Only-A 路由；结论"A 是条件性校正而非完整表征"；2026-09-05 结题并交接给 NLinear 瓶颈研究 |
 | 信息瓶颈父计划 | [`PhaseFormer_NLinear_Progressive_IB_Experiment_Plan_v1.0.md`](PhaseFormer_NLinear_Progressive_IB_Experiment_Plan_v1.0.md) | 形式化 Stage 1–10 计划；Stage 2/3 命题已由上一行的容量报告实质回答；**该文件状态块尚未同步更新** |
 
-- **当前探索指导文档**：[`PhaseFormer_top2_predictive_direction_retention_plan.md`](PhaseFormer_top2_predictive_direction_retention_plan.md)
-  —— 只构造两个数据瓶颈变体：NLinear 仅保留 RRR 方向 1，或保留方向 1+2；在
-  ETTh2-96/720、ETTm2-96/192、Weather-96/192 上进行端到端三 seed 配对验证，直接测量
-  前两个方向能够保留多少完整 NLinear 性能。
+- **当前探索指导文档**：
+  [`PhaseFormer_direction1_neighborhood_experiment_plan.md`](PhaseFormer_direction1_neighborhood_experiment_plan.md)
+  —— 在已完成的前两方向负结果基础上，用训练集连续区块 bootstrap 构造方向 1 的
+  `Qcone1/Qcone2/Qcone4/Qcone8` 局部邻域；在 ETTh2、ETTm2、Weather 与
+  Electricity 的 7 个 setting 上直接执行完整 test sweep，并明确按数据集进行
+  test-set selection。
+- 已完成的直接前置实验：
+  [`PhaseFormer_top2_predictive_direction_retention_plan.md`](PhaseFormer_top2_predictive_direction_retention_plan.md)
+  —— NLinear 仅保留 RRR 方向 1 或方向 1+2 的端到端验证，预注册判定为“不支持”。
 - 上一轮结构化宽度优先计划
   [`PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md`](PhaseFormer_nlinear_structured_lowrank_breadth_first_exploration_plan.md)
   已完成其路线判断，保留为历史计划，不再作为当前执行入口。

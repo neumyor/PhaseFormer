@@ -2663,6 +2663,34 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - `docs/README.md` 的当前探索入口已指向本计划；原结构化宽度优先计划降为历史入口。
 - 验证：`git diff --check` 通过；计划中的 5 张 Markdown 表格列数检查通过；未运行模型或实验。
 
+## 2026-09-16 — 规划并实现方向 1 bootstrap 邻域实验（未运行）
+
+- 新增 `docs/PhaseFormer_direction1_neighborhood_experiment_plan.md`，将“方向 1 扇形”
+  定义为训练集连续区块 bootstrap 得到的方向 1 扰动切向子空间，宽度固定探索
+  `k=1/2/4/8`；明确线性投影下夹角本身不能作为有效容量约束。
+- 新增 `scripts/compute_direction1_neighborhood_projectors.py`：只读取 train split，
+  使用 16 个连续窗口区块、64 次固定种子重采样，构造嵌套
+  `Qcone1/Qcone2/Qcone4/Qcone8` 与 `Qrrr2`，并审计方向夹角、切向谱、可见方差、
+  独立预测收益、方向 2 重叠、正交性、幂等性与文件哈希。
+- 按用户修订要求，将范围直接扩展到 7 个 setting，新增 Electricity-336；不再要求
+  本轮 Cone-1 与旧 V1 投影严格等价，所有关键对照均在本实验中重新训练。
+- 新增 `scripts/run_direction1_neighborhood_matrix.py`：Stage T 在 7 个 setting 上运行
+  direct、RRR-2、Cone-1/2/4/8，seed 2021 共 42 次，并直接读取 test；Stage S 按选择后的
+  数据集宽度训练 seeds 2022/2023 的 direct、RRR-2、Cone-1、selected Cone-k；当
+  selected k=1 时自动去重，共 42–56 次。
+- 新增 `scripts/select_direction1_neighborhood_width.py`：按数据集汇总 seed 2021 test
+  指标，先最小化宏平均 MSE，再以 0.10 个百分点容差内的 MAE和较小宽度作为 tie-break，
+  输出 `test_selection.json`。
+- 整个协议明确标记为 test-set selection；允许 ETTh2、ETTm2、Weather、Electricity
+  各自使用不同宽度，但同一数据集的多个 horizon 共享宽度。
+- 新增 `tests/test_direction1_neighborhood.py`，覆盖方向符号对齐、切向基嵌套、
+  解析 capture 单调性、实验矩阵规模和投影文件路由。
+- `docs/README.md` 的当前探索入口已切换到本计划。
+- 验证：9 个标准库单元测试通过；新增 3 个脚本语法检查通过；Stage T dry-run
+  生成 42 个读取 test 的 sweep 任务；Stage S 会按选择结果生成 42–56 个读取 test
+  的稳定性任务；计划文档 9 张 Markdown 表格列数与 `git diff --check` 通过。
+- 按用户要求，本次只编写代码和待填实验文档，未生成投影器、未启动训练、未读取 test。
+
 ## 2026-09-16 — 收窄前两方向实验的机制表述并修复 Stage A QC 标签
 
 - 根据三 seed 结果复核，修正
