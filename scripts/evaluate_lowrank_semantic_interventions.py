@@ -593,17 +593,17 @@ def main() -> None:
             key: features[key].astype(np.float64)
             for key in ("hidden", "z", "sigma", "mu", "gate", "phase", "target")
         }
+        # The cache is what lets the intervention arms be recomputed without a
+        # second GPU sweep over the frozen checkpoints.
+        np.savez_compressed(
+            cache_path,
+            encoder_weight=encoder_weight,
+            encoder_bias=encoder_bias,
+            decoder_weight=decoder_weight,
+            decoder_bias=decoder_bias,
+            **{key: value.astype(np.float32) for key, value in cached.items()},
+        )
         if args.audit_only:
-            # The cache is what lets the intervention pass run without spending a
-            # second GPU sweep over the frozen checkpoints.
-            np.savez_compressed(
-                cache_path,
-                encoder_weight=encoder_weight,
-                encoder_bias=encoder_bias,
-                decoder_weight=decoder_weight,
-                decoder_bias=decoder_bias,
-                **{key: value.astype(np.float32) for key, value in cached.items()},
-            )
             del features, hidden, residual_abs, residual_norm, cached
             models.pop(group_key, None)
             continue
