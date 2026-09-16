@@ -265,13 +265,18 @@ def random_drop_band(
         coefficients = np.einsum("ncr,mrk->nckm", piece, bases)
         back = np.einsum("nckm,mrk->ncrm", coefficients, bases)
         decoded = np.einsum("ncrm,hr->nhcm", back, decoder_weight)
-        corrections = (full[:, :, :, None] - decoded) * sigma[start:stop][
-            :, None, :, None
-        ]
-        branch = last_abs[start:stop][:, None, :, None] + corrections
-        fused = (1.0 - gate[start:stop])[:, None, :, None] * phase_abs[
-            start:stop
-        ][:, :, :, None] + gate[start:stop][:, None, :, None] * branch
+        # ``sigma``/``last_abs``/``gate`` are already ``(n, 1, c)``; the extra
+        # axis here is the arm axis, so the scale has to be re-shaped to
+        # ``(n, 1, c, 1)`` rather than to a five-dimensional tensor.
+        scale = sigma[start:stop].reshape(stop - start, 1, -1, 1)
+        gate_piece = gate[start:stop].reshape(stop - start, 1, -1, 1)
+        anchor_piece = last_abs[start:stop].reshape(stop - start, 1, -1, 1)
+        corrections = (full[:, :, :, None] - decoded) * scale
+        branch = anchor_piece + corrections
+        phase_piece = phase_abs[start:stop]
+        fused = (1.0 - gate_piece) * phase_piece[:, :, :, None] + (
+            gate_piece
+        ) * branch
         delta = fused - target[start:stop][:, :, :, None]
         weight = n / samples
         mse += weight * np.mean(delta ** 2, axis=(0, 1, 2))
