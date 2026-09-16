@@ -223,10 +223,13 @@ def arm_fused_errors(
         )
     del coefficients
     full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight)
-    if full.ndim != 3:
+    if full.ndim != 3 or removed.shape != (
+        hidden_chunk.shape[0], decoder_weight.shape[0], hidden_chunk.shape[1],
+        bases.shape[0],
+    ):
         raise RuntimeError(
-            f"decoder contraction produced rank {full.ndim}: "
-            f"hidden={hidden_chunk.shape} decoder={decoder_weight.shape}"
+            f"shape guard: hidden={hidden_chunk.shape} decoder={decoder_weight.shape} "
+            f"bases={bases.shape} full={full.shape} removed={removed.shape}"
         )
     corrections = (full[:, :, :, None] - removed) * sigma_chunk[:, None, :, None]
     branch = last_abs_chunk[:, None, :, None] + corrections
