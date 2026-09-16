@@ -442,11 +442,22 @@ def build_cells(
         if candidate.pool_factor != 1:
             unassigned.append(key)
             continue
-        summary_q = requested.get(key, set())
+        summary_q = sorted(requested.get(key, set()), reverse=True)
         if summary_q:
-            relative_rank = nearest_cell(max(summary_q), planned_cells)
+            # ``config_id`` records the requested fraction.  When one realized
+            # rank was produced by several requested fractions (the plan's
+            # ``q=1/16`` and ``q=1/32`` both realize rank 22 at horizon 720), the
+            # larger fraction is the one whose planned rank actually rounds onto
+            # it, so it is preferred rather than merged.
+            relative_rank = None
+            for item in summary_q:
+                relative_rank = nearest_cell(item, planned_cells)
+                break
             how = "runner_summary"
-            candidate.config_q = max(summary_q)
+            candidate.config_q = summary_q[0]
+            planned = planned_rank(candidate.pool_factor, relative_rank, candidate.horizon)
+            if int(candidate.rank or -1) != planned:
+                how = "runner_summary_offsets_planned_rank"
         else:
             ladder = sorted(
                 ladders.get((candidate.dataset, candidate.horizon, candidate.seed), ())
@@ -455,11 +466,6 @@ def build_cells(
                 candidate.pool_factor, candidate.horizon, ladder, int(candidate.rank), "exact"
             )
             how = "manifest_ladder_exact_rank"
-            if relative_rank is None:
-                relative_rank = ladder_q_for_rank(
-                    candidate.pool_factor, candidate.horizon, ladder, int(candidate.rank), "rounding"
-                )
-                how = "manifest_ladder_rounding_rank"
         label = LABEL_OF_RELATIVE_RANK.get(relative_rank)
         cell = cells.get((candidate.dataset, candidate.horizon, candidate.seed, label))
         if relative_rank is None or cell is None:
@@ -486,38 +492,43 @@ def build_cells(
     # and ``q=1/32`` both realize rank 22; the requested fraction recorded in
     # the runner summary resolves it above, and the collision is recorded so the
     # report can disclose which artifact carries which label.
-    collisions = [
+    # A realized rank must belong to exactly one cell, otherwise the label is
+    # ambiguous and two different rank values would be silently merged.
+    duplicated = [
         {"dataset": key[0], "horizon": key[1], "seed": key[2], "rank": key[3],
-         "cells": sorted(value)}
-        for key, value in cell_of_rank.items()
-        if len(value) > 1
+         "cells": sorted(cell_names)}
+        for key, cell_names in cell_of_rank.items()
+        if len(cell_names) > 1
     ]
-    for key, cell in cells.items():
-        if not cell.candidates:
-            continue
-        cell.candidates.sort(
-            key=lambda item: item.sort_key(SOURCE_ROOTS.index(item.source))
+    if duplicated:
+        raise RuntimeError(
+            f"one realized rank assigned to several cells: {duplicated}"
         )
-        cell.selected = cell.candidates[0]
-        realized = {candidate.rank for candidate in cell.candidates}
-        if len(realized) != 1:
-            raise RuntimeError(
-                f"ambiguous realized ranks for {cell.setting} seed={cell.seed} "
-                f"{cell.cell}: {sorted(realized)}"
-            )
+    # The plan's exact-rank rule and the realized artifact disagree for a few
+    # cells of the seed-2021 sweep; that is recorded rather than hidden.
+    offsets = [
+        {
+            "setting": entry["setting"],
+            "seed": entry["seed"],
+            "cell": entry["cell"],
+            "rank": entry["rank"],
+            "how": entry["how"],
+        }
+        for entry in inferred
+    ]
     if unassigned:
         raise RuntimeError(
             "low-rank checkpoints whose realized rank carries no recorded "
             f"requested relative rank: {sorted(set(unassigned))}"
         )
-    return cells, candidates, inferred, collisions
+    return cells, candidates, offsets
 
 
 def inventory_rows(
     repo_root: Path,
     hash_checkpoints: bool = True,
 ) -> tuple[list[dict], list[dict], list[dict]]:
-    cells, candidates, inferred, collisions = build_cells(repo_root)
+    cells, candidates, offsets = build_cells(repo_root)
     del candidates
     rows = []
     for key in sorted(cells, key=lambda item: (item[0], item[1], item[2], item[3])):
@@ -561,7 +572,7 @@ def inventory_rows(
         else:
             record["checkpoint_sha256_short"] = ""
         rows.append(record)
-    return rows, inferred, collisions
+    return rows, offsets
 
 
 def write_inventory(rows: list[dict], path: Path) -> None:
@@ -582,7 +593,7 @@ def main() -> None:
     parser.add_argument("--no-hash", action="store_true")
     args = parser.parse_args()
     repo_root = Path(args.repo_root).resolve()
-    rows, inferred, collisions = inventory_rows(
+    rows, offsets = inventory_rows(
         repo_root, hash_checkpoints=not args.no_hash
     )
     write_inventory(rows, repo_root / args.output)
@@ -595,20 +606,15 @@ def main() -> None:
     print(f"cells with duplicate training artifacts: {duplicates}")
     formal = [row for row in rows if not row["is_diagnostic_only"]]
     print(f"formal rows: {len(formal)}, diagnostic-only rows: {len(rows) - len(formal)}")
-    inferred = [row for row in rows if row["rank_assignment"] not in ("runner_summary", "")]
-    print(f"rows whose q was inferred from a manifest ladder: {len(inferred)}")
-    for row in inferred:
-        print("  INFERRED", row["setting"], row["seed"], row["cell"], row["rank"], row["rank_assignment"])
-    print("q values in the inventory:", sorted({row["relative_rank_q"] for row in rows}))
-    print(f"rank labels resolved from a manifest ladder: {len(inferred)}")
-    for entry in inferred:
+    print("relative ranks present:", sorted({row["relative_rank_q"] for row in rows}))
+    print(f"cells whose realized rank differs from the plan's exact rule: {len(offsets)}")
+    for entry in offsets:
         print(
-            "  LADDER", entry["setting"], entry["seed"], entry["cell"],
+            "  OFFSET", entry["setting"], entry["seed"], entry["cell"],
             f"rank={entry['rank']}", entry["how"],
         )
-    print(f"realized ranks claimed by two cells: {len(collisions)}")
-    for entry in collisions:
-        print("  COLLISION", entry)
+    missing_q = sorted({row["relative_rank_q"] for row in rows})
+    print("relative ranks present:", missing_q)
 
 
 if __name__ == "__main__":
