@@ -192,7 +192,6 @@ def arm_metrics(
 def arm_fused_errors(
     hidden_chunk: np.ndarray,
     decoder_weight: np.ndarray,
-    decoder_bias: np.ndarray,
     sigma_chunk: np.ndarray,
     last_abs_chunk: np.ndarray,
     gate_chunk: np.ndarray,
@@ -239,7 +238,6 @@ def arm_fused_errors(
 def random_drop_band(
     hidden: np.ndarray,
     decoder_weight: np.ndarray,
-    decoder_bias: np.ndarray,
     sigma: np.ndarray,
     last_abs: np.ndarray,
     gate: np.ndarray,
@@ -251,7 +249,6 @@ def random_drop_band(
     chunk: int = 128,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fused MSE/MAE of ``count`` random same-dimension drop arms."""
-    del decoder_bias
     count = max(int(count), 1)
     dimension = max(1, min(rank, 6))
     bases = np.stack(
@@ -264,7 +261,7 @@ def random_drop_band(
     for start in range(0, samples, chunk):
         stop = min(start + chunk, samples)
         chunk_mse, chunk_mae = arm_fused_errors(
-            hidden[start:stop], decoder_weight, None, sigma[start:stop],
+            hidden[start:stop], decoder_weight, sigma[start:stop],
             last_abs[start:stop], gate[start:stop], phase_abs[start:stop],
             target[start:stop], bases,
         )
@@ -701,8 +698,8 @@ def main() -> None:
             arms = [arm for arm in arms if arm[0] in requested]
 
         random_mse, random_mae = random_drop_band(
-            hidden, decoder_weight, decoder_bias, sigma, last_abs, gate,
-            phase_abs, target, rank_dim, args.random_repeats, rng,
+            hidden, decoder_weight, sigma, last_abs, gate, phase_abs, target,
+            rank_dim, args.random_repeats, rng,
         )
         random_count = int(args.random_repeats)
 
