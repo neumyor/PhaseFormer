@@ -404,7 +404,9 @@ def main() -> None:
                             f"decomposition {decomposition_max:.3e} "
                             f"tf32 deviation {tf32_max:.3e} "
                             f"| residual_norm absmax "
-                            f"{float(records['residual_norm'].abs().max()):.4f}",
+                            f"{float(records['residual_norm'].abs().max()):.4f} "
+                            f"| head-vs-residual_norm "
+                            f"{records['residual_consistency_max_abs']}",
                             flush=True,
                         )
                 batches += 1
