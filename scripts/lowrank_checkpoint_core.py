@@ -491,9 +491,13 @@ def group_shapley(
     # the prefix of s!(n-s-1)! orderings, so the weight normalizes by (n-1)!.
     for mask in range(1 << n):
         size = bin(mask).count("1")
+        # ``size == n`` has no marginal contribution to distribute, so its weight
+        # is never needed and ``(n - size - 1)!`` must not be evaluated.
         weight = (
             math.factorial(size) * math.factorial(n - size - 1)
             / math.factorial(n - 1)
+            if size < n
+            else 0.0
         )
         base = r2(mask)
         for index in range(n):
