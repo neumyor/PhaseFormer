@@ -209,9 +209,22 @@ def intervention_forward(intervention, audit_math=None):
             map64 = torch.nn.functional.linear(
                 pooled64, decoder64 @ self.encoder.weight.double()
             ) + (decoder64 * self.encoder.bias.double()).sum(dim=1)[None, None, :]
-            head64_candidate = torch.nn.functional.linear(
-                hidden64, decoder64, self.decoder.bias.double()
-            ).permute(0, 2, 1) + last.permute(0, 2, 1).double()
+            try:
+                head64_candidate = torch.nn.functional.linear(
+                    hidden64, decoder64, self.decoder.bias.double()
+                ).permute(0, 2, 1) + last.permute(0, 2, 1).double()
+            except Exception as error:  # pragma: no cover - diagnostic path
+                raise RuntimeError(
+                    "fp64 head evaluation failed: "
+                    f"hidden64={tuple(hidden64.shape)} "
+                    f"decoder64={tuple(decoder64.shape)} "
+                    f"decoder_bias={tuple(self.decoder.bias.shape)} "
+                    f"last={tuple(last.shape)} "
+                    f"centered={tuple(centered.shape)} "
+                    f"pooled={tuple(pooled.shape)} "
+                    f"rank={getattr(self, 'rank', None)} "
+                    f"pooled_len={getattr(self, 'pooled_len', None)}"
+                ) from error
             self.last_audit = {
                 "pooled64": pooled64,
                 "head64_candidate": head64_candidate,
