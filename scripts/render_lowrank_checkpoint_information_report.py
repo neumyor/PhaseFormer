@@ -542,6 +542,196 @@ def figures(output_dir: Path, canonical: list[dict], semantic: list[dict]) -> No
     plt.close()
 
 
+def render_report(
+    output_dir: Path,
+    tables_dir: Path,
+    inventory: list[dict],
+    audit: list[dict],
+    canonical: list[dict],
+    cross_seed: list[dict],
+    semantic: list[dict],
+    alignment: list[dict],
+    interventions: list[dict],
+) -> None:
+    """Assemble ``report.md`` from the analysis tables."""
+    audit_by_key = {(row["setting"], row["seed"], row["cell"]): row for row in audit}
+
+    def audit_stat(key: str) -> tuple[float, float]:
+        values = [to_float(row[key]) for row in audit if row.get(key) not in (None, "")]
+        if not values:
+            return (float("nan"), float("nan"))
+        return (float(np.max(values)), float(np.mean(values)))
+
+    equivalence_max, equivalence_mean = audit_stat("effective_map_equivalence_max_abs")
+    decomposition_max, decomposition_mean = audit_stat("head_decomposition_max_abs")
+    tf32_max, _ = audit_stat("fp32_tf32_deviation_max_abs")
+    equivalence_failures = [row for row in audit if row.get("equivalence_pass") != "True"]
+    decomposition_failures = [
+        row for row in audit if row.get("head_decomposition_pass") != "True"
+    ]
+    pool_offenders = [row for row in audit if row.get("pool_factor_is_one") != "True"]
+
+    # Per-setting macro view on the two headline compression levels.
+    level_rows = []
+    for level in ("q=1/8", "q=1/32"):
+        for setting in sorted({row["setting"] for row in semantic}):
+            entries = [row for row in semantic if row["setting"] == setting and row["cell"] == level]
+            if not entries:
+                continue
+            leading = [row for row in entries if row["mode_index"] == "0"]
+            if not leading:
+                continue
+            top = leading[0]
+            level_rows.append(
+                [
+                    setting,
+                    level,
+                    top["input_best_group"],
+                    f"{to_float(top['input_group_explanation']):.3f}",
+                    top["output_best_group"],
+                    f"{to_float(top['output_group_explanation']):.3f}",
+                    f"{to_float(top['input_dictionary_r2']):.3f}",
+                ]
+            )
+
+    shapley_leaders = []
+    for row in semantic:
+        if row["cell"] != "q=1/8" or row["mode_index"] != "0":
+            continue
+        shapley = json.loads(row["input_shapley_json"])
+        if not shapley:
+            continue
+        leader = max(shapley, key=shapley.get)
+        shapley_leaders.append(
+            [row["setting"], leader, f"{shapley[leader]:.3f}"]
+        )
+
+    # H1 support from the conditional-RRR comparison.
+    h1_supported = sum(1 for row in alignment if row.get("supports_h1") == "True")
+    h1_total = len(alignment)
+
+    lines = [
+        "# 低秩 checkpoint 信息保留分析（结果报告）",
+        "",
+        "> 结果登记报告：本文件只记录数值与判定，规则与预注册判据见 "
+        "`docs/PhaseFormer_lowrank_checkpoint_information_analysis_plan.md`。",
+        "",
+        "## 0. 结论摘要",
+        "",
+        f"- 正式审计单元 **{len(inventory)}** 个 checkpoint（7 setting × 4 压缩档 × 3 seed"
+        f" = 84，加 seed 2021 的 7 个 `q=1` 参数化诊断档）。",
+        f"- 映射等价审计（float64，阈值 `1e-6`）最大误差 **{equivalence_max:.3e}**"
+        f"（均值 {equivalence_mean:.3e}），失败 **{len(equivalence_failures)}** 个。",
+        f"- 头部分解审计最大误差 **{decomposition_max:.3e}**"
+        f"（均值 {decomposition_mean:.3e}），失败 **{len(decomposition_failures)}** 个。",
+        f"- 同一算子的 float32（TF32）执行与 float64 参考的最大偏差为 "
+        f"**{tf32_max:.3e}**，说明 `1e-6` 级等价性只能在 float64 下审计。",
+        f"- `pool_factor != 1` 的 checkpoint：**{len(pool_offenders)}** 个。",
+        f"- 条件性目标对齐：在 {h1_total} 个 cell 中，**{h1_supported}** 个与 Phase "
+        "条件性 RRR 的重叠高于与独立 RRR 的重叠（H1）。",
+        "",
+        "## 1. 表 1–7",
+        "",
+        "表 1：checkpoint 审计见 `aggregation/table1_checkpoint_audit.md`。",
+        "表 2：规范模式见 `aggregation/table2_canonical_modes.md`。",
+        "表 3：跨 seed 稳定性见 `aggregation/table3_cross_seed.md`。",
+        "表 4：输入—输出语义见 `aggregation/table4_semantics.md`。",
+        "表 5：条件性目标对齐见 `aggregation/table5_conditional_rrr.md`。",
+        "表 6：干预结果见 `aggregation/table6_interventions.md`。",
+        "表 7：机制裁定见 `aggregation/table7_verdict.md`。",
+        "",
+        "## 2. 首个规范模式的语义（q=1/8 与 q=1/32）",
+        "",
+        "| Setting | 压缩档 | 输入首要语义 | 输入解释率 | 输出首要语义 | 输出解释率 | 输入字典 R² |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for row in level_rows:
+        lines.append("| " + " | ".join(str(item) for item in row) + " |")
+    lines += [
+        "",
+        "## 3. 输入侧精确 Shapley 归因（q=1/8，mode 0）",
+        "",
+        "字典组彼此高度共线（多个组都包含近期水平模板），因此精确 Shapley 值会被"
+        "替代组稀释；表格给出归因最大的组。",
+        "",
+        "| Setting | 最大 Shapley 组 | 值 |",
+        "|---|---|---|",
+    ]
+    for row in shapley_leaders:
+        lines.append("| " + " | ".join(str(item) for item in row) + " |")
+    lines += [
+        "",
+        "## 4. 跨 seed 稳定性（子空间级）",
+        "",
+        "| Setting | 比较 | 输入子空间重叠 | 输出子空间重叠 | 匹配度 ≥0.7 的模式数 |",
+        "|---|---|---|---|---|",
+    ]
+    for row in cross_seed:
+        if row.get("scope") != "full":
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    row["setting"],
+                    f"{row['cell_a']} vs {row['cell_b']}",
+                    f"{to_float(row['input_subspace_overlap']):.4f}",
+                    f"{to_float(row['output_subspace_overlap']):.4f}",
+                    f"{row['matched_modes_above_0p7']}/{row['dimension']}",
+                ]
+            )
+            + " |"
+        )
+    lines += [
+        "",
+        "## 5. 干预结果（按 setting × arm 的均值）",
+        "",
+        "| Setting | Arm | 平均 Δfused MSE | 平均 Δbranch MSE | 平均 correction R² |",
+        "|---|---|---|---|---|",
+    ]
+    grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for row in interventions:
+        grouped[(row["setting"], row["arm"])].append(row)
+    for (setting, arm) in sorted(grouped):
+        entries = grouped[(setting, arm)]
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    setting,
+                    arm,
+                    f"{np.mean([to_float(item['delta_fused_mse_vs_checkpoint']) for item in entries]):+.6f}",
+                    f"{np.mean([to_float(item['delta_branch_mse_vs_checkpoint']) for item in entries]):+.6f}",
+                    f"{np.mean([to_float(item['correction_reconstruction_r2']) for item in entries]):.4f}",
+                ]
+            )
+            + " |"
+        )
+    lines += [
+        "",
+        "## 6. 复现方式",
+        "",
+        "四个入口脚本按顺序在仓库根目录执行：",
+        "",
+        "```text",
+        "python scripts/lowrank_checkpoint_inventory.py --repo-root .",
+        "python scripts/evaluate_lowrank_semantic_interventions.py --gpus 0 ",
+        "    --output-dir research_runs/lowrank_checkpoint_information_v1",
+        "python scripts/compute_phase_conditional_rrr.py --gpus 0",
+        "python scripts/analyze_lowrank_checkpoint_information.py",
+        "python scripts/render_lowrank_checkpoint_information_report.py",
+        "```",
+        "",
+        "`features/*.npz` 是每个 checkpoint 的 validation 缓存，可通过重跑"
+        "干预脚本重建；它不是结论来源，只是让 arm 复算不必重复 GPU 前向。",
+        "",
+    ]
+    (output_dir / "report.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
+    del audit_by_key, tables_dir
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", default=".")
@@ -575,6 +765,10 @@ def main() -> None:
     table5(alignment, tables_dir)
     table6(interventions, tables_dir)
     table7(semantic, interventions, cross_seed, tables_dir)
+    render_report(
+        output_dir, tables_dir, inventory, audit, canonical, cross_seed, semantic,
+        alignment, interventions,
+    )
     if not args.skip_figures:
         figures(output_dir, canonical, semantic)
     print(f"tables written to {tables_dir}")
