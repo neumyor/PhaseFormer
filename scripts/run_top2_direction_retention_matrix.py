@@ -61,8 +61,14 @@ FROZEN = {
 ARMS = ("phase_only", "direct_nlinear", "keep_direction_1", "keep_direction_1_2")
 
 
-def arm_command(arm, dataset, horizon, seed, projector_dir, evaluate_test=False):
-    """Build the runner argv (without the interpreter) for one cell."""
+def arm_command(arm, dataset, horizon, seed, projector_dir, output_root,
+                evaluate_test=False):
+    """Build the runner argv (without the interpreter) for one cell.
+
+    ``--output-dir`` is always passed explicitly: the runner's own default is
+    ``research_runs/search_v1``, and an implicit default would scatter this
+    experiment's runs into an unrelated root.
+    """
     frozen = FROZEN[(dataset, horizon)]
     overrides = {
         "weak_period_residual_gate_init": frozen["gate"],
@@ -73,6 +79,7 @@ def arm_command(arm, dataset, horizon, seed, projector_dir, evaluate_test=False)
     }
     argv = [
         str(RUNNER),
+        "--output-dir", output_root,
         "--dataset", dataset,
         "--horizon", str(horizon),
         "--stage", "confirm",
@@ -147,7 +154,7 @@ def dispatch(cells, gpus, output_root, projector_dir, retries, poll,
             attempts[key] = attempts.get(key, 0) + 1
             argv = arm_command(
                 cell["arm"], cell["dataset"], cell["horizon"], cell["seed"],
-                projector_dir, evaluate_test,
+                projector_dir, output_root, evaluate_test,
             )
             env = dict(os.environ)
             env["CUDA_VISIBLE_DEVICES"] = str(gpu)
@@ -253,7 +260,7 @@ def main() -> None:
         "cells": [
             {**cell, "key": cell_key(cell), "command": arm_command(
                 cell["arm"], cell["dataset"], cell["horizon"], cell["seed"],
-                projector_dir, args.evaluate_test)}
+                projector_dir, args.output_root, args.evaluate_test)}
             for cell in cells
         ],
     }
