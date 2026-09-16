@@ -543,7 +543,6 @@ def main() -> None:
             hidden, decoder_weight, decoder_bias, gate, phase_abs, target,
             correction_reference, last_abs, sigma, None, "identity",
         )
-        del residual_abs, residual_norm, phase_abs, target
         rank_dim = int(hidden.shape[-1])
         rng = np.random.default_rng(RANDOM_SEED)
         semantic_full = semantic_basis(dataset, rank_dim)
@@ -667,9 +666,10 @@ def main() -> None:
                 flush=True,
             )
 
-        del (features, cached, hidden, sigma, mu, gate, phase_abs, target,
-             correction_reference, last_abs, x_last_norm, semantic_full,
-             semantic_small, pca, conditional, independent, random_metrics, arms)
+        del (features, cached, hidden, residual_abs, residual_norm, sigma, mu, gate,
+             phase_abs, target, correction_reference, last_abs, x_last_norm,
+             semantic_full, semantic_small, pca, conditional, independent,
+             random_metrics, arms)
         models.pop(group_key, None)
         del model, val_loader
 
