@@ -189,9 +189,12 @@ def intervention_forward(intervention, audit_math=None):
                 self.encoder.bias.double(),
             )
             print(
-                "AUDIT POOL/ENC/HID",
-                tuple(pooled64.shape), tuple(self.encoder.weight.shape),
-                tuple(hidden64.shape), flush=True,
+                "DBG pooled", tuple(pooled64.shape), "encW",
+                tuple(self.encoder.weight.shape), "hid", tuple(hidden64.shape),
+                "decW", tuple(self.decoder.weight.shape), "decB",
+                tuple(self.decoder.bias.shape), "last", tuple(last.shape),
+                "centered", tuple(centered.shape), "delta", tuple(delta.shape),
+                flush=True,
             )
             # All operands are float64 copies of the *checkpoint* tensors; the
             # composed map must be rebuilt here rather than reused from the
