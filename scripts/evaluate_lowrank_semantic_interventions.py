@@ -697,7 +697,7 @@ def main() -> None:
         chunks: dict[str, list] = {
             "z": [], "hidden": [], "phase": [], "phase_norm": [], "residual": [],
             "residual_norm": [], "mu": [], "sigma": [], "gate": [], "target": [],
-            "fused": [],
+            "fused": [], "x_last_norm": [],
         }
         equivalence_max = 0.0
         decomposition_max = 0.0
@@ -809,6 +809,13 @@ def main() -> None:
                     # ``pred_len`` steps, so the cache keeps exactly those.
                     chunks["target"].append(
                         y.float()[:, -horizon:, :].double().cpu().numpy()
+                    )
+                    # The persistence anchor is the head's own uncentered last
+                    # step; taking it here in float64 avoids the catastrophic
+                    # cancellation of recovering it from
+                    # ``residual_norm - decoder(hidden) - bias``.
+                    chunks["x_last_norm"].append(
+                        records["anchor64"].double().cpu().numpy()
                     )
                     chunks["fused"].append(patched_out.double().cpu().numpy())
                     if args.debug_checks:
@@ -936,7 +943,7 @@ def main() -> None:
             encoder_bias=encoder_bias,
             decoder_weight=decoder_weight,
             decoder_bias=decoder_bias,
-            **{key: value.astype(np.float32) for key, value in cached.items()},
+            **{key: value.astype(np.float64) for key, value in cached.items()},
         )
         if args.audit_only:
             del features, hidden, residual_abs, residual_norm, cached

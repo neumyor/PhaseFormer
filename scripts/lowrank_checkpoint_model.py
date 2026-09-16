@@ -167,6 +167,9 @@ def intervention_forward(intervention, audit_math=None):
         self.last_hidden = hidden
         self.last_hidden_used = effective
         self.last_forward_output = delta + last.expand(-1, self.pred_len, -1)
+        # The persistence anchor in float64.  It is the head's own uncentered
+        # last step, so this is the exact quantity the branch adds back.
+        self.last_anchor64 = last.double()
         if audit_math:
             # Exact float64 evaluation of the *same* head applied to the *same*
             # private input.  The plan's 1e-6 equivalence bound cannot be met by
@@ -299,6 +302,9 @@ def _capture_forward(module, original_forward):
             "head_forward_output": head_out,
             "residual_consistency_max_abs": residual_consistency,
             "denormalize_calls": len(calls),
+            "anchor64": getattr(
+                self.weak_period_residual, "last_anchor64", None
+            ),
         }
         return out
 
@@ -326,7 +332,7 @@ def instrument_model(model, intervention=None, audit_math=None):
         type(model).forward = original_model_forward
         for attribute in (
             "last_centered", "last_pooled", "last_hidden", "last_hidden_used",
-            "last_audit", "last_forward_output",
+            "last_audit", "last_forward_output", "last_anchor64",
         ):
             if hasattr(head, attribute):
                 delattr(head, attribute)
