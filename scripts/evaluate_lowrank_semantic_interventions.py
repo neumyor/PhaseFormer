@@ -700,7 +700,10 @@ def main() -> None:
         cached["x_last_norm"] = x_last_norm
         # The cache is what lets the intervention arms be recomputed without a
         # second GPU sweep over the frozen checkpoints.
-        np.savez_compressed(
+        # Uncompressed: zlib on the largest validation split of this analysis
+        # (hundreds of megabytes per file, tens of files) dominated the cache
+        # sweep, and these files are scratch that Phase 2 reads once.
+        np.savez(
             cache_path,
             encoder_weight=encoder_weight,
             encoder_bias=encoder_bias,
