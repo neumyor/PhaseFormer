@@ -361,13 +361,19 @@ class InterventionTest(unittest.TestCase):
         # breaks orthogonality in the value space; the partition is therefore
         # asserted on the hidden space and the corrections are only required to
         # be of comparable magnitude.
-        self.assertAlmostEqual(
-            projected_energy
-            + residual_energy
-            - float(np.mean(np.einsum("ncr,hr->nhc", hidden, decoder) ** 2)),
-            0.0,
-            delta=1e-9
-            * float(np.mean(np.einsum("ncr,hr->nhc", hidden, decoder) ** 2)),
+        # The hidden state splits exactly into ``Q Q^T h`` and its complement,
+        # but the decoder mixes those two components again, so the *energies*
+        # do not partition exactly.  The identity that does hold is the
+        # complementarity of the projections themselves.
+        full_projected = np.einsum("ncr,hr->nhc", hidden, decoder)
+        split = (
+            np.einsum("nck,hr,rk->nhc", projected, decoder, basis)
+            + np.einsum("ncr,hr->nhc", back, decoder)
+        )
+        np.testing.assert_allclose(split, full_projected, atol=1e-10)
+        self.assertLessEqual(
+            abs(projected_energy + residual_energy - float(np.mean(full_projected ** 2))),
+            0.05 * float(np.mean(full_projected ** 2)),
         )
         total = only["correction_energy"] + drop["correction_energy"]
         self.assertGreater(total, full["correction_energy"] * 0.5)
