@@ -229,6 +229,16 @@ def arm_fused_errors(
         gate_chunk[:, None, :, None]
     ) * branch
     delta = fused - target_chunk[:, :, :, None]
+    if delta.ndim != 4:
+        raise RuntimeError(
+            "unexpected arm tensor rank: "
+            f"hidden={hidden_chunk.shape} removed={removed.shape} "
+            f"corrections={corrections.shape} branch={branch.shape} "
+            f"fused={fused.shape} delta={delta.shape} "
+            f"sigma={sigma_chunk.shape} last_abs={last_abs_chunk.shape} "
+            f"gate={gate_chunk.shape} phase={phase_chunk.shape} "
+            f"target={target_chunk.shape} bases={bases.shape}"
+        )
     return (
         np.mean(delta ** 2, axis=(0, 1, 2)),
         np.mean(np.abs(delta), axis=(0, 1, 2)),
