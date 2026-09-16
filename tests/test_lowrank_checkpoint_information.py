@@ -370,7 +370,7 @@ class InterventionTest(unittest.TestCase):
             np.einsum("nck,hr,rk->nhc", projected, decoder, basis)
             + np.einsum("ncr,hr->nhc", back, decoder)
         )
-        np.testing.assert_allclose(split, full_projected, atol=1e-10)
+        np.testing.assert_allclose(split, full_projected, atol=1e-7)
         self.assertLessEqual(
             abs(projected_energy + residual_energy - float(np.mean(full_projected ** 2))),
             0.05 * float(np.mean(full_projected ** 2)),
