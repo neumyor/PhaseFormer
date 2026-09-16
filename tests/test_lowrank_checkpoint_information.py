@@ -39,6 +39,8 @@ from scripts.lowrank_checkpoint_inventory import (
 )
 from scripts.evaluate_lowrank_semantic_interventions import (
     arm_metrics,
+    latent_image,
+    latent_input_pca_basis,
     random_orthogonal_basis,
     semantic_basis,
 )
@@ -413,6 +415,27 @@ class InterventionTest(unittest.TestCase):
         basis = semantic_basis("ETTh2", 8)
         self.assertEqual(basis.shape[1], 8)
         np.testing.assert_allclose(basis.T @ basis, np.eye(8), atol=1e-10)
+
+    def test_latent_image_lives_in_the_encoder_span(self):
+        rng = np.random.default_rng(12)
+        encoder = rng.standard_normal((6, 720))
+        z_basis = orthonormalize(rng.standard_normal((5, 720)))
+        image = latent_image(z_basis, encoder, 6)
+        self.assertEqual(image.shape, (6, 5))
+        np.testing.assert_allclose(image.T @ image, np.eye(5), atol=1e-10)
+        # The image is spanned by ``encoder @ z_basis``.
+        residual = image - (
+            encoder @ z_basis
+        ) @ np.linalg.pinv(encoder @ z_basis) @ image
+        np.testing.assert_allclose(residual, 0.0, atol=1e-8)
+
+    def test_latent_input_pca_basis_recovers_the_dominant_direction(self):
+        rng = np.random.default_rng(13)
+        hidden = rng.standard_normal((200, 3, 4))
+        hidden[:, :, 0] *= 20.0
+        basis = latent_input_pca_basis(hidden, 4)
+        self.assertEqual(basis.shape, (4, 4))
+        self.assertGreater(abs(float(basis[0, 0])), 0.999)
 
 
 class RankLadderTest(unittest.TestCase):

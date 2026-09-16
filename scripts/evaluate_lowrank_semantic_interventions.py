@@ -73,27 +73,50 @@ def random_orthogonal_basis(
     return np.ascontiguousarray(basis[:, :rank])
 
 
-def semantic_basis(dataset: str, limit: int) -> np.ndarray:
+def semantic_basis(dataset: str, limit: int | None = None) -> np.ndarray:
     """Union of the input semantic groups, optionally truncated.
 
-    The Semi/8 arm uses the leading eight directions of this union; the
-    Semantic-only and Semantic-drop arms use the full union (dimension 22-28 per
-    setting).  Both are data-free templates, so they cannot leak validation
-    information.
+    The dictionary groups overlap heavily (several contain the plain recent-level
+    templates), so the union is a superset of any single group's semantics; the
+    truncation keeps the leading directions of the union.
     """
     groups = build_groups(input_templates(720, DATASET_PERIOD_STEPS[dataset]))
     basis = orthonormalize(
         np.concatenate([group.basis for group in groups.values()], axis=1).T
     )
-    return np.ascontiguousarray(basis[:, :limit])
+    if limit is not None:
+        basis = np.ascontiguousarray(basis[:, :limit])
+    return basis
 
 
-def pca_basis(moments_path: Path, rank: int) -> np.ndarray:
-    payload = np.load(moments_path)
-    covariance = payload["covariance"].astype(np.float64)
+def latent_image(z_basis: np.ndarray, encoder_weight: np.ndarray, rank: int) -> np.ndarray:
+    """Orthonormal basis of the latent image of a z-space subspace.
+
+    A linear head applies ``decoder @ encoder`` to ``Q Q^T z``, so keeping the
+    z-space subspace ``Q`` writes corrections in the latent span of
+    ``encoder @ Q``.  That span -- not ``Q`` itself -- is what an intervention on
+    the hidden state can name.
+    """
+    image = encoder_weight @ z_basis
+    basis = orthonormalize(image.T)
+    return np.ascontiguousarray(basis[:, : min(rank, basis.shape[1])])
+
+
+def latent_input_pca_basis(hidden: np.ndarray, rank: int) -> np.ndarray:
+    """Top ``rank`` principal directions of the branch's hidden state.
+
+    The plan's same-dimension PCA control, evaluated in the coordinate system the
+    interventions actually touch.
+    """
+    centered = hidden.reshape(-1, hidden.shape[-1])
+    centered = centered - centered.mean(axis=0)
+    covariance = centered.T @ centered / max(centered.shape[0] - 1, 1)
     values, vectors = np.linalg.eigh(0.5 * (covariance + covariance.T))
     order = np.argsort(values)[::-1]
     return np.ascontiguousarray(vectors[:, order[:rank]])
+
+
+
 
 
 def arm_metrics(
@@ -545,24 +568,33 @@ def main() -> None:
         )
         rank_dim = int(hidden.shape[-1])
         rng = np.random.default_rng(RANDOM_SEED)
-        semantic_full = semantic_basis(dataset, rank_dim)
-        semantic_small = semantic_basis(dataset, min(args.semantic_rank, rank_dim))
-        moments_path = (
-            repo_root / args.output_dir / "train_moments"
-            / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
-        )
-        pca = pca_basis(moments_path, rank_dim) if moments_path.is_file() else None
-        conditional_path = (
-            repo_root / args.output_dir / "subspaces" / f"{setting}_seed{seed}.npz"
-        )
+        # Every mask lives in the head's latent space, because that is the space
+        # the interventions act on.  A z-space subspace is therefore converted to
+        # the latent span of its image under the encoder.
+        z_semantic = semantic_basis(dataset, rank_dim)
+        semantic_full = latent_image(z_semantic, encoder_weight, rank_dim)
+        semantic_small = np.ascontiguousarray(semantic_full[:, : min(args.semantic_rank, semantic_full.shape[1])])
+        pca = latent_input_pca_basis(hidden, rank_dim)
         conditional = None
         independent = None
-        if conditional_path.is_file():
-            payload = np.load(conditional_path)
+        subspace_path = (
+            repo_root / args.output_dir / "subspaces"
+            / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
+        )
+        if subspace_path.is_file():
+            payload = np.load(subspace_path)
             if "conditional_basis" in payload.files:
-                conditional = payload["conditional_basis"].astype(np.float64)
+                conditional = latent_image(
+                    payload["conditional_basis"].astype(np.float64),
+                    encoder_weight,
+                    rank_dim,
+                )
             if "independent_basis" in payload.files:
-                independent = payload["independent_basis"].astype(np.float64)
+                independent = latent_image(
+                    payload["independent_basis"].astype(np.float64),
+                    encoder_weight,
+                    rank_dim,
+                )
 
         requested = {item for item in args.arms_limit.split(",") if item}
         arms: list[tuple[str, np.ndarray | None, str]] = [
