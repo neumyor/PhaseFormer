@@ -187,9 +187,13 @@ def intervention_forward(intervention, audit_math=None):
             # float32 and then widened to float64 carries a TF32-level rounding
             # error that would masquerade as an equivalence failure.
             decoder64 = self.decoder.weight.double()
+            # The effective affine map of the branch is
+            #     r(z) = (decoder @ encoder) z + decoder @ encoder.bias + decoder.bias
+            # so the encoder bias has to be mapped through the decoder before it
+            # can be compared with ``decoder(encoder(z))``.
             map64 = torch.nn.functional.linear(
                 pooled64, decoder64 @ self.encoder.weight.double()
-            )
+            ) + (decoder64 @ self.encoder.bias.double())[None, None, :]
             self.last_audit = {
                 "pooled64": pooled64,
                 "hidden64": hidden64,
