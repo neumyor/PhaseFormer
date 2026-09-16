@@ -525,22 +525,24 @@ def main() -> None:
         mu = features["mu"].astype(np.float64)
         residual_abs = features["residual"].astype(np.float64)
         residual_norm = features["residual_norm"].astype(np.float64)
-        z_last_norm = features["z"].astype(np.float64)[:, -1, :][:, None, :]
-        last_abs = z_last_norm * sigma + mu
-        # The head's own forward is ``decoder(encoder(centered)) + decoder_bias +
-        # centered_last``; the last two terms are the persistence anchor.  This
-        # identity is checked on the cached normalized quantities.
-        head_identity_error = float(
-            np.abs(
-                residual_norm
-                - (
-                    np.einsum("ncr,hr->nhc", hidden, decoder_weight)
-                    + decoder_bias[None, :, None]
-                    + z_last_norm
-                )
-            ).max()
+        # The persistence anchor in the original value space.  It is recovered
+        # from the model's own normalized residual as
+        #     x_last_norm = residual_norm - (decoder(h) + mapped encoder bias
+        #                                    + decoder bias)
+        # rather than from a slice of ``z``: ``z`` is cached as ``(N, L, C)``, so
+        # its last index is the *channel* axis and cannot be used here.
+        head_map = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+        x_last_norm = (
+            residual_norm
+            - head_map
+            - affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
         )
-        _ = head_identity_error
+        last_abs = x_last_norm * sigma + mu
+        # The recovered anchor must be a single per-sample vector broadcast over
+        # the horizon, which is a direct consequence of the head's algebra.
+        anchor_spread = float(
+            np.abs(x_last_norm - x_last_norm.mean(axis=1, keepdims=True)).max()
+        )
         denormalization_error = float(
             np.abs(residual_abs - (residual_norm * sigma + mu)).max()
         )
