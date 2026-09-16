@@ -134,7 +134,8 @@ def arm_metrics(
         branch_abs = last_abs + delta_hidden
         correction_abs = branch_abs - last_abs
     else:
-        branch_abs = last_abs + delta_hidden + decoder_bias
+        # ``decoder_bias`` is ``(H,)`` and has to broadcast over channels.
+        branch_abs = last_abs + delta_hidden + decoder_bias[None, :, None]
         correction_abs = branch_abs - last_abs
     branch_delta = branch_abs - target
     fused = (1.0 - gate) * phase_abs + gate * branch_abs
