@@ -59,6 +59,13 @@ class WeakPeriodResidualHead(nn.Module):
     through drift or phase jitter, so this head directly extrapolates the
     centered recent trajectory and adds the last value back as a persistence
     anchor.
+
+    ``projection_basis`` optionally freezes the branch onto a ``k``-dimensional
+    subspace of the centered history: after the ``x_last`` centering (so the
+    branch's own regression target is unchanged) the input becomes
+    ``Q Q^T (x - x_last)`` with ``Q`` an orthonormal ``(L, k)`` basis.  The
+    projector is a non-trainable buffer, so this only removes input information;
+    it never changes parameter count or trainable capacity.
     """
 
     def __init__(
@@ -77,6 +84,28 @@ class WeakPeriodResidualHead(nn.Module):
         nn.init.zeros_(self.linear.bias)
         self.smooth_ratio = float(smooth_ratio)
         self.causal_ema_alpha = float(causal_ema_alpha)
+        # Populated by ``set_projection_basis`` when the frozen-direction
+        # retention variants (V1/V2) are configured.  ``None`` is the plain
+        # direct-nlinear route and preserves the historical forward exactly.
+        # It is deliberately *not* a registered buffer: the projector is a
+        # frozen data artifact, so it must stay out of the state dict and out of
+        # the checkpoint/parameter accounting.
+        self.projection_basis = None
+
+    def set_projection_basis(self, basis):
+        """Install a frozen orthonormal ``(L, k)`` subspace projector."""
+        if basis is None:
+            self.projection_basis = None
+            return
+        tensor = torch.as_tensor(basis, dtype=self.linear.weight.dtype)
+        if tensor.ndim != 2 or tensor.shape[0] != self.linear.in_features:
+            raise ValueError(
+                "projection_basis must have shape "
+                f"({self.linear.in_features}, k), got {tuple(tensor.shape)}"
+            )
+        if tensor.shape[1] < 1:
+            raise ValueError("projection_basis must keep at least one direction")
+        self.projection_basis = tensor.contiguous()
 
     def forward(self, x):  # x: (B, L, C), normalized scale
         last = x[:, -1:, :]
@@ -85,6 +114,11 @@ class WeakPeriodResidualHead(nn.Module):
             smoothed = _causal_ema(centered, self.causal_ema_alpha)
             centered = (1.0 - self.smooth_ratio) * centered + self.smooth_ratio * smoothed
         centered = centered.permute(0, 2, 1).contiguous()
+        if self.projection_basis is not None:
+            basis = self.projection_basis.to(device=centered.device, dtype=centered.dtype)
+            # (B, C, L) @ (L, k) then back, i.e. Q Q^T centered.
+            coeff = centered @ basis
+            centered = coeff @ basis.transpose(0, 1)
         delta = self.linear(centered).permute(0, 2, 1).contiguous()
         return delta + last.expand(-1, delta.size(1), -1)
 

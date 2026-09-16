@@ -1058,6 +1058,24 @@ class PhaseFormer(DefaultPLModule):
                         configs, "weak_period_residual_causal_ema_alpha", 0.08
                     ),
                 )
+            # Frozen-direction retention variants (V1 = direction 1 only,
+            # V2 = directions 1+2).  The projector is a frozen data artifact
+            # produced on the train split; the caller installs it explicitly
+            # through ``install_projection_basis`` rather than a config path.
+            self.weak_residual_projection = getattr(
+                configs, "weak_residual_projection", "full"
+            )
+            self.projection_basis_source = None
+            if self.weak_residual_projection == "frozen_subspace":
+                if not isinstance(self.weak_period_residual, WeakPeriodResidualHead):
+                    raise ValueError(
+                        "weak_residual_projection=frozen_subspace requires the "
+                        "'shared' weak_period_residual head type"
+                    )
+            elif self.weak_residual_projection != "full":
+                raise ValueError(
+                    "weak_residual_projection must be 'full' or 'frozen_subspace'"
+                )
             gate_init = float(getattr(configs, "weak_period_residual_gate_init", 0.2))
             if self.use_rcrf_fusion:
                 if self.use_dual_reliability_fusion:
@@ -1766,6 +1784,40 @@ class PhaseFormer(DefaultPLModule):
                     module.eval()
             self.safe_triaxis_cycle_expert.train()
             self.safe_triaxis_router.train()
+
+    def install_projection_basis(self, basis, source: str | None = None):
+        """Install the frozen NLinear input subspace from a Stage-0 artifact.
+
+        ``basis`` is an orthonormal ``(seq_len, k)`` matrix.  With ``k == 1``
+        this is variant V1 (direction 1 only); with ``k == 2`` it is variant V2
+        (directions 1+2).  The projector replaces the information the NLinear
+        branch can see and is never updated by the optimizer.
+        """
+        if not self.use_weak_period_residual:
+            raise RuntimeError(
+                "install_projection_basis requires an active weak-period "
+                "residual (NLinear) branch"
+            )
+        if not hasattr(self.weak_period_residual, "set_projection_basis"):
+            raise RuntimeError(
+                "the configured weak-period residual head does not support a "
+                "frozen projection basis"
+            )
+        self.weak_period_residual.set_projection_basis(basis)
+        self.weak_residual_projection = "frozen_subspace"
+        self.projection_basis_source = source
+        return int(self.weak_period_residual.projection_basis.shape[1])
+
+    def learned_residual_gate(self) -> float | None:
+        """Report the effective scalar fusion weight of the NLinear branch.
+
+        Only the fixed-gate route is scalar; adaptive/RCRF routes return
+        ``None`` because their weight is input dependent.
+        """
+        parameter = getattr(self, "weak_period_residual_gate", None)
+        if parameter is None:
+            return None
+        return float(torch.sigmoid(parameter.detach().float()).mean().item())
 
     # phase rearrangement helpers
     @staticmethod
