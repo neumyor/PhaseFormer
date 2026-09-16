@@ -189,6 +189,53 @@ def arm_metrics(
     }
 
 
+def arm_fused_errors(
+    hidden_chunk: np.ndarray,
+    decoder_weight: np.ndarray,
+    decoder_bias: np.ndarray,
+    sigma_chunk: np.ndarray,
+    last_abs_chunk: np.ndarray,
+    gate_chunk: np.ndarray,
+    phase_chunk: np.ndarray,
+    target_chunk: np.ndarray,
+    bases: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fused MSE/MAE of every arm in ``bases`` on one sample block.
+
+    ``bases`` is ``(arms, r, k)``.  The arm axis is kept as a trailing dimension
+    so the whole band is evaluated without a Python loop over the arms.
+    """
+    hidden_chunk = np.ascontiguousarray(hidden_chunk, dtype=np.float64)
+    bases = np.ascontiguousarray(bases, dtype=np.float64)
+    samples, channels, rank = hidden_chunk.shape
+    horizon = decoder_weight.shape[0]
+    arms = bases.shape[0]
+    # ``hidden @ Q`` per arm: (n, c, arms, k)
+    coefficients = np.empty((samples, channels, arms, bases.shape[2]))
+    # ``Q Q^T h`` per arm, then decoded: (n, h, c, arms)
+    removed = np.empty((samples, horizon, channels, arms))
+    for arm in range(arms):
+        basis = bases[arm]
+        projected = hidden_chunk @ basis                 # (n, c, k)
+        coefficients[:, :, arm, :] = projected
+        back = projected @ basis.T                       # (n, c, r)
+        removed[:, :, :, arm] = np.einsum(
+            "ncr,hr->nhc", back, decoder_weight
+        )
+    del coefficients
+    full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight)
+    corrections = (full[:, :, :, None] - removed) * sigma_chunk[:, None, :, None]
+    branch = last_abs_chunk[:, None, :, None] + corrections
+    fused = (1.0 - gate_chunk)[:, None, :, None] * phase_chunk[:, :, :, None] + (
+        gate_chunk[:, None, :, None]
+    ) * branch
+    delta = fused - target_chunk[:, :, :, None]
+    return (
+        np.mean(delta ** 2, axis=(0, 1, 2)),
+        np.mean(np.abs(delta), axis=(0, 1, 2)),
+    )
+
+
 def random_drop_band(
     hidden: np.ndarray,
     decoder_weight: np.ndarray,
@@ -201,48 +248,29 @@ def random_drop_band(
     rank: int,
     count: int,
     rng: np.random.Generator,
-    chunk: int = 256,
+    chunk: int = 128,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Fused MSE/MAE of ``count`` random same-dimension drop arms.
-
-    The arms are linear projections, so the whole band is evaluated with blocked
-    contractions over a stacked basis tensor instead of ``count`` separate
-    evaluations; this keeps the 100-repeat control affordable on the largest
-    validation split of the analysis.  Returns the per-arm fused MSE and MAE.
-    """
+    """Fused MSE/MAE of ``count`` random same-dimension drop arms."""
+    del decoder_bias
     count = max(int(count), 1)
     dimension = max(1, min(rank, 6))
     bases = np.stack(
         [random_orthogonal_basis(rank, dimension, rng) for _ in range(count)],
         axis=0,
-    ).astype(np.float64)  # (arms, r, k)
+    )
     samples = hidden.shape[0]
     mse = np.zeros(count)
     mae = np.zeros(count)
     for start in range(0, samples, chunk):
         stop = min(start + chunk, samples)
-        hidden_chunk = hidden[start:stop]
-        full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight)
-        # Project the hidden state onto each arm's subspace, then decode it with
-        # the same basis, i.e. the correction the projected state would write.
-        # (n, c, r, arms): the hidden state projected onto every arm's subspace.
-        # ``k`` is the shared basis index and ``m`` keeps the arm separate.
-        reconstructed = np.einsum("ncr,mrk->ncrm", hidden_chunk, bases)
-        reconstructed = np.einsum("ncrm,mrk->nckm", reconstructed, bases)
-        reconstructed = np.einsum("nckm,mrk->ncrm", reconstructed, bases)
-        removed = np.einsum("ncrm,hr->nhcm", reconstructed, decoder_weight)
-        corrections = (full[:, :, :, None] - removed) * sigma[start:stop][
-            :, None, :, None
-        ]
-        branch = last_abs[start:stop][:, None, :, None] + corrections
-        fused = (1.0 - gate[start:stop])[:, None, :, None] * phase_abs[
-            start:stop
-        ][:, :, :, None] + gate[start:stop][:, None, :, None] * branch
-        delta = fused - target[start:stop][:, :, :, None]
+        chunk_mse, chunk_mae = arm_fused_errors(
+            hidden[start:stop], decoder_weight, None, sigma[start:stop],
+            last_abs[start:stop], gate[start:stop], phase_abs[start:stop],
+            target[start:stop], bases,
+        )
         weight = (stop - start) / samples
-        mse += weight * np.mean(delta ** 2, axis=(0, 1, 2))
-        mae += weight * np.mean(np.abs(delta), axis=(0, 1, 2))
-        del full, coefficients, reconstructed, removed, corrections, branch, fused, delta
+        mse += weight * chunk_mse
+        mae += weight * chunk_mae
     return mse, mae
 
 
