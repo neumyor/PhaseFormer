@@ -178,10 +178,11 @@ def _capture_forward(module, original_forward):
     """
 
     def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, *args, **kwargs):
-        captured: dict = {}
+        captured: dict = {"denorm": []}
         revin = self.revin
         original_normalize = revin.normalize
         original_with_stats = revin.normalize_with_stats
+        original_denormalize = revin.denormalize
 
         def normalize(x):
             value, stats = original_normalize(x)
@@ -192,8 +193,17 @@ def _capture_forward(module, original_forward):
             captured["stats"] = stats
             return original_with_stats(x, stats)
 
+        def denormalize(y, stats):
+            # Recording the *inputs* of the denormalization gives the exact
+            # normalized tensors the model wrote, which is the only way to state
+            # the branch decomposition without re-deriving the pre-normalization
+            # history.
+            captured["denorm"].append((y.detach(), stats))
+            return original_denormalize(y, stats)
+
         module.revin.normalize = normalize
         module.revin.normalize_with_stats = normalize_with_stats
+        module.revin.denormalize = denormalize
         try:
             out = original_forward(
                 self, x_enc, x_mark_enc, x_dec, x_mark_dec, *args, **kwargs
@@ -201,6 +211,7 @@ def _capture_forward(module, original_forward):
         finally:
             module.revin.normalize = original_normalize
             module.revin.normalize_with_stats = original_with_stats
+            module.revin.denormalize = original_denormalize
 
         gate = None
         if getattr(self, "weak_period_residual_gate", None) is not None:
@@ -212,11 +223,17 @@ def _capture_forward(module, original_forward):
                 "RevIN statistics were never produced; the analyzer requires "
                 "use_revin=True on the audited checkpoints"
             )
+        calls = captured["denorm"]
+        phase_norm = calls[1][0] if len(calls) > 1 else None
+        residual_norm = calls[2][0] if len(calls) > 2 else None
         self.last_lowrank_records = {
             "stats": captured["stats"],
             "gate": gate,
             "hidden": getattr(self.weak_period_residual, "last_hidden", None),
             "z": getattr(self.weak_period_residual, "last_centered", None),
+            "phase_norm": phase_norm,
+            "residual_norm": residual_norm,
+            "denormalize_calls": len(calls),
         }
         return out
 
