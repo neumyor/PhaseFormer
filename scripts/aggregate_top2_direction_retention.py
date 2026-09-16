@@ -260,7 +260,11 @@ def table_stage_a(rows):
         if direct is None or phase_only is None:
             qc.append("missing control")
         if direct and phase_only and direct["val_mse"] <= phase_only["val_mse"]:
-            qc.append("direct does not beat phase-only -> retention N/A")
+            qc.append(
+                "validation: direct does not beat phase-only -> retention N/A"
+            )
+        if direct and phase_only and direct["val_mse"] > phase_only["val_mse"]:
+            qc.append("validation: retention defined")
         lines.append(
             f"| {dataset}-{horizon} | {pair('direct_nlinear')} | {pair('phase_only')} | "
             f"{pair('keep_direction_1')} | {pair('keep_direction_1_2')} | "
@@ -354,6 +358,77 @@ def table_final_test(aggregated):
     return "\n".join(lines)
 
 
+def table_diagnostics(rows, aggregated, stage0, projector_index):
+    """Plan section 8.4: gate, NLinear-branch, projection and cost diagnostics."""
+    lines = [
+        "### 表 6：诊断指标（计划 §8.4）",
+        "",
+        "| Setting | Arm | learned gate mean±std | NLinear 支路 test MSE | "
+        "NLinear 支路 test MAE | 可见中心化输入方差占比 | b1^Tz std | b2^Tz std | "
+        "最佳 epoch | 训练时间 (s) | 参数量 | 峰值显存 (MB) |",
+        "|---|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|",
+    ]
+    for dataset, horizon in SETTINGS:
+        entry = projector_index.get(f"{dataset}-{horizon}", {})
+        audit = stage0.get(f"{dataset}-{horizon}", {})
+        per_arm = aggregated[(dataset, horizon)]
+        for arm in ARMS:
+            stats = per_arm.get(arm, {})
+            if stats.get("n_seeds", 0) == 0:
+                continue
+            gates, nlin_mse, nlin_mae = [], [], []
+            for seed in SEEDS:
+                record = rows.get((dataset, horizon, seed, arm))
+                if not record:
+                    continue
+                if record.get("gate_value") is not None:
+                    gates.append(record["gate_value"])
+                if record.get("nlinear_mse") is not None:
+                    nlin_mse.append(record["nlinear_mse"])
+                    nlin_mae.append(record["nlinear_mae"])
+            gate_mean, gate_std = mean_std(gates)
+            gate_text = (
+                "N/A（无 NLinear 门控）" if arm == "phase_only"
+                else f"{fmt(gate_mean, 4)} ± "
+                     f"{fmt(gate_std, 4) if gate_std is not None else '—'}"
+            )
+            if arm == "keep_direction_1":
+                var_share = entry.get("used_var_share_v1")
+            elif arm == "keep_direction_1_2":
+                var_share = entry.get("used_var_share_v12")
+            elif arm == "direct_nlinear":
+                var_share = 1.0
+            else:
+                var_share = 0.0
+            b1_std = audit.get("feature_b1_z_std")
+            b2_std = audit.get("feature_b2_z_std")
+            b2_std_text = fmt(b2_std, 4)
+            if arm == "keep_direction_1":
+                b2_std_text = "N/A（V1 不可见）"
+            elif arm == "phase_only":
+                b2_std_text = "N/A"
+            params = stats.get("params") or []
+            peaks = stats.get("peak") or []
+            elapsed = stats.get("elapsed") or []
+            lines.append(
+                f"| {dataset}-{horizon} | {ARM_LABEL[arm]} | {gate_text} | "
+                f"{fmt(mean_std(nlin_mse)[0], 6)} | {fmt(mean_std(nlin_mae)[0], 6)} | "
+                f"{fmt(var_share, 4) if var_share is not None else 'N/A'} | "
+                f"{fmt(b1_std, 4) if b1_std is not None else 'N/A'} | "
+                f"{b2_std_text} | "
+                f"{stats.get('epochs')} | {fmt(mean_std(elapsed)[0], 0)} | "
+                f"{params[0] if params else ''} | "
+                f"{fmt(mean_std(peaks)[0] / 1e6, 1) if peaks else 'N/A'} |"
+            )
+    lines.append("")
+    lines.append(
+        "`可见中心化输入方差占比` 取自 Stage 0 的解析值；`b1^Tz / b2^Tz std` 取自 "
+        "Stage 0 训练 split 上的样本标准差。三 seed 的 gate 值在此处为逐 seed 均值。"
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def table_direction2(rows, aggregated, projector_index):
     lines = [
         "### 表 4：方向 2 增量",
@@ -367,7 +442,7 @@ def table_direction2(rows, aggregated, projector_index):
         v1 = per_arm.get("keep_direction_1", {})
         v2 = per_arm.get("keep_direction_1_2", {})
         direct = per_arm.get("direct_nlinear", {})
-        lambda2 = projector_index.get(setting_key(dataset, horizon), {}).get(
+        lambda2 = projector_index.get(f"{dataset}-{horizon}", {}).get(
             "lambda2_share"
         )
         dmse = None
@@ -396,9 +471,22 @@ def table_direction2(rows, aggregated, projector_index):
                 v1["mae_mean"] - direct["mae_mean"]
             ) * 100.0
         agree = direction_agreement(rows, dataset, horizon)
+        # Plan 8.3 defines gap recovery only when V1 is worse than direct; when
+        # V1 already matches or beats direct there is no gap to recover, and a
+        # signed percentage of a near-zero denominator would be meaningless.
+        rec_mse_text = (
+            f"{fmt(rec_mse, 1)}%" if rec_mse is not None else
+            ("N/A (V1 不差于 direct)" if v1 and v1.get("mse_mean") is not None
+             else "N/A")
+        )
+        rec_mae_text = (
+            f"{fmt(rec_mae, 1)}%" if rec_mae is not None else
+            ("N/A (V1 不差于 direct)" if v1 and v1.get("mae_mean") is not None
+             else "N/A")
+        )
         lines.append(
             f"| {dataset}-{horizon} | {fmt(lambda2, 4)} | {fmt(dmse, 6)} | "
-            f"{fmt(dmae, 6)} | {fmt(rec_mse, 1)}% | {fmt(rec_mae, 1)}% | {agree} |"
+            f"{fmt(dmae, 6)} | {rec_mse_text} | {rec_mae_text} | {agree} |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -605,6 +693,16 @@ def main() -> None:
     index_path = projector_dir / "projectors.json"
     if index_path.exists():
         projector_index = json.loads(index_path.read_text()).get("projectors", {})
+    # Stage 0 audit, keyed "Dataset-Horizon" for the diagnostics table.
+    stage0 = {}
+    stage0_path = projector_dir / "stage0_audit.json"
+    if stage0_path.exists():
+        for entry in json.loads(stage0_path.read_text()):
+            stage0[entry["setting"]] = entry
+    stage0_md = ""
+    stage0_md_path = projector_dir / "stage0_audit.md"
+    if stage0_md_path.exists():
+        stage0_md = stage0_md_path.read_text()
 
     aggregated = aggregate_test(rows)
     write_results_csv(rows, aggregated, output / "results.csv")
@@ -621,7 +719,17 @@ def main() -> None:
         table_final_test(aggregated),
         table_direction2(rows, aggregated, projector_index),
         decision_md,
+        table_diagnostics(rows, aggregated, stage0, projector_index),
     ]
+    if stage0_md:
+        sections += [
+            "## 表 1：投影器审计（Stage 0）",
+            "",
+            "由 `scripts/compute_top2_direction_projectors.py` 生成，只读取训练 split；",
+            "完整逐项检查与方向 2 稳定性标注见 `projectors/stage0_audit.md`。",
+            "",
+            stage0_md,
+        ]
     (output / "report_tables.md").write_text("\n".join(sections))
     (output / "decision.json").write_text(
         json.dumps(decision, indent=2, sort_keys=True) + "\n"
