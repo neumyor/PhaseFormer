@@ -466,6 +466,11 @@ def group_shapley(
     n = len(group_names)
     if n == 0:
         return {}
+    if n == 1:
+        # A single group has nothing to distribute: the exact Shapley value is
+        # the group's own reconstruction R^2.
+        _, value = orthogonal_projection(direction, groups[group_names[0]].basis)
+        return {group_names[0]: float(value)}
     basis_cache: dict[int, np.ndarray] = {}
 
     def r2(mask: int) -> float:
