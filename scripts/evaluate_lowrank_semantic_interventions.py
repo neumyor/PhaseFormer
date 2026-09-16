@@ -225,9 +225,11 @@ def random_drop_band(
         full = np.einsum("ncr,hr->nhc", hidden_chunk, decoder_weight)
         # Project the hidden state onto each arm's subspace, then decode it with
         # the same basis, i.e. the correction the projected state would write.
-        coefficients = np.einsum("ncr,mrk->nckm", hidden_chunk, bases)
-        # (n, c, r, arms): recombine the coefficients with the same basis.
-        reconstructed = np.einsum("nckm,mrk->ncrm", coefficients, bases)
+        # (n, c, r, arms): the hidden state projected onto every arm's subspace.
+        # ``k`` is the shared basis index and ``m`` keeps the arm separate.
+        reconstructed = np.einsum("ncr,mrk->ncrm", hidden_chunk, bases)
+        reconstructed = np.einsum("ncrm,mrk->nckm", reconstructed, bases)
+        reconstructed = np.einsum("nckm,mrk->ncrm", reconstructed, bases)
         removed = np.einsum("ncrm,hr->nhcm", reconstructed, decoder_weight)
         corrections = (full[:, :, :, None] - removed) * sigma[start:stop][
             :, None, :, None
