@@ -165,6 +165,31 @@ def evaluate_once(model, loader, split, target_var_index, head_gate):
     return result
 
 
+def resolve_checkpoint(record, run_dir: Path):
+    """Find the best-validation checkpoint of a run.
+
+    ``metrics.csv`` stores a repo-relative path recorded when the run finished.
+    The runs are relocatable, so fall back to resolving the same relative path
+    against the run's own directory before giving up.
+    """
+    recorded = record.get("checkpoint") or ""
+    if not recorded:
+        return None
+    raw = Path(recorded)
+    candidates = [ROOT / raw, run_dir / raw]
+    # Strip a leading run-directory name (e.g. a relocated ``runs/<id>/...``).
+    parts = raw.parts
+    for index, part in enumerate(parts):
+        if part == "runs" and index + 1 < len(parts):
+            candidates.append(run_dir / Path(*parts[index + 1 :]))
+            break
+    candidates.append(run_dir / "attempts" / "001" / "checkpoints" / raw.name)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def read_one(cell, root: Path, projector_dir: Path) -> dict:
     from src.dataset.data_factory import data_provider
 
@@ -192,12 +217,16 @@ def read_one(cell, root: Path, projector_dir: Path) -> dict:
             "run_dir": str(run_dir.relative_to(ROOT)),
         }
 
-    checkpoint = ROOT / record["checkpoint"]
-    if not checkpoint.is_file():
+    checkpoint = resolve_checkpoint(record, run_dir)
+    if checkpoint is None:
         return {
             "cell": f"{dataset}-{horizon}-s{seed}-{arm}",
             "status": "missing_checkpoint",
-            "checkpoint": str(checkpoint),
+            "checkpoint": record.get("checkpoint", ""),
+            "checked": [
+                str(ROOT / record["checkpoint"]) if record.get("checkpoint") else "",
+                str(run_dir / record["checkpoint"]) if record.get("checkpoint") else "",
+            ],
         }
 
     hyper = dict(config["hyperparams"])
