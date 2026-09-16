@@ -110,9 +110,6 @@ def sha256_of(path: Path, chunk: int = 1 << 20) -> str:
     return digest.hexdigest()
 
 
-CONFIG_Q_PATTERN = re.compile(r"pool(\d+)_q([0-9.eE+-]+)_r(\d+)")
-
-
 def classify_cell(mechanism: str, hyperparams: dict) -> tuple[str, int | None, int]:
     head = hyperparams.get("weak_period_residual_head_type", "shared")
     if mechanism == "no_residual":
