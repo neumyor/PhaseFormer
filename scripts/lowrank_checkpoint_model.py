@@ -167,30 +167,40 @@ def intervention_forward(intervention):
     return forward
 
 
-def _capture_forward(original_forward):
-    """Wrap ``PhaseFormer.forward`` so the recorded quantities can be collected.
+def _capture_forward(module, original_forward):
+    """Wrap the model's ``forward`` so the recorded quantities can be collected.
 
-    ``original_forward`` is passed in explicitly: storing the original on the
-    instance would shadow the class attribute and re-entering the wrapper would
-    recurse.
+    The RevIN statistics are captured by temporarily replacing the bound
+    ``normalize`` / ``normalize_with_stats`` callables of ``module.revin``;
+    ``denormalize`` is called as a plain method, so a module hook would never
+    fire for it.  The replacement is a pure wrapper: it returns exactly what the
+    original returned and does not touch the numerical path.
     """
 
     def forward(self, x_enc, x_mark_enc=None, x_dec=None, x_mark_dec=None, *args, **kwargs):
-        captured = {}
+        captured: dict = {}
+        revin = self.revin
+        original_normalize = revin.normalize
+        original_with_stats = revin.normalize_with_stats
 
-        def pre_hook(_module, inputs):
-            # ``denormalize`` is the last place the exact RevIN statistics of
-            # this forward pass are still available; reading them here is
-            # read-only and cannot perturb the numerical path.
-            captured["stats"] = inputs[1]
+        def normalize(x):
+            value, stats = original_normalize(x)
+            captured["stats"] = stats
+            return value, stats
 
-        handle = self.revin.register_forward_pre_hook(pre_hook)
+        def normalize_with_stats(x, stats):
+            captured["stats"] = stats
+            return original_with_stats(x, stats)
+
+        module.revin.normalize = normalize
+        module.revin.normalize_with_stats = normalize_with_stats
         try:
             out = original_forward(
                 self, x_enc, x_mark_enc, x_dec, x_mark_dec, *args, **kwargs
             )
         finally:
-            handle.remove()
+            module.revin.normalize = original_normalize
+            module.revin.normalize_with_stats = original_with_stats
 
         gate = None
         if getattr(self, "weak_period_residual_gate", None) is not None:
@@ -224,7 +234,7 @@ def instrument_model(model, intervention=None):
     original_head_forward = head.forward
     original_model_forward = type(model).forward
     head.forward = types.MethodType(intervention_forward(intervention), head)
-    type(model).forward = _capture_forward(original_model_forward)
+    type(model).forward = _capture_forward(model, original_model_forward)
     try:
         yield model
     finally:
