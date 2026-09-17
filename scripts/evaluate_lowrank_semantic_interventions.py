@@ -1065,9 +1065,11 @@ def write_csv(rows: list[dict], path: Path) -> None:
 
     The sweep is sharded across GPUs, and every shard writes the same audit and
     intervention tables, so a plain overwrite would leave only whichever shard
-    finished last.  Rows are keyed by ``(setting, seed, cell)``; a re-run of a
-    shard refreshes only its own rows and the other shards are preserved.  The
-    lock keeps concurrent shards from clobbering one another's merge.
+    finished last.  Rows are keyed by ``(setting, seed, cell, arm)``; the ``arm``
+    component is load-bearing because the intervention table holds one row *per
+    arm*, so without it the eight arms of a cell collapse onto each other and
+    only the last one written survives.  The lock keeps concurrent shards from
+    clobbering one another's merge.
     """
     if not rows:
         return
@@ -1075,6 +1077,9 @@ def write_csv(rows: list[dict], path: Path) -> None:
         row.get("setting", ""),
         str(row.get("seed", "")),
         row.get("cell", ""),
+        # The audit table has no ``arm`` column; "all" keeps its key stable and
+        # distinct from any real arm name.
+        row.get("arm", "all"),
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = path.with_suffix(path.suffix + ".lock")

@@ -204,30 +204,51 @@ def table2(canonical: list[dict], out: Path) -> None:
 
 
 def table3(cross_seed: list[dict], out: Path) -> None:
+    """Cross-seed stability, reported on the two scopes that can discriminate.
+
+    The ``full`` scope compares a low-dimensional subspace against the *whole*
+    horizon (96-720 dimensions), so its output overlap is 1.0000 by construction
+    -- measured as 48/48 rows at exactly 1.0 -- and it cannot separate stable from
+    unstable checkpoints.  Its input overlap is still informative, so ``full``
+    rows are kept in the table but marked as not usable for the verdict, and the
+    fixed-dimension scopes carry the conclusion.
+    """
+    order = {"leading4": 0, "leading8": 1, "full": 2}
     rows = []
-    for row in cross_seed:
-        if row.get("scope") != "full":
+    for row in sorted(
+        cross_seed,
+        key=lambda r: (r["setting"], r["cell_a"], order.get(r.get("scope"), 9)),
+    ):
+        scope = row.get("scope")
+        if scope not in order:
             continue
+        input_overlap = to_float(row["input_subspace_overlap"])
+        verdict = (
+            "不用于判定" if scope == "full" else ("稳定" if input_overlap >= 0.8 else "不稳定")
+        )
         rows.append(
             [
                 row["setting"],
-                f"{row['cell_a']}/{row['cell_b']}",
-                f"{to_float(row['input_subspace_overlap']):.4f}",
+                f"{row['cell_a']}",
+                scope,
+                f"{int(to_float(row['dimension']))}",
+                f"{input_overlap:.4f}",
                 f"{to_float(row['output_subspace_overlap']):.4f}",
                 f"{row['matched_modes_above_0p7']}/{row['dimension']}",
-                "稳定"
-                if to_float(row["input_subspace_overlap"]) >= 0.8
-                else "不稳定",
+                verdict,
             ]
         )
     write_markdown_table(
         out / "table3_cross_seed.md",
         [
-            "Setting", "q/rank", "input subspace overlap", "output subspace overlap",
-            "stable individual modes", "结论",
+            "Setting", "q/rank", "scope", "维度", "input subspace overlap",
+            "output subspace overlap", "stable individual modes", "结论",
         ],
         rows,
         "表 3：跨 seed 稳定性",
+        "结论只在固定维度的 `leading4`/`leading8` 上给出。`full` scope 的输出子空间重叠在本次"
+        "全部 48 行中精确等于 1.0000：把一个小维子空间放进完整 horizon（96–720 维）空间时，"
+        "重叠存在非平凡下界，因此该列不具判别力，标为 `不用于判定`；其 input 列仍可读。",
     )
 
 

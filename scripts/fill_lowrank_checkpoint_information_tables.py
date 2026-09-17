@@ -164,25 +164,42 @@ def build_tables() -> dict[int, str]:
     )
 
     # ---- table 3: cross-seed stability ---------------------------------
+    # The verdict is carried by the fixed-dimension scopes only: the ``full``
+    # scope places a small subspace inside the whole horizon (96-720 dims), so
+    # its output overlap is 1.0000 by construction (48/48 rows measured at
+    # exactly 1.0) and cannot separate stable from unstable seeds.
+    order3 = {"leading4": 0, "leading8": 1, "full": 2}
     rows3 = []
-    for row in cross_seed:
-        if row.get("scope") != "full":
+    for row in sorted(
+        cross_seed,
+        key=lambda r: (r["setting"], r["cell_a"], order3.get(r.get("scope"), 9)),
+    ):
+        scope = row.get("scope")
+        if scope not in order3:
             continue
         overlap = num(row["input_subspace_overlap"])
+        verdict = (
+            "不用于判定" if scope == "full" else ("稳定" if overlap >= 0.8 else "不稳定")
+        )
         rows3.append([
             row["setting"],
-            f"{row['rank_a']} vs {row['rank_b']}",
+            f"{row['cell_a']}  r={row['rank_a']}",
+            scope,
+            f"{int(num(row['dimension']))}",
             f"{overlap:.4f}",
             f"{num(row['output_subspace_overlap']):.4f}",
             f"{row['matched_modes_above_0p7']}/{row['dimension']}",
-            "稳定" if overlap >= 0.8 else "不稳定",
+            verdict,
         ])
     tables[3] = table_block(
         "表 3：跨 seed 稳定性",
-        ["Setting", "rank 对比", "input subspace overlap", "output subspace overlap",
-         "匹配度 ≥0.7 的模式数", "结论"],
+        ["Setting", "q/rank", "scope", "维度", "input subspace overlap",
+         "output subspace overlap", "匹配度 ≥0.7 的模式数", "结论"],
         rows3,
-        "重叠为 `‖QaᵀQb‖_F²/k`，1 表示子空间重合、0 表示正交。",
+        "重叠为 `‖QaᵀQb‖_F²/k`，1 表示子空间重合、0 表示正交。结论只在固定维度的 "
+        "`leading4`/`leading8` 上给出：`full` scope 把一个小维子空间放进完整 horizon"
+        "（96–720 维）空间，重叠存在非平凡下界，本次 48 行全部精确等于 1.0000，"
+        "不具判别力，标为 `不用于判定`；其 input 列仍可读。",
     )
 
     # ---- table 4: input/output semantics -------------------------------
@@ -331,13 +348,24 @@ def build_tables() -> dict[int, str]:
 
 
 def replace_section(text: str, number: int, block: str) -> str:
-    """Replace the ``### 表 N：…`` section with ``block``."""
+    """Replace the ``### 表 N：…`` section with ``block``.
+
+    The section ends at the next ``### 表 ``/``## `` heading.  The old pattern
+    used ``\\Z`` as a terminator, which meant the *last* table's section ran to
+    end-of-document and the substitution silently deleted everything that
+    followed it (it destroyed this plan's section 11 execution record once).
+    Section 7 always has a following ``## `` heading, so requiring a real
+    boundary makes that failure impossible instead of merely unlikely.
+    """
     pattern = re.compile(
-        rf"^### 表 {number}：.*?(?=^### 表 |\Z|\n## )",
+        rf"^### 表 {number}：.*?(?=^### 表 |\n## )",
         re.MULTILINE | re.DOTALL,
     )
     if not pattern.search(text):
-        raise SystemExit(f"plan has no section for table {number}")
+        raise SystemExit(
+            f"plan has no section for table {number}, or table {number} is the "
+            "last section in the file (every table must be followed by a heading)"
+        )
     return pattern.sub(block, text, count=1)
 
 

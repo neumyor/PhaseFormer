@@ -426,7 +426,10 @@ def main() -> None:
         )
         del train_z
 
-        per_seed: dict[int, dict] = {}
+        # Keyed by ``(seed, cell)``: a setting has one checkpoint per seed *and*
+        # per compression level, so keying by seed alone silently kept only the
+        # last cell written and then compared that single object with itself.
+        modes_by_key: dict[tuple[int, str], dict] = {}
         for row in sorted(entries, key=lambda item: int(item["seed"])):
             seed = int(row["seed"])
             # The evaluator writes one cache per (setting, seed, cell); the cell
@@ -529,7 +532,7 @@ def main() -> None:
                         "sigma_mean": float(sigma.mean()),
                     }
                 )
-            per_seed[seed] = {
+            modes_by_key[(seed, row["cell"])] = {
                 "u": u,
                 "s": s,
                 "vt": vt,
@@ -546,51 +549,61 @@ def main() -> None:
             )
             del features, hidden, sigma, mode_energies
 
-        seeds = sorted(per_seed)
-        reference = per_seed[seeds[0]]
-        for other in seeds[1:]:
-            candidate = per_seed[other]
-            for label, dimension in (("leading4", 4), ("leading8", 8), ("full", 0)):
-                dim = (
-                    min(reference["s"].size, candidate["s"].size)
-                    if dimension == 0
-                    else min(dimension, reference["s"].size, candidate["s"].size)
-                )
-                if dim < 1:
-                    continue
-                input_a, input_b = reference["vt"][:dim].T, candidate["vt"][:dim].T
-                output_a, output_b = reference["u"][:, :dim], candidate["u"][:, :dim]
-                angles_in = principal_angles(input_a, input_b)
-                angles_out = principal_angles(output_a, output_b)
-                matched = np.max(np.abs(input_a.T @ input_b), axis=1)
-                cross_seed_rows.append(
-                    {
-                        "setting": setting,
-                        "dataset": dataset,
-                        "horizon": horizon,
-                        "seed_a": int(seeds[0]),
-                        "seed_b": int(other),
-                        "scope": label,
-                        "dimension": int(dim),
-                        "input_subspace_overlap": float(projection_overlap(input_a, input_b)),
-                        "output_subspace_overlap": float(projection_overlap(output_a, output_b)),
-                        "input_principal_angle_max_deg": float(angles_in.max()),
-                        "input_principal_angle_mean_deg": float(angles_in.mean()),
-                        "output_principal_angle_max_deg": float(angles_out.max()),
-                        "output_principal_angle_mean_deg": float(angles_out.mean()),
-                        "matched_mode_cosine_min": float(matched.min()),
-                        "matched_mode_cosine_mean": float(matched.mean()),
-                        "matched_modes_above_0p7": int(np.sum(matched >= 0.7)),
-                        "cell_a": reference["row"]["cell"],
-                        "cell_b": candidate["row"]["cell"],
-                        "rank_a": reference["row"]["rank"],
-                        "rank_b": candidate["row"]["rank"],
-                    }
-                )
+        # Cross-seed stability is only meaningful *within* a compression level:
+        # different cells have different ranks, so pairing them would compare
+        # unlike objects.  Each cell is therefore paired across the seeds that
+        # have it, which is also what plan section 1 asks for (same setting and
+        # same rank).
+        cells = sorted({cell for (_, cell) in modes_by_key})
+        for cell in cells:
+            seeds_here = sorted(seed for (seed, c) in modes_by_key if c == cell)
+            if len(seeds_here) < 2:
+                continue
+            reference = modes_by_key[(seeds_here[0], cell)]
+            for other in seeds_here[1:]:
+                candidate = modes_by_key[(other, cell)]
+                for label, dimension in (("leading4", 4), ("leading8", 8), ("full", 0)):
+                    dim = (
+                        min(reference["s"].size, candidate["s"].size)
+                        if dimension == 0
+                        else min(dimension, reference["s"].size, candidate["s"].size)
+                    )
+                    if dim < 1:
+                        continue
+                    input_a, input_b = reference["vt"][:dim].T, candidate["vt"][:dim].T
+                    output_a, output_b = reference["u"][:, :dim], candidate["u"][:, :dim]
+                    angles_in = principal_angles(input_a, input_b)
+                    angles_out = principal_angles(output_a, output_b)
+                    matched = np.max(np.abs(input_a.T @ input_b), axis=1)
+                    cross_seed_rows.append(
+                        {
+                            "setting": setting,
+                            "dataset": dataset,
+                            "horizon": horizon,
+                            "cell": cell,
+                        "seed_a": int(seeds_here[0]),
+                            "seed_b": int(other),
+                            "scope": label,
+                            "dimension": int(dim),
+                            "input_subspace_overlap": float(projection_overlap(input_a, input_b)),
+                            "output_subspace_overlap": float(projection_overlap(output_a, output_b)),
+                            "input_principal_angle_max_deg": float(angles_in.max()),
+                            "input_principal_angle_mean_deg": float(angles_in.mean()),
+                            "output_principal_angle_max_deg": float(angles_out.max()),
+                            "output_principal_angle_mean_deg": float(angles_out.mean()),
+                            "matched_mode_cosine_min": float(matched.min()),
+                            "matched_mode_cosine_mean": float(matched.mean()),
+                            "matched_modes_above_0p7": int(np.sum(matched >= 0.7)),
+                            "cell_a": reference["row"]["cell"],
+                            "cell_b": candidate["row"]["cell"],
+                            "rank_a": reference["row"]["rank"],
+                            "rank_b": candidate["row"]["rank"],
+                        }
+                    )
 
         for row in sorted(entries, key=lambda item: (int(item["seed"]), item["cell"])):
             seed = int(row["seed"])
-            modes = per_seed[seed]
+            modes = modes_by_key[(seed, row["cell"])]
             for index in range(min(modes["s"].size, int(args.modes))):
                 input_alignment = align_direction(
                     modes["vt"][index],

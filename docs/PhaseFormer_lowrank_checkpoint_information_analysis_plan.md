@@ -619,36 +619,168 @@ min_{W,c} Σ ||y - y_hat||²
 | Weather-96 | q=1/8 (r=12) | 2023 | mode 7 | 0.0001 | 0.0000 | 0.0027 | 0.4360 |
 ### 表 3：跨 seed 稳定性
 
-重叠为 `‖QaᵀQb‖_F²/k`，1 表示子空间重合、0 表示正交。
+重叠为 `‖QaᵀQb‖_F²/k`，1 表示子空间重合、0 表示正交。结论只在固定维度的 `leading4`/`leading8` 上给出：`full` scope 把一个小维子空间放进完整 horizon（96–720 维）空间，重叠存在非平凡下界，本次 48 行全部精确等于 1.0000，不具判别力，标为 `不用于判定`；其 input 列仍可读。
 
-| Setting | rank 对比 | input subspace overlap | output subspace overlap | 匹配度 ≥0.7 的模式数 | 结论 |
-|---|---|---|---|---|---|
-| ETTh2-720 | 90 vs 90 | 1.0000 | 1.0000 | 4/720 | 稳定 |
-| ETTh2-720 | 90 vs 90 | 1.0000 | 1.0000 | 4/720 | 稳定 |
-| ETTh2-96 | 12 vs 12 | 0.2889 | 1.0000 | 2/96 | 不稳定 |
-| ETTh2-96 | 12 vs 12 | 0.2828 | 1.0000 | 2/96 | 不稳定 |
-| ETTm2-192 | 24 vs 24 | 0.4366 | 1.0000 | 1/192 | 不稳定 |
-| ETTm2-192 | 24 vs 24 | 0.4476 | 1.0000 | 3/192 | 不稳定 |
-| ETTm2-96 | 12 vs 12 | 0.3107 | 1.0000 | 2/96 | 不稳定 |
-| ETTm2-96 | 12 vs 12 | 0.2898 | 1.0000 | 4/96 | 不稳定 |
-| Weather-192 | 24 vs 24 | 0.4206 | 1.0000 | 8/192 | 不稳定 |
-| Weather-192 | 24 vs 24 | 0.4199 | 1.0000 | 7/192 | 不稳定 |
-| Weather-96 | 12 vs 12 | 0.2926 | 1.0000 | 7/96 | 不稳定 |
-| Weather-96 | 12 vs 12 | 0.2922 | 1.0000 | 7/96 | 不稳定 |
+| Setting | q/rank | scope | 维度 | input subspace overlap | output subspace overlap | 匹配度 ≥0.7 的模式数 | 结论 |
+|---|---|---|---|---|---|---|---|
+| ETTh2-720 | q=1/16  r=45 | leading4 | 4 | 0.6682 | 0.9499 | 2/4 | 不稳定 |
+| ETTh2-720 | q=1/16  r=45 | leading4 | 4 | 0.6543 | 0.8820 | 3/4 | 不稳定 |
+| ETTh2-720 | q=1/16  r=45 | leading8 | 8 | 0.4725 | 0.7037 | 2/8 | 不稳定 |
+| ETTh2-720 | q=1/16  r=45 | leading8 | 8 | 0.4896 | 0.6967 | 3/8 | 不稳定 |
+| ETTh2-720 | q=1/16  r=45 | full | 720 | 1.0000 | 1.0000 | 3/720 | 不用于判定 |
+| ETTh2-720 | q=1/16  r=45 | full | 720 | 1.0000 | 1.0000 | 4/720 | 不用于判定 |
+| ETTh2-720 | q=1/32  r=22 | leading4 | 4 | 0.5878 | 0.7921 | 2/4 | 不稳定 |
+| ETTh2-720 | q=1/32  r=22 | leading4 | 4 | 0.5961 | 0.8777 | 1/4 | 不稳定 |
+| ETTh2-720 | q=1/32  r=22 | leading8 | 8 | 0.4072 | 0.6219 | 2/8 | 不稳定 |
+| ETTh2-720 | q=1/32  r=22 | leading8 | 8 | 0.4062 | 0.6090 | 1/8 | 不稳定 |
+| ETTh2-720 | q=1/32  r=22 | full | 720 | 1.0000 | 1.0000 | 3/720 | 不用于判定 |
+| ETTh2-720 | q=1/32  r=22 | full | 720 | 1.0000 | 1.0000 | 2/720 | 不用于判定 |
+| ETTh2-720 | q=1/4  r=180 | leading4 | 4 | 0.5831 | 0.6978 | 3/4 | 不稳定 |
+| ETTh2-720 | q=1/4  r=180 | leading4 | 4 | 0.6995 | 0.8498 | 4/4 | 不稳定 |
+| ETTh2-720 | q=1/4  r=180 | leading8 | 8 | 0.6652 | 0.8357 | 4/8 | 不稳定 |
+| ETTh2-720 | q=1/4  r=180 | leading8 | 8 | 0.5863 | 0.7503 | 4/8 | 不稳定 |
+| ETTh2-720 | q=1/4  r=180 | full | 720 | 1.0000 | 1.0000 | 5/720 | 不用于判定 |
+| ETTh2-720 | q=1/4  r=180 | full | 720 | 1.0000 | 1.0000 | 5/720 | 不用于判定 |
+| ETTh2-720 | q=1/8  r=90 | leading4 | 4 | 0.6555 | 0.8342 | 3/4 | 不稳定 |
+| ETTh2-720 | q=1/8  r=90 | leading4 | 4 | 0.6438 | 0.8373 | 3/4 | 不稳定 |
+| ETTh2-720 | q=1/8  r=90 | leading8 | 8 | 0.4847 | 0.6886 | 3/8 | 不稳定 |
+| ETTh2-720 | q=1/8  r=90 | leading8 | 8 | 0.5069 | 0.7147 | 3/8 | 不稳定 |
+| ETTh2-720 | q=1/8  r=90 | full | 720 | 1.0000 | 1.0000 | 4/720 | 不用于判定 |
+| ETTh2-720 | q=1/8  r=90 | full | 720 | 1.0000 | 1.0000 | 4/720 | 不用于判定 |
+| ETTh2-96 | q=1/16  r=6 | leading4 | 4 | 0.3191 | 0.8853 | 1/4 | 不稳定 |
+| ETTh2-96 | q=1/16  r=6 | leading4 | 4 | 0.3326 | 0.9381 | 1/4 | 不稳定 |
+| ETTh2-96 | q=1/16  r=6 | leading8 | 8 | 0.2929 | 0.5918 | 2/8 | 不稳定 |
+| ETTh2-96 | q=1/16  r=6 | leading8 | 8 | 0.2994 | 0.5892 | 2/8 | 不稳定 |
+| ETTh2-96 | q=1/16  r=6 | full | 96 | 0.2306 | 1.0000 | 3/96 | 不用于判定 |
+| ETTh2-96 | q=1/16  r=6 | full | 96 | 0.2383 | 1.0000 | 3/96 | 不用于判定 |
+| ETTh2-96 | q=1/32  r=3 | leading4 | 4 | 0.4729 | 0.6347 | 2/4 | 不稳定 |
+| ETTh2-96 | q=1/32  r=3 | leading4 | 4 | 0.4458 | 0.5039 | 2/4 | 不稳定 |
+| ETTh2-96 | q=1/32  r=3 | leading8 | 8 | 0.4633 | 0.3818 | 4/8 | 不稳定 |
+| ETTh2-96 | q=1/32  r=3 | leading8 | 8 | 0.4742 | 0.3133 | 4/8 | 不稳定 |
+| ETTh2-96 | q=1/32  r=3 | full | 96 | 0.2206 | 1.0000 | 4/96 | 不用于判定 |
+| ETTh2-96 | q=1/32  r=3 | full | 96 | 0.2567 | 1.0000 | 4/96 | 不用于判定 |
+| ETTh2-96 | q=1/4  r=24 | leading4 | 4 | 0.4471 | 0.8000 | 1/4 | 不稳定 |
+| ETTh2-96 | q=1/4  r=24 | leading4 | 4 | 0.4655 | 0.8689 | 1/4 | 不稳定 |
+| ETTh2-96 | q=1/4  r=24 | leading8 | 8 | 0.2878 | 0.7928 | 1/8 | 不稳定 |
+| ETTh2-96 | q=1/4  r=24 | leading8 | 8 | 0.2564 | 0.7612 | 1/8 | 不稳定 |
+| ETTh2-96 | q=1/4  r=24 | full | 96 | 0.3223 | 1.0000 | 1/96 | 不用于判定 |
+| ETTh2-96 | q=1/4  r=24 | full | 96 | 0.3155 | 1.0000 | 1/96 | 不用于判定 |
+| ETTh2-96 | q=1/8  r=12 | leading4 | 4 | 0.3999 | 0.8968 | 1/4 | 不稳定 |
+| ETTh2-96 | q=1/8  r=12 | leading4 | 4 | 0.3668 | 0.8636 | 1/4 | 不稳定 |
+| ETTh2-96 | q=1/8  r=12 | leading8 | 8 | 0.2217 | 0.7436 | 1/8 | 不稳定 |
+| ETTh2-96 | q=1/8  r=12 | leading8 | 8 | 0.2053 | 0.8383 | 1/8 | 不稳定 |
+| ETTh2-96 | q=1/8  r=12 | full | 96 | 0.2889 | 1.0000 | 2/96 | 不用于判定 |
+| ETTh2-96 | q=1/8  r=12 | full | 96 | 0.2828 | 1.0000 | 2/96 | 不用于判定 |
+| ETTm2-192 | q=1/16  r=12 | leading4 | 4 | 0.5179 | 0.7286 | 1/4 | 不稳定 |
+| ETTm2-192 | q=1/16  r=12 | leading4 | 4 | 0.5772 | 0.8731 | 3/4 | 不稳定 |
+| ETTm2-192 | q=1/16  r=12 | leading8 | 8 | 0.3052 | 0.7885 | 1/8 | 不稳定 |
+| ETTm2-192 | q=1/16  r=12 | leading8 | 8 | 0.4176 | 0.7415 | 3/8 | 不稳定 |
+| ETTm2-192 | q=1/16  r=12 | full | 192 | 0.4434 | 1.0000 | 1/192 | 不用于判定 |
+| ETTm2-192 | q=1/16  r=12 | full | 192 | 0.4562 | 1.0000 | 3/192 | 不用于判定 |
+| ETTm2-192 | q=1/32  r=6 | leading4 | 4 | 0.5219 | 0.7554 | 2/4 | 不稳定 |
+| ETTm2-192 | q=1/32  r=6 | leading4 | 4 | 0.5574 | 0.7761 | 3/4 | 不稳定 |
+| ETTm2-192 | q=1/32  r=6 | leading8 | 8 | 0.3818 | 0.4753 | 3/8 | 不稳定 |
+| ETTm2-192 | q=1/32  r=6 | leading8 | 8 | 0.3832 | 0.5279 | 4/8 | 不稳定 |
+| ETTm2-192 | q=1/32  r=6 | full | 192 | 0.4525 | 1.0000 | 3/192 | 不用于判定 |
+| ETTm2-192 | q=1/32  r=6 | full | 192 | 0.4516 | 1.0000 | 4/192 | 不用于判定 |
+| ETTm2-192 | q=1/4  r=48 | leading4 | 4 | 0.5996 | 0.7507 | 3/4 | 不稳定 |
+| ETTm2-192 | q=1/4  r=48 | leading4 | 4 | 0.6102 | 0.9093 | 3/4 | 不稳定 |
+| ETTm2-192 | q=1/4  r=48 | leading8 | 8 | 0.3986 | 0.6437 | 3/8 | 不稳定 |
+| ETTm2-192 | q=1/4  r=48 | leading8 | 8 | 0.3604 | 0.6969 | 3/8 | 不稳定 |
+| ETTm2-192 | q=1/4  r=48 | full | 192 | 0.4141 | 1.0000 | 3/192 | 不用于判定 |
+| ETTm2-192 | q=1/4  r=48 | full | 192 | 0.4020 | 1.0000 | 3/192 | 不用于判定 |
+| ETTm2-192 | q=1/8  r=24 | leading4 | 4 | 0.6159 | 0.7244 | 1/4 | 不稳定 |
+| ETTm2-192 | q=1/8  r=24 | leading4 | 4 | 0.6657 | 0.8401 | 3/4 | 不稳定 |
+| ETTm2-192 | q=1/8  r=24 | leading8 | 8 | 0.3778 | 0.7840 | 1/8 | 不稳定 |
+| ETTm2-192 | q=1/8  r=24 | leading8 | 8 | 0.4179 | 0.8792 | 3/8 | 不稳定 |
+| ETTm2-192 | q=1/8  r=24 | full | 192 | 0.4366 | 1.0000 | 1/192 | 不用于判定 |
+| ETTm2-192 | q=1/8  r=24 | full | 192 | 0.4476 | 1.0000 | 3/192 | 不用于判定 |
+| ETTm2-96 | q=1/16  r=6 | leading4 | 4 | 0.4745 | 0.9290 | 1/4 | 不稳定 |
+| ETTm2-96 | q=1/16  r=6 | leading4 | 4 | 0.4667 | 0.9516 | 2/4 | 不稳定 |
+| ETTm2-96 | q=1/16  r=6 | leading8 | 8 | 0.3710 | 0.5622 | 2/8 | 不稳定 |
+| ETTm2-96 | q=1/16  r=6 | leading8 | 8 | 0.2770 | 0.5097 | 2/8 | 不稳定 |
+| ETTm2-96 | q=1/16  r=6 | full | 96 | 0.2364 | 1.0000 | 3/96 | 不用于判定 |
+| ETTm2-96 | q=1/16  r=6 | full | 96 | 0.2361 | 1.0000 | 4/96 | 不用于判定 |
+| ETTm2-96 | q=1/32  r=3 | leading4 | 4 | 0.3002 | 0.5891 | 1/4 | 不稳定 |
+| ETTm2-96 | q=1/32  r=3 | leading4 | 4 | 0.4681 | 0.5816 | 2/4 | 不稳定 |
+| ETTm2-96 | q=1/32  r=3 | leading8 | 8 | 0.3759 | 0.3407 | 3/8 | 不稳定 |
+| ETTm2-96 | q=1/32  r=3 | leading8 | 8 | 0.4176 | 0.3420 | 3/8 | 不稳定 |
+| ETTm2-96 | q=1/32  r=3 | full | 96 | 0.1905 | 1.0000 | 4/96 | 不用于判定 |
+| ETTm2-96 | q=1/32  r=3 | full | 96 | 0.1983 | 1.0000 | 4/96 | 不用于判定 |
+| ETTm2-96 | q=1/4  r=24 | leading4 | 4 | 0.5668 | 0.9322 | 3/4 | 不稳定 |
+| ETTm2-96 | q=1/4  r=24 | leading4 | 4 | 0.5796 | 0.9166 | 1/4 | 不稳定 |
+| ETTm2-96 | q=1/4  r=24 | leading8 | 8 | 0.3006 | 0.8138 | 3/8 | 不稳定 |
+| ETTm2-96 | q=1/4  r=24 | leading8 | 8 | 0.3162 | 0.8445 | 1/8 | 不稳定 |
+| ETTm2-96 | q=1/4  r=24 | full | 96 | 0.3273 | 1.0000 | 3/96 | 不用于判定 |
+| ETTm2-96 | q=1/4  r=24 | full | 96 | 0.3204 | 1.0000 | 1/96 | 不用于判定 |
+| ETTm2-96 | q=1/8  r=12 | leading4 | 4 | 0.5408 | 0.9179 | 1/4 | 不稳定 |
+| ETTm2-96 | q=1/8  r=12 | leading4 | 4 | 0.5479 | 0.9539 | 3/4 | 不稳定 |
+| ETTm2-96 | q=1/8  r=12 | leading8 | 8 | 0.2903 | 0.7877 | 1/8 | 不稳定 |
+| ETTm2-96 | q=1/8  r=12 | leading8 | 8 | 0.2821 | 0.7332 | 3/8 | 不稳定 |
+| ETTm2-96 | q=1/8  r=12 | full | 96 | 0.3107 | 1.0000 | 2/96 | 不用于判定 |
+| ETTm2-96 | q=1/8  r=12 | full | 96 | 0.2898 | 1.0000 | 4/96 | 不用于判定 |
+| Weather-192 | q=1/16  r=12 | leading4 | 4 | 0.8527 | 0.9374 | 4/4 | 稳定 |
+| Weather-192 | q=1/16  r=12 | leading4 | 4 | 0.9120 | 0.9772 | 4/4 | 稳定 |
+| Weather-192 | q=1/16  r=12 | leading8 | 8 | 0.7951 | 0.9942 | 5/8 | 不稳定 |
+| Weather-192 | q=1/16  r=12 | leading8 | 8 | 0.8645 | 0.9957 | 8/8 | 稳定 |
+| Weather-192 | q=1/16  r=12 | full | 192 | 0.4138 | 1.0000 | 5/192 | 不用于判定 |
+| Weather-192 | q=1/16  r=12 | full | 192 | 0.4191 | 1.0000 | 8/192 | 不用于判定 |
+| Weather-192 | q=1/32  r=6 | leading4 | 4 | 0.8433 | 0.9391 | 4/4 | 稳定 |
+| Weather-192 | q=1/32  r=6 | leading4 | 4 | 0.8697 | 0.9563 | 4/4 | 稳定 |
+| Weather-192 | q=1/32  r=6 | leading8 | 8 | 0.7045 | 0.7609 | 6/8 | 不稳定 |
+| Weather-192 | q=1/32  r=6 | leading8 | 8 | 0.7302 | 0.7511 | 7/8 | 不稳定 |
+| Weather-192 | q=1/32  r=6 | full | 192 | 0.4035 | 1.0000 | 6/192 | 不用于判定 |
+| Weather-192 | q=1/32  r=6 | full | 192 | 0.4076 | 1.0000 | 8/192 | 不用于判定 |
+| Weather-192 | q=1/4  r=48 | leading4 | 4 | 0.9166 | 0.9772 | 4/4 | 稳定 |
+| Weather-192 | q=1/4  r=48 | leading4 | 4 | 0.9089 | 0.9825 | 4/4 | 稳定 |
+| Weather-192 | q=1/4  r=48 | leading8 | 8 | 0.8666 | 0.9960 | 8/8 | 稳定 |
+| Weather-192 | q=1/4  r=48 | leading8 | 8 | 0.8545 | 0.9784 | 7/8 | 稳定 |
+| Weather-192 | q=1/4  r=48 | full | 192 | 0.4012 | 1.0000 | 8/192 | 不用于判定 |
+| Weather-192 | q=1/4  r=48 | full | 192 | 0.4102 | 1.0000 | 9/192 | 不用于判定 |
+| Weather-192 | q=1/8  r=24 | leading4 | 4 | 0.8680 | 0.9163 | 4/4 | 稳定 |
+| Weather-192 | q=1/8  r=24 | leading4 | 4 | 0.8784 | 0.9374 | 4/4 | 稳定 |
+| Weather-192 | q=1/8  r=24 | leading8 | 8 | 0.8888 | 0.9784 | 8/8 | 稳定 |
+| Weather-192 | q=1/8  r=24 | leading8 | 8 | 0.8759 | 0.9587 | 7/8 | 稳定 |
+| Weather-192 | q=1/8  r=24 | full | 192 | 0.4206 | 1.0000 | 8/192 | 不用于判定 |
+| Weather-192 | q=1/8  r=24 | full | 192 | 0.4199 | 1.0000 | 7/192 | 不用于判定 |
+| Weather-96 | q=1/16  r=6 | leading4 | 4 | 0.8463 | 0.9845 | 4/4 | 稳定 |
+| Weather-96 | q=1/16  r=6 | leading4 | 4 | 0.8468 | 0.9926 | 4/4 | 稳定 |
+| Weather-96 | q=1/16  r=6 | leading8 | 8 | 0.5669 | 0.6400 | 5/8 | 不稳定 |
+| Weather-96 | q=1/16  r=6 | leading8 | 8 | 0.6099 | 0.7228 | 5/8 | 不稳定 |
+| Weather-96 | q=1/16  r=6 | full | 96 | 0.2548 | 1.0000 | 9/96 | 不用于判定 |
+| Weather-96 | q=1/16  r=6 | full | 96 | 0.2540 | 1.0000 | 7/96 | 不用于判定 |
+| Weather-96 | q=1/32  r=3 | leading4 | 4 | 0.6805 | 0.7313 | 3/4 | 不稳定 |
+| Weather-96 | q=1/32  r=3 | leading4 | 4 | 0.8705 | 0.7449 | 4/4 | 稳定 |
+| Weather-96 | q=1/32  r=3 | leading8 | 8 | 0.6950 | 0.4067 | 6/8 | 不稳定 |
+| Weather-96 | q=1/32  r=3 | leading8 | 8 | 0.6963 | 0.4352 | 6/8 | 不稳定 |
+| Weather-96 | q=1/32  r=3 | full | 96 | 0.2272 | 1.0000 | 6/96 | 不用于判定 |
+| Weather-96 | q=1/32  r=3 | full | 96 | 0.2319 | 1.0000 | 6/96 | 不用于判定 |
+| Weather-96 | q=1/4  r=24 | leading4 | 4 | 0.9131 | 0.9967 | 3/4 | 稳定 |
+| Weather-96 | q=1/4  r=24 | leading4 | 4 | 0.8928 | 0.9968 | 4/4 | 稳定 |
+| Weather-96 | q=1/4  r=24 | leading8 | 8 | 0.6719 | 0.9551 | 5/8 | 不稳定 |
+| Weather-96 | q=1/4  r=24 | leading8 | 8 | 0.6471 | 0.9860 | 6/8 | 不稳定 |
+| Weather-96 | q=1/4  r=24 | full | 96 | 0.3334 | 1.0000 | 5/96 | 不用于判定 |
+| Weather-96 | q=1/4  r=24 | full | 96 | 0.3284 | 1.0000 | 6/96 | 不用于判定 |
+| Weather-96 | q=1/8  r=12 | leading4 | 4 | 0.8755 | 0.9762 | 4/4 | 稳定 |
+| Weather-96 | q=1/8  r=12 | leading4 | 4 | 0.8815 | 0.9974 | 4/4 | 稳定 |
+| Weather-96 | q=1/8  r=12 | leading8 | 8 | 0.5699 | 0.9410 | 5/8 | 不稳定 |
+| Weather-96 | q=1/8  r=12 | leading8 | 8 | 0.5594 | 0.9546 | 5/8 | 不稳定 |
+| Weather-96 | q=1/8  r=12 | full | 96 | 0.2926 | 1.0000 | 7/96 | 不用于判定 |
+| Weather-96 | q=1/8  r=12 | full | 96 | 0.2922 | 1.0000 | 7/96 | 不用于判定 |
 ### 表 4：输入—输出语义
 
 解释率为该组子空间在方向 L2 范数中的投影份额；字典组彼此共线，因此各组分额不构成划分。
 
 | Setting | q/rank | canonical mode | 输入首要语义组 | 输入解释率 | 输出首要语义组 | 输出解释率 | 配对机制 |
 |---|---|---|---|---|---|---|---|
-| ETTh2-720 | q=1/32 (r=22) | mode 0 | recent_level | 0.739 | overall_displacement | 0.955 | 近期加权水平 → 整体位移 |
-| ETTh2-720 | q=1/32 (r=22) | mode 1 | period_shape | 0.630 | periodic | 0.950 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 2 | period_shape | 0.655 | periodic | 0.935 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 3 | period_shape | 0.682 | periodic | 0.921 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 4 | period_shape | 0.660 | periodic | 0.872 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 5 | level_change | 0.190 | curvature | 0.388 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 6 | recent_level | 0.351 | curvature | 0.339 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 7 | recent_level | 0.122 | slow_tilt | 0.348 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 0 | recent_level | 0.684 | overall_displacement | 0.907 | 近期加权水平 → 整体位移 |
+| ETTh2-720 | q=1/32 (r=22) | mode 1 | period_shape | 0.798 | periodic | 0.956 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 2 | period_shape | 0.801 | periodic | 0.932 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 3 | recent_level | 0.317 | curvature | 0.560 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 4 | recent_level | 0.251 | curvature | 0.352 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 5 | level_change | 0.044 | slow_tilt | 0.151 | 水平变化/局部趋势 → 倾斜修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 6 | recent_level | 0.090 | periodic | 0.110 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 7 | period_shape | 0.228 | periodic | 0.446 | 周期 level/幅度/相位 → 周期修正 |
 | ETTh2-720 | q=1/8 (r=90) | mode 0 | recent_level | 0.739 | overall_displacement | 0.955 | 近期加权水平 → 整体位移 |
 | ETTh2-720 | q=1/8 (r=90) | mode 1 | period_shape | 0.630 | periodic | 0.950 | 周期 level/幅度/相位 → 周期修正 |
 | ETTh2-720 | q=1/8 (r=90) | mode 2 | period_shape | 0.655 | periodic | 0.935 | 周期 level/幅度/相位 → 周期修正 |
@@ -657,14 +789,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTh2-720 | q=1/8 (r=90) | mode 5 | level_change | 0.190 | curvature | 0.388 | 未匹配预注册机制 |
 | ETTh2-720 | q=1/8 (r=90) | mode 6 | recent_level | 0.351 | curvature | 0.339 | 未匹配预注册机制 |
 | ETTh2-720 | q=1/8 (r=90) | mode 7 | recent_level | 0.122 | slow_tilt | 0.348 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 0 | recent_level | 0.722 | overall_displacement | 0.928 | 近期加权水平 → 整体位移 |
-| ETTh2-720 | q=1/32 (r=22) | mode 1 | period_shape | 0.781 | periodic | 0.925 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 2 | period_shape | 0.794 | periodic | 0.909 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 3 | period_shape | 0.798 | periodic | 0.934 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 4 | period_shape | 0.627 | periodic | 0.765 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 5 | recent_level | 0.196 | slow_tilt | 0.459 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 6 | recent_level | 0.163 | curvature | 0.094 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 7 | recent_level | 0.051 | slow_tilt | 0.081 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 0 | recent_level | 0.717 | overall_displacement | 0.964 | 近期加权水平 → 整体位移 |
+| ETTh2-720 | q=1/32 (r=22) | mode 1 | period_shape | 0.771 | periodic | 0.960 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 2 | period_shape | 0.740 | periodic | 0.881 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 3 | level_change | 0.305 | curvature | 0.288 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 4 | recent_level | 0.175 | slow_tilt | 0.344 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 5 | recent_level | 0.256 | curvature | 0.301 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 6 | period_shape | 0.124 | slow_tilt | 0.228 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 7 | recent_level | 0.086 | curvature | 0.046 | 未匹配预注册机制 |
 | ETTh2-720 | q=1/8 (r=90) | mode 0 | recent_level | 0.722 | overall_displacement | 0.928 | 近期加权水平 → 整体位移 |
 | ETTh2-720 | q=1/8 (r=90) | mode 1 | period_shape | 0.781 | periodic | 0.925 | 周期 level/幅度/相位 → 周期修正 |
 | ETTh2-720 | q=1/8 (r=90) | mode 2 | period_shape | 0.794 | periodic | 0.909 | 周期 level/幅度/相位 → 周期修正 |
@@ -673,14 +805,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTh2-720 | q=1/8 (r=90) | mode 5 | recent_level | 0.196 | slow_tilt | 0.459 | 未匹配预注册机制 |
 | ETTh2-720 | q=1/8 (r=90) | mode 6 | recent_level | 0.163 | curvature | 0.094 | 未匹配预注册机制 |
 | ETTh2-720 | q=1/8 (r=90) | mode 7 | recent_level | 0.051 | slow_tilt | 0.081 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 0 | recent_level | 0.743 | overall_displacement | 0.956 | 近期加权水平 → 整体位移 |
-| ETTh2-720 | q=1/32 (r=22) | mode 1 | period_shape | 0.759 | periodic | 0.969 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 2 | period_shape | 0.795 | periodic | 0.952 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 3 | period_shape | 0.767 | periodic | 0.954 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 4 | period_shape | 0.675 | periodic | 0.855 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-720 | q=1/32 (r=22) | mode 5 | recent_level | 0.267 | curvature | 0.394 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 6 | recent_level | 0.186 | curvature | 0.054 | 未匹配预注册机制 |
-| ETTh2-720 | q=1/32 (r=22) | mode 7 | recent_level | 0.132 | slow_tilt | 0.311 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 0 | recent_level | 0.690 | overall_displacement | 0.940 | 近期加权水平 → 整体位移 |
+| ETTh2-720 | q=1/32 (r=22) | mode 1 | period_shape | 0.707 | periodic | 0.941 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 2 | period_shape | 0.698 | periodic | 0.916 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 3 | recent_level | 0.282 | slow_tilt | 0.565 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 4 | recent_level | 0.217 | curvature | 0.280 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 5 | recent_level | 0.232 | slow_tilt | 0.359 | 未匹配预注册机制 |
+| ETTh2-720 | q=1/32 (r=22) | mode 6 | level_change | 0.062 | slow_tilt | 0.150 | 水平变化/局部趋势 → 倾斜修正 |
+| ETTh2-720 | q=1/32 (r=22) | mode 7 | period_shape | 0.256 | periodic | 0.449 | 周期 level/幅度/相位 → 周期修正 |
 | ETTh2-720 | q=1/8 (r=90) | mode 0 | recent_level | 0.743 | overall_displacement | 0.956 | 近期加权水平 → 整体位移 |
 | ETTh2-720 | q=1/8 (r=90) | mode 1 | period_shape | 0.759 | periodic | 0.969 | 周期 level/幅度/相位 → 周期修正 |
 | ETTh2-720 | q=1/8 (r=90) | mode 2 | period_shape | 0.795 | periodic | 0.952 | 周期 level/幅度/相位 → 周期修正 |
@@ -689,14 +821,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTh2-720 | q=1/8 (r=90) | mode 5 | recent_level | 0.267 | curvature | 0.394 | 未匹配预注册机制 |
 | ETTh2-720 | q=1/8 (r=90) | mode 6 | recent_level | 0.186 | curvature | 0.054 | 未匹配预注册机制 |
 | ETTh2-720 | q=1/8 (r=90) | mode 7 | recent_level | 0.132 | slow_tilt | 0.311 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 0 | period_shape | 0.611 | overall_displacement | 0.963 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.250 | slow_tilt | 0.880 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 2 | period_shape | 0.544 | periodic | 0.857 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.156 | periodic | 0.637 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-96 | q=1/32 (r=3) | mode 4 | recent_level | 0.267 | slow_tilt | 0.561 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.113 | curvature | 0.497 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 6 | recent_level | 0.051 | periodic | 0.061 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.030 | periodic | 0.093 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 0 | period_shape | 0.524 | overall_displacement | 0.977 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.389 | curvature | 0.907 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.032 | periodic | 0.668 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 3 | recent_level | 0.002 | recent_shape_continuation | 0.028 | 近期加权形状 → 局部形状修正 |
+| ETTh2-96 | q=1/32 (r=3) | mode 4 | period_shape | 0.005 | periodic | 0.045 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-96 | q=1/32 (r=3) | mode 5 | fast_local_change | 0.056 | curvature | 0.061 | 快速局部变化 → 局部形状修正 |
+| ETTh2-96 | q=1/32 (r=3) | mode 6 | recent_level | 0.040 | periodic | 0.015 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.014 | periodic | 0.028 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 0 | period_shape | 0.611 | overall_displacement | 0.963 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 1 | recent_level | 0.250 | slow_tilt | 0.880 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 2 | period_shape | 0.544 | periodic | 0.857 | 周期 level/幅度/相位 → 周期修正 |
@@ -705,14 +837,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTh2-96 | q=1/8 (r=12) | mode 5 | recent_level | 0.113 | curvature | 0.497 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 6 | recent_level | 0.051 | periodic | 0.061 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.030 | periodic | 0.093 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.635 | overall_displacement | 0.962 | 近期加权水平 → 整体位移 |
-| ETTh2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.611 | periodic | 0.939 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-96 | q=1/32 (r=3) | mode 2 | period_shape | 0.322 | slow_tilt | 0.503 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.235 | periodic | 0.603 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-96 | q=1/32 (r=3) | mode 4 | period_level | 0.077 | curvature | 0.507 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.134 | slow_tilt | 0.305 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 6 | recent_level | 0.035 | periodic | 0.106 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.082 | periodic | 0.348 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 0 | period_shape | 0.639 | overall_displacement | 0.953 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.347 | slow_tilt | 0.585 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.248 | periodic | 0.486 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 3 | fast_local_change | 0.005 | periodic | 0.019 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 4 | fast_local_change | 0.018 | recent_shape_continuation | 0.021 | 快速局部变化 → 局部形状修正 |
+| ETTh2-96 | q=1/32 (r=3) | mode 5 | period_shape | 0.003 | curvature | 0.023 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.188 | periodic | 0.074 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.070 | periodic | 0.087 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.635 | overall_displacement | 0.962 | 近期加权水平 → 整体位移 |
 | ETTh2-96 | q=1/8 (r=12) | mode 1 | period_shape | 0.611 | periodic | 0.939 | 周期 level/幅度/相位 → 周期修正 |
 | ETTh2-96 | q=1/8 (r=12) | mode 2 | period_shape | 0.322 | slow_tilt | 0.503 | 未匹配预注册机制 |
@@ -721,14 +853,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTh2-96 | q=1/8 (r=12) | mode 5 | recent_level | 0.134 | slow_tilt | 0.305 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 6 | recent_level | 0.035 | periodic | 0.106 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.082 | periodic | 0.348 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.639 | overall_displacement | 0.949 | 近期加权水平 → 整体位移 |
-| ETTh2-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.420 | curvature | 0.928 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 2 | period_shape | 0.536 | periodic | 0.923 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.450 | periodic | 0.868 | 周期 level/幅度/相位 → 周期修正 |
-| ETTh2-96 | q=1/32 (r=3) | mode 4 | recent_level | 0.113 | curvature | 0.645 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.105 | periodic | 0.262 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 6 | level_change | 0.045 | periodic | 0.120 | 未匹配预注册机制 |
-| ETTh2-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.025 | slow_tilt | 0.429 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 0 | period_shape | 0.609 | overall_displacement | 0.959 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.529 | curvature | 0.976 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 2 | period_shape | 0.071 | periodic | 0.586 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.006 | periodic | 0.029 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-96 | q=1/32 (r=3) | mode 4 | period_shape | 0.004 | curvature | 0.029 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 5 | period_shape | 0.006 | periodic | 0.027 | 周期 level/幅度/相位 → 周期修正 |
+| ETTh2-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.043 | periodic | 0.026 | 未匹配预注册机制 |
+| ETTh2-96 | q=1/32 (r=3) | mode 7 | local_curvature | 0.087 | periodic | 0.033 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.639 | overall_displacement | 0.949 | 近期加权水平 → 整体位移 |
 | ETTh2-96 | q=1/8 (r=12) | mode 1 | recent_level | 0.420 | curvature | 0.928 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 2 | period_shape | 0.536 | periodic | 0.923 | 周期 level/幅度/相位 → 周期修正 |
@@ -737,14 +869,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTh2-96 | q=1/8 (r=12) | mode 5 | recent_level | 0.105 | periodic | 0.262 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 6 | level_change | 0.045 | periodic | 0.120 | 未匹配预注册机制 |
 | ETTh2-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.025 | slow_tilt | 0.429 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.631 | slow_tilt | 0.974 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 1 | period_shape | 0.630 | periodic | 0.947 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 2 | period_shape | 0.728 | periodic | 0.979 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 3 | period_shape | 0.350 | periodic | 0.543 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.346 | curvature | 0.615 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 5 | period_shape | 0.290 | periodic | 0.520 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 6 | recent_level | 0.238 | curvature | 0.539 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 7 | recent_level | 0.191 | curvature | 0.138 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.651 | overall_displacement | 0.981 | 近期加权水平 → 整体位移 |
+| ETTm2-192 | q=1/32 (r=6) | mode 1 | period_shape | 0.736 | periodic | 0.943 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 2 | period_shape | 0.655 | periodic | 0.903 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 3 | recent_level | 0.464 | curvature | 0.729 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.073 | curvature | 0.608 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.031 | recent_shape_continuation | 0.097 | 近期加权形状 → 局部形状修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 6 | fast_local_change | 0.003 | periodic | 0.007 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 7 | fast_local_change | 0.021 | curvature | 0.013 | 快速局部变化 → 局部形状修正 |
 | ETTm2-192 | q=1/8 (r=24) | mode 0 | recent_level | 0.631 | slow_tilt | 0.974 | 未匹配预注册机制 |
 | ETTm2-192 | q=1/8 (r=24) | mode 1 | period_shape | 0.630 | periodic | 0.947 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-192 | q=1/8 (r=24) | mode 2 | period_shape | 0.728 | periodic | 0.979 | 周期 level/幅度/相位 → 周期修正 |
@@ -753,14 +885,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTm2-192 | q=1/8 (r=24) | mode 5 | period_shape | 0.290 | periodic | 0.520 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-192 | q=1/8 (r=24) | mode 6 | recent_level | 0.238 | curvature | 0.539 | 未匹配预注册机制 |
 | ETTm2-192 | q=1/8 (r=24) | mode 7 | recent_level | 0.191 | curvature | 0.138 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.616 | overall_displacement | 0.962 | 近期加权水平 → 整体位移 |
-| ETTm2-192 | q=1/32 (r=6) | mode 1 | period_shape | 0.776 | periodic | 0.941 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 2 | period_shape | 0.705 | periodic | 0.922 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 3 | recent_level | 0.436 | curvature | 0.553 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.355 | curvature | 0.408 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.148 | curvature | 0.242 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 6 | recent_level | 0.091 | periodic | 0.257 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 7 | recent_level | 0.046 | slow_tilt | 0.117 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.650 | slow_tilt | 0.939 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 1 | period_shape | 0.637 | periodic | 0.858 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 2 | period_shape | 0.478 | periodic | 0.639 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 3 | recent_level | 0.231 | curvature | 0.366 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 4 | local_trend | 0.037 | periodic | 0.433 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 5 | fast_local_change | 0.016 | slow_tilt | 0.211 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 6 | fast_local_change | 0.004 | periodic | 0.017 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 7 | fast_local_change | 0.006 | slow_tilt | 0.008 | 未匹配预注册机制 |
 | ETTm2-192 | q=1/8 (r=24) | mode 0 | recent_level | 0.616 | overall_displacement | 0.962 | 近期加权水平 → 整体位移 |
 | ETTm2-192 | q=1/8 (r=24) | mode 1 | period_shape | 0.776 | periodic | 0.941 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-192 | q=1/8 (r=24) | mode 2 | period_shape | 0.705 | periodic | 0.922 | 周期 level/幅度/相位 → 周期修正 |
@@ -769,14 +901,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTm2-192 | q=1/8 (r=24) | mode 5 | recent_level | 0.148 | curvature | 0.242 | 未匹配预注册机制 |
 | ETTm2-192 | q=1/8 (r=24) | mode 6 | recent_level | 0.091 | periodic | 0.257 | 未匹配预注册机制 |
 | ETTm2-192 | q=1/8 (r=24) | mode 7 | recent_level | 0.046 | slow_tilt | 0.117 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.635 | overall_displacement | 0.968 | 近期加权水平 → 整体位移 |
-| ETTm2-192 | q=1/32 (r=6) | mode 1 | period_shape | 0.593 | periodic | 0.941 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 2 | period_shape | 0.654 | periodic | 0.976 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-192 | q=1/32 (r=6) | mode 3 | recent_level | 0.466 | curvature | 0.748 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.285 | curvature | 0.551 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.200 | periodic | 0.345 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 6 | recent_level | 0.112 | periodic | 0.447 | 未匹配预注册机制 |
-| ETTm2-192 | q=1/32 (r=6) | mode 7 | recent_level | 0.053 | periodic | 0.129 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.623 | slow_tilt | 0.964 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 1 | period_shape | 0.653 | periodic | 0.930 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 2 | period_shape | 0.657 | periodic | 0.808 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 3 | level_change | 0.276 | slow_tilt | 0.743 | 水平变化/局部趋势 → 倾斜修正 |
+| ETTm2-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.124 | curvature | 0.335 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.051 | periodic | 0.038 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 6 | fast_local_change | 0.006 | periodic | 0.018 | 未匹配预注册机制 |
+| ETTm2-192 | q=1/32 (r=6) | mode 7 | fast_local_change | 0.155 | curvature | 0.010 | 快速局部变化 → 局部形状修正 |
 | ETTm2-192 | q=1/8 (r=24) | mode 0 | recent_level | 0.635 | overall_displacement | 0.968 | 近期加权水平 → 整体位移 |
 | ETTm2-192 | q=1/8 (r=24) | mode 1 | period_shape | 0.593 | periodic | 0.941 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-192 | q=1/8 (r=24) | mode 2 | period_shape | 0.654 | periodic | 0.976 | 周期 level/幅度/相位 → 周期修正 |
@@ -785,14 +917,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTm2-192 | q=1/8 (r=24) | mode 5 | recent_level | 0.200 | periodic | 0.345 | 未匹配预注册机制 |
 | ETTm2-192 | q=1/8 (r=24) | mode 6 | recent_level | 0.112 | periodic | 0.447 | 未匹配预注册机制 |
 | ETTm2-192 | q=1/8 (r=24) | mode 7 | recent_level | 0.053 | periodic | 0.129 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.607 | overall_displacement | 0.970 | 近期加权水平 → 整体位移 |
-| ETTm2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.617 | periodic | 0.966 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 2 | period_shape | 0.628 | periodic | 0.980 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 3 | recent_level | 0.196 | slow_tilt | 0.594 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 4 | recent_level | 0.084 | periodic | 0.544 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.133 | periodic | 0.058 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.015 | periodic | 0.118 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.025 | periodic | 0.246 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.603 | overall_displacement | 0.980 | 近期加权水平 → 整体位移 |
+| ETTm2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.444 | curvature | 0.964 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.050 | periodic | 0.331 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.001 | periodic | 0.031 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-96 | q=1/32 (r=3) | mode 4 | fast_local_change | 0.062 | slow_tilt | 0.115 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 5 | fast_local_change | 0.329 | periodic | 0.038 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.154 | periodic | 0.030 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.068 | slow_tilt | 0.053 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.607 | overall_displacement | 0.970 | 近期加权水平 → 整体位移 |
 | ETTm2-96 | q=1/8 (r=12) | mode 1 | period_shape | 0.617 | periodic | 0.966 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-96 | q=1/8 (r=12) | mode 2 | period_shape | 0.628 | periodic | 0.980 | 周期 level/幅度/相位 → 周期修正 |
@@ -801,14 +933,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTm2-96 | q=1/8 (r=12) | mode 5 | recent_level | 0.133 | periodic | 0.058 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 6 | fast_local_change | 0.015 | periodic | 0.118 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.025 | periodic | 0.246 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.593 | overall_displacement | 0.961 | 近期加权水平 → 整体位移 |
-| ETTm2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.593 | periodic | 0.948 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 2 | period_shape | 0.567 | periodic | 0.948 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.353 | periodic | 0.834 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 4 | recent_level | 0.154 | periodic | 0.459 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.093 | periodic | 0.100 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 6 | recent_level | 0.072 | periodic | 0.300 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.040 | periodic | 0.064 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.550 | slow_tilt | 0.997 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.453 | curvature | 0.954 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.255 | curvature | 0.804 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 3 | fast_local_change | 0.030 | periodic | 0.047 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 4 | period_shape | 0.001 | periodic | 0.039 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-96 | q=1/32 (r=3) | mode 5 | fast_local_change | 0.146 | periodic | 0.034 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.087 | periodic | 0.022 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.137 | periodic | 0.009 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.593 | overall_displacement | 0.961 | 近期加权水平 → 整体位移 |
 | ETTm2-96 | q=1/8 (r=12) | mode 1 | period_shape | 0.593 | periodic | 0.948 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-96 | q=1/8 (r=12) | mode 2 | period_shape | 0.567 | periodic | 0.948 | 周期 level/幅度/相位 → 周期修正 |
@@ -817,14 +949,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTm2-96 | q=1/8 (r=12) | mode 5 | recent_level | 0.093 | periodic | 0.100 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 6 | recent_level | 0.072 | periodic | 0.300 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.040 | periodic | 0.064 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.601 | slow_tilt | 0.971 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.659 | periodic | 0.962 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 2 | period_shape | 0.659 | periodic | 0.964 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 3 | local_trend | 0.216 | periodic | 0.715 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 4 | recent_level | 0.047 | slow_tilt | 0.058 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 5 | period_shape | 0.053 | periodic | 0.484 | 周期 level/幅度/相位 → 周期修正 |
-| ETTm2-96 | q=1/32 (r=3) | mode 6 | recent_level | 0.066 | periodic | 0.081 | 未匹配预注册机制 |
-| ETTm2-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.013 | periodic | 0.122 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.559 | slow_tilt | 0.991 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 1 | period_shape | 0.543 | periodic | 0.967 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.216 | recent_shape_continuation | 0.794 | 近期加权形状 → 局部形状修正 |
+| ETTm2-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.008 | slow_tilt | 0.022 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 4 | period_shape | 0.005 | periodic | 0.003 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-96 | q=1/32 (r=3) | mode 5 | period_shape | 0.010 | periodic | 0.020 | 周期 level/幅度/相位 → 周期修正 |
+| ETTm2-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.211 | periodic | 0.063 | 未匹配预注册机制 |
+| ETTm2-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.069 | periodic | 0.011 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.601 | slow_tilt | 0.971 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 1 | period_shape | 0.659 | periodic | 0.962 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-96 | q=1/8 (r=12) | mode 2 | period_shape | 0.659 | periodic | 0.964 | 周期 level/幅度/相位 → 周期修正 |
@@ -833,14 +965,14 @@ min_{W,c} Σ ||y - y_hat||²
 | ETTm2-96 | q=1/8 (r=12) | mode 5 | period_shape | 0.053 | periodic | 0.484 | 周期 level/幅度/相位 → 周期修正 |
 | ETTm2-96 | q=1/8 (r=12) | mode 6 | recent_level | 0.066 | periodic | 0.081 | 未匹配预注册机制 |
 | ETTm2-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.013 | periodic | 0.122 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.573 | curvature | 0.935 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 1 | recent_level | 0.421 | curvature | 0.521 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 2 | local_trend | 0.220 | slow_tilt | 0.359 | 水平变化/局部趋势 → 倾斜修正 |
-| Weather-192 | q=1/32 (r=6) | mode 3 | local_curvature | 0.164 | slow_tilt | 0.248 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.304 | slow_tilt | 0.199 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.113 | curvature | 0.036 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 6 | recent_level | 0.280 | slow_tilt | 0.097 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 7 | recent_level | 0.240 | slow_tilt | 0.640 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.586 | curvature | 0.919 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 1 | recent_level | 0.553 | curvature | 0.542 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 2 | recent_level | 0.322 | slow_tilt | 0.419 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 3 | recent_level | 0.218 | slow_tilt | 0.371 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.178 | curvature | 0.019 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.213 | slow_tilt | 0.888 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 6 | fast_local_change | 0.095 | periodic | 0.051 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 7 | period_shape | 0.004 | periodic | 0.041 | 周期 level/幅度/相位 → 周期修正 |
 | Weather-192 | q=1/8 (r=24) | mode 0 | recent_level | 0.573 | curvature | 0.935 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 1 | recent_level | 0.421 | curvature | 0.521 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 2 | local_trend | 0.220 | slow_tilt | 0.359 | 水平变化/局部趋势 → 倾斜修正 |
@@ -849,14 +981,14 @@ min_{W,c} Σ ||y - y_hat||²
 | Weather-192 | q=1/8 (r=24) | mode 5 | recent_level | 0.113 | curvature | 0.036 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 6 | recent_level | 0.280 | slow_tilt | 0.097 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 7 | recent_level | 0.240 | slow_tilt | 0.640 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.570 | curvature | 0.911 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 1 | recent_level | 0.455 | curvature | 0.556 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 2 | recent_level | 0.173 | slow_tilt | 0.156 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 3 | recent_level | 0.307 | slow_tilt | 0.653 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.248 | curvature | 0.024 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.264 | slow_tilt | 0.231 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 6 | local_curvature | 0.136 | curvature | 0.032 | 快速局部变化 → 局部形状修正 |
-| Weather-192 | q=1/32 (r=6) | mode 7 | recent_level | 0.195 | slow_tilt | 0.642 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.591 | curvature | 0.920 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 1 | recent_level | 0.529 | curvature | 0.596 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 2 | local_trend | 0.231 | slow_tilt | 0.269 | 水平变化/局部趋势 → 倾斜修正 |
+| Weather-192 | q=1/32 (r=6) | mode 3 | local_trend | 0.249 | slow_tilt | 0.423 | 水平变化/局部趋势 → 倾斜修正 |
+| Weather-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.325 | slow_tilt | 0.084 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.240 | slow_tilt | 0.898 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 6 | period_shape | 0.003 | periodic | 0.036 | 周期 level/幅度/相位 → 周期修正 |
+| Weather-192 | q=1/32 (r=6) | mode 7 | fast_local_change | 0.024 | periodic | 0.018 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 0 | recent_level | 0.570 | curvature | 0.911 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 1 | recent_level | 0.455 | curvature | 0.556 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 2 | recent_level | 0.173 | slow_tilt | 0.156 | 未匹配预注册机制 |
@@ -865,14 +997,14 @@ min_{W,c} Σ ||y - y_hat||²
 | Weather-192 | q=1/8 (r=24) | mode 5 | recent_level | 0.264 | slow_tilt | 0.231 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 6 | local_curvature | 0.136 | curvature | 0.032 | 快速局部变化 → 局部形状修正 |
 | Weather-192 | q=1/8 (r=24) | mode 7 | recent_level | 0.195 | slow_tilt | 0.642 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.574 | curvature | 0.928 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 1 | recent_level | 0.444 | curvature | 0.471 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 2 | recent_level | 0.140 | curvature | 0.129 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 3 | local_trend | 0.329 | slow_tilt | 0.740 | 水平变化/局部趋势 → 倾斜修正 |
-| Weather-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.215 | slow_tilt | 0.032 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 5 | local_curvature | 0.127 | curvature | 0.023 | 快速局部变化 → 局部形状修正 |
-| Weather-192 | q=1/32 (r=6) | mode 6 | recent_level | 0.278 | slow_tilt | 0.155 | 未匹配预注册机制 |
-| Weather-192 | q=1/32 (r=6) | mode 7 | recent_level | 0.175 | slow_tilt | 0.471 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 0 | recent_level | 0.645 | curvature | 0.908 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 1 | recent_level | 0.535 | curvature | 0.514 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 2 | recent_level | 0.197 | curvature | 0.302 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 3 | recent_level | 0.334 | slow_tilt | 0.527 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 4 | recent_level | 0.185 | slow_tilt | 0.025 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 5 | recent_level | 0.214 | slow_tilt | 0.911 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 6 | fast_local_change | 0.020 | periodic | 0.030 | 未匹配预注册机制 |
+| Weather-192 | q=1/32 (r=6) | mode 7 | recent_level | 0.004 | periodic | 0.034 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 0 | recent_level | 0.574 | curvature | 0.928 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 1 | recent_level | 0.444 | curvature | 0.471 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 2 | recent_level | 0.140 | curvature | 0.129 | 未匹配预注册机制 |
@@ -881,14 +1013,14 @@ min_{W,c} Σ ||y - y_hat||²
 | Weather-192 | q=1/8 (r=24) | mode 5 | local_curvature | 0.127 | curvature | 0.023 | 快速局部变化 → 局部形状修正 |
 | Weather-192 | q=1/8 (r=24) | mode 6 | recent_level | 0.278 | slow_tilt | 0.155 | 未匹配预注册机制 |
 | Weather-192 | q=1/8 (r=24) | mode 7 | recent_level | 0.175 | slow_tilt | 0.471 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.547 | curvature | 0.968 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.362 | curvature | 0.962 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.124 | curvature | 0.507 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 3 | local_curvature | 0.126 | slow_tilt | 0.548 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 4 | recent_level | 0.277 | curvature | 0.445 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.172 | periodic | 0.160 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 6 | recent_level | 0.216 | periodic | 0.048 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.083 | periodic | 0.427 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.603 | slow_tilt | 0.987 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.290 | curvature | 0.993 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 2 | local_trend | 0.217 | curvature | 0.922 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 3 | recent_level | 0.006 | periodic | 0.044 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 4 | level_change | 0.004 | periodic | 0.042 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 5 | fast_local_change | 0.023 | slow_tilt | 0.044 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.484 | periodic | 0.121 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.070 | periodic | 0.026 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.547 | curvature | 0.968 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 1 | recent_level | 0.362 | curvature | 0.962 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 2 | recent_level | 0.124 | curvature | 0.507 | 未匹配预注册机制 |
@@ -897,14 +1029,14 @@ min_{W,c} Σ ||y - y_hat||²
 | Weather-96 | q=1/8 (r=12) | mode 5 | recent_level | 0.172 | periodic | 0.160 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 6 | recent_level | 0.216 | periodic | 0.048 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.083 | periodic | 0.427 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.594 | slow_tilt | 0.948 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.375 | curvature | 0.938 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 2 | local_trend | 0.164 | curvature | 0.465 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 3 | local_curvature | 0.102 | slow_tilt | 0.656 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 4 | local_curvature | 0.163 | curvature | 0.299 | 快速局部变化 → 局部形状修正 |
-| Weather-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.290 | periodic | 0.243 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 6 | period_level | 0.130 | periodic | 0.107 | 周期 level/幅度/相位 → 周期修正 |
-| Weather-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.195 | periodic | 0.396 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.609 | slow_tilt | 0.996 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.235 | curvature | 0.992 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.165 | curvature | 0.989 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 3 | recent_level | 0.001 | periodic | 0.058 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 4 | period_shape | 0.008 | slow_tilt | 0.009 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.013 | recent_shape_continuation | 0.045 | 近期加权形状 → 局部形状修正 |
+| Weather-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.446 | slow_tilt | 0.067 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.623 | periodic | 0.070 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.594 | slow_tilt | 0.948 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 1 | recent_level | 0.375 | curvature | 0.938 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 2 | local_trend | 0.164 | curvature | 0.465 | 未匹配预注册机制 |
@@ -913,14 +1045,14 @@ min_{W,c} Σ ||y - y_hat||²
 | Weather-96 | q=1/8 (r=12) | mode 5 | recent_level | 0.290 | periodic | 0.243 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 6 | period_level | 0.130 | periodic | 0.107 | 周期 level/幅度/相位 → 周期修正 |
 | Weather-96 | q=1/8 (r=12) | mode 7 | recent_level | 0.195 | periodic | 0.396 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.593 | curvature | 0.960 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.476 | curvature | 0.952 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.166 | curvature | 0.497 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 3 | local_curvature | 0.150 | slow_tilt | 0.526 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 4 | recent_level | 0.269 | curvature | 0.411 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 5 | recent_level | 0.154 | recent_shape_continuation | 0.096 | 近期加权形状 → 局部形状修正 |
-| Weather-96 | q=1/32 (r=3) | mode 6 | recent_level | 0.316 | periodic | 0.065 | 未匹配预注册机制 |
-| Weather-96 | q=1/32 (r=3) | mode 7 | recent_level | 0.065 | periodic | 0.376 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 0 | recent_level | 0.595 | slow_tilt | 0.997 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 1 | recent_level | 0.351 | curvature | 0.993 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 2 | recent_level | 0.245 | curvature | 0.980 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 3 | period_shape | 0.008 | periodic | 0.031 | 周期 level/幅度/相位 → 周期修正 |
+| Weather-96 | q=1/32 (r=3) | mode 4 | fast_local_change | 0.006 | periodic | 0.035 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 5 | fast_local_change | 0.148 | periodic | 0.024 | 未匹配预注册机制 |
+| Weather-96 | q=1/32 (r=3) | mode 6 | fast_local_change | 0.325 | recent_shape_continuation | 0.028 | 快速局部变化 → 局部形状修正 |
+| Weather-96 | q=1/32 (r=3) | mode 7 | fast_local_change | 0.551 | periodic | 0.027 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 0 | recent_level | 0.593 | curvature | 0.960 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 1 | recent_level | 0.476 | curvature | 0.952 | 未匹配预注册机制 |
 | Weather-96 | q=1/8 (r=12) | mode 2 | recent_level | 0.166 | curvature | 0.497 | 未匹配预注册机制 |
@@ -1011,78 +1143,726 @@ min_{W,c} Σ ||y - y_hat||²
 
 | Setting | q/rank | Arm | correction R² | Δbranch MSE | Δfused MSE | Δfused MAE | vs random 95% |
 |---|---|---|---|---|---|---|---|
-| ETTh2-720 | q=1/16 (r=45) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000478 | +0.000366 | — |
-| ETTh2-720 | q=1/32 (r=22) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000625 | +0.000320 | — |
-| ETTh2-720 | q=1/4 (r=180) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000792 | -0.000356 | — |
-| ETTh2-720 | q=1/8 (r=90) | Independent-RRR-only | 1.0000 | +0.000000 | -0.001098 | -0.000500 | — |
-| ETTh2-720 | q=1/16 (r=45) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000111 | +0.000120 | — |
-| ETTh2-720 | q=1/32 (r=22) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000242 | -0.000107 | — |
-| ETTh2-720 | q=1/4 (r=180) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000296 | +0.000465 | — |
-| ETTh2-720 | q=1/8 (r=90) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000670 | -0.000274 | — |
-| ETTh2-720 | q=1/16 (r=45) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000197 | +0.000100 | — |
-| ETTh2-720 | q=1/32 (r=22) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000119 | +0.000067 | — |
-| ETTh2-720 | q=1/4 (r=180) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000233 | +0.000040 | — |
-| ETTh2-720 | q=1/8 (r=90) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000324 | -0.000149 | — |
-| ETTh2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000017 | +0.000003 | — |
-| ETTh2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000002 | -0.000000 | — |
-| ETTh2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000014 | +0.000000 | — |
-| ETTh2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000003 | -0.000001 | — |
-| ETTh2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000006 | -0.000000 | — |
-| ETTh2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000002 | — |
-| ETTh2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000015 | +0.000007 | — |
-| ETTh2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000014 | -0.000004 | — |
-| ETTh2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000010 | -0.000003 | — |
-| ETTh2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000009 | +0.000002 | — |
-| ETTh2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000017 | +0.000000 | — |
-| ETTh2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000024 | -0.000002 | — |
-| ETTm2-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000006 | -0.000002 | — |
-| ETTm2-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000001 | — |
-| ETTm2-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000003 | -0.000000 | — |
-| ETTm2-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000017 | -0.000003 | — |
-| ETTm2-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000006 | +0.000002 | — |
-| ETTm2-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000013 | +0.000006 | — |
-| ETTm2-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000025 | +0.000007 | — |
-| ETTm2-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000022 | +0.000003 | — |
+| ETTh2-720 | q=1/16 (r=45) | Bias-off | 0.9673 | -0.003369 | +0.003821 | +0.001447 | — |
+| ETTh2-720 | q=1/16 (r=45) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | PCA-drop | 0.0454 | +0.024059 | +0.045569 | +0.033545 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Semantic-drop | 0.0531 | +0.025036 | +0.045571 | +0.033481 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | Semantic-only | 0.9980 | -0.002139 | -0.000281 | -0.000130 | — |
+| ETTh2-720 | q=1/16 (r=45) | Semantic8-drop | 0.1510 | +0.039163 | +0.043071 | +0.031071 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | Semantic8-only | 0.9325 | -0.022943 | +0.000642 | +0.001257 | — |
+| ETTh2-720 | q=1/32 (r=22) | Bias-off | 0.9792 | +0.000682 | +0.003746 | +0.001777 | — |
+| ETTh2-720 | q=1/32 (r=22) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | PCA-drop | 0.0301 | +0.025477 | +0.044352 | +0.032841 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Semantic-drop | 0.0301 | +0.025477 | +0.044352 | +0.032841 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Semantic8-drop | 0.1189 | +0.030717 | +0.042757 | +0.031036 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | Semantic8-only | 0.9485 | -0.012496 | -0.000139 | +0.000879 | — |
+| ETTh2-720 | q=1/4 (r=180) | Bias-off | 0.9668 | +0.005562 | +0.012017 | +0.005296 | — |
+| ETTh2-720 | q=1/4 (r=180) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | PCA-drop | 0.0579 | -0.057267 | +0.073554 | +0.050390 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Semantic-drop | 0.0991 | -0.056035 | +0.069763 | +0.048485 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | Semantic-only | 0.9769 | -0.006174 | +0.002665 | +0.001383 | — |
+| ETTh2-720 | q=1/4 (r=180) | Semantic8-drop | 0.2101 | -0.037758 | +0.065121 | +0.045173 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | Semantic8-only | 0.8861 | -0.029956 | +0.005845 | +0.003524 | — |
+| ETTh2-720 | q=1/8 (r=90) | Bias-off | 0.9484 | -0.016086 | +0.006401 | +0.002986 | — |
+| ETTh2-720 | q=1/8 (r=90) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | PCA-drop | 0.1050 | -0.081673 | +0.074822 | +0.050194 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Semantic-drop | 0.1321 | -0.073343 | +0.073030 | +0.049358 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | Semantic-only | 0.9855 | -0.011899 | +0.000967 | +0.000481 | — |
+| ETTh2-720 | q=1/8 (r=90) | Semantic8-drop | 0.1924 | -0.063300 | +0.070756 | +0.047325 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | Semantic8-only | 0.9379 | -0.025575 | +0.002351 | +0.001876 | — |
+| ETTh2-720 | q=1/16 (r=45) | Bias-off | 0.9625 | +0.007624 | +0.010338 | +0.004161 | — |
+| ETTh2-720 | q=1/16 (r=45) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | PCA-drop | 0.0433 | -0.046046 | +0.073297 | +0.046642 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Semantic-drop | 0.0514 | -0.045245 | +0.073273 | +0.046524 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | Semantic-only | 0.9974 | -0.002178 | -0.000321 | -0.000096 | — |
+| ETTh2-720 | q=1/16 (r=45) | Semantic8-drop | 0.1017 | -0.039469 | +0.072058 | +0.045138 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | Semantic8-only | 0.9520 | -0.009201 | +0.000577 | +0.000649 | — |
+| ETTh2-720 | q=1/32 (r=22) | Bias-off | 0.9825 | +0.004077 | +0.005112 | +0.002538 | — |
+| ETTh2-720 | q=1/32 (r=22) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | PCA-drop | 0.0206 | -0.060008 | +0.066210 | +0.045254 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Semantic-drop | 0.0206 | -0.060008 | +0.066210 | +0.045254 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Semantic8-drop | 0.0794 | -0.048786 | +0.064600 | +0.043918 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | Semantic8-only | 0.9701 | -0.017949 | +0.000026 | +0.000482 | — |
+| ETTh2-720 | q=1/4 (r=180) | Bias-off | 0.9506 | -0.012714 | +0.007240 | +0.002634 | — |
+| ETTh2-720 | q=1/4 (r=180) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | PCA-drop | 0.1024 | -0.056108 | +0.072771 | +0.050273 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Semantic-drop | 0.1571 | -0.039494 | +0.071483 | +0.049669 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | Semantic-only | 0.9641 | -0.021874 | +0.000111 | +0.000002 | — |
+| ETTh2-720 | q=1/4 (r=180) | Semantic8-drop | 0.2309 | -0.027941 | +0.068604 | +0.047180 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | Semantic8-only | 0.8908 | -0.033572 | +0.002848 | +0.002571 | — |
+| ETTh2-720 | q=1/8 (r=90) | Bias-off | 0.9681 | +0.002584 | +0.008247 | +0.003562 | — |
+| ETTh2-720 | q=1/8 (r=90) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | PCA-drop | 0.0578 | -0.041197 | +0.070453 | +0.045282 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Semantic-drop | 0.0828 | -0.038006 | +0.069252 | +0.044565 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | Semantic-only | 0.9903 | -0.006970 | +0.000279 | +0.000257 | — |
+| ETTh2-720 | q=1/8 (r=90) | Semantic8-drop | 0.1428 | -0.024472 | +0.067195 | +0.043359 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | Semantic8-only | 0.9364 | -0.022017 | +0.001955 | +0.001406 | — |
+| ETTh2-720 | q=1/16 (r=45) | Bias-off | 0.9807 | +0.008239 | +0.006542 | +0.002908 | — |
+| ETTh2-720 | q=1/16 (r=45) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | PCA-drop | 0.0223 | +0.044404 | +0.044602 | +0.032711 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | PCA-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/16 (r=45) | Semantic-drop | 0.0262 | +0.044430 | +0.044562 | +0.032651 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | Semantic-only | 0.9993 | -0.000599 | -0.000098 | -0.000039 | — |
+| ETTh2-720 | q=1/16 (r=45) | Semantic8-drop | 0.1016 | +0.048346 | +0.044931 | +0.032048 | 100.0% |
+| ETTh2-720 | q=1/16 (r=45) | Semantic8-only | 0.9458 | -0.008490 | -0.001429 | -0.000039 | — |
+| ETTh2-720 | q=1/32 (r=22) | Bias-off | 0.9751 | +0.005541 | +0.004722 | +0.002286 | — |
+| ETTh2-720 | q=1/32 (r=22) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | PCA-drop | 0.0273 | +0.058205 | +0.034780 | +0.025389 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | PCA-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Semantic-drop | 0.0273 | +0.058205 | +0.034780 | +0.025389 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/32 (r=22) | Semantic8-drop | 0.1015 | +0.061722 | +0.034780 | +0.025102 | 100.0% |
+| ETTh2-720 | q=1/32 (r=22) | Semantic8-only | 0.9449 | -0.006524 | -0.000713 | -0.000060 | — |
+| ETTh2-720 | q=1/4 (r=180) | Bias-off | 0.9588 | +0.004732 | +0.011337 | +0.004719 | — |
+| ETTh2-720 | q=1/4 (r=180) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | PCA-drop | 0.0677 | -0.006395 | +0.057753 | +0.039368 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/4 (r=180) | Semantic-drop | 0.1049 | -0.001476 | +0.055851 | +0.038400 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | Semantic-only | 0.9788 | -0.008679 | +0.001002 | +0.000526 | — |
+| ETTh2-720 | q=1/4 (r=180) | Semantic8-drop | 0.1980 | +0.006872 | +0.053665 | +0.036484 | 100.0% |
+| ETTh2-720 | q=1/4 (r=180) | Semantic8-only | 0.8928 | -0.018713 | +0.002720 | +0.002188 | — |
+| ETTh2-720 | q=1/8 (r=90) | Bias-off | 0.9769 | +0.002099 | +0.006747 | +0.003089 | — |
+| ETTh2-720 | q=1/8 (r=90) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | PCA-drop | 0.0407 | -0.039287 | +0.065172 | +0.042945 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-720 | q=1/8 (r=90) | Semantic-drop | 0.0560 | -0.038620 | +0.064104 | +0.042335 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | Semantic-only | 0.9933 | -0.003051 | +0.000498 | +0.000309 | — |
+| ETTh2-720 | q=1/8 (r=90) | Semantic8-drop | 0.1092 | -0.034636 | +0.062824 | +0.040836 | 100.0% |
+| ETTh2-720 | q=1/8 (r=90) | Semantic8-only | 0.9507 | -0.010017 | +0.001032 | +0.000962 | — |
+| ETTh2-96 | q=1/16 (r=6) | Bias-off | 0.9977 | -0.005745 | +0.000814 | +0.000613 | — |
+| ETTh2-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | PCA-drop | -0.0137 | -0.187903 | +0.074571 | +0.066644 | 0.0% |
+| ETTh2-96 | q=1/16 (r=6) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Semantic-drop | -0.0137 | -0.187903 | +0.074571 | +0.066644 | 0.0% |
+| ETTh2-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Semantic8-drop | -0.0137 | -0.187903 | +0.074571 | +0.066644 | 0.0% |
+| ETTh2-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Bias-off | 0.9969 | -0.001634 | +0.000824 | +0.000495 | — |
+| ETTh2-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | PCA-drop | -0.0110 | -0.027596 | +0.029390 | +0.030490 | 100.0% |
+| ETTh2-96 | q=1/32 (r=3) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Semantic-drop | -0.0110 | -0.027596 | +0.029390 | +0.030490 | 100.0% |
+| ETTh2-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Semantic8-drop | -0.0110 | -0.027596 | +0.029390 | +0.030490 | 100.0% |
+| ETTh2-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Bias-off | 0.9968 | -0.001164 | +0.000684 | +0.000368 | — |
+| ETTh2-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | PCA-drop | -0.0162 | -0.045113 | +0.044696 | +0.045488 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Semantic-drop | -0.0162 | -0.045113 | +0.044696 | +0.045488 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Semantic8-drop | -0.0011 | -0.044726 | +0.044143 | +0.044943 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | Semantic8-only | 0.9985 | -0.002289 | +0.000118 | +0.000241 | — |
+| ETTh2-96 | q=1/8 (r=12) | Bias-off | 0.9988 | -0.000282 | +0.000192 | +0.000088 | — |
+| ETTh2-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | PCA-drop | -0.0201 | -0.067672 | +0.050307 | +0.050154 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Semantic-drop | -0.0201 | -0.067672 | +0.050307 | +0.050154 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Semantic8-drop | -0.0203 | -0.067434 | +0.050308 | +0.050144 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | Semantic8-only | 0.9999 | -0.000180 | +0.000012 | +0.000018 | — |
+| ETTh2-96 | q=1/16 (r=6) | Bias-off | 0.9975 | -0.001843 | +0.000451 | +0.000331 | — |
+| ETTh2-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | PCA-drop | -0.0116 | -0.056947 | +0.050266 | +0.050343 | 100.0% |
+| ETTh2-96 | q=1/16 (r=6) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Semantic-drop | -0.0116 | -0.056947 | +0.050266 | +0.050343 | 100.0% |
+| ETTh2-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Semantic8-drop | -0.0116 | -0.056947 | +0.050266 | +0.050343 | 100.0% |
+| ETTh2-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Bias-off | 0.9961 | -0.002043 | +0.000882 | +0.000421 | — |
+| ETTh2-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | PCA-drop | -0.0059 | -0.036578 | +0.032806 | +0.033875 | 97.0% |
+| ETTh2-96 | q=1/32 (r=3) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Semantic-drop | -0.0059 | -0.036578 | +0.032806 | +0.033875 | 97.0% |
+| ETTh2-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Semantic8-drop | -0.0059 | -0.036578 | +0.032806 | +0.033875 | 97.0% |
+| ETTh2-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Bias-off | 0.9976 | +0.000120 | -0.000519 | -0.000203 | — |
+| ETTh2-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | PCA-drop | -0.0114 | -0.040411 | +0.041496 | +0.043898 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Semantic-drop | -0.0114 | -0.040411 | +0.041496 | +0.043898 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Semantic8-drop | 0.0254 | -0.039531 | +0.040197 | +0.042618 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | Semantic8-only | 0.9961 | -0.005711 | +0.000261 | +0.000370 | — |
+| ETTh2-96 | q=1/8 (r=12) | Bias-off | 0.9955 | -0.002529 | +0.000717 | +0.000477 | — |
+| ETTh2-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | PCA-drop | -0.0125 | -0.079357 | +0.058212 | +0.055530 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Semantic-drop | -0.0125 | -0.079357 | +0.058212 | +0.055530 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Semantic8-drop | 0.0010 | -0.079047 | +0.057579 | +0.054980 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | Semantic8-only | 0.9988 | -0.002640 | +0.000090 | +0.000114 | — |
+| ETTh2-96 | q=1/16 (r=6) | Bias-off | 0.9966 | -0.001429 | +0.000656 | +0.000433 | — |
+| ETTh2-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | PCA-drop | -0.0123 | -0.085189 | +0.055440 | +0.053938 | 100.0% |
+| ETTh2-96 | q=1/16 (r=6) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Semantic-drop | -0.0123 | -0.085189 | +0.055440 | +0.053938 | 100.0% |
+| ETTh2-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/16 (r=6) | Semantic8-drop | -0.0123 | -0.085189 | +0.055440 | +0.053938 | 100.0% |
+| ETTh2-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Bias-off | 0.9954 | -0.002554 | -0.000134 | +0.000087 | — |
+| ETTh2-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | PCA-drop | -0.0004 | -0.052862 | +0.041014 | +0.040847 | 0.0% |
+| ETTh2-96 | q=1/32 (r=3) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Semantic-drop | -0.0004 | -0.052862 | +0.041014 | +0.040847 | 0.0% |
+| ETTh2-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/32 (r=3) | Semantic8-drop | -0.0004 | -0.052862 | +0.041014 | +0.040847 | 0.0% |
+| ETTh2-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Bias-off | 0.9953 | +0.002223 | -0.000771 | -0.000330 | — |
+| ETTh2-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | PCA-drop | -0.0236 | -0.016992 | +0.038586 | +0.039983 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Semantic-drop | -0.0236 | -0.016992 | +0.038586 | +0.039983 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/4 (r=24) | Semantic8-drop | -0.0042 | -0.016076 | +0.037970 | +0.039336 | 100.0% |
+| ETTh2-96 | q=1/4 (r=24) | Semantic8-only | 0.9958 | -0.002912 | +0.000148 | +0.000211 | — |
+| ETTh2-96 | q=1/8 (r=12) | Bias-off | 0.9975 | +0.002214 | -0.000473 | -0.000299 | — |
+| ETTh2-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | PCA-drop | -0.0243 | -0.036396 | +0.046327 | +0.046827 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | PCA-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Semantic-drop | -0.0243 | -0.036396 | +0.046327 | +0.046827 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTh2-96 | q=1/8 (r=12) | Semantic8-drop | -0.0232 | -0.036647 | +0.046364 | +0.046844 | 100.0% |
+| ETTh2-96 | q=1/8 (r=12) | Semantic8-only | 0.9998 | +0.000120 | -0.000067 | -0.000049 | — |
+| ETTm2-192 | q=1/16 (r=12) | Bias-off | 0.9983 | -0.004911 | +0.000156 | +0.000037 | — |
+| ETTm2-192 | q=1/16 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | PCA-drop | 0.0014 | -0.848620 | +0.038799 | +0.040922 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Semantic-drop | 0.0014 | -0.848620 | +0.038799 | +0.040922 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Semantic8-drop | 0.0103 | -0.850147 | +0.038409 | +0.040369 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | Semantic8-only | 0.9951 | -0.002177 | +0.000241 | +0.000325 | — |
+| ETTm2-192 | q=1/32 (r=6) | Bias-off | 0.9995 | -0.005000 | +0.000142 | +0.000048 | — |
+| ETTm2-192 | q=1/32 (r=6) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | PCA-drop | -0.0085 | -1.583178 | +0.061072 | +0.056205 | 95.0% |
+| ETTm2-192 | q=1/32 (r=6) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Semantic-drop | -0.0085 | -1.583178 | +0.061072 | +0.056205 | 43.0% |
+| ETTm2-192 | q=1/32 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Semantic8-drop | -0.0085 | -1.583178 | +0.061072 | +0.056205 | 43.0% |
+| ETTm2-192 | q=1/32 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Bias-off | 0.9988 | +0.005402 | -0.000306 | -0.000111 | — |
+| ETTm2-192 | q=1/4 (r=48) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | PCA-drop | -0.0068 | -0.857634 | +0.041062 | +0.042585 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Semantic-drop | -0.0068 | -0.857662 | +0.041059 | +0.042581 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | Semantic-only | 1.0000 | +0.000015 | +0.000003 | +0.000003 | — |
+| ETTm2-192 | q=1/4 (r=48) | Semantic8-drop | 0.0044 | -0.857895 | +0.040642 | +0.042119 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | Semantic8-only | 0.9991 | -0.009025 | +0.000050 | +0.000100 | — |
+| ETTm2-192 | q=1/8 (r=24) | Bias-off | 0.9987 | -0.005788 | +0.000221 | +0.000061 | — |
+| ETTm2-192 | q=1/8 (r=24) | Conditional-RRR-only | 1.0000 | -0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | PCA-drop | -0.0015 | -0.832010 | +0.034215 | +0.037781 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | PCA-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Semantic-drop | -0.0015 | -0.832010 | +0.034215 | +0.037781 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Semantic8-drop | 0.0004 | -0.832044 | +0.034097 | +0.037662 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | Semantic8-only | 0.9990 | -0.000860 | +0.000085 | +0.000101 | — |
+| ETTm2-192 | q=1/16 (r=12) | Bias-off | 0.9992 | -0.004359 | +0.000140 | +0.000070 | — |
+| ETTm2-192 | q=1/16 (r=12) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
 | ETTm2-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
-| ETTm2-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000002 | -0.000003 | — |
-| ETTm2-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000013 | +0.000002 | — |
-| ETTm2-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000010 | +0.000004 | — |
-| ETTm2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | PCA-drop | -0.0031 | -1.426132 | +0.049378 | +0.047011 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Semantic-drop | -0.0031 | -1.426132 | +0.049378 | +0.047011 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Semantic8-drop | -0.0040 | -1.427115 | +0.049405 | +0.047009 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | Semantic8-only | 1.0000 | +0.002167 | +0.000020 | +0.000020 | — |
+| ETTm2-192 | q=1/32 (r=6) | Bias-off | 0.9986 | -0.000649 | +0.000235 | +0.000048 | — |
+| ETTm2-192 | q=1/32 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | PCA-drop | -0.0024 | -0.974093 | +0.041599 | +0.040380 | 100.0% |
+| ETTm2-192 | q=1/32 (r=6) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Semantic-drop | -0.0024 | -0.974093 | +0.041599 | +0.040380 | 100.0% |
+| ETTm2-192 | q=1/32 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Semantic8-drop | -0.0024 | -0.974093 | +0.041599 | +0.040380 | 100.0% |
+| ETTm2-192 | q=1/32 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Bias-off | 0.9972 | -0.016814 | +0.000580 | +0.000296 | — |
+| ETTm2-192 | q=1/4 (r=48) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | PCA-drop | -0.0013 | -1.097359 | +0.044640 | +0.045901 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Semantic-drop | -0.0011 | -1.097509 | +0.044628 | +0.045890 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | Semantic-only | 1.0000 | -0.000011 | +0.000006 | +0.000007 | — |
+| ETTm2-192 | q=1/4 (r=48) | Semantic8-drop | 0.0664 | -1.066188 | +0.041650 | +0.043367 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | Semantic8-only | 0.9858 | -0.090885 | +0.000675 | +0.000902 | — |
+| ETTm2-192 | q=1/8 (r=24) | Bias-off | 0.9979 | -0.012450 | +0.000516 | +0.000177 | — |
+| ETTm2-192 | q=1/8 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | PCA-drop | -0.0015 | -1.038793 | +0.038947 | +0.041609 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Semantic-drop | -0.0015 | -1.038793 | +0.038947 | +0.041609 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Semantic8-drop | -0.0010 | -1.038876 | +0.038923 | +0.041585 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | Semantic8-only | 0.9999 | -0.000364 | +0.000007 | -0.000011 | — |
+| ETTm2-192 | q=1/16 (r=12) | Bias-off | 0.9994 | -0.002062 | +0.000030 | +0.000050 | — |
+| ETTm2-192 | q=1/16 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | PCA-drop | -0.0070 | -1.634469 | +0.059565 | +0.053961 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | PCA-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Semantic-drop | -0.0070 | -1.634469 | +0.059565 | +0.053961 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/16 (r=12) | Semantic8-drop | -0.0025 | -1.634429 | +0.059281 | +0.053682 | 100.0% |
+| ETTm2-192 | q=1/16 (r=12) | Semantic8-only | 0.9993 | -0.006069 | +0.000047 | +0.000087 | — |
+| ETTm2-192 | q=1/32 (r=6) | Bias-off | 0.9971 | -0.004820 | +0.000108 | +0.000042 | — |
+| ETTm2-192 | q=1/32 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | PCA-drop | 0.0022 | -0.825362 | +0.034587 | +0.035201 | 100.0% |
+| ETTm2-192 | q=1/32 (r=6) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Semantic-drop | 0.0022 | -0.825362 | +0.034587 | +0.035201 | 100.0% |
+| ETTm2-192 | q=1/32 (r=6) | Semantic-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/32 (r=6) | Semantic8-drop | 0.0022 | -0.825362 | +0.034587 | +0.035201 | 100.0% |
+| ETTm2-192 | q=1/32 (r=6) | Semantic8-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Bias-off | 0.9993 | -0.005066 | +0.000452 | +0.000190 | — |
+| ETTm2-192 | q=1/4 (r=48) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | PCA-drop | -0.0037 | -1.457422 | +0.061642 | +0.059426 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/4 (r=48) | Semantic-drop | -0.0037 | -1.457458 | +0.061636 | +0.059420 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | Semantic-only | 1.0000 | +0.000014 | +0.000005 | +0.000006 | — |
+| ETTm2-192 | q=1/4 (r=48) | Semantic8-drop | 0.0039 | -1.456855 | +0.061168 | +0.059021 | 100.0% |
+| ETTm2-192 | q=1/4 (r=48) | Semantic8-only | 0.9999 | -0.011712 | +0.000027 | +0.000039 | — |
+| ETTm2-192 | q=1/8 (r=24) | Bias-off | 0.9994 | -0.001144 | +0.000064 | +0.000034 | — |
+| ETTm2-192 | q=1/8 (r=24) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | PCA-drop | -0.0094 | -1.564602 | +0.056401 | +0.053269 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | PCA-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Semantic-drop | -0.0094 | -1.564602 | +0.056401 | +0.053269 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | Semantic-only | 1.0000 | +0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-192 | q=1/8 (r=24) | Semantic8-drop | -0.0093 | -1.565195 | +0.056383 | +0.053239 | 100.0% |
+| ETTm2-192 | q=1/8 (r=24) | Semantic8-only | 0.9999 | +0.000534 | +0.000016 | +0.000018 | — |
+| ETTm2-96 | q=1/16 (r=6) | Bias-off | 0.9993 | +0.000683 | -0.000006 | +0.000038 | — |
+| ETTm2-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | PCA-drop | -0.0087 | -0.065682 | +0.044802 | +0.052978 | 0.0% |
+| ETTm2-96 | q=1/16 (r=6) | PCA-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Semantic-drop | -0.0087 | -0.065682 | +0.044802 | +0.052978 | 0.0% |
+| ETTm2-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | -0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Semantic8-drop | -0.0087 | -0.065682 | +0.044802 | +0.052978 | 0.0% |
+| ETTm2-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | -0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Bias-off | 0.9997 | -0.000215 | -0.000002 | +0.000047 | — |
+| ETTm2-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
 | ETTm2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
-| ETTm2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000016 | -0.000006 | — |
-| ETTm2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000007 | -0.000006 | — |
-| ETTm2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000001 | +0.000004 | — |
-| ETTm2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000005 | -0.000004 | — |
-| ETTm2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000011 | +0.000001 | — |
-| ETTm2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000004 | +0.000004 | — |
-| ETTm2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000006 | -0.000001 | — |
-| ETTm2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000003 | -0.000004 | — |
-| ETTm2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000006 | -0.000001 | — |
-| ETTm2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000001 | — |
-| Weather-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000013 | +0.000020 | — |
-| Weather-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000006 | +0.000003 | — |
-| Weather-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000027 | -0.000008 | — |
-| Weather-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000011 | +0.000014 | — |
-| Weather-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000011 | +0.000008 | — |
-| Weather-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000012 | -0.000022 | — |
-| Weather-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000002 | +0.000002 | — |
-| Weather-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000003 | -0.000008 | — |
-| Weather-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000003 | -0.000014 | — |
-| Weather-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000003 | -0.000003 | — |
-| Weather-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000001 | -0.000000 | — |
-| Weather-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000011 | -0.000005 | — |
-| Weather-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000010 | +0.000007 | — |
-| Weather-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000014 | +0.000008 | — |
-| Weather-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000039 | -0.000058 | — |
-| Weather-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000010 | -0.000006 | — |
-| Weather-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000004 | -0.000002 | — |
-| Weather-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000001 | -0.000004 | — |
-| Weather-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000004 | +0.000007 | — |
-| Weather-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000018 | -0.000001 | — |
-| Weather-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000005 | -0.000009 | — |
-| Weather-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000003 | -0.000003 | — |
-| Weather-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000003 | +0.000004 | — |
-| Weather-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000011 | +0.000018 | — |
+| ETTm2-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | PCA-drop | -0.0051 | -0.063964 | +0.036368 | +0.041532 | 100.0% |
+| ETTm2-96 | q=1/32 (r=3) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Semantic-drop | -0.0051 | -0.063964 | +0.036368 | +0.041532 | 100.0% |
+| ETTm2-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Semantic8-drop | -0.0051 | -0.063964 | +0.036368 | +0.041532 | 100.0% |
+| ETTm2-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Bias-off | 0.9954 | -0.002692 | +0.000610 | +0.000462 | — |
+| ETTm2-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | -0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | PCA-drop | 0.0042 | -0.008876 | +0.040460 | +0.050294 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Semantic-drop | 0.0042 | -0.008876 | +0.040460 | +0.050294 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | -0.000000 | -0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Semantic8-drop | 0.0044 | -0.009539 | +0.040369 | +0.050244 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | Semantic8-only | 0.9993 | +0.000743 | +0.000109 | +0.000133 | — |
+| ETTm2-96 | q=1/8 (r=12) | Bias-off | 0.9994 | +0.000027 | -0.000055 | +0.000030 | — |
+| ETTm2-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | PCA-drop | -0.0030 | -0.055469 | +0.046429 | +0.055108 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | PCA-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Semantic-drop | -0.0030 | -0.055469 | +0.046429 | +0.055108 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Semantic8-drop | 0.0006 | -0.055400 | +0.046293 | +0.054956 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | Semantic8-only | 0.9999 | -0.000683 | -0.000015 | +0.000008 | — |
+| ETTm2-96 | q=1/16 (r=6) | Bias-off | 0.9994 | +0.000286 | -0.000047 | +0.000022 | — |
+| ETTm2-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | PCA-drop | -0.0023 | +0.011993 | +0.031498 | +0.041068 | 51.0% |
+| ETTm2-96 | q=1/16 (r=6) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Semantic-drop | -0.0023 | +0.011993 | +0.031498 | +0.041068 | 100.0% |
+| ETTm2-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Semantic8-drop | -0.0023 | +0.011993 | +0.031498 | +0.041068 | 100.0% |
+| ETTm2-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Bias-off | 0.9983 | -0.000868 | +0.000045 | +0.000164 | — |
+| ETTm2-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | PCA-drop | 0.0035 | -0.017950 | +0.031622 | +0.038659 | 89.0% |
+| ETTm2-96 | q=1/32 (r=3) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Semantic-drop | 0.0035 | -0.017950 | +0.031622 | +0.038659 | 89.0% |
+| ETTm2-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Semantic8-drop | 0.0035 | -0.017950 | +0.031622 | +0.038659 | 89.0% |
+| ETTm2-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Bias-off | 0.9993 | -0.000278 | -0.000073 | +0.000028 | — |
+| ETTm2-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | PCA-drop | 0.0002 | -0.021066 | +0.037948 | +0.048189 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | PCA-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Semantic-drop | 0.0002 | -0.021066 | +0.037948 | +0.048189 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Semantic8-drop | -0.0000 | -0.021897 | +0.037883 | +0.048103 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | Semantic8-only | 0.9993 | +0.000964 | +0.000098 | +0.000161 | — |
+| ETTm2-96 | q=1/8 (r=12) | Bias-off | 0.9969 | +0.000080 | -0.000022 | +0.000099 | — |
+| ETTm2-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | PCA-drop | -0.0011 | +0.016294 | +0.034536 | +0.044454 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Semantic-drop | -0.0011 | +0.016294 | +0.034536 | +0.044454 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Semantic8-drop | 0.0003 | +0.015770 | +0.034472 | +0.044375 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | Semantic8-only | 0.9999 | +0.000363 | +0.000025 | +0.000046 | — |
+| ETTm2-96 | q=1/16 (r=6) | Bias-off | 0.9975 | -0.000353 | -0.000115 | +0.000122 | — |
+| ETTm2-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | PCA-drop | 0.0023 | +0.006891 | +0.031397 | +0.041160 | 100.0% |
+| ETTm2-96 | q=1/16 (r=6) | PCA-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Semantic-drop | 0.0023 | +0.006891 | +0.031397 | +0.041160 | 100.0% |
+| ETTm2-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/16 (r=6) | Semantic8-drop | 0.0023 | +0.006891 | +0.031397 | +0.041160 | 100.0% |
+| ETTm2-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Bias-off | 0.9981 | -0.000582 | +0.000036 | +0.000095 | — |
+| ETTm2-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | PCA-drop | 0.0050 | +0.015691 | +0.024616 | +0.032261 | 0.0% |
+| ETTm2-96 | q=1/32 (r=3) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Semantic-drop | 0.0050 | +0.015691 | +0.024616 | +0.032261 | 58.0% |
+| ETTm2-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/32 (r=3) | Semantic8-drop | 0.0050 | +0.015691 | +0.024616 | +0.032261 | 58.0% |
+| ETTm2-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Bias-off | 0.9981 | -0.000713 | +0.000118 | +0.000098 | — |
+| ETTm2-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | PCA-drop | 0.0003 | -0.038707 | +0.044597 | +0.054129 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | PCA-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Semantic-drop | 0.0003 | -0.038707 | +0.044597 | +0.054129 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/4 (r=24) | Semantic8-drop | 0.0019 | -0.040179 | +0.044450 | +0.054010 | 100.0% |
+| ETTm2-96 | q=1/4 (r=24) | Semantic8-only | 0.9992 | +0.001324 | +0.000111 | +0.000116 | — |
+| ETTm2-96 | q=1/8 (r=12) | Bias-off | 0.9978 | -0.002660 | +0.000411 | +0.000239 | — |
+| ETTm2-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | PCA-drop | 0.0008 | -0.062337 | +0.047157 | +0.057647 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Semantic-drop | 0.0008 | -0.062337 | +0.047157 | +0.057647 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| ETTm2-96 | q=1/8 (r=12) | Semantic8-drop | 0.0010 | -0.062593 | +0.047103 | +0.057567 | 100.0% |
+| ETTm2-96 | q=1/8 (r=12) | Semantic8-only | 0.9998 | +0.000264 | +0.000055 | +0.000086 | — |
+| Weather-192 | q=1/16 (r=12) | Bias-off | 0.9946 | -0.007932 | -0.000020 | -0.000744 | — |
+| Weather-192 | q=1/16 (r=12) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | PCA-drop | 0.0034 | +0.144486 | +0.147299 | +0.110058 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Semantic-drop | 0.0034 | +0.144486 | +0.147299 | +0.110058 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Semantic8-drop | 0.1428 | +0.132564 | +0.125167 | +0.094638 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | Semantic8-only | 0.9539 | -0.055067 | +0.004203 | +0.007818 | — |
+| Weather-192 | q=1/32 (r=6) | Bias-off | 0.9823 | -0.018651 | +0.002283 | +0.002078 | — |
+| Weather-192 | q=1/32 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | PCA-drop | 0.0092 | +0.116798 | +0.153295 | +0.115847 | 0.0% |
+| Weather-192 | q=1/32 (r=6) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Semantic-drop | 0.0092 | +0.116798 | +0.153295 | +0.115847 | 0.0% |
+| Weather-192 | q=1/32 (r=6) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Semantic8-drop | 0.0092 | +0.116798 | +0.153295 | +0.115847 | 0.0% |
+| Weather-192 | q=1/32 (r=6) | Semantic8-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Bias-off | 0.9797 | -0.024155 | +0.003180 | +0.002839 | — |
+| Weather-192 | q=1/4 (r=48) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | PCA-drop | 0.0106 | +0.118741 | +0.174275 | +0.123216 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | PCA-only | 1.0000 | -0.000000 | -0.000000 | -0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Semantic-drop | 0.0243 | +0.113016 | +0.171538 | +0.121851 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | Semantic-only | 0.9995 | -0.005055 | -0.000292 | +0.000030 | — |
+| Weather-192 | q=1/4 (r=48) | Semantic8-drop | 0.1768 | +0.049091 | +0.140987 | +0.104356 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | Semantic8-only | 0.9635 | -0.036560 | +0.003551 | +0.006900 | — |
+| Weather-192 | q=1/8 (r=24) | Bias-off | 0.9875 | -0.016154 | +0.001477 | +0.001438 | — |
+| Weather-192 | q=1/8 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | PCA-drop | 0.0063 | +0.121684 | +0.154569 | +0.113833 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Semantic-drop | 0.0063 | +0.121684 | +0.154569 | +0.113833 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Semantic8-drop | 0.2252 | +0.068223 | +0.116289 | +0.092677 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | Semantic8-only | 0.9306 | -0.064998 | +0.005696 | +0.011199 | — |
+| Weather-192 | q=1/16 (r=12) | Bias-off | 0.9762 | -0.024492 | +0.003413 | +0.002585 | — |
+| Weather-192 | q=1/16 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | PCA-drop | 0.0127 | +0.140424 | +0.157138 | +0.118849 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Semantic-drop | 0.0127 | +0.140424 | +0.157138 | +0.118849 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Semantic8-drop | 0.1050 | +0.138021 | +0.141780 | +0.109906 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | Semantic8-only | 0.9532 | -0.029103 | +0.005916 | +0.009678 | — |
+| Weather-192 | q=1/32 (r=6) | Bias-off | 0.9821 | -0.019500 | +0.001399 | +0.000682 | — |
+| Weather-192 | q=1/32 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | PCA-drop | 0.0089 | +0.152248 | +0.161497 | +0.115884 | 100.0% |
+| Weather-192 | q=1/32 (r=6) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Semantic-drop | 0.0089 | +0.152248 | +0.161497 | +0.115884 | 50.0% |
+| Weather-192 | q=1/32 (r=6) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Semantic8-drop | 0.0089 | +0.152248 | +0.161497 | +0.115884 | 50.0% |
+| Weather-192 | q=1/32 (r=6) | Semantic8-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Bias-off | 0.9571 | -0.040695 | +0.007241 | +0.007171 | — |
+| Weather-192 | q=1/4 (r=48) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | PCA-drop | 0.0218 | +0.061092 | +0.170854 | +0.124365 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Semantic-drop | 0.0321 | +0.057617 | +0.169012 | +0.123307 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | Semantic-only | 0.9997 | -0.003871 | -0.000181 | +0.000005 | — |
+| Weather-192 | q=1/4 (r=48) | Semantic8-drop | 0.1536 | +0.020951 | +0.146467 | +0.109653 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | Semantic8-only | 0.9734 | -0.037278 | +0.002385 | +0.004407 | — |
+| Weather-192 | q=1/8 (r=24) | Bias-off | 0.9896 | -0.013732 | +0.001097 | +0.001438 | — |
+| Weather-192 | q=1/8 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | PCA-drop | 0.0056 | +0.058858 | +0.163634 | +0.120237 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Semantic-drop | 0.0056 | +0.058858 | +0.163634 | +0.120237 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Semantic8-drop | 0.2331 | +0.010313 | +0.125423 | +0.098134 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | Semantic8-only | 0.9202 | -0.065760 | +0.009204 | +0.013950 | — |
+| Weather-192 | q=1/16 (r=12) | Bias-off | 0.9730 | -0.027344 | +0.002172 | +0.001865 | — |
+| Weather-192 | q=1/16 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | PCA-drop | 0.0137 | +0.091571 | +0.157005 | +0.118354 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Semantic-drop | 0.0137 | +0.091571 | +0.157005 | +0.118354 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/16 (r=12) | Semantic8-drop | 0.1703 | +0.094310 | +0.132594 | +0.103821 | 100.0% |
+| Weather-192 | q=1/16 (r=12) | Semantic8-only | 0.9270 | -0.061147 | +0.007149 | +0.011888 | — |
+| Weather-192 | q=1/32 (r=6) | Bias-off | 0.9710 | -0.029130 | +0.003571 | +0.002488 | — |
+| Weather-192 | q=1/32 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | PCA-drop | 0.0148 | +0.147983 | +0.164713 | +0.121035 | 100.0% |
+| Weather-192 | q=1/32 (r=6) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Semantic-drop | 0.0148 | +0.147983 | +0.164713 | +0.121035 | 100.0% |
+| Weather-192 | q=1/32 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/32 (r=6) | Semantic8-drop | 0.0148 | +0.147983 | +0.164713 | +0.121035 | 100.0% |
+| Weather-192 | q=1/32 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Bias-off | 0.9789 | -0.027027 | +0.002617 | +0.002715 | — |
+| Weather-192 | q=1/4 (r=48) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | PCA-drop | 0.0109 | +0.012999 | +0.170463 | +0.126636 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | PCA-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| Weather-192 | q=1/4 (r=48) | Semantic-drop | 0.0288 | +0.005931 | +0.167116 | +0.124892 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | Semantic-only | 0.9993 | -0.008177 | -0.000305 | +0.000065 | — |
+| Weather-192 | q=1/4 (r=48) | Semantic8-drop | 0.3039 | -0.066904 | +0.117718 | +0.094047 | 100.0% |
+| Weather-192 | q=1/4 (r=48) | Semantic8-only | 0.9001 | -0.090929 | +0.009596 | +0.014330 | — |
+| Weather-192 | q=1/8 (r=24) | Bias-off | 0.9873 | -0.013983 | +0.001957 | +0.002597 | — |
+| Weather-192 | q=1/8 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | PCA-drop | 0.0066 | +0.097811 | +0.153896 | +0.117998 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | PCA-only | 1.0000 | +0.000000 | -0.000000 | -0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Semantic-drop | 0.0066 | +0.097811 | +0.153896 | +0.117998 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-192 | q=1/8 (r=24) | Semantic8-drop | 0.2396 | +0.036673 | +0.116603 | +0.095193 | 100.0% |
+| Weather-192 | q=1/8 (r=24) | Semantic8-only | 0.9249 | -0.047724 | +0.007113 | +0.011919 | — |
+| Weather-96 | q=1/16 (r=6) | Bias-off | 0.9917 | -0.017034 | +0.001762 | +0.001093 | — |
+| Weather-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | PCA-drop | 0.0029 | -2.120240 | +0.157540 | +0.141815 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Semantic-drop | 0.0029 | -2.120240 | +0.157540 | +0.141815 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Semantic8-drop | 0.0029 | -2.120240 | +0.157540 | +0.141815 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Bias-off | 0.9877 | -0.026749 | +0.001273 | +0.000770 | — |
+| Weather-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | PCA-drop | 0.0051 | -1.491134 | +0.114979 | +0.109072 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Semantic-drop | 0.0051 | -1.491134 | +0.114979 | +0.109072 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Semantic8-drop | 0.0051 | -1.491134 | +0.114979 | +0.109072 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Bias-off | 0.9949 | -0.014698 | +0.001397 | +0.000674 | — |
+| Weather-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | PCA-drop | 0.0032 | -2.323129 | +0.167803 | +0.150990 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | PCA-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Semantic-drop | 0.0032 | -2.323129 | +0.167803 | +0.150990 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Semantic8-drop | 0.0411 | -2.324041 | +0.162234 | +0.147257 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | Semantic8-only | 0.9882 | -0.084851 | +0.001209 | +0.002558 | — |
+| Weather-96 | q=1/8 (r=12) | Bias-off | 0.9945 | -0.012586 | +0.000490 | -0.000039 | — |
+| Weather-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | PCA-drop | 0.0018 | -2.315035 | +0.157332 | +0.140749 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Semantic-drop | 0.0018 | -2.315035 | +0.157332 | +0.140749 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Semantic8-drop | 0.0136 | -2.317354 | +0.155414 | +0.139467 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | Semantic8-only | 0.9991 | -0.033926 | +0.000073 | +0.000406 | — |
+| Weather-96 | q=1/16 (r=6) | Bias-off | 0.9878 | -0.033651 | +0.001529 | +0.001275 | — |
+| Weather-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | PCA-drop | 0.0055 | -2.205818 | +0.180611 | +0.156633 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | PCA-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Semantic-drop | 0.0055 | -2.205818 | +0.180611 | +0.156633 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Semantic8-drop | 0.0055 | -2.205818 | +0.180611 | +0.156633 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Bias-off | 0.9947 | -0.011210 | +0.000693 | +0.000284 | — |
+| Weather-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | PCA-drop | 0.0028 | -1.449709 | +0.119726 | +0.115701 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Semantic-drop | 0.0028 | -1.449709 | +0.119726 | +0.115701 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Semantic8-drop | 0.0028 | -1.449709 | +0.119726 | +0.115701 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Bias-off | 0.9874 | -0.032033 | +0.002617 | +0.002396 | — |
+| Weather-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | PCA-drop | 0.0067 | -2.056851 | +0.150967 | +0.137998 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Semantic-drop | 0.0067 | -2.056851 | +0.150967 | +0.137998 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Semantic8-drop | 0.0625 | -2.018978 | +0.143223 | +0.132694 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | Semantic8-only | 0.9671 | -0.104618 | +0.003908 | +0.007101 | — |
+| Weather-96 | q=1/8 (r=12) | Bias-off | 0.9914 | -0.024211 | +0.001071 | +0.000790 | — |
+| Weather-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | +0.000000 | -0.000000 | -0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | PCA-drop | 0.0045 | -2.280793 | +0.175371 | +0.155915 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | PCA-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Semantic-drop | 0.0045 | -2.280793 | +0.175371 | +0.155915 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Semantic8-drop | 0.0209 | -2.280487 | +0.172996 | +0.154447 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | Semantic8-only | 0.9950 | -0.037778 | +0.000522 | +0.001623 | — |
+| Weather-96 | q=1/16 (r=6) | Bias-off | 0.9881 | -0.029175 | +0.001697 | +0.001041 | — |
+| Weather-96 | q=1/16 (r=6) | Conditional-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Independent-RRR-only | 1.0000 | +0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | PCA-drop | 0.0049 | -1.867413 | +0.138880 | +0.129982 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Semantic-drop | 0.0049 | -1.867413 | +0.138880 | +0.129982 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | Semantic-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/16 (r=6) | Semantic8-drop | 0.0049 | -1.867413 | +0.138880 | +0.129982 | 100.0% |
+| Weather-96 | q=1/16 (r=6) | Semantic8-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Bias-off | 0.9874 | -0.024757 | +0.001687 | +0.001412 | — |
+| Weather-96 | q=1/32 (r=3) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | -0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | PCA-drop | 0.0043 | -1.594132 | +0.132136 | +0.121597 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | PCA-only | 1.0000 | -0.000000 | +0.000000 | -0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Semantic-drop | 0.0043 | -1.594132 | +0.132136 | +0.121597 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | Semantic-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/32 (r=3) | Semantic8-drop | 0.0043 | -1.594132 | +0.132136 | +0.121597 | 0.0% |
+| Weather-96 | q=1/32 (r=3) | Semantic8-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Bias-off | 0.9926 | -0.022042 | +0.001441 | +0.001627 | — |
+| Weather-96 | q=1/4 (r=24) | Conditional-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Independent-RRR-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | PCA-drop | 0.0031 | -2.889076 | +0.202581 | +0.169154 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Semantic-drop | 0.0031 | -2.889076 | +0.202581 | +0.169154 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/4 (r=24) | Semantic8-drop | 0.0348 | -2.875863 | +0.196503 | +0.165660 | 100.0% |
+| Weather-96 | q=1/4 (r=24) | Semantic8-only | 0.9910 | -0.103310 | +0.001291 | +0.003330 | — |
+| Weather-96 | q=1/8 (r=12) | Bias-off | 0.9984 | -0.003589 | +0.000310 | +0.000058 | — |
+| Weather-96 | q=1/8 (r=12) | Conditional-RRR-only | 1.0000 | -0.000000 | -0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Independent-RRR-only | 1.0000 | -0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Original | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | PCA-drop | 0.0006 | -2.140893 | +0.147209 | +0.137396 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | PCA-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Semantic-drop | 0.0006 | -2.140893 | +0.147209 | +0.137396 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | Semantic-only | 1.0000 | +0.000000 | +0.000000 | +0.000000 | — |
+| Weather-96 | q=1/8 (r=12) | Semantic8-drop | 0.0273 | -2.151475 | +0.143500 | +0.134876 | 100.0% |
+| Weather-96 | q=1/8 (r=12) | Semantic8-only | 0.9962 | -0.058260 | +0.000183 | +0.000950 | — |
 ### 表 7：最终机制裁定
 
 成立判定按计划 §6.1：三个 seed 中至少 2 个把该机制排在首位，且输入解释率 ≥0.5、输出解释率 ≥0.8。跨 setting 判定按 §6.2，并按实际生效 scope （n=6）按多数边界折算：≥5/6 为一致机制，3–4/6 为条件性机制，≤2/6 为不支持。注：本轮实际生效 6 个 setting（原计划 7 个），被排除的 setting 不参与裁定。
@@ -1158,7 +1938,6 @@ checkpoint 不复制进该目录，只记录原路径和哈希。
 7. 若 Semantic-only 失败而 Conditional-RRR-only 成功，应结论为“保留了任务相关线性混合，
    但当前人工语义字典不足”，而不是否定低秩信息集中。
 8. 若分支明显退化而融合输出近中性，应把 gate 稀释和主干补偿作为独立机制报告。
-
 ## 11. 执行记录与披露
 
 本节由本轮实际执行结果回填，记录生效范围、环境与已知偏差。表 1–7 的数字来自
@@ -1245,8 +2024,14 @@ checkpoint／Semantic-only／Semantic-drop 四条曲线、原始修正的规范�
 1. `skip_math` 的 `last_audit` 守卫缺失：加入可选的 float64 审计后，读取端未同步
    加守卫，导致 shard 在第一个 cell 抛 `AttributeError` 而整体退出（已补回归测试，
    并验证该测试在缺陷版本上确实失败）；
-2. 并行分片的 CSV 写入互相覆盖：`stage0_audit.csv` 与 `intervention_results.csv`
-   原先为纯覆盖写，多分片并行时只有最后完成的分片留下（已改为加锁合并）；
+2. **并行分片的 CSV 写入互相覆盖（第一次未修完整）**：`stage0_audit.csv` 与
+   `intervention_results.csv` 原先都是纯覆盖写，多分片并行时只有最后完成的分片留下。
+   第一次修复只给 `stage0_audit.csv` 补了加锁合并，**漏掉了 `intervention_results.csv`**，
+   且更关键的是合并键只有 `(setting, seed, cell)`、不含 `arm`。干预表每个 cell 有 10 个臂，
+   于是同一 cell 的 10 行互相覆盖，最终 72 行全部只剩 `Independent-RRR-only`，
+   表 6 因此完全没有充分性/必要性证据，表 7 的两条裁定引用的是空证据，H4 落空。
+   现已把合并键改为 `(setting, seed, cell, arm)` 并用 `--cache-only` 重放，
+   得到 720 行 = 72 cell × 10 臂、0 重复；
 3. Stage 3 的 `conditional_rrr_alignment.csv` 每个 setting 覆盖一次，只保留最后一个
    setting 的 12 行（已改为按键合并）；
 4. evaluator 与 analyzer 的 cache 文件名不一致（缺少 cell 后缀），导致 analyzer 无法
@@ -1255,3 +2040,27 @@ checkpoint／Semantic-only／Semantic-drop 四条曲线、原始修正的规范�
    方向点乘、模式数越界、输出侧误用输入侧协方差度量；
 6. `CenteredMoments.whitened()` 每次调用重算 720×720 特征分解，是 Stage 1/2 的
    性能瓶颈（已加实例级缓存，实测 0.117 s → 15 µs，且缓存值与未缓存值逐位相同）。
+7. **analyzer 的模式缓存按 seed 索引而非 `(seed, cell)`**：同一 seed 的 4 个压缩档互相
+   覆盖，`per_seed[seed]` 只剩最后一个 cell，于是跨 seed 比较的 reference 与 candidate
+   指向同一个对象。证据是 `scope=full` 的行 `dimension=720`、`input_subspace_overlap`
+   精确等于 1.0000（自比较），而真实的 `leading4/leading8` 重叠（0.21–0.92）根本没进表 3。
+   表 3 原先的「ETTh2-720 稳定、其余不稳定」是伪影。已改为 `(seed, cell)` 索引、
+   并在同一 cell 内跨 seed 配对；
+8. **同一缺陷导致表 4 逐 cell 重复**：字典与矩按 setting 共享，报错前的 144 个
+   `(setting, seed, mode)` 键下 4 行完全相同的值。修复后 576 行全部不同
+   （`distinct (setting, seed, cell, mode) = 576`）；
+9. **`fill_lowrank_checkpoint_information_tables.py` 的 section 正则吃掉文末内容**：
+   模式 `^### 表 {number}：.*?(?=^### 表 |\Z|\n## )` 在最后一张表（表 7）上只能由 `\Z`
+   终止，替换时把表 7 到文件结尾的全部内容一起删掉——首次回填时本文件的 §11 执行记录
+   就是这样被静默删除的。已改为按下一个标题精确边界切分。
+
+### 11.7 表 3 口径的修正
+
+表 3 原先只渲染 `scope=full`，而该 scope 把一个小维子空间放进完整的 horizon 空间
+（96–720 维），其输出子空间重叠存在非平凡下界：本次全部 48 行**精确等于 1.0000**，
+没有任何判别力，却对每一行都给出"稳定"。同时"匹配度 ≥0.7 的模式数"只有 2–5/720，
+即重叠饱和但模式并不对应。
+
+修正后表 3 以固定维度的 `leading4`/`leading8` 给出结论，`full` 行保留但明确标注
+`不用于判定`。修正后 ETTh2-720 的 `leading4` 输入重叠为 0.59–0.67，结论为"不稳定"，
+与修正前"全部稳定"相反。这一改动只改变判定口径，不改变任何原始数值。
