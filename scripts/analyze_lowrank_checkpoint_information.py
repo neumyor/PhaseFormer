@@ -110,6 +110,10 @@ class SettingDictionary:
     input_shapley: dict[str, float]
     output_shapley: dict[str, float]
     moments: CenteredMoments
+    # The input modes live in the 720-wide lookback space and the output modes in
+    # the horizon-wide forecast space, so their covariance metrics are different
+    # objects of different sizes; sharing one would silently mix the two spaces.
+    output_moments: CenteredMoments | None = None
     independent_rrr: dict[int, np.ndarray] = field(default_factory=dict)
 
     def group_shapley_input(self, direction: np.ndarray) -> dict[str, float]:
@@ -167,6 +171,51 @@ def centered_moments(z: np.ndarray) -> CenteredMoments:
     centered = z - mean
     cov = centered.T @ centered / max(z.shape[0] - 1, 1)
     return CenteredMoments(mean=mean, cov=cov, n=int(z.shape[0]))
+
+
+def output_residual_moments(
+    setting: str,
+    feature_paths: list[Path],
+    horizon: int,
+    block: int = 400,
+) -> CenteredMoments | None:
+    """Second moments of the validation residuals in the forecast space.
+
+    The output-side covariance metric needs ``horizon``-wide vectors, so it
+    cannot reuse the input moments.  It is estimated from the residuals the
+    checkpoints themselves leave in that space (``target - phase``), pooled over
+    the available seeds and computed block-wise so the transient stays bounded.
+    A small ridge keeps the whitening well defined when the pooled residuals are
+    rank deficient.
+    """
+    residuals: list[np.ndarray] = []
+    collected = 0
+    for path in feature_paths:
+        if not path.is_file():
+            continue
+        payload = np.load(path)
+        target = payload["target"]
+        phase = payload["phase"]
+        samples = target.shape[0]
+        for start in range(0, samples, block):
+            stop = min(start + block, samples)
+            piece = (
+                target[start:stop].astype(np.float64)
+                - phase[start:stop].astype(np.float64)
+            ).reshape(-1, horizon)
+            residuals.append(piece)
+            collected += piece.shape[0]
+        if collected >= 20000:
+            break
+    if not residuals:
+        return None
+    stacked = np.concatenate(residuals, axis=0)
+    mean = stacked.mean(axis=0)
+    centered = stacked - mean
+    cov = centered.T @ centered / max(stacked.shape[0] - 1, 1)
+    scale = float(np.trace(cov)) / max(horizon, 1)
+    cov = cov + np.eye(horizon) * max(scale, 1e-12) * 1e-6
+    return CenteredMoments(mean=mean, cov=cov, n=int(stacked.shape[0]))
 
 
 def build_dictionary(
@@ -260,8 +309,8 @@ def align_direction(
     return result
 
 
-def canonical_modes(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """SVD of the effective map: ``(u, s, vt, numerical_rank_tol)``."""
+def canonical_modes(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """SVD of the effective map: ``(u, s, vt)``."""
     u, s, vt = np.linalg.svd(matrix, full_matrices=False)
     return u, s, vt
 
@@ -355,6 +404,20 @@ def main() -> None:
         horizon = int(entries[0]["horizon"])
         train_z = load_train_centered_windows(dataset, horizon, args.train_pairs or 0)
         dictionary = build_dictionary(setting, dataset, horizon, train_z)
+        dictionary.output_moments = output_residual_moments(
+            setting,
+            [
+                features_dir
+                / f"{setting}_seed{int(entry['seed'])}_{entry['cell'].replace('/', '-')}.npz"
+                for entry in entries
+            ],
+            horizon,
+        )
+        if dictionary.output_moments is None:
+            raise FileNotFoundError(
+                f"no cached features available to estimate the output-space "
+                f"moments for {setting}"
+            )
         dictionaries[setting] = dictionary
         print(
             f"[dictionary] {setting}: input "
@@ -366,7 +429,13 @@ def main() -> None:
         per_seed: dict[int, dict] = {}
         for row in sorted(entries, key=lambda item: int(item["seed"])):
             seed = int(row["seed"])
-            feature_path = features_dir / f"{setting}_seed{seed}.npz"
+            # The evaluator writes one cache per (setting, seed, cell); the cell
+            # suffix is mandatory because a setting/seed pair can carry more than
+            # one compression level.
+            feature_path = (
+                features_dir
+                / f"{setting}_seed{seed}_{row['cell'].replace('/', '-')}.npz"
+            )
             if not feature_path.is_file():
                 raise FileNotFoundError(
                     f"missing cached validation features: {feature_path}"
@@ -382,24 +451,54 @@ def main() -> None:
             gaps = principal_angle_gap(s)
 
             hidden = features["hidden"].astype(np.float64)
-            sigma = features["sigma"].astype(np.float64)
             n_samples = hidden.shape[0]
+            # The cache stores ``sigma``/``mu`` as ``(N, 1, C)``; the horizon axis
+            # is the window's RevIN statistics, constant over the horizon, so it is
+            # dropped to recover the per-(sample, channel) scale the branch uses.
+            sigma = features["sigma"].astype(np.float64).reshape(n_samples, -1)
             # ``correction_abs = decoder(h) * sigma`` is the low-rank branch
-            # correction in the original value space.  Every per-mode quantity
-            # below is an exact decomposition of it, computed in the low-rank
-            # hidden basis so no (N, H, mode) tensor has to be materialised.
-            weighted = np.einsum("nc,nk->nck", sigma, hidden)
+            # correction in the original value space, exactly as the evaluator
+            # forms it.  The modes are taken in the canonical latent frame of the
+            # decoder: its left singular vectors are orthonormal, so the modal
+            # contributions ``(S_k u_k) <v_k, h>`` sum back to ``decoder(h)``
+            # exactly.  Their squares therefore partition the decoded energy, and
+            # each mode's energy is its mean square under the same RevIN scaling;
+            # ``total_correction_energy`` is the evaluator's own total, so the
+            # reported shares are computed against the quantity the intervention
+            # arms use.
+            # The reported spectrum comes from the effective map, while the
+            # per-mode attribution below lives in the decoder's latent frame;
+            # the two can differ in length, so the mode loop is clamped to the
+            # shorter of the two rather than risking an out-of-range index.
             mode_count = min(int(args.modes), s.size)
-            total_correction_energy = float(
-                np.sum((decoder_weight @ hidden.T) ** 2 * (sigma ** 2).T)
-            ) / n_samples
-            variance = hidden.var(axis=0)
-            variance_total = float(variance.sum())
-            for index in range(mode_count):
-                delta = decoder_weight[:, index][None, :, None] * weighted[:, :, index]
-                energy = float(np.mean(delta ** 2))
-                singular_direction = decoder_weight[:, index]
-                coefficient_std = float(np.sqrt(max(variance[index], 0.0)))
+            # ``u``/``s``/``vt`` above decompose the *effective map* and therefore
+            # span the input space (720 wide), which the hidden state does not live
+            # in.  The per-mode attribution below needs the decoder's own latent
+            # frame, so it is taken separately; the spectrum statistics keep using
+            # the effective map as planned.
+            dec_u, dec_s, dec_vt = np.linalg.svd(decoder_weight, full_matrices=False)
+            correction = (
+                np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+                * sigma[:, None, :]
+            )
+            total_correction_energy = float(np.mean(correction ** 2))
+            mode_energies = np.empty(dec_s.size)
+            score_variance = np.empty(dec_s.size)
+            for index in range(dec_s.size):
+                score = np.einsum("ncr,r->nc", hidden, dec_vt[index])
+                contribution = (
+                    (dec_u[:, index] * dec_s[index])[None, :, None]
+                    * score[:, None, :]
+                    * sigma[:, None, :]
+                )
+                mode_energies[index] = float(np.mean(contribution ** 2))
+                # The plan's ``Var(h_i)`` is the variance of the canonical latent
+                # score, i.e. of the projection onto the mode's latent direction --
+                # not of a raw hidden unit, which is not the same quantity.
+                score_variance[index] = float(np.var(score))
+            for index in range(min(mode_count, dec_s.size)):
+                energy = float(mode_energies[index])
+                coefficient_std = float(np.sqrt(max(score_variance[index], 0.0)))
                 canonical_rows.append(
                     {
                         "setting": setting,
@@ -413,8 +512,10 @@ def main() -> None:
                         "singular_value_share": float(statistics["singular_energy_shares"][index]),
                         "cumulative_singular_share": float(statistics["cumulative_energy_share"][index]),
                         "singular_gap_to_next": float(gaps[index]) if index < gaps.size else 0.0,
-                        "latent_variance": float(variance[index]),
-                        "latent_variance_share": float(variance[index] / variance_total) if variance_total else 0.0,
+                        "latent_variance": float(score_variance[index]),
+                        "latent_variance_share": float(
+                            score_variance[index] / score_variance.sum()
+                        ) if score_variance.sum() else 0.0,
                         "latent_variance_std": coefficient_std,
                         "correction_energy": energy,
                         "correction_energy_share": float(energy / total_correction_energy) if total_correction_energy else 0.0,
@@ -443,7 +544,7 @@ def main() -> None:
                 f"numerical_rank={statistics['numerical_rank']} "
                 f"participation={statistics['participation_ratio']:.3f}"
             )
-            del features, hidden, sigma, weighted
+            del features, hidden, sigma, mode_energies
 
         seeds = sorted(per_seed)
         reference = per_seed[seeds[0]]
@@ -503,7 +604,9 @@ def main() -> None:
                     dictionary.output_templates,
                     dictionary.output_groups,
                     dictionary.output_group_order,
-                    dictionary.moments,
+                    # Output modes are horizon-wide, so they use the residual
+                    # moments of that space, not the lookback-space moments.
+                    dictionary.output_moments,
                 )
                 semantic_rows.append(
                     {

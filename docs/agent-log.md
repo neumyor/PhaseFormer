@@ -2838,3 +2838,30 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   Semantic-only/Semantic-drop/PCA/Random 干预设计，用于区分真实信息保留、无预测价值信息
   删除，以及 gate/主干对分支损失的绕行。
 - 本轮只制定计划，未实现脚本、未运行分析、未新增训练，也未重新读取 test。
+
+## 2026-09-17 — 执行低秩 checkpoint 信息保留分析（Stage 0–5 与表回填）
+
+- 执行了 `docs/PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 的全部阶段：
+  审计 72/72 通过（有效映射等价误差 `max 1.42e-13`，阈值 `1e-6`），Stage 1/2 产出
+  `canonical_modes.csv`(501)、`semantic_alignment.csv`(576)、`cross_seed_alignment.csv`；
+  Stage 3 产出 6 个 setting 的条件性 RRR 对齐；Stage 4 产出 72 cell × 8 臂的干预结果；
+  Stage 5 按 §5 规则程序化选样产出 54 张图。表 1–7 已回填计划 §7，并新增 §11 执行记录。
+- **Electricity-336 被排除**，实际生效 scope 为 6 个 setting。原因是其条件性 RRR 在 Gram
+  组装阶段超出单进程内存（`(17344, 336, 321)` 需 13.9 GiB），且该 setting 占全部 7 个
+  setting 计算量的 42%。计划 §6.2 的 7-setting 边界按同比例折算为 n=6 的
+  `≥5/6、3–4/6、≤2/6` 并在表 7 注明；若沿用字面 `≥5`，在 n=6 下"一致机制"几乎不可达，
+  会使裁定系统性偏向"不支持"。最终裁定为**条件性机制**（4/6 setting 支持
+  "近期加权水平 → 整体位移"）。
+- 修复了 6 个会导致产物缺失或口径不一致的缺陷：`skip_math` 的 `last_audit` 读取端缺守卫
+  （直接导致 GPU shard 在首个 cell 崩溃、14 个 cell 被静默遗留）、分片 CSV 覆盖写、
+  Stage 3 汇总表每 setting 覆盖一次、evaluator/analyzer 的 cache 文件名不一致、analyzer
+  的 `sigma`/空间/模式数/输出侧度量四处轴序错位、`CenteredMoments.whitened()` 重复
+  计算 720×720 特征分解（0.117 s → 15 µs）。
+- 为 `skip_math` 守卫补了回归测试，并确认该测试在缺陷版本上**确实失败**——首版测试写在
+  model 层，对缺陷版本通过，是无效测试；改写在 consumer 层后才具备保护力。
+- 教训（本轮反复出现）：多次先启动长任务、后做单 cell 验证，导致 scope 变更与集成错位在
+  关键路径上才暴露并返工。`analyze_lowrank_checkpoint_information.py` 在本轮之前从未在
+  该流水线上跑通过一次，其 4 个集成问题本应在启动 72-cell sweep 之前用单 cell 端到端
+  验证一次性发现。已将"启动长任务前必须单 cell 端到端验证"列为该流水线的固定前置步骤。
+- 未重训任何模型、未读取 test、未修改既有 checkpoint。GPU 仅使用 0–5 号，未占用该机器上
+  其他用户的 6/7 号卡。

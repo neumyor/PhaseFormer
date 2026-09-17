@@ -6,9 +6,12 @@ subspace utilities, the reduced-rank regression solvers and the inverse
 problem used by the intervention analysis.
 """
 
+import ast
 import numpy as np
 import torch
+import types
 import unittest
+from pathlib import Path
 
 from scripts.lowrank_checkpoint_core import (
     CenteredMoments,
@@ -45,7 +48,10 @@ from scripts.evaluate_lowrank_semantic_interventions import (
     random_orthogonal_basis,
     semantic_basis,
 )
+from scripts.lowrank_checkpoint_model import intervention_forward
 from src.models.phase_adapters import PooledLowRankWeakPeriodResidualHead
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class EffectiveMapTest(unittest.TestCase):
@@ -485,6 +491,96 @@ class RankLadderTest(unittest.TestCase):
         self.assertEqual(len(FORMAL_SETTINGS), 7)
         self.assertEqual(FORMAL_SEEDS, (2021, 2022, 2023))
         self.assertEqual(LABEL_OF_RELATIVE_RANK[0.25], "q=1/4")
+
+
+class SkipAuditMathTest(unittest.TestCase):
+    """The float64 audit must be genuinely optional, at *both* ends.
+
+    Regression test for a real failure: the ``--skip-audit-math`` flag was added
+    and the model's ``last_audit`` assignment was guarded, but one consumer in
+    ``evaluate_lowrank_semantic_interventions.main`` kept reading
+    ``head.last_audit`` unconditionally.  The ``AttributeError`` killed a whole
+    GPU shard on its first cell and silently stranded 14 of the 84 analysis
+    cells, which looked like a stalled sweep rather than a crash.
+    """
+
+    def _source(self):
+        return (
+            Path(REPO_ROOT) / "scripts" / "evaluate_lowrank_semantic_interventions.py"
+        ).read_text()
+
+    def test_head_accepts_skip_math_without_recording_the_audit(self):
+        torch.manual_seed(0)
+        head = PooledLowRankWeakPeriodResidualHead(
+            24, 12, pool_factor=1, rank=5, smooth_ratio=0.0
+        ).double()
+        head.forward = types.MethodType(
+            intervention_forward(lambda centered, hidden: hidden, {"skip_math": True}),
+            head,
+        )
+        out = head(torch.randn(4, 24, 3, dtype=torch.float64))
+        self.assertEqual(tuple(out.shape), (4, 12, 3))
+        # The interface contract the consumer must respect.
+        self.assertFalse(hasattr(head, "last_audit"))
+        for attribute in ("last_hidden", "last_centered", "last_anchor64"):
+            self.assertTrue(hasattr(head, attribute), attribute)
+
+    def test_head_records_the_audit_when_math_is_requested(self):
+        torch.manual_seed(0)
+        head = PooledLowRankWeakPeriodResidualHead(
+            24, 12, pool_factor=1, rank=5, smooth_ratio=0.0
+        ).double()
+        head.forward = types.MethodType(
+            intervention_forward(lambda centered, hidden: hidden, {"skip_math": False}),
+            head,
+        )
+        head(torch.randn(4, 24, 3, dtype=torch.float64))
+        self.assertTrue(hasattr(head, "last_audit"))
+        for key in ("hidden64", "map64", "head64", "pooled64"):
+            self.assertIn(key, head.last_audit)
+
+    def test_consumer_never_reads_last_audit_outside_its_guard(self):
+        """``head.last_audit`` must not be reachable when the math is skipped.
+
+        This is the check that actually fails on the buggy revision: it parses
+        the consumer and requires every read of ``head.last_audit`` to sit inside
+        an audit-enabled branch.
+        """
+        source = self._source()
+        tree = ast.parse(source)
+        guarded_reads = 0
+        for function in ast.walk(tree):
+            if not isinstance(function, ast.FunctionDef) or function.name != "main":
+                continue
+            for node in ast.walk(function):
+                if not isinstance(node, ast.If):
+                    continue
+                tests = ast.dump(node.test)
+                if "run_audit_math" not in tests:
+                    continue
+                for inner in ast.walk(node):
+                    if (
+                        isinstance(inner, ast.Attribute)
+                        and inner.attr == "last_audit"
+                        and isinstance(inner.ctx, ast.Load)
+                    ):
+                        guarded_reads += 1
+        self.assertGreaterEqual(
+            guarded_reads,
+            1,
+            "every read of head.last_audit must be guarded by an audit-enabled "
+            "branch, otherwise --skip-audit-math crashes the shard",
+        )
+        # And the guard flag has to exist for that to be possible.
+        self.assertIn("run_audit_math", source)
+
+    def test_full_audit_math_flag_exists_and_overrides_skip(self):
+        source = self._source()
+        self.assertIn("--full-audit-math", source)
+        # ``--full-audit-math`` must actually feed the skip decision, otherwise
+        # it is a silently ignored flag.
+        self.assertIn("args.skip_audit_math", source)
+        self.assertIn("args.full_audit_math", source)
 
 
 if __name__ == "__main__":

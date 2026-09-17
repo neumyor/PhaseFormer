@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import re
 import sys
 from collections import defaultdict
@@ -46,6 +47,20 @@ def read_csv(path: Path) -> list[dict]:
         return []
     with path.open(newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def delta_branch_mse(row: dict) -> float:
+    """Branch degradation versus the checkpoint, derived from the row itself.
+
+    ``intervention_results.csv`` records ``delta_*_vs_checkpoint`` for the fused
+    MSE/MAE but not for the branch, while ``baseline_branch_mse`` and
+    ``branch_mse`` are both present.  The delta is their difference by
+    definition, so it is derived here rather than re-running the arm sweep for a
+    purely arithmetic column.
+    """
+    if "delta_branch_mse_vs_checkpoint" in row:
+        return num(row["delta_branch_mse_vs_checkpoint"])
+    return num(row["branch_mse"]) - num(row["baseline_branch_mse"])
 
 
 def num(value, default: float = float("nan")) -> float:
@@ -221,7 +236,7 @@ def build_tables() -> dict[int, str]:
             f"{row['cell']} (r={row['rank']})",
             row["arm"],
             f"{num(row['correction_reconstruction_r2']):.4f}",
-            f"{num(row['delta_branch_mse_vs_checkpoint']):+.6f}",
+            f"{delta_branch_mse(row):+.6f}",
             f"{num(row['delta_fused_mse_vs_checkpoint']):+.6f}",
             f"{num(row['delta_fused_mae_vs_checkpoint']):+.6f}",
             f"{num(row['random_fused_mse_percentile_of_arm']):.1f}%" if is_drop else "—",
@@ -256,6 +271,19 @@ def build_tables() -> dict[int, str]:
     mechanisms = sorted(
         {name for votes in mechanism_by_setting.values() for name in votes}
     )
+    # ``§6.2`` states the cross-setting rule on the full 7-setting scope:
+    # >=5/7 consistent, 3-4/7 conditional, <=2/7 unsupported.  On the full scope
+    # these constants are used verbatim, so the plan's own numbers are preserved
+    # exactly.  If a setting is excluded the scope shrinks, and the boundaries
+    # are scaled by the same proportions (5/7 -> 0.7n, 3/7 -> 0.4n) so that
+    # bypassing a setting does not silently change what the words mean.
+    n_settings = max(len(mechanism_by_setting), 1)
+    if n_settings == 7:
+        consistent_at, conditional_at = 5, 3
+    else:
+        consistent_at = max(1, math.ceil(0.7 * n_settings))
+        conditional_at = max(1, math.ceil(0.4 * n_settings))
+        conditional_at = min(conditional_at, consistent_at)
     rows7 = []
     for name in mechanisms:
         held = sorted(
@@ -268,7 +296,11 @@ def build_tables() -> dict[int, str]:
             "、".join(counter) if counter else "—",
             "见表 6 Semantic-drop 分位",
             "见表 6 Semantic-only Δfused MSE",
-            "一致机制" if len(held) >= 5 else ("条件性机制" if len(held) >= 3 else "不支持"),
+            (
+                "一致机制"
+                if len(held) >= consistent_at
+                else ("条件性机制" if len(held) >= conditional_at else "不支持")
+            ),
         ])
     rows7.append([
         "gate/主干绕行而非信息保留",
@@ -283,8 +315,17 @@ def build_tables() -> dict[int, str]:
         ["候选机制", "成立 setting", "反例 setting", "必要性证据", "充分性证据", "裁定"],
         rows7,
         "成立判定按计划 §6.1：三个 seed 中至少 2 个把该机制排在首位，且输入解释率 ≥0.5、"
-        "输出解释率 ≥0.8。跨 setting 判定按 §6.2：≥5/7 为一致机制，3–4/7 为条件性机制，"
-        "≤2/7 为不支持。",
+        "输出解释率 ≥0.8。跨 setting 判定按 §6.2，并按实际生效 scope "
+        f"（n={n_settings}）按多数边界折算："
+        f"≥{consistent_at}/{n_settings} 为一致机制，"
+        f"{conditional_at}–{consistent_at - 1}/{n_settings} 为条件性机制，"
+        f"≤{conditional_at - 1}/{n_settings} 为不支持。"
+        + (
+            ""
+            if n_settings == 7
+            else f"注：本轮实际生效 {n_settings} 个 setting（原计划 7 个），"
+            "被排除的 setting 不参与裁定。"
+        ),
     )
     return tables
 

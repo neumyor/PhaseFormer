@@ -532,10 +532,21 @@ class CenteredMoments:
     n: int
 
     def whitened(self) -> np.ndarray:
-        """``C^+^{1/2}`` on the support of ``C`` (shape ``(L, L)``)."""
-        values, vectors = np.linalg.eigh(0.5 * (self.cov + self.cov.T))
-        keep = values > max(values.max(), 1e-300) * 1e-10
-        return (vectors[:, keep] / np.sqrt(values[keep])) @ vectors[:, keep].T
+        """``C^+^{1/2}`` on the support of ``C`` (shape ``(L, L)``).
+
+        The eigendecomposition is cached on the instance: the whitening depends
+        only on ``cov``, but the semantic attribution evaluates it once per
+        template and per canonical direction (hundreds of times per checkpoint),
+        so recomputing a 720x720 ``eigh`` each time dominated the Stage 1/2
+        runtime.  A copied moments object simply recomputes it.
+        """
+        cached = getattr(self, "_whitening", None)
+        if cached is None:
+            values, vectors = np.linalg.eigh(0.5 * (self.cov + self.cov.T))
+            keep = values > max(values.max(), 1e-300) * 1e-10
+            cached = (vectors[:, keep] / np.sqrt(values[keep])) @ vectors[:, keep].T
+            object.__setattr__(self, "_whitening", cached)
+        return cached
 
     def whiten(self, vector: np.ndarray) -> np.ndarray:
         return self.whitened() @ np.asarray(vector, dtype=np.float64)

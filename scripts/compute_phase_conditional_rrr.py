@@ -57,6 +57,10 @@ from scripts.lowrank_checkpoint_model import (  # noqa: E402
 )
 
 RIDGE = 1e-6
+# Row block for the Gram-matrix accumulation.  The full design on
+# Electricity-336 is ~5.6e6 rows x 720 float64 (32 GiB); accumulating in blocks
+# keeps the transients small without changing the (associative) sums.
+ACCUMULATION_BLOCK = 131_072
 
 
 def main() -> None:
@@ -144,8 +148,7 @@ def main() -> None:
             model.to(device).eval()
             set_seed(25601)
             collection = {
-                "z": [], "delta": [], "target": [], "weight": [], "residual_norm": [],
-                "phase_norm": [],
+                "z": [], "delta": [], "target": [], "weight": [],
             }
             with torch.inference_mode():
                 for batch_index, batch in enumerate(train_loader):
@@ -189,30 +192,54 @@ def main() -> None:
                             x.shape[0], conditional_target.shape[1], gate.shape[-1]
                         ).double().cpu().numpy()
                     )
-                    collection["residual_norm"].append(
-                        records["residual_norm"].double().cpu().numpy()
-                    )
-                    collection["phase_norm"].append(
-                        phase_norm.double().cpu().numpy()
-                    )
                     del independent_target
             stacked = {
                 key: np.concatenate(value, axis=0).reshape(-1, value[0].shape[-1])
                 for key, value in collection.items()
             }
             del collection
+            # ``z`` is ``(N, C, lookback)`` once concatenated, but the RRR design
+            # is per (sample, channel) row with the *lookback* dimension as the
+            # regressor, so its last axis has to become the 720-wide lookback
+            # axis rather than the channel axis that ``shape[-1]`` produced.
             z_flat = stacked["z"].reshape(-1, 720)
             delta_flat = stacked["delta"]
             target_flat = stacked["target"].reshape(-1, horizon)
             weight_flat = stacked["weight"].reshape(-1, horizon)[:, 0]
-            accumulators["zz"] += z_flat.T @ z_flat
-            accumulators["zy"] += z_flat.T @ target_flat
-            accumulators["yy"] += target_flat.T @ target_flat
-            weighted_z = z_flat * weight_flat[:, None]
-            accumulators["wzz"] += weighted_z.T @ z_flat
-            accumulators["wzy"] += weighted_z.T @ target_flat
-            accumulators["wyy"] += (target_flat * weight_flat[:, None]).T @ target_flat
-            accumulators["count"] += z_flat.shape[0]
+            del stacked
+            # The Gram accumulators are sums over training rows, so they are
+            # evaluated in row blocks instead of as one product of the full
+            # ``(rows, 720)`` design.  On Electricity-336 the full design is
+            # 5.6e6 x 720 float64 (32 GiB), and materialising ``weighted_z``
+            # beside it exhausted memory; blockwise accumulation is exact
+            # (each block contributes its own partial sum) and bounds the
+            # transient to one block.
+            rows_total = z_flat.shape[0]
+            residual_square_sum = 0.0
+            for start in range(0, rows_total, ACCUMULATION_BLOCK):
+                stop = min(start + ACCUMULATION_BLOCK, rows_total)
+                z_block = np.ascontiguousarray(z_flat[start:stop])
+                target_block = np.ascontiguousarray(target_flat[start:stop])
+                weight_block = np.ascontiguousarray(weight_flat[start:stop])
+                accumulators["zz"] += z_block.T @ z_block
+                accumulators["zy"] += z_block.T @ target_block
+                accumulators["yy"] += target_block.T @ target_block
+                accumulators["wzz"] += (z_block * weight_block[:, None]).T @ z_block
+                accumulators["wzy"] += (z_block * weight_block[:, None]).T @ target_block
+                accumulators["wyy"] += (
+                    target_block * weight_block[:, None]
+                ).T @ target_block
+                accumulators["count"] += z_block.shape[0]
+                if delta_flat is not None:
+                    delta_block = delta_flat[start:stop]
+                    residual_square_sum += float(
+                        np.einsum("ij,ij->", delta_block, delta_block)
+                    )
+                    del delta_block
+                del z_block, target_block, weight_block
+            # ``residual_trace`` is ``np.mean(delta**2)``, i.e. normalised by the
+            # *element* count (rows x latent rank), not by the row count.
+            residual_trace = residual_square_sum / max(delta_flat.size, 1)
 
             encoder_weight = model.weak_period_residual.encoder.weight.detach()
             decoder_weight = model.weak_period_residual.decoder.weight.detach()
@@ -230,9 +257,7 @@ def main() -> None:
                 "effective_singular_values": singular,
                 "decoder_weight": decoder_weight.double().cpu().numpy(),
                 "encoder_weight": encoder_weight.double().cpu().numpy(),
-                "residual_trace": float(
-                    np.mean(delta_flat ** 2)
-                ),
+                "residual_trace": float(residual_trace),
                 "sample_count": int(z_flat.shape[0]),
             }
             print(
@@ -322,17 +347,37 @@ def main() -> None:
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
+    """Merge ``rows`` into ``path``, replacing rows with the same checkpoint key.
+
+    Stage 3 is run one setting at a time (each setting is a separate GPU job), so
+    a plain overwrite would leave only the last setting in the table.  The rows
+    are keyed by ``(setting, seed, cell)``; a re-run of one setting refreshes only
+    its own rows and the other settings are preserved.
+    """
     if not rows:
         return
-    fields: list[str] = []
+    key = lambda row: (  # noqa: E731
+        row.get("setting", ""),
+        str(row.get("seed", "")),
+        row.get("cell", ""),
+    )
+    merged: dict[tuple, dict] = {}
+    if path.is_file():
+        with path.open(newline="") as handle:
+            for existing in csv.DictReader(handle):
+                merged[key(existing)] = existing
     for row in rows:
-        for key in row:
-            if key not in fields:
-                fields.append(key)
+        merged[key(row)] = row
+    ordered = [merged[k] for k in sorted(merged, key=str)]
+    fields: list[str] = []
+    for row in ordered:
+        for name in row:
+            if name not in fields:
+                fields.append(name)
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(ordered)
 
 
 if __name__ == "__main__":

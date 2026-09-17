@@ -76,6 +76,11 @@ def to_float(value, default=float("nan")) -> float:
         return default
 
 
+def _is_true(value) -> bool:
+    """Boolean column read from a CSV cell."""
+    return str(value).strip().lower() in {"true", "1", "yes"}
+
+
 def write_markdown_table(
     path: Path, header: list[str], rows: list[list[str]], title: str, note: str = ""
 ) -> None:
@@ -93,10 +98,19 @@ def write_markdown_table(
 def table1(inventory: list[dict], audit: list[dict], out: Path) -> list[dict]:
     """checkpoint audit: per setting x rank cell."""
     audit_by_key = {
-        (row["setting"], row["seed"], row["cell"]): row for row in audit
+        # ``seed`` is read from a CSV (string) and from the inventory (also a
+        # string here); it is normalised to ``int`` on both sides because the
+        # lookup below compares it numerically and a string/int mismatch silently
+        # emptied every record.
+        (row["setting"], int(row["seed"]), row["cell"]): row for row in audit
     }
     groups: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     for row in inventory:
+        # The diagnostic ``q=1`` cells are outside the audited scope; they carry
+        # no audit row, so including them would render an unaudited cell as a
+        # spurious ``FAIL`` and make the QC column unreadable.
+        if _is_true(row.get("is_diagnostic_only")):
+            continue
         groups[(row["setting"], row["cell"], row["rank"])].append(row)
     rendered = []
     summary = []
@@ -269,6 +283,20 @@ def table5(alignment: list[dict], out: Path) -> None:
     )
 
 
+def delta_branch_mse(row: dict) -> float:
+    """Branch degradation versus the checkpoint, derived from the row itself.
+
+    ``intervention_results.csv`` records ``delta_*_vs_checkpoint`` for the fused
+    MSE/MAE but not for the branch, while ``baseline_branch_mse`` and
+    ``branch_mse`` are both present.  The delta is their difference by
+    definition, so it is derived here instead of re-running the whole arm sweep
+    for a purely arithmetic column.
+    """
+    if "delta_branch_mse_vs_checkpoint" in row:
+        return to_float(row["delta_branch_mse_vs_checkpoint"])
+    return to_float(row["branch_mse"]) - to_float(row["baseline_branch_mse"])
+
+
 def table6(interventions: list[dict], out: Path) -> None:
     rows = []
     for row in interventions:
@@ -278,7 +306,7 @@ def table6(interventions: list[dict], out: Path) -> None:
                 f"{row['cell']} (r={row['rank']})",
                 row["arm"],
                 f"{to_float(row['correction_reconstruction_r2']):.4f}",
-                f"{to_float(row['delta_branch_mse_vs_checkpoint']):+.6f}",
+                f"{delta_branch_mse(row):+.6f}",
                 f"{to_float(row['delta_fused_mse_vs_checkpoint']):+.6f}",
                 f"{to_float(row['delta_fused_mae_vs_checkpoint']):+.6f}",
                 (
@@ -701,7 +729,7 @@ def render_report(
                     setting,
                     arm,
                     f"{np.mean([to_float(item['delta_fused_mse_vs_checkpoint']) for item in entries]):+.6f}",
-                    f"{np.mean([to_float(item['delta_branch_mse_vs_checkpoint']) for item in entries]):+.6f}",
+                    f"{np.mean([delta_branch_mse(item) for item in entries]):+.6f}",
                     f"{np.mean([to_float(item['correction_reconstruction_r2']) for item in entries]):.4f}",
                 ]
             )

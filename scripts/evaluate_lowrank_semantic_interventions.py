@@ -33,7 +33,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -555,6 +557,14 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
 
+    # ``--full-audit-math`` wins over ``--skip-audit-math``, so both flags have a
+    # defined meaning instead of the second one silently doing nothing.
+    args.skip_audit_math = bool(args.skip_audit_math and not args.full_audit_math)
+    # Whether the in-model float64 head evaluation runs.  The model only creates
+    # ``head.last_audit`` when this is true, so every consumer below is guarded by
+    # this same flag rather than reading an attribute that may not exist.
+    run_audit_math = not args.skip_audit_math
+
     repo_root = Path(args.repo_root).resolve()
     output_dir = repo_root / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -760,50 +770,51 @@ def main() -> None:
                     bias = torch.as_tensor(
                         decoder_bias, dtype=hidden.dtype, device=hidden.device
                     )
-                    audit_math_values = head.last_audit
-                    decoder_weight64 = torch.as_tensor(
-                        decoder_weight, dtype=torch.float64, device=device
-                    )
-                    # 1) The plan's effective-map equivalence, in float64:
-                    #    decoder(encoder(pool(z))) must equal ``M z + c`` on the
-                    #    head's own private input.
-                    equivalence_max = max(
-                        equivalence_max,
-                        float(
-                            (
-                                audit_math_values["hidden64"] @ decoder_weight64.T
-                                - audit_math_values["map64"]
-                            )
-                            .abs()
-                            .max()
-                        ),
-                    )
-                    # 2) The head's full decomposition: the normalized residual
-                    #    the model actually wrote equals the mapped hidden state
-                    #    plus the mapped encoder bias, the decoder bias and the
-                    #    persistence anchor.
-                    decomposition_max = max(
-                        decomposition_max,
-                        float(
-                            (
-                                audit_math_values["head64"]
-                                - records["residual_norm"].double()
-                            )
-                            .abs()
-                            .max()
-                        ),
-                    )
-                    tf32_max = max(
-                        tf32_max,
-                        float(
-                            (
-                                audit_math_values["fp32_head"].double()
-                                - audit_math_values["head64"]
-                            )
-                            .abs()
-                            .max()
-                        ),
-                    )
+                    if run_audit_math:
+                        audit_math_values = head.last_audit
+                        decoder_weight64 = torch.as_tensor(
+                            decoder_weight, dtype=torch.float64, device=device
+                        )
+                        # 1) The plan's effective-map equivalence, in float64:
+                        #    decoder(encoder(pool(z))) must equal ``M z + c`` on the
+                        #    head's own private input.
+                        equivalence_max = max(
+                            equivalence_max,
+                            float(
+                                (
+                                    audit_math_values["hidden64"] @ decoder_weight64.T
+                                    - audit_math_values["map64"]
+                                )
+                                .abs()
+                                .max()
+                            ),
+                        )
+                        # 2) The head's full decomposition: the normalized residual
+                        #    the model actually wrote equals the mapped hidden state
+                        #    plus the mapped encoder bias, the decoder bias and the
+                        #    persistence anchor.
+                        decomposition_max = max(
+                            decomposition_max,
+                            float(
+                                (
+                                    audit_math_values["head64"]
+                                    - records["residual_norm"].double()
+                                )
+                                .abs()
+                                .max()
+                            ),
+                        )
+                        tf32_max = max(
+                            tf32_max,
+                            float(
+                                (
+                                    audit_math_values["fp32_head"].double()
+                                    - audit_math_values["head64"]
+                                )
+                                .abs()
+                                .max()
+                            ),
+                        )
                     identity_max = max(
                         identity_max, float((patched_out - clean_out).abs().max())
                     )
@@ -841,9 +852,13 @@ def main() -> None:
                     )
                     chunks["fused"].append(patched_out.double().cpu().numpy())
                     if args.debug_checks:
+                        fp64_equiv = "skipped"
+                        if run_audit_math:
+                            fp64_equiv = (
+                                f"{float((audit_math_values['hidden64'] @ torch.as_tensor(decoder_weight, dtype=torch.float64, device=device).T - audit_math_values['map64']).abs().max()):.3e}"
+                            )
                         print(
-                            "  [check] fp64 equiv "
-                            f"{float((audit_math_values['hidden64'] @ torch.as_tensor(decoder_weight, dtype=torch.float64, device=device).T - audit_math_values['map64']).abs().max()):.3e} "
+                            f"  [check] fp64 equiv {fp64_equiv} "
                             f"decomposition {decomposition_max:.3e} "
                             f"tf32 deviation {tf32_max:.3e} "
                             f"| residual_norm absmax "
@@ -902,17 +917,31 @@ def main() -> None:
             "rank": row["rank"],
             "rank_from_checkpoint": rank_from_checkpoint,
             "rank_matches_inventory": bool(rank_from_checkpoint == int(row["rank"])),
+            # When ``--skip-audit-math`` is in force the in-model float64 head
+            # evaluation never ran, so these numbers are not measurements and the
+            # corresponding ``*_pass`` flags must not be recorded as True.  They
+            # are written as NaN and the pass flags as False; Phase 2 re-derives
+            # the skipped equivalence from the cached features.
+            "audit_math_ran": bool(run_audit_math),
             "pool_factor": int(head.pool_factor),
             "pooled_len": int(head.pooled_len),
             "pool_factor_is_one": bool(int(head.pool_factor) == 1),
             "smooth_ratio": float(head.smooth_ratio),
             "smooth_ratio_is_zero": bool(float(head.smooth_ratio) == 0.0),
-            "effective_map_equivalence_max_abs": equivalence_max,
-            "equivalence_pass": bool(equivalence_max < 1e-6),
-            "head_decomposition_max_abs": decomposition_max,
-            "head_decomposition_pass": bool(decomposition_max < 1e-6),
+            "effective_map_equivalence_max_abs": (
+                equivalence_max if run_audit_math else float("nan")
+            ),
+            "equivalence_pass": bool(run_audit_math and equivalence_max < 1e-6),
+            "head_decomposition_max_abs": (
+                decomposition_max if run_audit_math else float("nan")
+            ),
+            "head_decomposition_pass": bool(
+                run_audit_math and decomposition_max < 1e-6
+            ),
             "anchor_horizon_spread_max_abs": anchor_spread,
-            "fp32_tf32_deviation_max_abs": tf32_max,
+            "fp32_tf32_deviation_max_abs": (
+                tf32_max if run_audit_math else float("nan")
+            ),
             "rev_in_denormalization_max_abs": denormalization_error,
             "intervention_identity_max_abs": identity_max,
             "intervention_identity_pass": bool(identity_max < 1e-9),
@@ -927,10 +956,18 @@ def main() -> None:
             "run_val_mae": row["selected_val_mae"],
         }
         audit_rows.append(audit)
+        if run_audit_math:
+            audit_note = (
+                f"equiv={equivalence_max:.3e} identity={identity_max:.3e} "
+                f"decomp={decomposition_max:.3e}"
+            )
+        else:
+            audit_note = (
+                f"head-math=skipped identity={identity_max:.3e}"
+            )
         print(
             f"[audit] {setting} seed={seed} {cell} rank={rank_from_checkpoint} "
-            f"equiv={equivalence_max:.3e} identity={identity_max:.3e} "
-            f"decomp={decomposition_max:.3e} n={audit['validation_samples']}",
+            f"{audit_note} n={audit['validation_samples']}",
             flush=True,
         )
         if args.debug_checks:
@@ -1024,17 +1061,47 @@ def to_float_or(value, default: float) -> float:
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
+    """Merge ``rows`` into ``path`` under an exclusive lock.
+
+    The sweep is sharded across GPUs, and every shard writes the same audit and
+    intervention tables, so a plain overwrite would leave only whichever shard
+    finished last.  Rows are keyed by ``(setting, seed, cell)``; a re-run of a
+    shard refreshes only its own rows and the other shards are preserved.  The
+    lock keeps concurrent shards from clobbering one another's merge.
+    """
     if not rows:
         return
-    fields: list[str] = []
-    for row in rows:
-        for key in row:
-            if key not in fields:
-                fields.append(key)
-    with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(rows)
+    key = lambda row: (  # noqa: E731
+        row.get("setting", ""),
+        str(row.get("seed", "")),
+        row.get("cell", ""),
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    with lock_path.open("w") as lock_handle:
+        fcntl.flock(lock_handle, fcntl.LOCK_EX)
+        try:
+            merged: dict[tuple, dict] = {}
+            if path.is_file():
+                with path.open(newline="") as handle:
+                    for existing in csv.DictReader(handle):
+                        merged[key(existing)] = existing
+            for row in rows:
+                merged[key(row)] = row
+            ordered = [merged[k] for k in sorted(merged, key=str)]
+            fields: list[str] = []
+            for row in ordered:
+                for name in row:
+                    if name not in fields:
+                        fields.append(name)
+            temporary = path.with_suffix(path.suffix + f".tmp{os.getpid()}")
+            with temporary.open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(ordered)
+            os.replace(temporary, path)
+        finally:
+            fcntl.flock(lock_handle, fcntl.LOCK_UN)
 
 
 if __name__ == "__main__":
