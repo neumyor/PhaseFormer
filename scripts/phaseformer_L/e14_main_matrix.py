@@ -346,7 +346,9 @@ def build_cells(args, reuse) -> list:
             for horizon in horizons:
                 for seed in seeds:
                     key = (dataset, horizon, seed)
-                    source = None if args.no_reuse else reuse[arm].get(key)
+                    # Arms absent from REUSE_SCOPE (l_rcrf, a1) have no reusable
+                    # cell at all, so their index is empty by construction.
+                    source = None if args.no_reuse else reuse.get(arm, {}).get(key)
                     cells.append({
                         "arm": arm,
                         "dataset": dataset,

@@ -1175,6 +1175,11 @@ def main(argv=None) -> int:
         if channel_cap < channels_available:
             train_seg = train_seg[:, :channel_cap]
             val_seg = val_seg[:, :channel_cap]
+            print(
+                f"[warn] {dataset}: --max-channels {channel_cap} < {channels_available}; "
+                "this is a debug cap and changes every moment and metric",
+                flush=True,
+            )
         if not args.quiet:
             print(
                 f"[load] {dataset}: {meta['rows_in_csv']} rows in CSV, {meta['rows_read']} "
