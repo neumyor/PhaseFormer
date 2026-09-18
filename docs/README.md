@@ -170,6 +170,10 @@
   7 个 setting 中只有 Weather-192 的被选 Cone-4 同时改善 MSE（-1.594%）与 MAE（-1.000%）
   且 3/3 seed 一致。研究主结论为**不支持“加宽邻域是普遍改进”**，仅保留
   Weather-192 的条件性信号。本实验明确披露为 test-set selection。
+- **期刊扩展 MiniPaper 草稿（2026-09-18）**：
+  [`PhaseFormer_L_minipaper.md`](PhaseFormer_L_minipaper.md) —— 把上述整条链收束为
+  "相位 token 化看不见的部分是一维的跨周期电平漂移"这一主张：Intro/Methodology 完整，
+  Experiments 为预注册空表；§4.1 的先导证据全部标注 test-exposed、仅作动机。
 - **下一阶段计划（2026-09-16，待实现）**：
   [`PhaseFormer_lowrank_checkpoint_information_analysis_plan.md`](PhaseFormer_lowrank_checkpoint_information_analysis_plan.md)
   —— 直接分析既有三 seed 低秩 checkpoint 的有效映射，以规范 SVD 消除隐藏维旋转歧义，

@@ -2892,3 +2892,16 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   时本计划的 §11 执行记录就是这样被静默删掉的（已从 git 恢复）。改为要求真实标题边界
   （去掉 `\Z`），并验证重复运行现在输出逐字节相同且 §11 保留。
 - 未重训模型、未重跑特征提取；两处修复都只在缓存与已存产物上重放。GPU 仍只用 0–5 号。
+
+## 2026-09-18 — 新增期刊扩展 MiniPaper 草稿（PhaseFormer-L）
+
+- 新增 `docs/PhaseFormer_L_minipaper.md`：以 PhaseFormer 原文"假设周期局部平稳、非平稳性留作未来工作"
+  为出发点，提出"相位 token 化看不见的部分是一维的跨周期电平漂移"这一主张。Introduction 与
+  Methodology（探针、闭式降秩分析、训练头规范分解与私有输入干预、PhaseFormer-L 最小实例）为完整稿；
+  §2 给出命题 1–2 的证明路线（未形式化完成）；Experiments 为预注册空表（28 setting × 3 seed 主表、
+  维数度量、解剖与干预、条件性学习、负对照、预测力检验）。
+- §4.1 单独收录既有先导证据，全部标注 test-exposed、仅作动机；数字逐项引用既有登记文档，未新增任何
+  实验、未读取 test、未修改任何既有结论口径。
+- 新增对照需求两项：随机 RRR 子空间 drop（区分语义有效 vs 方向数量有效）、冻结条件性 RRR 方向
+  （区分冻结本身有害 vs 独立目标错位）。
+- `docs/README.md` 机制消融节增加该文档的指针。
