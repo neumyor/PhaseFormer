@@ -127,7 +127,7 @@ COST_HINT = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stage", choices=["plan", "a"], default="plan")
+    parser.add_argument("--stage", choices=["plan", "smoke", "a"], default="plan")
     parser.add_argument("--output-root", default="research_runs/phaseformer_L_e14_main_v1")
     parser.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
     parser.add_argument("--arms", default=",".join(MAIN_ARMS),
@@ -143,7 +143,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-reuse", action="store_true",
                         help="train every cell (protocol check / fallback)")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--smoke-epochs", type=int, default=1,
+                        help="epochs for --stage smoke")
     return parser.parse_args()
+
+
+# Smoke coverage: every arm on a cheap dataset, on the widest channel count
+# below Traffic, and on the Traffic appendix itself.  The point is to have the
+# runner accept each arm's exact command line (mechanism + overrides + rank)
+# before a 300-cell matrix is launched.
+SMOKE_BLOCK = (("ETTh2", 96), ("Electricity", 336), ("Traffic", 96))
 
 
 def parse_list(raw, cast=str):
@@ -380,7 +389,8 @@ def build_reuse() -> tuple[dict, dict, list, dict]:
 # --------------------------------------------------------------------------
 
 def arm_command(arm: str, dataset: str, horizon: int, seed: int,
-                output_root: str, num_workers: int) -> list:
+                output_root: str, num_workers: int,
+                max_epochs: int = MAX_EPOCHS) -> list:
     """Build the runner argv (without the interpreter) for one new cell."""
     spec = ARMS[arm]
     overrides: dict = {}
@@ -392,7 +402,7 @@ def arm_command(arm: str, dataset: str, horizon: int, seed: int,
         "--stage", "confirm",
         "--lookback", str(LOOKBACK),
         "--period", str(PERIOD),
-        "--max-epochs", str(MAX_EPOCHS),
+        "--max-epochs", str(max_epochs),
         "--seed", str(seed),
         "--loss", LOSS,
         "--percent", str(PERCENT),
@@ -455,7 +465,8 @@ def cell_key(cell) -> str:
     return f"{cell['arm']}__{cell['dataset']}-{cell['horizon']}-s{cell['seed']}"
 
 
-def dispatch(cells, gpus, output_root, num_workers, retries, poll):
+def dispatch(cells, gpus, output_root, num_workers, retries, poll,
+             max_epochs: int = MAX_EPOCHS):
     pending = [c for c in cells if c["status"] == "new"]
     active: dict = {}
     attempts: dict = {}
@@ -470,7 +481,7 @@ def dispatch(cells, gpus, output_root, num_workers, retries, poll):
             key = cell_key(cell)
             attempts[key] = attempts.get(key, 0) + 1
             argv = arm_command(cell["arm"], cell["dataset"], cell["horizon"],
-                               cell["seed"], output_root, num_workers)
+                               cell["seed"], output_root, num_workers, max_epochs)
             env = dict(os.environ)
             env["CUDA_VISIBLE_DEVICES"] = str(gpu)
             log = open(log_dir / f"{key}.log", "w")
@@ -593,6 +604,27 @@ def main() -> None:
         for cell in cells[:20]:
             print(json.dumps({"cell": cell_key(cell), "status": cell["status"]}))
         print(json.dumps({"event": "plan_only", "cells": total}))
+        return
+
+    if args.stage == "smoke":
+        arms = parse_list(args.arms) + [a for a in OPTIONAL_ARMS
+                                        if a not in parse_list(args.arms)]
+        smoke_cells = [
+            {"arm": arm, "dataset": ds, "horizon": hz, "seed": SEEDS[0],
+             "status": "new", "source": None}
+            for arm in arms for ds, hz in SMOKE_BLOCK
+        ]
+        smoke_root = f"{args.output_root}_smoke"
+        print(json.dumps({"event": "smoke_start", "cells": len(smoke_cells),
+                          "arms": arms, "block": [f"{d}-{h}" for d, h in SMOKE_BLOCK],
+                          "epochs": args.smoke_epochs}))
+        done, bad = dispatch(smoke_cells, manifest["gpus"], smoke_root,
+                             args.num_workers, args.retries, args.poll_seconds,
+                             max_epochs=args.smoke_epochs)
+        print(json.dumps({"event": "smoke_finished", "ok": len(done),
+                          "failed": bad}, ensure_ascii=False))
+        if bad:
+            raise SystemExit(f"smoke test failed: {bad}")
         return
 
     completed, failed = dispatch(cells, manifest["gpus"], args.output_root,
