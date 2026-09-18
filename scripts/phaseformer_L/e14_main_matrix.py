@@ -221,7 +221,83 @@ def _arm_match(config, arm: str) -> bool:
     return int(hyper.get("weak_period_residual_pool_factor", 1) or 1) == 1
 
 
-def resolve_reuse(arm: str, wanted: set) -> tuple[dict, list]:
+# E8 ran a deliberately staged protocol: training runs were launched WITHOUT
+# ``--evaluate-test`` and the single test read happened afterwards, so their own
+# ``metrics.csv`` has empty ``test_mse``/``test_mae`` columns and the audited
+# numbers live in the experiment's summary CSV instead.  A reused cell may
+# therefore draw its test evidence from such a registered file, provided the
+# record carries an accepted read status and a small validation-reproduction
+# gap.  Values checked on 2026-09-18: 18/18 phase_only cells, status "read",
+# max val_relative_difference 3.75e-05.
+EXTERNAL_TEST_EVIDENCE = (
+    {
+        "path": "research_runs/top2_direction_retention_v1/results.csv",
+        "protocol": "top2-direction-retention-v1",
+        "arm_column": "arm",
+        "arm_values": {"phase_only": "phase_only", "l_main": "direct_nlinear"},
+        "status_column": "test_read_status",
+        "status_ok": ("read", "reused"),
+        "val_column": "val_relative_difference",
+        "val_tolerance": 1e-3,
+    },
+)
+
+
+def load_external_test_evidence() -> tuple[dict, list]:
+    """Index externally registered single-test-read results.
+
+    Returns ``{(arm, dataset, horizon, seed): {...}}`` plus a list of rows that
+    were present but rejected, so the audit trail is explicit.
+    """
+    index: dict = {}
+    rejected: list = []
+    for spec in EXTERNAL_TEST_EVIDENCE:
+        path = ROOT / spec["path"]
+        if not path.exists():
+            continue
+        with path.open() as handle:
+            for row in csv.DictReader(handle):
+                arm_value = str(row.get(spec["arm_column"], "")).strip()
+                arms = [a for a, v in spec["arm_values"].items() if v == arm_value]
+                if not arms:
+                    continue
+                if not str(row.get("test_mse", "")).strip():
+                    rejected.append({"source": spec["path"], "reason": "empty test_mse",
+                                     "row": {k: row.get(k) for k in
+                                             ("dataset", "horizon", "seed", arm_value and spec["arm_column"])}})
+                    continue
+                status = str(row.get(spec["status_column"], "")).strip()
+                if status not in spec["status_ok"]:
+                    rejected.append({"source": spec["path"],
+                                     "reason": f"test_read_status={status!r}",
+                                     "row": {k: row.get(k) for k in ("dataset", "horizon", "seed")}})
+                    continue
+                raw_val = str(row.get(spec["val_column"], "")).strip()
+                if raw_val:
+                    try:
+                        if float(raw_val) > spec["val_tolerance"]:
+                            rejected.append({
+                                "source": spec["path"],
+                                "reason": f"val_relative_difference {raw_val} > "
+                                          f"{spec['val_tolerance']}",
+                                "row": {k: row.get(k) for k in ("dataset", "horizon", "seed")},
+                            })
+                            continue
+                    except ValueError:
+                        continue
+                key = (arms[0], row["dataset"], int(row["horizon"]), int(row["seed"]))
+                index[key] = {
+                    "evidence": spec["path"],
+                    "protocol": spec["protocol"],
+                    "status": status,
+                    "test_mse": row["test_mse"],
+                    "test_mae": row.get("test_mae"),
+                    "val_relative_difference": raw_val or None,
+                }
+    return index, rejected
+
+
+def resolve_reuse(arm: str, wanted: set, evidence: dict) -> tuple[dict, list]:
     """Find one audited run dir per wanted (dataset, horizon, seed) cell.
 
     Returns ``(index, rejected)`` where ``index`` maps the cell tuple to
@@ -256,9 +332,14 @@ def resolve_reuse(arm: str, wanted: set) -> tuple[dict, list]:
                 rejected.append({"run_dir": str(run_dir.relative_to(ROOT)),
                                  "failures": failures})
                 continue
-            if not _has_test_metrics(run_dir):
-                rejected.append({"run_dir": str(run_dir.relative_to(ROOT)),
-                                 "failures": ["no test metrics recorded"]})
+            inline_test = _has_test_metrics(run_dir)
+            external = evidence.get((arm, key[0], key[1], key[2]))
+            if not inline_test and not external:
+                rejected.append({
+                    "run_dir": str(run_dir.relative_to(ROOT)),
+                    "failures": ["no test metrics recorded inline or in a "
+                                 "registered external evidence file"],
+                })
                 continue
             if key in index:
                 continue  # keep the first whitelisted root's match; deterministic
@@ -266,18 +347,23 @@ def resolve_reuse(arm: str, wanted: set) -> tuple[dict, list]:
                 "run_dir": str(run_dir.relative_to(ROOT)),
                 "config_hash": config.get("config_hash"),
                 "root": root_rel,
+                "test_evidence": "inline metrics.csv" if inline_test else external,
             }
     return index, rejected
 
 
-def build_reuse() -> tuple[dict, dict, list]:
-    """Resolve reuse for every arm.  Returns (per-arm index, summary, rejected)."""
+def build_reuse() -> tuple[dict, dict, list, dict]:
+    """Resolve reuse for every arm.
+
+    Returns ``(per-arm index, summary, rejected, evidence_index)``.
+    """
+    evidence, evidence_rejected = load_external_test_evidence()
     per_arm: dict = {}
     summary: dict = {}
-    rejected: list = []
+    rejected: list = list(evidence_rejected)
     for arm, settings in REUSE_SCOPE.items():
         wanted = {(d, h, s) for (d, h) in settings for s in SEEDS}
-        index, rej = resolve_reuse(arm, wanted)
+        index, rej = resolve_reuse(arm, wanted, evidence)
         per_arm[arm] = index
         missing = sorted(wanted - set(index))
         summary[arm] = {
@@ -286,7 +372,7 @@ def build_reuse() -> tuple[dict, dict, list]:
             "missing": [f"{d}-{h}-s{s}" for d, h, s in missing],
         }
         rejected.extend({"arm": arm, **entry} for entry in rej)
-    return per_arm, summary, rejected
+    return per_arm, summary, rejected, evidence
 
 
 # --------------------------------------------------------------------------
@@ -427,7 +513,7 @@ def main() -> None:
     out_root = ROOT / args.output_root
     out_root.mkdir(parents=True, exist_ok=True)
 
-    reuse, reuse_summary, rejected = build_reuse()
+    reuse, reuse_summary, rejected, evidence = build_reuse()
     cells = build_cells(args, reuse)
 
     total = len(cells)
@@ -449,6 +535,8 @@ def main() -> None:
             "reused_cell_hyperparams": "kept from their own audited Stage-0 freeze (D-2)",
         },
         "reuse_roots_whitelist": list(REUSE_ROOT_WHITELIST),
+        "external_test_evidence_files": [spec["path"] for spec in EXTERNAL_TEST_EVIDENCE],
+        "external_test_evidence_cells": len(evidence),
         "reuse_scope": {arm: [f"{d}-{h}" for d, h in s]
                         for arm, s in REUSE_SCOPE.items()},
         "reuse_summary": reuse_summary,
