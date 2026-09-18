@@ -91,11 +91,40 @@ def main() -> None:
     timestamps = pd.date_range(
         start=START_TIMESTAMP, periods=n_steps, freq="h"
     )
-    out = pd.DataFrame(values, columns=[str(i) for i in range(n_channels)])
+
+    # This repository's multi-variate CSVs name their LAST data column ``OT``:
+    # ``Dataset_Custom_Multi.__read_data__`` unconditionally runs
+    # ``cols.remove(self.target)`` with ``dataset_args.target == "OT"``
+    # (config/base_config.py), then appends the target back last. The sibling
+    # datasets follow the same convention -- resources/all_datasets/electricity/
+    # electricity.csv ends in ``...,319,OT`` and weather/weather.csv ends in
+    # ``...,Tlog (degC),OT`` -- so the released unnamed columns 0..861 are
+    # relabelled with 861 -> OT. With ``features="M"`` every column is still a
+    # model input, so this rename changes no value and no channel count.
+    columns = [str(i) for i in range(n_channels)]
+    columns[-1] = "OT"
+    out = pd.DataFrame(values, columns=columns)
     out.insert(0, "date", timestamps.strftime("%Y-%m-%d %H:%M:%S"))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(args.output, index=False)
+
+    # Re-read what we just wrote and assert the loader contract, so a silent
+    # header mistake fails here instead of inside a GPU smoke run.
+    check = pd.read_csv(args.output, nrows=5)
+    expected_header = ["date"] + [str(i) for i in range(n_channels - 1)] + ["OT"]
+    if list(check.columns) != expected_header:
+        raise SystemExit(
+            "written CSV header does not match the required contract: "
+            f"got {list(check.columns)[:4]}...{list(check.columns)[-2:]}"
+        )
+    if "OT" not in check.columns:
+        raise SystemExit("target column 'OT' missing from written CSV")
+    if check.shape[1] != n_channels + 1:
+        raise SystemExit(
+            f"written CSV has {check.shape[1]} columns, expected {n_channels + 1}"
+        )
+    print(f"verify  : header OK ({n_channels} data columns, target='OT' last)")
 
     manifest = {
         "role": "dataset preparation (not an experiment)",
@@ -110,11 +139,14 @@ def main() -> None:
         "end_timestamp": str(timestamps[-1]),
         "value_min": float(values.min()),
         "value_max": float(values.max()),
-        "header": f"date,0..{n_channels - 1}",
+        "header": f"date,0..{n_channels - 2},OT",
         "transformations": [
             "prepend hourly date column (2015-01-01 00:00, 17544 steps)",
-            f"prepend header date,0..{n_channels - 1}",
+            f"prepend header date,0..{n_channels - 2},OT "
+            "(last released column renamed 861 -> OT to match the repository "
+            "convention; required by Dataset_Custom_Multi `cols.remove(target)`)",
         ],
+        "target_column": "OT (last column; renamed from 861, no values changed)",
         "unmodified_fields": "all 862 value columns, row order, and row count",
     }
     if args.manifest:
