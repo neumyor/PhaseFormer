@@ -62,6 +62,39 @@ Weather-192、Electricity-336。其中 `phase_only` 只复用前 6 个（E8 未�
 > `gate_init=0.2`，E8 的 `reuse_audit.json` 已明确 `rejected`（`gate_init=0.2 != 0.5`、
 > `learning_rate=0.001 != 0.0003`），**不得**进入任何复用清单。
 
+### 2.4 复用审计结论（2026-09-18 服务器逐 run 核对）
+
+审计方法：扫描服务器 `research_runs/*/runs/*/config.json`（共 **690** 个 run），
+按 `dataset/horizon/seed` + `mechanism` + `weak_period_residual_head_type` + `rank`
++ `pool_factor` + **无 `weak_residual_projection`**（排除冻结子空间臂）匹配，并要求
+`lookback=720 ∧ loss=huber ∧ max_epochs=30 ∧ percent=100 ∧ period=24 ∧ metrics.csv 存在`。
+
+| 复用目标 | 审计结论 | 判定 |
+|---|---|---|
+| `phase_only`（`no_residual`） | **恰好 6 个 setting × 3 seed**（ETTh2-96/720、ETTm2-96/192、Weather-96/192），主要来自 E8 `top2_direction_retention_v1` | 与 §4.2 的 "24 − 6" **一致** |
+| `weak_residual`+`shared`（`l_main`） | **7 个 setting × 3 seed**（上述 6 个 + Electricity-336），来源 E3 系 `rank_sweep_2_stage1` / `..._multiseed_stage1_20260914_v3|v4|repair_v1` | 与 §4.2 的 "24 − 7" **一致** |
+| `pooled_lowrank` q=1/4（`rank=H/4`） | **7 个 setting × 3 seed** | **一致** |
+| `pooled_lowrank` q=1/8（`rank=H/8`） | **7 个 setting × 3 seed** | **一致** |
+| `rcrf_nlinear_plain`（L-rcrf） | **0 个 run**：服务器全库无此 mechanism 的任何 run | 与 §3.4.1 "已实现为正式对照；D0 validation 有单 seed 记录" 相容（实现存在、无三 seed 产物）→ 需 **24 × 3 全训** |
+| `gold_combo_reliability_s2`（A1） | **0 个 run**：服务器全库无任何 `gold_combo*` mechanism，且 `research_runs/` 下无 `gold_combo_*` 目录 | **与 minipaper 冲突**，见下 |
+
+**审计推翻的两项 minipaper 陈述（须在 §4.2 表注或勘误中处理）**：
+
+1. **A1 的"12 格既有"在本分支不可得。** `gold_combo` 系产物在**本地与服务器两侧都不存在**
+   （本地 `research_runs/` 13 个目录、服务器 43 个目录均无 `gold_combo_*`）。`docs/agent-log.md`
+   把该证据登记在 `research_runs/gold_combo_stability_v1/`、`research_runs/gold_combo_screen_runs/`，
+   两者都不在当前分支的工作副本中。更关键的是，agent-log 1292 行记录的那批 A1 运行使用
+   **MAE loss、batch 256、lr 3e-4**，而 §4.0 规定 **Huber**——即便找回也不满足 §4.0 的"同协议"。
+   因此 §4.2 的 A1 行**不存在可复用格**，"补 H336/720"的前提不成立：该行要么按 §4.0 协议全训
+   （24 × 3 = 72 runs），要么整行留空并披露。
+2. **`phase_only` 的"额外三 seed 格"不可用。** 服务器上 ETTh1-96、ETTm1-96 确实存在三 seed 的
+   `no_residual` 记录，但它们来自 `joint_lowrank_rank_sweep_v1`（E1，已被 E8 审计 rejected）与
+   `joint_pooled_lowrank_phase_a_scratch`（scratch 根目录，非登记实验），**不得**计入复用。
+
+**审计同时确认**：`weak_residual_projection=frozen_subspace` 的 E8 `keep_direction_*` 臂（36 个 run，
+含 18 个 `direct_nlinear` + 18 个冻结臂）必须按投影臂排除，只有其中标记
+`weak_residual_projection_arm=direct_nlinear` 的 18 个是 E3 复用格的镜像，不重复计入。
+
 ### 2.2 E14 主表矩阵明细
 
 | 行 | 配置 | setting 域 | 复用 | 新训 runs |
