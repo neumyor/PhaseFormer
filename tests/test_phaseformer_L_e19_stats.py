@@ -121,6 +121,26 @@ class TestTauHatEstimator(unittest.TestCase):
         )
         self.assertAlmostEqual(float(out["tau_capped_frac"][0]), 1.0, places=6)
 
+    def test_near_unit_rho_is_also_capped(self):
+        # Regression: -1/ln(rho) diverges as rho -> 1 from below, so a nearly
+        # (but not exactly) linear level used to return memory far longer than
+        # the window itself (observed: 2176 steps against a 720-step window).
+        # The cap must therefore be applied to the RESULT, not only to rho >= 1.
+        levels = np.arange(CYCLES, dtype=np.float64) + np.linspace(
+            0.0, 1e-6, CYCLES
+        )
+        out = window_descriptors(make_batch(levels))
+        cycles = float(out["tau_hat_cycles"][0])
+        self.assertLessEqual(cycles, TAU_CYCLE_CAP + 1e-9)
+        self.assertLessEqual(
+            float(out["tau_hat_steps"][0]), TAU_CYCLE_CAP * PERIOD + 1e-6
+        )
+        self.assertGreater(float(out["tau_capped_frac"][0]), 0.0)
+
+    def test_tau_hat_never_exceeds_the_window_in_steps(self):
+        for phi in (0.5, 0.9, 0.99):
+            self.assertLessEqual(_ar1_tau(phi), TAU_CYCLE_CAP + 1e-9)
+
     def test_alternating_level_has_no_memory(self):
         # rho == -1 means the level flips every cycle: no memory at all.
         levels = np.where(np.arange(CYCLES) % 2 == 0, 1.0, -1.0)

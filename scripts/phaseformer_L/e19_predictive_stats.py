@@ -36,9 +36,11 @@ earlier script defines it, so its definition is frozen here, before any §4.2
 result exists:
 
     rho_c       = Pearson corr over k of (l[0:K-1, c], l[1:K, c])
-    tau_c       = -1 / ln(rho_c)      if 0 < rho_c < 1
+    tau_c      = -1 / ln(rho_c)      if 0 < rho_c < 1
                 = 0                   if rho_c <= 0      (no level memory)
                 = TAU_CYCLE_CAP       if rho_c >= 1      (memory exceeds window)
+    tau_c      = min(tau_c, TAU_CYCLE_CAP)   # applied to the RESULT: a rho of
+                                             # 0.99999 also exceeds the window
     tau_hat     = P * mean_c tau_c                        # expressed in STEPS
 
 The per-window value is then averaged over train windows.  ``tau_hat`` is
@@ -173,8 +175,15 @@ def window_descriptors(batch_x: torch.Tensor) -> dict[str, np.ndarray]:
     ok = np.isfinite(rho) & (rho > 0.0) & (rho < 1.0)
     tau_cycles[ok] = -1.0 / np.log(rho[ok])
     tau_cycles[np.isfinite(rho) & (rho <= 0.0)] = 0.0
-    tau_cycles[np.isfinite(rho) & (rho >= 1.0)] = TAU_CYCLE_CAP
-    capped = np.isfinite(rho) & (rho >= 1.0)
+    # A rho in (1 - eps, 1) is numerically indistinguishable from a perfectly
+    # persistent level but -1/ln(rho) diverges there, so the cap must be applied
+    # to the RESULT, not only to the rho >= 1 branch. Without this the estimator
+    # silently reports memory far longer than the 30-cycle window (observed:
+    # 2176 steps on ETTh2-720 against a 720-step window).
+    tau_cycles[np.isfinite(tau_cycles)] = np.minimum(
+        tau_cycles[np.isfinite(tau_cycles)], TAU_CYCLE_CAP
+    )
+    capped = np.isfinite(tau_cycles) & (tau_cycles >= TAU_CYCLE_CAP)
     valid = np.isfinite(tau_cycles)
     tau_steps = np.where(valid, tau_cycles * PERIOD, np.nan)
 
