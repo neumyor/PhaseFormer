@@ -58,10 +58,22 @@ on purpose:
 * K = 30 is identical for every setting (lookback 720 / period 24), so the bias
   is comparable across settings and does not change the *ranking* of datasets,
   which is all §3.4.3's threshold and §4.7's Spearman rho use it for;
-* the bias shrinks as the true memory grows, so it is monotone-preserving:
+* the bias shrinks in absolute terms as the true memory grows, so it is
+  monotone-preserving.  Measured on synthetic AR(1) levels
+  (``tests/test_phaseformer_L_e19_stats.py::_ar1_tau``, 200 channels x 40
+  windows, cycles):
 
-      phi:  0.1    0.3    0.5    0.7    0.9
-      tau:  ~0.1   ~0.35  ~1.25  ~2.7   ~9.5     (measured, monotone increasing)
+  | phi  | population tau | measured tau_hat | tau_hat / population |
+  |-----:|---:|---:|---:|
+  | 0.1  | 0.434 | 0.352 | 0.81 |
+  | 0.3  | 0.831 | 0.725 | 0.87 |
+  | 0.5  | 1.443 | 1.245 | 0.86 |
+  | 0.7  | 2.804 | 2.169 | 0.77 |
+  | 0.9  | 9.491 | 4.530 | 0.48 |
+
+  The estimate is a faithful *ordinal* instrument on the 0.1-0.7 range that
+  real settings occupy; it compresses strongly-memorable series, so §4.7 must
+  not read ``tau_hat`` as an absolute memory length.
 
 Any correction would be an additional modelling choice that must be frozen
 before use, and §4.7 only requires the quantity to be *defined* and frozen.  The
