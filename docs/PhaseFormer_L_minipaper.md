@@ -4,6 +4,16 @@
 > Experiments 为**预注册空表**，只有 §4.1 的"先导证据"一节引用既有结果，且全部标注 test-exposed。
 > 本文不改变任何既有结论的口径；所有先导数字均可在被引用的登记文档中逐项核对。
 >
+> **执行入口与回写目标**：`docs/PhaseFormer_L_experiment_plan.md`（2026-09-18 登记）——本文 §4 空表的
+> 唯一执行契约与结果回写目标。该文 §4 给出缺口核对结论：**G1–G18 全部确认存在**（既有证据最大只覆盖
+> 7 个 setting，且全部为条件性数字），并列出 6 项登记不一致 D1–D6 待修。
+>
+> **已知待核项（2 项）**：§4.1 表格中"删除子空间后支路自身误差变好 52/72、融合误差变差 72/72
+> （中位 +30.4%）"与"Semantic-only Δfused ≤ +0.0006"**暂无法在本文引用的登记文档中逐项核对**
+> （前者仅见于未跟踪脚本 `scripts/render_lowrank_semantic_readwrite_slide.py` 的硬编码字符串，
+> 后者与执行计划 §11.8.2 的"最大 +0.0027"不一致）。二者须以服务器侧
+> `intervention_results.csv` 复核后统一，详见执行计划 D1/D2；在复核完成前不得对外引用这两项数字。
+>
 > 备选题目：*From Phases to Levels: Completing Phase-Domain Forecasting with a Single Degree of Freedom*；
 > 中文：《相位之外只剩一维：补全相位域时序预测》。
 
@@ -407,6 +417,8 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
 
 ## 6. 关联文档
 
+- **执行入口与结果回写目标**：`PhaseFormer_L_experiment_plan.md`（本文 §4 全部表格的施工图、
+  缺口核对 G1–G18 与登记不一致 D1–D6）
 - 主干与金标准：`PhaseFormer_gold_standard.md`；原文 [arXiv 2510.04134](https://arxiv.org/abs/2510.04134)
 - 探针的增益与不对称：`PhaseFormer_gold_combo_experiment.md`、`PhaseFormer_top5_test_models.md`、
   `PhaseFormer_joint_lowrank_rank_sweep_plan.md`

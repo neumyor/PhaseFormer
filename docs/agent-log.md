@@ -2905,3 +2905,53 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 新增对照需求两项：随机 RRR 子空间 drop（区分语义有效 vs 方向数量有效）、冻结条件性 RRR 方向
   （区分冻结本身有害 vs 独立目标错位）。
 - `docs/README.md` 机制消融节增加该文档的指针。
+
+## 2026-09-18 — 登记 PhaseFormer-L 正式实验计划并核对既有证据缺口
+
+- 新增 `docs/PhaseFormer_L_experiment_plan.md`：把 minipaper §4 的 18 项实验缺口整理为正式实验
+  计划，并**登记为该线的当前执行入口与唯一结果回写契约**（工作包 WP0–WP6、§7 回写契约表、
+  §6 待冻结判定门槛、§8 预算）。本文件不运行任何实验、不读 test、不改既有结论口径。
+- **核对方法（只读）**：通读 `docs/agent-log.md` 全部 151 条条目（2907 行）整理出证据账本 E1–E13；
+  逐项打开 minipaper §4.1 引用的 6 份登记文档核对数字、覆盖范围与协议；在本地 `research_runs/`
+  13 个目录逐产物定位，区分"本地可复核"与"仅服务器"两类证据。
+- **缺口确认结论：G1–G18 全部确认存在**，关键结构性事实三条：①既有证据最大只覆盖 **7 个
+  setting**（且正是 test-set selection 挑出的集合），10 setting 覆盖仅 E1 且限 H∈{96,192} 单 seed，
+  **28 setting × 3 seed 的覆盖在任何既有实验中都不存在**；②**PhaseFormer-L 尚无实现**
+  （`src/models/` 无 §3.4 的 EMA 初始化 + 可靠度门控 rank-1/2 电平通道），§4.2/§4.4/§4.5 联合列/
+  §4.6 行 1 全部依赖它；③全部既有 test 数字均为条件性（E8 是唯一"三 seed + test 一次 + 无选择"，
+  但只有 6 setting）。
+- 若干缺口经核对得到**强化或修正**：
+  - **G10（随机 RRR 子空间对照）为最高优先级且已获文献级确认**：计划 §11.8.2 原文写明
+    "本实验**没有设置**'随机 RRR 子空间'对照"，且 57/57 cell 的 `Semantic-drop` ≡ `PCA-drop`
+    （差值恰 0.000000）、15/72 cell 两个"同维对照"维度不同（如 semantic 36 vs pca 180）。
+  - **G15 修正**：SVD 截断的现状不是 minipaper 所写的仅 Electricity-336；`PhaseFormer_lowrank_mechanism_analysis.md`
+    §3.2 已覆盖 **7 个 setting**（其余 6 个差 1–3%），Electricity-336 是反例（r=10 差 29%）。
+  - **G11（冻结条件-RRR 方向 1）为贡献 4 的关键空白**：E8 只做了独立目标方向（V1/V2）；
+    log 2026-09-16 已明确记录"未设置 phase/gate 冻结或支路独立训练对照，不能在信息不足、
+    联合优化干扰与有限样本泛化之间做唯一归因"，正是该臂要解决的问题。
+  - **G17 确认为完全空白**：28 setting 的电平统计量与 setting 级相关从未计算；E12 是 setting 内
+    样本级相关，量纲不同，不可替代。
+  - **G13 口径待注明**：E10 表 5 的 H1 有 72 行；按"seed 内多数 rank 支持"读法为 5/6 setting
+    3/3 seed（Weather-192 全否、Weather-96 各 seed 为 3/4、2/4、4/4），表注须写明该口径。
+- **发现 6 项登记不一致（D1–D6，非实验缺口，但影响论文可追溯性）**：
+  - **D1（重要）**：minipaper §4.1 第 6 行的"支路自身误差变好 **52/72**、融合误差变差 **72/72**
+    （中位 **+30.4%**）"在其引用的 `PhaseFormer_top2_direction_retention_summary.md` 与计划 §11.8 中
+    **均不存在**；全仓库唯一出现处是**未跟踪脚本** `scripts/render_lowrank_semantic_readwrite_slide.py:270`
+    的硬编码字符串。该行是贡献 4 的核心判据，须从服务器 `intervention_results.csv` 重新导出。
+  - **D2**：minipaper §4.1 的"`Semantic-only` Δfused ≤ **+0.0006**"与计划 §11.8.2 的"最大仅
+    **+0.0027**"矛盾（表 6 中 ETTh2-720 q=1/4 `Semantic-only` Δfused MSE = +0.002665）。
+  - **D3**：minipaper §3.3.3 臂表与执行不一致——表 6 实际 10 臂含 `Semantic8-only`/`Semantic8-drop`，
+    而 `Random-*` **不是**臂（用作 95% 零分布）。
+  - **D4**：§4.1 第 8 行把 SVD 截断现状写成仅 Electricity-336（同 G15）。
+  - **D5**：计划 §11.2 记 `intervention_results.csv`（576 条），与 09-17 修复记录"720 行 = 72 cell
+    × 10 臂"不一致（576 = 72 × 8，疑为修复前计数）。
+  - **D6**：`docs/README.md` 仍写低秩 checkpoint 信息保留计划为"待实现"，实际已于 09-17 完成（已修）。
+- 文档改动：`docs/PhaseFormer_L_experiment_plan.md`（新增）；`docs/README.md` 机制消融节新增
+  "当前执行入口"条目并把该计划的过期状态行更正为已完成（含 scope=6、§11.8 两项遗留对照）；
+  `PhaseFormer_L_minipaper.md` 头部新增执行入口指针与**待核项声明**（D1/D2 复核前不得引用），
+  §6 关联文档加入执行计划。
+- 校验：新计划 11 张 Markdown 表格列数一致性脚本检查通过（0 处不一致），并修掉 1 处单元格内
+  未转义的 `|`（会破坏 GFM 列结构）。未运行任何训练、未读取 test、未修改任何既有数值或结论。
+- 下一步（待用户裁定后执行）：WP0-1 冻结 §4.0 判定门槛（建议 K=14/28 及格线、20/28 强结论、
+  回退上限 R=1.0%）；WP0-2 实现 PhaseFormer-L 与 4 个消融开关；WP0-4 修 D1–D6
+  （D1/D2/D5 需服务器侧产物）。WP1/WP2 训练无关，可并行先做。

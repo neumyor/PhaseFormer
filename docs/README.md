@@ -174,12 +174,20 @@
   [`PhaseFormer_L_minipaper.md`](PhaseFormer_L_minipaper.md) —— 把上述整条链收束为
   "相位 token 化看不见的部分是一维的跨周期电平漂移"这一主张：Intro/Methodology 完整，
   Experiments 为预注册空表；§4.1 的先导证据全部标注 test-exposed、仅作动机。
-- **下一阶段计划（2026-09-16，待实现）**：
+- **当前执行入口：PhaseFormer-L 实验计划（2026-09-18 登记）**：
+  [`PhaseFormer_L_experiment_plan.md`](PhaseFormer_L_experiment_plan.md) —— 该线唯一的执行入口
+  与结果回写契约（工作包 WP0–WP6）。经 `agent-log.md` 全量核对，minipaper §4 声明的 18 项实验
+  缺口（G1–G18）**全部确认存在**，另有 6 项登记不一致（D1–D6）需先修文档；既有证据最大只覆盖
+  7 个 setting 且全部为条件性数字，28 setting × 3 seed 的覆盖在任何既有实验中都不存在。
+  **当前状态：已登记、未执行**（WP0 的判定门槛尚未冻结）。
+- **已完成的低秩 checkpoint 信息保留分析（2026-09-16 规划 → 2026-09-17 执行）**：
   [`PhaseFormer_lowrank_checkpoint_information_analysis_plan.md`](PhaseFormer_lowrank_checkpoint_information_analysis_plan.md)
   —— 直接分析既有三 seed 低秩 checkpoint 的有效映射，以规范 SVD 消除隐藏维旋转歧义，
   比较独立 RRR 与 Phase 条件性 RRR，并通过只作用于残差支路私有输入的
   Semantic-only/Semantic-drop/PCA/Random 干预，回答低秩模型实际保留了哪些信息。本阶段
-  不新增训练、不重新读取 test。
+  不新增训练、不重新读取 test。**结果：72/72 cell 审计通过，裁定为条件性机制（4/6 setting）；
+  Electricity-336 因 Gram 组装内存（13.9 GiB）被排除，实际 scope 为 6 个 setting；遗留两项对照
+  问题（57/57 cell 的 Semantic-drop ≡ PCA-drop、缺随机 RRR 子空间对照）已如实披露于 §11.8。**
 - 已完成的直接前置实验：
   [`PhaseFormer_top2_predictive_direction_retention_plan.md`](PhaseFormer_top2_predictive_direction_retention_plan.md)
   —— NLinear 仅保留 RRR 方向 1 或方向 1+2 的端到端验证，预注册判定为“不支持”。
