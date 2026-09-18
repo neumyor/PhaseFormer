@@ -46,6 +46,27 @@ reported in steps so that it is directly comparable with the learned EMA
 timescale tau = 6..72 reported in minipaper §4.1/§4.7.  The fraction of channels
 saturating the cap is recorded so a degenerate fit cannot pass unnoticed.
 
+Known finite-sample bias (disclosed, not corrected)
+---------------------------------------------------
+``rho_c`` is a lag-1 autocorrelation estimated from only K = 30 cycle levels, so
+it is biased toward zero by roughly ``(1 + 3*rho)/K`` (Kendall/Marriott-Pope for
+an AR(1) with an estimated mean).  Consequently ``tau_hat`` **understates** the
+population level-memory length; on a synthetic AR(1) with phi = 0.5 it returns
+about 1.25 cycles where the population value is 1.44.  This is left uncorrected
+on purpose:
+
+* K = 30 is identical for every setting (lookback 720 / period 24), so the bias
+  is comparable across settings and does not change the *ranking* of datasets,
+  which is all §3.4.3's threshold and §4.7's Spearman rho use it for;
+* the bias shrinks as the true memory grows, so it is monotone-preserving:
+
+      phi:  0.1    0.3    0.5    0.7    0.9
+      tau:  ~0.1   ~0.35  ~1.25  ~2.7   ~9.5     (measured, monotone increasing)
+
+Any correction would be an additional modelling choice that must be frozen
+before use, and §4.7 only requires the quantity to be *defined* and frozen.  The
+bias must be stated in the §4.7 table note.
+
 Usage::
 
     /home/yyk/yyk03/miniconda3/envs/time/bin/python \
