@@ -175,16 +175,18 @@ def window_descriptors(batch_x: torch.Tensor) -> dict[str, np.ndarray]:
     ok = np.isfinite(rho) & (rho > 0.0) & (rho < 1.0)
     tau_cycles[ok] = -1.0 / np.log(rho[ok])
     tau_cycles[np.isfinite(rho) & (rho <= 0.0)] = 0.0
-    # A rho in (1 - eps, 1) is numerically indistinguishable from a perfectly
-    # persistent level but -1/ln(rho) diverges there, so the cap must be applied
-    # to the RESULT, not only to the rho >= 1 branch. Without this the estimator
-    # silently reports memory far longer than the 30-cycle window (observed:
-    # 2176 steps on ETTh2-720 against a 720-step window).
-    tau_cycles[np.isfinite(tau_cycles)] = np.minimum(
-        tau_cycles[np.isfinite(tau_cycles)], TAU_CYCLE_CAP
-    )
-    capped = np.isfinite(tau_cycles) & (tau_cycles >= TAU_CYCLE_CAP)
-    valid = np.isfinite(tau_cycles)
+    # Exactly-unit rho is a perfectly persistent level: -1/ln diverges, so
+    # saturate it explicitly.
+    tau_cycles[np.isfinite(rho) & (rho >= 1.0)] = TAU_CYCLE_CAP
+    # A rho just below 1 is numerically indistinguishable from unit but still
+    # yields an unbounded -1/ln(rho), so the cap must also be applied to the
+    # RESULT. Without this the estimator silently reports memory longer than the
+    # 30-cycle window (observed: 2176 steps on ETTh2-720 against a 720 step
+    # window).
+    finite = np.isfinite(tau_cycles)
+    tau_cycles[finite] = np.minimum(tau_cycles[finite], TAU_CYCLE_CAP)
+    capped = finite & (tau_cycles >= TAU_CYCLE_CAP)
+    valid = finite
     tau_steps = np.where(valid, tau_cycles * PERIOD, np.nan)
 
     return {
