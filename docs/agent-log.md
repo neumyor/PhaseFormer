@@ -2975,3 +2975,27 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   低秩 checkpoint 计划文档表 6 正文。
 - 执行计划 `docs/PhaseFormer_L_experiment_plan.md` 的 WP0-2（实现新头）与 WP3 的 7 变体矩阵（588 runs）
   因此**作废**，已在其 §10 追加记录；WP3 应按 minipaper §4.2 变体行重排。未改任何模型代码、未训练、未读 test。
+
+## 2026-09-18 — 远程 A800 占用清理：按用户指示释放 GPU 6/7
+
+- 背景：清理前远程 8×A800 处于「**GPU 0–5 完全空闲（1 MiB / 0%）、GPU 6–7 被别人启动的推理服务占显存但 0% 利用率**」
+  的状态；PhaseFormer 侧无任何训练/评估进程（最后活动为 09-17 17:52，`lowrank_checkpoint_information_v1`
+  的 renderer 日志）。此前日志中「GPU 6/7 被用户 vLLM 服务占用，未触碰」的约束由本次用户指示解除。
+- 清理前占位方（均为共享账号下的常驻模型服务端点，非训练任务）：
+  1. search-R1 检索服务 `retrieval_server.py`（端口 8000，`CUDA_VISIBLE_DEVICES=6,7`，09-15 17:47 启动）——
+     占 GPU 6 约 18.4 GB、GPU 7 约 17.4 GB（FAISS GPU 索引 + e5 retriever）。
+  2. vLLM `alfworld-rl`（`Alfworld-7B-RL-hf`，端口 8007，`CUDA_VISIBLE_DEVICES=7`，09-17 09:02 启动）——
+     占 GPU 7 约 26.0 GB。
+  3. vLLM `search-rl`（`Search-7B-RL-hf`，端口 8002，启动命令为 `CUDA_VISIBLE_DEVICES=6`，09-15 17:21 启动）——
+     engine 已于 09-17 08:35 退出（`destroy_process_group() was not called before program exit`），worker
+     变 `<defunct>` 僵尸，**不占显存**，仅残留监听端口与进程。
+- 空闲判定依据：上述服务日志 12 s 内零增长、无 ESTABLISHED 客户端连接、alfworld engine 日志为
+  `Running: 0 reqs`。
+- 操作：对每个目标 PID 先用 `/proc/<pid>/cmdline` 做串匹配身份校验（防 PID 复用误杀），再向 setsid 进程组
+  （组首 77956、91040）与启动器 wrapper（77954、91010）发 `SIGTERM`；15 s 宽限后 91040 仍存活，升级
+  `SIGKILL`；随后清理残留 zombie 组（71187/71189/72429）。
+- 验证（清理后）：8/8 张卡均回到 `1 MiB / 0%`，`nvidia-smi --query-compute-apps` 为空，端口 8000/8002/8007
+  均不再监听，账号下无 `vllm`/`retrieval_server` 进程，无 crontab 或 watchdog，20 s 后复查未自动重启。
+- 边界：**未删除任何文件、日志或 checkpoint**（原启动命令仍可从服务器侧对应 nohup 日志还原以便重启）；
+  **未触碰其它用户的任务**（test06 的纯 CPU `botbin` 进程未受影响）。未改任何模型代码、未训练、未读 test。
+- 后续：GPU 0–7 共 8 张卡现已全部可用；单卡任务按 `CUDA_VISIBLE_DEVICES=N` 选卡，启动前先 `nvidia-smi` 确认。
