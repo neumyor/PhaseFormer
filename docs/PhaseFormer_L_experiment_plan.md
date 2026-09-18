@@ -312,3 +312,10 @@ minipaper 主张"相位 token 化看不见的部分本质上是一维的跨周�
 | 日期 | WP | 状态 | 摘要 / 产物 | 结论 |
 |---|---|---|---|---|
 | 2026-09-18 | — | **登记** | 建立本文件；核对 agent-log 全部 151 条条目与 12 份被引文档，产出证据账本（E1–E13）、缺口确认表（G1–G18 全部确认存在）、登记不一致（D1–D6） | 待 WP0 启动 |
+
+- **2026-09-18（追加）**：用户裁定不新增模型头。minipaper §3.4 已重写为只基于既有 preset（`weak_residual` /
+  `rcrf_nlinear_plain` / `pooled_lowrank` / `original` + 训练集统计量开关），**WP0-2 作废**；WP3 的
+  `L`/`L-fixed`/`L-rank2`/`L-nogate`/`L-mean` 7 变体 × 28 × 3 = 588 runs 作废，应按 minipaper §4.2 的变体行
+  （`phase_only` / PhaseFormer-L 含开关 / always-on / L-q1/4 / L-q1/8 / L-rcrf / A1）与 24+4 setting 重排，
+  既有同协议三 seed 格子经审计复用。D1/D2 已用 rsync 副本复核（见 agent-log 同日条目），待写入
+  低秩 checkpoint 计划表 6 正文。本条为追加记录，未改动 §1–§9 正文。

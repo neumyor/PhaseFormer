@@ -8,11 +8,16 @@
 > 唯一执行契约与结果回写目标。该文 §4 给出缺口核对结论：**G1–G18 全部确认存在**（既有证据最大只覆盖
 > 7 个 setting，且全部为条件性数字），并列出 6 项登记不一致 D1–D6 待修。
 >
-> **已知待核项（2 项）**：§4.1 表格中"删除子空间后支路自身误差变好 52/72、融合误差变差 72/72
-> （中位 +30.4%）"与"Semantic-only Δfused ≤ +0.0006"**暂无法在本文引用的登记文档中逐项核对**
-> （前者仅见于未跟踪脚本 `scripts/render_lowrank_semantic_readwrite_slide.py` 的硬编码字符串，
-> 后者与执行计划 §11.8.2 的"最大 +0.0027"不一致）。二者须以服务器侧
-> `intervention_results.csv` 复核后统一，详见执行计划 D1/D2；在复核完成前不得对外引用这两项数字。
+> **D1/D2 复核结果（2026-09-18）**：用服务器 `research_runs/lowrank_checkpoint_information_v1/intervention_results.csv`
+> 的单向 rsync 副本（720 行 = 72 cell × 10 臂）复算：Semantic-drop 下支路自身 MSE 变好 **52/72**、融合 MSE 变差
+> **72/72**、相对上升中位 **+30.43%**（范围 +5.72%～+51.65%）——与 §4.1 引用一致；Semantic-only 的 Δfused MSE
+> 全 72 格最大 **+0.0027**（q=1/8 格最大 +0.0010），此前"≤ +0.0006"为 3-seed 均值口径且偏小，**已按全格最大值
+> 更正**。两项数字尚未写入 `PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 的表 6 正文，对外引用前
+> 应先补登记（执行计划 D1/D2）。
+>
+> **2026-09-18 修订（风险收敛）**：§3.4 / §4.0 / §4.2 / §5 按"只基于既有实现、不新增模型代码"重写。
+> PhaseFormer-L 现定义为**既有** `weak_residual`（静态门）/ `rcrf_nlinear_plain`（可靠度门）+ `shared` 或
+> `pooled_lowrank` 头的组合；**秩 1–2 不再作为模型工作点**，只保留为分析对象与边界消融（理由见 §3.4.2）。
 >
 > 备选题目：*From Phases to Levels: Completing Phase-Domain Forecasting with a Single Degree of Freedom*；
 > 中文：《相位之外只剩一维：补全相位域时序预测》。
@@ -35,9 +40,11 @@ interventions of 72 jointly trained low-rank correction heads whose leading mode
 level and writes a constant shift over the whole horizon. We further show that this correction must be
 learned *conditionally on the phase backbone*: the same direction frozen from an independent regression
 degrades the model, while the jointly learned subspace aligns with the backbone-conditional target and
-its removal hurts the fused forecast even where it improves the branch on its own. These findings distill a
-70k–520k-parameter linear probe into **PhaseFormer-L**, a single reliability-gated level channel that keeps
-PhaseFormer at the k-parameter scale. *[Main results on 28 settings to be filled.]*
+its removal hurts the fused forecast even where it improves the branch on its own. These findings turn the
+probe into **PhaseFormer-L**: PhaseFormer plus a gated linear level corrector whose rank is set by the
+predictive spectrum rather than by parameter budget — compressible to 3.5–6.1% of the dense head with
+≥92% of its value provably retained — and whose gain is predicted, from training data alone, to concentrate
+on datasets with non-stationary cross-cycle level. *[Main results to be filled.]*
 
 **中文。** PhaseFormer 证明按相位（跨周期同偏移位置）做 token 化，得到的表示对周期形状变化结构不变、且位于
 极低维子空间，因此约 1k 参数即可达到 SOTA。但其理论假设周期局部平稳，非平稳性被留作未来工作。本文证明相位
@@ -46,8 +53,9 @@ PhaseFormer at the k-parameter scale. *[Main results on 28 settings to be filled
 闭式降秩回归显示单一输入—输出模式即占线性修正全部可实现价值的 66%–86%；对 72 个联合训练的低秩修正头做规范
 分解与因果干预，其主模式读取近端加权电平、写出整段恒定位移。我们进一步证明该修正必须**以相位主干为条件**
 学习：同一方向若从独立回归中冻结得到反而使模型退化，而联合学到的子空间与主干条件性目标对齐，删除它会损害
-融合预测——即便支路自身误差反而变好。这些发现把 70k–520k 参数的线性探针蒸馏为 **PhaseFormer-L**：一个由可靠度
-门控的单电平通道，使 PhaseFormer 仍停留在 k 级参数。*[28 个 setting 的主结果待填。]*
+融合预测——即便支路自身误差反而变好。这些发现把探针收束为 **PhaseFormer-L**：PhaseFormer 加一条门控线性电平修正器，
+其秩由预测谱而非参数预算决定——可压缩到稠密头参数的 3.5%–6.1% 且可证保留 ≥92% 的价值——并且其增益能仅凭训练
+数据预测为集中在跨周期电平非平稳的数据集上。*[主结果待填。]*
 
 ---
 
@@ -106,11 +114,12 @@ X' = X + ℓ 1ᵀ ,   ℓ ∈ R^K  为各周期的电平轨迹
    而按任务做的联合低秩训练容量中性（§4.6）。
 4. **设计原则：电平状态必须与相位主干联合学习。** 独立最优方向做冻结瓶颈失败、联合子空间与条件性目标对齐、
    支路自身误差与融合误差反向——三者共同确立"残差支路的信息是相对伙伴定义的"（§3.3.3，§4.5）。
-5. **PhaseFormer-L。** 一个 EMA 初始化、可靠度门控、与主干联合训练的秩-1/秩-2 电平通道，把探针蒸馏回
-   k 级参数（§3.4，§4.2）。
+5. **PhaseFormer-L。** PhaseFormer + 门控线性电平修正器：以已完成三 seed 验证的既有实现为工作点，秩由
+   预测谱选定并给出容量上界；配一个仅用训练集统计量决定"是否启用"的数据驱动开关，使增益的条件性成为
+   可预注册的预测而非事后解释（§3.4，§4.2，§4.7）。
 
-方法上的新意不在"加一个旁支"，而在 1–4 以及"把探针蒸馏成原理性最小模块"的过程。NLinear 在本文中是
-显微镜，不是贡献。
+方法上的新意不在"加一个旁支"，而在 1–4：把一条旁支的作用**测出维数、命名、并证明其条件性**。NLinear 在本文中
+首先是显微镜；它作为修正器被保留，是因为证据显示它的价值确实是低维的、可压缩的、且可预测在哪里出现。
 
 ---
 
@@ -250,27 +259,75 @@ W = W_dec W_enc ,   c = W_dec b_enc + b_dec ,   W = Σ_i s_i u_i v_iᵀ
 对每个臂同时报告**支路自身误差**与**融合误差**。若删除某子空间使支路自身误差变好而融合误差变差，则该子空间
 承载的是"相对主干的修正"而非"独立预测"——这是贡献 4 的核心判据，也是 §2.3 的直接后果。
 
-### 3.4 PhaseFormer-L：最小实例
+### 3.4 PhaseFormer-L：基于既有实现的定义与工作点选择
 
-把 §3.2–§3.3 收敛到的对象写成一个结构：
+> 本节只使用仓库中**已经实现且已有三 seed 测试记录**的部件，不新增模型代码。每个组件对应的
+> `mechanism` / 配置项在表中注明，§4 的全部空表都能用既有 runner 直接补齐。
+
+#### 3.4.1 定义
 
 ```text
-h   = wᵀ (x_n − x_n,last)                          # 单标量：近端加权电平偏移；w 以 exp(−lag/τ) 初始化
-δ_n = h · u  (+ h₂ · u₂ 可选秩-2)                   # u 以 1_H 初始化：恒定位移；u₂ 以线性 ramp 初始化
-ŷ_L = σ · (δ_n + x_n,last) + μ
-ŷ   = (1 − g(x)) · ŷ_φ + g(x) · ŷ_L               # g(x)：可靠度门（RCRF 或电平非平稳度触发）
+PhaseFormer-L  =  相位主干 ŷ_φ（原始 PhaseFormer，不改）
+               +  线性电平修正器 ŷ_r = σ·(W(x_n − x_n,last) + x_n,last) + μ
+               +  门 g：静态 per-channel sigmoid（主）或 RCRF 可靠度门（消融）
+               +  数据驱动开关 s ∈ {0,1}：仅用训练集统计量决定该数据集是否启用修正器
 ```
 
-参数量约 `720 + H (+ 720 + H)`，即 0.8k–2.9k，与主干（1.16k）同量级；相对 direct 探针压缩 25–450 倍。
-三点设计原则均来自实证而非先验：
+| 组件 | 既有实现 | 既有证据 |
+|---|---|---|
+| 修正器（稠密） | `weak_period_residual_head_type="shared"`，`WeakPeriodResidualHead` | 7 setting × 3 seed test：MSE 7/7、MAE 6/7 优于 Golden；12 setting × 3 seed（A1 栈） |
+| 修正器（低秩） | `weak_period_residual_head_type="pooled_lowrank"`，`pool_factor=1`，`rank = qH` | 7 setting × 3 seed × q∈{1/4,1/8,1/16,1/32}，105/105 审计 |
+| 静态门 | `mechanism="weak_residual"`，`weak_period_residual_gate_init` | 全部压缩/解剖/干预证据均在此栈上 |
+| 可靠度门 | `mechanism="rcrf_nlinear_plain"`（原始相位路径 + shared 头 + RCRF，无附加校准模块） | 已实现为正式对照；D0 validation 有单 seed 记录 |
+| A1 incumbent | `mechanism="gold_combo_reliability_s2"` | 12 setting × 3 seed test（含 ETTm2-96/192 稳定超过 Golden） |
 
-1. **必须联合训练**（§4.5）：`w, u` 可学习，从独立 RRR 冻结得到的 `w` 反而退化；
-2. **EMA 初始化、允许偏离**（§2.4，§4.3）：初始核是理论最优形状，训练允许数据修正 τ；
-3. **门控可关闭**（§4.2，§4.7）：在电平已稳定的数据（先导证据中 ETTh1/ETTm1）上，通道应自动关小；这是
-   命题 1 的可反驳预测，也是 main table 不退化的前提。
+**主工作点**：`weak_residual` + `shared`（稠密）。理由：它是所有机制证据（§3.2–§3.3）实际分析的那个模型，
+也是三 seed test 证据最完整的形态。低秩与 RCRF 作为受控变体报告，不作主张。
 
-消融：`L-fixed`（冻结 EMA 核，只学 `u` 与门）、`L-rank2`、`L-nogate`（静态门）、`L-mean`（均值核初始化，
-对照 §2.4）、`direct`（完整探针，上界参照）、`phase_only`。
+#### 3.4.2 为什么秩不是 1–2：工作点必须落在已测区间内
+
+命题 2 说的是**主导模式**是一维的，不是"模型应当只有一维"。既有证据一致指出，把秩压到 1–2 会落在性能下行的区间：
+
+| 证据 | 数字 | 含义 |
+|---|---|---|
+| 三 seed 压缩曲线（`PhaseFormer_rank_sweep_conditioned_experiment.md` §7.3） | 已测最深档 q=1/32（r=3/6/10/22）宏平均 ΔMSE −0.52%、ΔMAE −0.81%，0/7 setting 三 seed 双优；ETTh2-96 q=1/32 已劣于 Golden（0.2757 vs 0.275） | 越深越差的弱趋势在 r=3 就已出现；r=1–2 在网格之外、且在下行方向 |
+| RRR 容量上界（`..._rank_capacity_..._report.md` 表 A） | `capture(1)` = 65.5%–86.2%，`capture(2)` = 81.6%–96.7%，`capture(3)` = 88.1%–99.3% | 秩 1 **必然**放弃 14%–35% 的支路价值，秩 2 放弃 3%–18%；ETTh2-96 相对 Golden 只有 0.7% 余量 |
+| 训练头解剖（`..._checkpoint_information_analysis_plan.md` 表 2） | q=1/8 主模式修正能量份额：ETTh2-720 0.20、Weather 0.36–0.39、ETTm2/ETTh2-96 0.64–0.80；参与比 1.26–4.42 | 训练出的头在 3/6 setting 上实际使用 2–4 个以上模式 |
+| ETTh2 的谱 | 95% 可实现降幅需 8–9 维；压缩档训练头与 `b_1` 对齐仅 0.53–0.72 | 该数据集依赖"若干次优但够用"的子空间，不是单方向 |
+| 冻结秩-1（V1） | 6 setting 宏平均 ΔMSE +1.9% | 最接近"秩 1"的既有实验是负结果 |
+
+因此本文的秩选择规则是：**由预测谱决定下界、由已测三 seed 曲线决定工作点**——
+
+- 报告的低秩变体取 **q=1/4 与 q=1/8**（r=H/4、H/8；三 seed 宏平均在 ±0.3% 内，2–3/7 setting 双优），
+  作为"容量中性"的实证；
+- 深档 q=1/16、1/32 只作容量上界（≥92%）与效率下限（参数 3.5%–6.1%）的说明，明写其 −0.3%～−0.8% 的代价；
+- **秩 1–2 只出现在两处**：§3.2 的 `capture(1/2)` 与 §3.3 的主模式（分析对象），以及 §4.6 一行预注册为
+  "预期退化、用于量化残项 ε"的边界消融（`pooled_lowrank`，`rank∈{1,2}`，6 setting），其结果无论好坏都不影响主张。
+
+"一维"因此是**对最优映射与学到的映射的主导模式的陈述**，工作点则诚实地停在预测谱的 90%–95% 维数附近。
+
+#### 3.4.3 数据驱动开关：把"条件性"变成预注册的预测
+
+先导证据（§4.1）显示修正器在 ETTh1/ETTm1 上不带来增益甚至略有退化。命题 1 预测这正是"电平已稳定、
+相位视角无盲点"的数据。与其事后解释，不如把它写成模型的一部分：
+
+```text
+s(dataset) = 1[ ν_train(dataset) > ν* ] ,   ν_train ∈ {cycle_level_std, last_cycle_shift, τ̂}（只用训练集）
+```
+
+`ν` 的定义与阈值 `ν*` 在 §4.7 冻结（由 6 个已知 setting 的训练集统计量拟合，不看任何 test）。`s=0` 时
+PhaseFormer-L 退化为原始 PhaseFormer，因此在这些数据集上**按构造不劣于** matched rerun。开关不需要新模型代码：
+它只是在两个既有 preset（`original` / `weak_residual`）之间按训练集统计量选择。§4.2 同时报告 `s` 恒为 1 的
+"always-on"列，以便读者看到开关的真实贡献。
+
+#### 3.4.4 与既有失败设计的关系
+
+| 已否定的设计 | 为什么 PhaseFormer-L 不重蹈 |
+|---|---|
+| 冻结独立 RRR 方向（V1/V2，+1.9%） | 修正器可学习、与主干联合训练（§3.3.3 的支路/融合反向证据要求如此） |
+| 周期坐标电平头（`structured_level_shape`，−1.5%～−2.5%） | 保持时间轴坐标；电平读取由训练在 720 维上自行收敛为近端加权核 |
+| 输入平滑（14/14 无改善） | 不做任何按能量的输入预处理 |
+| 结构化基/共享基（5/5 退化） | 不更换坐标系；低秩只作受控变体且停在已测区间 |
 
 ---
 
@@ -278,13 +335,23 @@ h   = wᵀ (x_n − x_n,last)                          # 单标量：近端加�
 
 ### 4.0 协议
 
-- 数据：ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity/Traffic，输入 720，输出 96/192/336/720，共 28 setting。
+- 数据：主表 ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity × H96/192/336/720 = **24 setting**；Traffic 4 个
+  setting 作为**探索性附录**（既有证据中无任何 Traffic 记录，不进入判定）。
 - 训练：full-train、最低 validation loss checkpoint、seeds 2021/2022/2023、每 checkpoint 只读一次 test。
 - 参照：固定 Golden（`PhaseFormer_gold_standard.md`）；matched rerun 仅用于协议诊断。
-- **盲测边界**：§4.2 的 28 个 setting 在本文冻结后不做任何基于 test 的选择；机制分析（§4.3–§4.6）全部使用
-  train/validation。§4.1 的先导证据来自既有 test-exposed 条件性配置，只作动机，不进入主结论。
-- 判定门槛（预注册）：PhaseFormer-L 相对 Golden 在 ≥ [待定] /28 setting 双指标改善，任一 setting 双指标回退
-  ≤ [待定]%；"稳定超过 Golden"沿用既有严格标准（三 seed 均值 + 样本 std < Golden）。
+- **既有结果的复用规则**：主表中已有三 seed、同协议（720 输入、Huber、≤30 epoch、best-val、单次 test）记录的
+  格子（`weak_residual` direct 7 格；`phase_only` 6 格）经逐格审计后**直接复用**，不重训；其余格子新训。
+  所有复用格在表中标注来源；曾参与 test-set selection 的 7 个 setting 在表注中显式披露。
+- **盲测边界**：新训格子在本文冻结后不做任何基于 test 的选择；开关阈值 `ν*`、机制分析（§4.3–§4.6）只用
+  train/validation。§4.1 的先导证据只作动机，不进入主结论。
+- **判定门槛（预注册，建议值，待用户裁定后冻结）**：
+  - 主张 A（不劣化）：PhaseFormer-L（含开关）相对 matched `phase_only` rerun 在 24 setting 上**无一**双指标
+    回退超过 1.0%；
+  - 主张 B（条件性增益）：在开关判 `s=1` 的数据集上，≥ 3/4 的 setting 双指标优于 `phase_only`，且这些数据集
+    与 §4.7 的预测一致；
+  - 主张 C（相对 Golden）：按既有严格标准（三 seed 均值 + 样本 std < Golden）逐格报告"稳定超过"计数，**不设
+    最低数目门槛**——Golden 来自不同硬件环境，本文对 Golden 只做披露性比较。
+  - 主张 D（效率）：q=1/8 变体相对 direct 的三 seed 宏平均 |ΔMSE|、|ΔMAE| ≤ 0.5%。
 
 ### 4.1 先导证据（既有结果，test-exposed，仅作动机）
 
@@ -297,49 +364,61 @@ test-set selection 所得，**不得表述为盲测**。
 | 最优线性修正近似一维 | `λ_1/Σλ` = 0.66–0.86；90% 只需 2–4 维；PR 1.33–2.12 | `PhaseFormer_rank_capacity_and_data_property_report.md` §2.1, §2.6 |
 | 读近端加权电平、写恒定位移 | `b_1` 最近 24 步占能量 53%–70%，最佳模板 exp 核 τ=6–72（\|cos\| 0.58–0.78）；`a_1` 与常值 \|cos\| 0.89–0.99、符号 7/7 一致 | 同上 §2.6 |
 | 预测维数 ≠ 能量维数 | 首方向只占输入方差 0.8%–12.3%；ETTh2-720 权重谱 95% 能量需 418 维、预测谱 95% 只需 8 维 | 同上 §1.3, §2.3 |
-| 训练头真的在用这一维 | 72 个低秩 checkpoint 主模式：读 EMA（\|cos\| 0.70–0.81）、写常数（0.92–0.99）；Semantic-only Δfused ≤ +0.0006；Semantic-drop +4.3%–16.0%（q=1/8），60/72 超出随机 95% 区间；4/6 setting 成立，Weather 为反例 | `PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 表 4–7 |
+| 训练头真的在用这一维 | 72 个低秩 checkpoint 主模式：读 EMA（\|cos\| 0.70–0.81）、写常数（0.92–0.99）；Semantic-only Δfused MSE 全 72 格最大 +0.0027（q=1/8 格 ≤ +0.0010）；Semantic-drop +4.3%–16.0%（q=1/8），60/72 超出随机 95% 区间；4/6 setting 成立，Weather 为反例 | `PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 表 4–7 |
 | 修正相对主干定义 | 独立 RRR 方向 1/1+2 冻结为瓶颈：宏平均 +1.94%/+1.99%；H1 在 5/6 setting 3/3 seed 成立；删除子空间后支路自身误差变好 52/72、融合误差变差 72/72（中位 +30.4%） | `PhaseFormer_top2_direction_retention_summary.md`；同上 §11.8 |
 | 周期越不稳定盲点越大 | 探针相对 phase_only：ETTm2 +6.2%、ETTh2 +3.4%、Weather +2.0%；ETTh1 −1.3%、ETTm1 −2.7%（单 seed，静态门） | `PhaseFormer_joint_lowrank_rank_sweep_plan.md` §13.4 |
 | 压缩是放大镜不是增益 | 最深档（参数 3.5%–6.1%）保留 92.4%–101.9% 可实现价值；三 seed test 宏平均 −0.12/+0.07/−0.32/−0.52%，唯一可复现增益 ETTh2-720 q=1/8（+1.05%/+0.43%，3/3） | `PhaseFormer_rank_sweep_conditioned_experiment.md` §7 |
 
-### 4.2 主结果：PhaseFormer-L vs Golden（28 setting × 3 seed）
+### 4.2 主结果：PhaseFormer-L vs matched PhaseFormer 与 Golden（24 setting × 3 seed；Traffic 附录）
 
-| Dataset | H | Golden MSE/MAE | PhaseFormer-L MSE±std / MAE±std | Δ vs Golden | 稳定超过 | 参数量 | `g` 均值 |
-|---|---:|---:|---|---:|---|---:|---:|
-| ETTh1 | 96 | 0.359/0.382 | | | | | |
-| ETTh1 | 192 | 0.397/0.404 | | | | | |
-| ETTh1 | 336 | 0.425/0.424 | | | | | |
-| ETTh1 | 720 | 0.431/0.450 | | | | | |
-| ETTh2 | 96 | 0.275/0.338 | | | | | |
-| ETTh2 | 192 | 0.341/0.376 | | | | | |
-| ETTh2 | 336 | 0.369/0.405 | | | | | |
-| ETTh2 | 720 | 0.402/0.436 | | | | | |
-| ETTm1 | 96 | 0.293/0.344 | | | | | |
-| ETTm1 | 192 | 0.323/0.361 | | | | | |
-| ETTm1 | 336 | 0.358/0.381 | | | | | |
-| ETTm1 | 720 | 0.412/0.410 | | | | | |
-| ETTm2 | 96 | 0.163/0.256 | | | | | |
-| ETTm2 | 192 | 0.219/0.293 | | | | | |
-| ETTm2 | 336 | 0.269/0.326 | | | | | |
-| ETTm2 | 720 | 0.351/0.379 | | | | | |
-| Weather | 96 | 0.148/0.195 | | | | | |
-| Weather | 192 | 0.193/0.237 | | | | | |
-| Weather | 336 | 0.242/0.278 | | | | | |
-| Weather | 720 | 0.309/0.332 | | | | | |
-| Electricity | 96 | 0.129/0.221 | | | | | |
-| Electricity | 192 | 0.148/0.238 | | | | | |
-| Electricity | 336 | 0.165/0.257 | | | | | |
-| Electricity | 720 | 0.201/0.285 | | | | | |
-| Traffic | 96 | 0.361/0.238 | | | | | |
-| Traffic | 192 | 0.373/0.243 | | | | | |
-| Traffic | 336 | 0.385/0.248 | | | | | |
-| Traffic | 720 | 0.428/0.270 | | | | | |
+| Dataset | H | Golden MSE/MAE | `phase_only`（matched） | PhaseFormer-L（含开关 `s`） | always-on | Δ vs phase_only | 稳定超过 Golden | 来源/披露 |
+|---|---:|---:|---|---|---|---:|---|---|
+| ETTh1 | 96 | 0.359/0.382 | | | | | | |
+| ETTh1 | 192 | 0.397/0.404 | | | | | | |
+| ETTh1 | 336 | 0.425/0.424 | | | | | | |
+| ETTh1 | 720 | 0.431/0.450 | | | | | | |
+| ETTh2 | 96 | 0.275/0.338 | | | | | | |
+| ETTh2 | 192 | 0.341/0.376 | | | | | | |
+| ETTh2 | 336 | 0.369/0.405 | | | | | | |
+| ETTh2 | 720 | 0.402/0.436 | | | | | | |
+| ETTm1 | 96 | 0.293/0.344 | | | | | | |
+| ETTm1 | 192 | 0.323/0.361 | | | | | | |
+| ETTm1 | 336 | 0.358/0.381 | | | | | | |
+| ETTm1 | 720 | 0.412/0.410 | | | | | | |
+| ETTm2 | 96 | 0.163/0.256 | | | | | | |
+| ETTm2 | 192 | 0.219/0.293 | | | | | | |
+| ETTm2 | 336 | 0.269/0.326 | | | | | | |
+| ETTm2 | 720 | 0.351/0.379 | | | | | | |
+| Weather | 96 | 0.148/0.195 | | | | | | |
+| Weather | 192 | 0.193/0.237 | | | | | | |
+| Weather | 336 | 0.242/0.278 | | | | | | |
+| Weather | 720 | 0.309/0.332 | | | | | | |
+| Electricity | 96 | 0.129/0.221 | | | | | | |
+| Electricity | 192 | 0.148/0.238 | | | | | | |
+| Electricity | 336 | 0.165/0.257 | | | | | | |
+| Electricity | 720 | 0.201/0.285 | | | | | | |
+| Traffic | 96 | 0.361/0.238 | | | | | | 探索性附录，不进入判定 |
+| Traffic | 192 | 0.373/0.243 | | | | | | 探索性附录，不进入判定 |
+| Traffic | 336 | 0.385/0.248 | | | | | | 探索性附录，不进入判定 |
+| Traffic | 720 | 0.428/0.270 | | | | | | 探索性附录，不进入判定 |
 
-对照行（同协议、同 seed）：`phase_only`（matched rerun）、`direct`（完整探针）、`L-fixed`、`L-rank2`、`L-nogate`、
-`L-mean`。参数量与 FLOPs 列须与原文 Table 4 同口径。
+**变体行（同协议、同 seed，全部为既有 preset）**：
 
-**必答问题**：(a) ETTh2 是否被补齐到 FITS 水平；(b) ETTh1/ETTm1 是否不退化、`g` 是否如预测自动关小；
-(c) `L-rank2` 相对 `L` 的增量是否在 seed 噪声内（命题 2 的秩-1 预测）。
+| 行 | preset / 配置 | 作用 | 新训规模 |
+|---|---|---|---|
+| `phase_only` | `original`（matched rerun） | 配对基线 | 24 − 6 复用 = 18 setting × 3 |
+| PhaseFormer-L（主） | `weak_residual`，`shared` 头，逐数据集开关 `s` | 主张 A/B | 24 − 7 复用 = 17 setting × 3（`s=0` 的数据集不需训练） |
+| always-on | 同上，`s≡1` | 显示开关贡献 | 与上行共享 run |
+| L-q1/4、L-q1/8 | `pooled_lowrank`，`rank=H/4`、`H/8` | 主张 D（效率） | 6 数据集 × 4 H × 2 × 3 − 复用 |
+| L-rcrf | `rcrf_nlinear_plain` | 门的消融 | 24 × 3（可先做 H96/192） |
+| A1 | `gold_combo_reliability_s2` | incumbent 参照（12 格既有） | 补 H336/720 可选 |
+
+参数量列按仓库 `metrics.csv` 的 `parameter_count` 口径报告（主干 + 修正器 + 门），并单列修正器参数；
+FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现）。
+
+**必答问题**：(a) ETTh2 四个 horizon 相对 `phase_only` 与 Golden 的差距是否收窄、是否达到 FITS 的引用数字；
+(b) 开关是否把 ETTh1/ETTm1 判为 `s=0`，若判为 `s=1` 则 always-on 在这两个数据集上的表现如何（如实报告）；
+(c) q=1/8 与 direct 的三 seed 差是否在 ±0.5% 内。
 
 ### 4.3 相位补空间的维数（7 数据集，train/validation）
 
@@ -382,6 +461,7 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
 | 结构化坐标（周期低秩、共享基、水平/形状、近期周期、可分离） | 支路参数化 | 4 setting | 5/5 双指标退化 1.6%–3.0%；同参数量时间轴对照仅 −0.30%/−0.52% | — |
 | SVD 截断 vs 秩约束训练 | 支路权重 | Electricity-336 r=10 | 截断 +29%，训练 +0.7% | 全 28 setting |
 | 联合低秩训练 q=1/32 | 支路容量 | 7 setting | 保留 92.4%–101.9% 可实现价值 | — |
+| **边界消融：`pooled_lowrank` rank∈{1,2}** | 支路容量（网格之外） | 6 setting × 3 seed | 无 | **预注册预期：相对 direct 退化**，幅度上界由 `1−capture(1/2)`（14%–35% / 3%–18% 的支路价值）经 `g²` 折算；用于量化残项 ε，不影响主张 |
 
 ### 4.7 命题 1 的预测力：电平非平稳度 vs 增益（训练无关）
 
@@ -401,17 +481,24 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
 
 ## 5. Limitations 与披露
 
-1. §4.1 的全部先导证据来自 test-set selection 得到的 6–7 个 setting，属条件性、test-exposed 证据；本文的
-   主结论只能建立在 §4.2–§4.7 冻结后的盲测与 train/validation 分析上。
-2. 命题 1–2 目前是证明路线而非完整证明；命题 2 依赖"电平在预测区间内近似持续"的近似，长 horizon 上残项
-   `ε` 可能不小（先导证据中 ETTh2-720 主模式修正能量份额仅 0.20，与此一致）。
-3. 既有 checkpoint 解剖中只有主模式可命名；第 2 个及以后模式跨 seed 不稳定，应报告为"多组等价信息通路"。
+1. §4.1 的全部先导证据来自 test-set selection 得到的 6–7 个 setting，属条件性、test-exposed 证据；主表中复用的
+   7 个 direct 格与 6 个 `phase_only` 格同样来自这些 setting，表中逐格标注。本文的主张 A–D 只能建立在
+   §4.2 冻结后的新训格与 train/validation 分析上。
+2. 命题 1–2 目前是证明路线而非完整证明；命题 2 依赖"电平在预测区间内近似持续"的近似，长 horizon 上残项 `ε`
+   不小（ETTh2-720 主模式修正能量份额仅 0.20）。**因此本文不主张模型应为秩 1**；"一维"是对主导模式的陈述，
+   工作点停在预测谱 90%–95% 维数附近（§3.4.2）。
+3. 既有 checkpoint 解剖中只有主模式可命名；第 2 个及以后模式跨 seed 不稳定，报告为"多组等价信息通路"。
    Weather 两个 setting 的主模式指向曲率/慢趋势而非电平，是命题的边界而非支持。
 4. "语义有效"与"任意同数量主方向有效"尚未分开（既有 57/57 单元 Semantic-drop ≡ PCA-drop）；§4.4 新增的
-   随机 RRR 子空间对照是解决此项的必要实验。
-5. 低秩压缩在本文中是分析工具，不是精度贡献；既有三 seed 结果无普适增益。
-6. 结论范围：与相位/周期主干经凸门联合训练的线性残差修正，标准长程基准；不宣称任意时序模型可压缩或
-   任意线性模型等价于电平修正。
+   随机 RRR 子空间对照是解决此项的必要实验，需在 `evaluate_lowrank_semantic_interventions.py` 增加一个臂
+   （分析侧代码，不涉及模型）。
+5. 低秩压缩是分析工具与效率选项，不是精度贡献；既有三 seed 结果无普适增益，深档 q=1/16、1/32 有 −0.3%～−0.8%
+   的代价，本文明写。
+6. 数据驱动开关的阈值 `ν*` 由 6 个已知数据集的训练集统计量拟合，样本量极小；它是可预注册、可被 Traffic 与
+   H336/720 新格子反驳的预测，不是已验证的规律。若开关在新格上判错，按 §4.0 主张 B 如实报告为未达标。
+7. Golden 来自不同硬件环境；本文对 Golden 只做披露性比较，主张 A/B 的配对基线是同环境 matched rerun。
+8. 结论范围：与相位主干经凸门联合训练的线性残差修正、标准长程基准；不宣称任意时序模型可压缩或任意线性模型
+   等价于电平修正。
 
 ---
 

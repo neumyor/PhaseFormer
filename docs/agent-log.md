@@ -2955,3 +2955,23 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 下一步（待用户裁定后执行）：WP0-1 冻结 §4.0 判定门槛（建议 K=14/28 及格线、20/28 强结论、
   回退上限 R=1.0%）；WP0-2 实现 PhaseFormer-L 与 4 个消融开关；WP0-4 修 D1–D6
   （D1/D2/D5 需服务器侧产物）。WP1/WP2 训练无关，可并行先做。
+
+## 2026-09-18 — MiniPaper 风险收敛：PhaseFormer-L 改为只基于既有实现，秩 1–2 退出工作点
+
+- 用户裁定：不新增模型头；MiniPaper 只基于既有代码规划，确保 §4 空表都能用既有 runner 补齐。
+- 重写 `docs/PhaseFormer_L_minipaper.md` 的 Abstract 结尾、§1.4 贡献 5、§3.4、§4.0、§4.2、§5：
+  - PhaseFormer-L 定义为既有 `weak_residual`（静态门，主工作点）/ `rcrf_nlinear_plain`（门消融）
+    + `shared` / `pooled_lowrank` 头 + 仅用训练集统计量的逐数据集开关（在 `original` 与 `weak_residual`
+    preset 间选择，不需模型代码）。
+  - §3.4.2 用既有数字说明为何秩 1–2 不能作工作点：q=1/32（r=3–22）三 seed 已 −0.52%/−0.81% 且 0/7 双优、
+    ETTh2-96 该档已劣于 Golden；`capture(1)`=65.5%–86.2% 意味着秩 1 必然放弃 14%–35% 支路价值；训练头主模式
+    能量份额在 ETTh2-720 仅 0.20、参与比至 4.42；V1 冻结秩-1 为负结果。秩 1–2 只保留为分析对象与 §4.6 一行
+    "预期退化"的边界消融。
+  - 主表改为 24 setting（Traffic 4 格为探索性附录）、以 matched `phase_only` 为配对基线、对 Golden 只做披露性
+    比较；既有同协议三 seed 格子经审计复用；判定门槛给出建议值（不劣化 ≤1.0%、条件性增益 ≥3/4、效率 ±0.5%）
+    待用户冻结。删除"k 级参数"主张。
+- D1/D2 复核：用 `intervention_results.csv` 的 rsync 副本（720 行）复算，52/72、72/72、中位 +30.43% 与引用
+  一致；Semantic-only 全格最大 +0.0027（q=1/8 格 ≤ +0.0010），§4.1 中原"≤ +0.0006"已更正。两项尚未写入
+  低秩 checkpoint 计划文档表 6 正文。
+- 执行计划 `docs/PhaseFormer_L_experiment_plan.md` 的 WP0-2（实现新头）与 WP3 的 7 变体矩阵（588 runs）
+  因此**作废**，已在其 §10 追加记录；WP3 应按 minipaper §4.2 变体行重排。未改任何模型代码、未训练、未读 test。
