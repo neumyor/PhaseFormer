@@ -576,6 +576,127 @@ def check_4_7(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
             report.add("§4.7", stat, header[column], state, detail)
 
 
+def _truthy(text: str):
+    lowered = text.strip().lower()
+    if lowered in ("✓", "true", "yes", "是", "1", "supported"):
+        return True
+    if lowered in ("✗", "false", "no", "否", "0", "not_supported"):
+        return False
+    return None
+
+
+def check_4_4_dissection(report: Report, root: pathlib.Path,
+                         minipaper: pathlib.Path) -> None:
+    """Section 4.4's dissection table: three columns are composite, so compare parts.
+
+    Mapping (read from `e16_writeback.build_dissection`, i.e. the producer, not guessed):
+
+        模型                      <- model
+        Dataset / H               <- dataset / horizon
+        主模式输入组 / 解释率      <- leading_input_group_label + mean_input_group_explanation
+        主模式输出组 / 解释率      <- output_group_label        + mean_output_group_explanation
+        修正能量份额              <- leading_correction_energy_share
+        跨 seed leading4 重叠     <- leading4_input_overlap + leading4_output_overlap
+        稳定语义判定              <- stable_semantics_verdict   (a bool)
+
+    The rendering follows the header's own convention ("组 / 解释率"), with the
+    explanation rate as a 0-1 fraction at two decimals -- the scale is confirmed by
+    the producer's own criterion "input_explanation >= 0.5".
+
+    Comparison is deliberately tolerant on shape: a group label may itself contain a
+    slash ("周期形状/相位"), so the label check is "the cell starts with the label"
+    and the rate check keeps only the trailing number.  The verdict accepts the usual
+    truthy spellings so the paper is free to use ✓/✗ or true/false.
+    """
+    path = root / E16 / "dissection_table_44.csv"
+    block = section_text(minipaper.read_text(encoding="utf-8"), "### 4.4", "### 4.5")
+    header, paper_rows = parse_markdown_table(block, "主模式输入组")
+    if header is None:
+        report.add("§4.4 解剖表", "-", "-", "MISMATCH", "could not find the table header")
+        return
+    if len(header) != 8:
+        report.add("§4.4 解剖表", "-", "columns", "MISMATCH",
+                   f"header has {len(header)} columns, expected 8")
+    if not path.is_file():
+        report.add("§4.4 解剖表", "-", "artifact", "PENDING", f"{path.name} does not exist yet")
+        return
+
+    artifact = {}
+    for row in csv.DictReader(path.open(newline="")):
+        key = (str(row.get("model")), str(row.get("dataset")), str(row.get("horizon")))
+        artifact[key] = row
+
+    def label_and_rate(cell: str, label, rate, column: str, key_label: str) -> None:
+        if not cell:
+            report.add("§4.4 解剖表", key_label, column, "blank", "empty paper cell")
+            return
+        problems = []
+        if label and not cell.strip().startswith(str(label).strip()):
+            problems.append(f"label {label!r} does not lead the cell")
+        numbers = re.findall(r"[-+]?\d*\.?\d+", cell)
+        if rate in (None, ""):
+            pass
+        elif not numbers:
+            problems.append("no number in the cell")
+        else:
+            shown = float(numbers[-1])
+            if abs(shown - round(float(rate), 2)) >= 1e-9:
+                problems.append(f"rate shown {shown} vs artifact {rate}")
+        report.add("§4.4 解剖表", key_label, column,
+                   "MISMATCH" if problems else "match",
+                   "; ".join(problems) if problems else cell)
+
+    for cells in paper_rows:
+        if len(cells) < 8:
+            report.add("§4.4 解剖表", "|".join(cells[:2]), "-", "MISMATCH",
+                       f"row has {len(cells)} cells, expected 8")
+            continue
+        key = (cells[0], cells[1], cells[2])
+        want = artifact.get(key)
+        key_label = f"{key[0]}|{key[1]}-{key[2]}"
+        if want is None:
+            report.add("§4.4 解剖表", key_label, "-", "MISMATCH",
+                       "no artifact row for this model/dataset/horizon")
+            continue
+        label_and_rate(cells[3], want.get("leading_input_group_label"),
+                       want.get("mean_input_group_explanation"), header[3], key_label)
+        label_and_rate(cells[4], want.get("output_group_label"),
+                       want.get("mean_output_group_explanation"), header[4], key_label)
+        state, detail = compare_number(cells[5], want.get("leading_correction_energy_share"), 3)
+        report.add("§4.4 解剖表", key_label, header[5], state, detail)
+        # the two leading4 overlaps are one cell in the paper
+        cell = cells[6]
+        if not cell:
+            report.add("§4.4 解剖表", key_label, header[6], "blank", "empty paper cell")
+        else:
+            numbers = re.findall(r"[-+]?\d*\.?\d+", cell)
+            wanted = [want.get("leading4_input_overlap"), want.get("leading4_output_overlap")]
+            problems = []
+            if len(numbers) < 2:
+                problems.append(f"expected two numbers, found {numbers}")
+            else:
+                for shown, value in zip(numbers, wanted):
+                    if value in (None, ""):
+                        continue
+                    if abs(float(shown) - round(float(value), 2)) >= 1e-9:
+                        problems.append(f"overlap shown {shown} vs artifact {value}")
+            report.add("§4.4 解剖表", key_label, header[6],
+                       "MISMATCH" if problems else "match",
+                       "; ".join(problems) if problems else cell)
+        seen = _truthy(cells[7])
+        expected = want.get("stable_semantics_verdict")
+        if not cells[7]:
+            report.add("§4.4 解剖表", key_label, header[7], "blank", "empty paper cell")
+        elif seen is None:
+            report.add("§4.4 解剖表", key_label, header[7], "MISMATCH",
+                       f"unparseable verdict {cells[7]!r}")
+        else:
+            want_bool = str(expected).strip().lower() in ("true", "1")
+            report.add("§4.4 解剖表", key_label, header[7],
+                       "match" if seen == want_bool else "MISMATCH",
+                       cells[7] if seen == want_bool else f"paper={cells[7]!r} artifact={expected!r}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -600,6 +721,7 @@ def main() -> int:
     check_4_4_intervention(report, root, minipaper)
     check_4_6(report, root, minipaper)
     check_4_7(report, root, minipaper)
+    check_4_4_dissection(report, root, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
