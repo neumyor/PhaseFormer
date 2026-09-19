@@ -190,15 +190,22 @@ def build_dissection(rows: list) -> tuple[list, list]:
                  "head_kind": block[0].get("head_kind"),
                  "seeds": len(block)}
         # majority input group across seeds
-        votes: dict = {}
+        group_votes: dict = {}
+        label_by_group: dict = {}
         for row in block:
-            key = (str(row.get("majority_input_group", "")),
-                   str(row.get("majority_input_group_label", "")))
-            votes[key] = votes.get(key, 0) + 1
-        if votes:
-            (group, label), count = max(votes.items(), key=lambda kv: kv[1])
+            group = str(row.get("majority_input_group", "") or "").strip()
+            label = str(row.get("majority_input_group_label", "") or "").strip()
+            group_votes[group] = group_votes.get(group, 0) + 1
+            if label:
+                label_by_group.setdefault(group, {})
+                label_by_group[group][label] = label_by_group[group].get(label, 0) + 1
+        if group_votes:
+            group, count = max(group_votes.items(), key=lambda kv: kv[1])
             entry["input_group"] = group
-            entry["input_group_label"] = label
+            labels = label_by_group.get(group) or {}
+            entry["input_group_label"] = (
+                max(labels.items(), key=lambda kv: kv[1])[0] if labels else ""
+            )
             entry["input_group_votes"] = f"{count}/{len(block)}"
         for column, target in (("mean_input_group_explanation",
                                 "input_group_explanation"),
@@ -295,12 +302,15 @@ def main() -> None:
         rrr_band = ("—" if row["random_rrr_band_low_fused_mse"] is None else
                     f"[{row['random_rrr_band_low_fused_mse']:.4f}, "
                     f"{row['random_rrr_band_high_fused_mse']:.4f}]")
-        lines.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
-            row["model"], row["dataset"], row["horizon"],
-            qr_label(row["arm"], row["horizon"]),
-            delta("Semantic-only"), delta("Semantic-drop"), band,
-            delta("PCA-drop"), rrr_band,
-            delta("Semantic-drop", "branch"), delta("Semantic-drop")))
+        # Eleven cells: model, dataset, H, q/r, Semantic-only, Semantic-drop,
+        # random band, PCA-drop, random-RRR band, branch delta, fused delta.
+        lines.append(
+            "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+                row["model"], row["dataset"], row["horizon"],
+                qr_label(row["arm"], row["horizon"]),
+                delta("Semantic-only"), delta("Semantic-drop"), band,
+                delta("PCA-drop"), rrr_band,
+                delta("Semantic-drop", "branch"), delta("Semantic-drop")))
     (out_root / "intervention_table_44.md").write_text("\n".join(lines) + "\n",
                                                        encoding="utf-8")
 
