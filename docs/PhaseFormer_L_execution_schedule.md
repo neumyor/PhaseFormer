@@ -511,6 +511,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 用**第 1 步自己的逐格前置检查**在真实矩阵上预跑 | **220/220 通过、0 拒绝**（提前几十分钟拿到先手） | §3 验的是"两条分支能跑"；本轮验的是"在这个正在跑的真实矩阵上，第 1 步会不会拒绝某些格"。直接调 `e14_read_test.preflight_new_cell(cell, ROOT, ignore_protocol_drift=False)`——即 worker 读 test **之前**跑的那一段（协议漂移 / run 解析 / checkpoint 解析，且源码里**失败即停**）：`accepted 220 / refused 0 / pending 191` ⇒ **已完成的 220 格第 1 步一个都不会拒**。这比"等链跑起来看"多出几十分钟先手。**顺带记一次我自己的读法错误**：第一版把 payload 里空的 `status` 当成拒绝（报"215 格会被拒"）；查明 `status='planned'` 是**上一层 `plan_cell` 才贴的**，此处为空是正常形状——**真正的判据是"有没有抛 SystemExit"**，改后才是 220/220 |
 
+| 2026-09-20 | 协议在 **411 个命令上逐项一致**（可引用） | 与 §10 的"同一版代码"合起来构成协议一致性陈述 | 取 manifest 的 411 条命令逐项统计：`--stage confirm` / `--lookback 720` / `--period 24` / `--max-epochs 30` / `--loss huber` / `--percent 100` / `--num-workers 4` **各 411 个同值**；**`--evaluate-test` 在 411 条里全部缺失**（阶段 A 一格没读 test——与 `audit_e14_stage_a.py` 的逐格结论、与 176 格实测 `test_mse` 全空，**三处独立一致**）；`--seed` **2021/2022/2023 各 137**（411 = 3×137，完全均衡）；`--mechanism` 分布（189/84/66/72）与 manifest 按臂 new 计数**逐项吻合**。从 `--overrides` 反推臂超参：**222 格无 head/gate、126 格 pooled_lowrank+gate0.2、63 格 shared+gate0.2，全部 lr=1e-3** ⇒ 新训格一律 **gate 0.2 / lr 1e-3**（§4.0 的 D-2），故 §4.0 所述"三种 gate 先验"里的 0.5 **只可能来自复用格**（实测复用格 `source.gate_init` = 0.5 共 57 格、0.2 共 24 格）——与披露相互印证 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据

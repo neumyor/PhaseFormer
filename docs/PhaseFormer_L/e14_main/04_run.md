@@ -202,3 +202,33 @@ Traffic-96 的 4096 s 与冒烟实测（138 s/epoch × 30 epoch = 4140 s）**完
 > 再按"启动提交 → HEAD"的**字节级 diff** 回答。发现一个（`e14_main_matrix.py`）之后**没有靠推理**下结论，
 > 而是把它的消费者（stage B 的指纹门）**实跑**一遍。若当时只推理"应该是纯增量、应该没事"，
 > 就会漏掉"万一改了既有常量 ⇒ 第 1 步拒绝启动"这一支。
+
+## 11. 协议在 411 个命令上**逐项一致**（2026-09-20 06:18 实测，可直接引用）
+
+§10 回答"是不是同一版**代码**"；§11 回答"是不是同一套**协议**"——取 manifest 记录的 411 条命令逐项统计：
+
+| flag | 取值分布 | 判读 |
+|---|---|---|
+| `--stage` | `confirm` × 411 | 一致 ✓ |
+| `--lookback` | `720` × 411 | 一致 ✓ |
+| `--period` | `24` × 411 | 一致 ✓ |
+| `--max-epochs` | `30` × 411 | 一致 ✓ |
+| `--loss` | `huber` × 411 | 一致 ✓ |
+| `--percent` | `100` × 411 | 一致 ✓ |
+| `--num-workers` | `4` × 411 | 一致 ✓ |
+| **`--evaluate-test`** | **缺失 × 411** | **阶段 A 一格都没读 test** ✓（与 `audit_e14_stage_a.py` 的逐格结论、以及 176 格实测的 `test_mse` 全空三处独立一致） |
+| `--seed` | 2021/2022/2023 **各 137** | 三 seed 完全均衡（411 = 3 × 137）✓ |
+| `--mechanism` | `weak_residual` 189、`rcrf_nlinear_plain` 84、`no_residual` 66、`gold_combo_reliability_s2` 72 | 与 manifest 的按臂 new 计数**逐项吻合**（189 = 3 臂 × 63）✓ |
+| `--require-cuda` / `--resume` | 两者都在 411 条里出现 | ✓（本表把它们显示成"取到下一个 flag"是我脚本对 store_true 的读法所致，非产物问题） |
+
+**从 `--overrides` 反推的臂超参**（三类的计数与 manifest 的按臂计数完全一致）：
+
+```text
+x222  head=None            gate=None  lr=1e-3     # phase_only 66 + l_rcrf 84 + a1 72
+x126  head=pooled_lowrank  gate=0.2   lr=1e-3     # l_q1_4 63 + l_q1_8 63
+x 63  head=shared          gate=0.2   lr=1e-3     # l_main 63
+```
+
+⇒ **所有新训格一律 gate 0.2 / lr 1e-3**（§4.0 冻结的 D-2 新格超参）✓；
+即 §4.0 表注所述"**三种 gate 先验**"中，0.5 那一种**只可能来自复用格**——与"81 个复用格保留 Stage-0 冻结值
+（0.5 或 0.2）"的披露相互印证（实测复用格的 `source.gate_init` 为 0.5 共 57 格、0.2 共 24 格）。
