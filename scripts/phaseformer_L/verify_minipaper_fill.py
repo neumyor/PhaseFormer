@@ -593,9 +593,17 @@ def check_4_4_dissection(report: Report, root: pathlib.Path,
 
         模型                      <- model
         Dataset / H               <- dataset / horizon
-        主模式输入组 / 解释率      <- leading_input_group_label + mean_input_group_explanation
-        主模式输出组 / 解释率      <- output_group_label        + mean_output_group_explanation
-        修正能量份额              <- leading_correction_energy_share
+        主模式输入组 / 解释率      <- input_group_label + input_group_explanation
+        主模式输出组 / 解释率      <- output_group_label + output_group_explanation
+        修正能量份额              <- correction_energy_share
+
+    NOTE (2026-09-20): those four names were first written as the RAW table's
+    names (`leading_input_group_label`, `mean_input_group_explanation`, ...).
+    `e16_writeback` renames them when it aggregates, so every lookup returned
+    None -- and because `label_and_rate` skips a check whose artifact side is
+    empty, the cells were reported as **match** without ever being compared.
+    The names below are the 44-table's own, and the header guard above turns any
+    future rename into a MISMATCH instead of a silent pass.
         跨 seed leading4 重叠     <- leading4_input_overlap + leading4_output_overlap
         稳定语义判定              <- stable_semantics_verdict   (a bool)
 
@@ -622,20 +630,37 @@ def check_4_4_dissection(report: Report, root: pathlib.Path,
         return
 
     artifact = {}
+    columns: set = set()
     for row in csv.DictReader(path.open(newline="")):
+        columns |= set(row)
         key = (str(row.get("model")), str(row.get("dataset")), str(row.get("horizon")))
         artifact[key] = row
+    # A renamed or dropped column must be loud.  Reading an absent column yields
+    # None, and None used to mean "nothing to compare" -> reported as match.
+    required = ("input_group_label", "input_group_explanation", "output_group_label",
+                "output_group_explanation", "correction_energy_share",
+                "leading4_input_overlap", "leading4_output_overlap",
+                "stable_semantics_verdict")
+    absent = [name for name in required if name not in columns]
+    if absent:
+        report.add("§4.4 解剖表", "-", "columns", "MISMATCH",
+                   f"{path.name} lacks {absent} (has {sorted(columns)[:8]}...)")
+        return
 
     def label_and_rate(cell: str, label, rate, column: str, key_label: str) -> None:
         if not cell:
             report.add("§4.4 解剖表", key_label, column, "blank", "empty paper cell")
             return
         problems = []
+        if label in (None, "") and rate in (None, ""):
+            report.add("§4.4 解剖表", key_label, column, "MISMATCH",
+                       "artifact has neither a label nor a rate for this cell")
+            return
         if label and not cell.strip().startswith(str(label).strip()):
             problems.append(f"label {label!r} does not lead the cell")
         numbers = re.findall(r"[-+]?\d*\.?\d+", cell)
         if rate in (None, ""):
-            pass
+            problems.append("artifact has no rate for this cell")
         elif not numbers:
             problems.append("no number in the cell")
         else:
@@ -658,11 +683,11 @@ def check_4_4_dissection(report: Report, root: pathlib.Path,
             report.add("§4.4 解剖表", key_label, "-", "MISMATCH",
                        "no artifact row for this model/dataset/horizon")
             continue
-        label_and_rate(cells[3], want.get("leading_input_group_label"),
-                       want.get("mean_input_group_explanation"), header[3], key_label)
+        label_and_rate(cells[3], want.get("input_group_label"),
+                       want.get("input_group_explanation"), header[3], key_label)
         label_and_rate(cells[4], want.get("output_group_label"),
-                       want.get("mean_output_group_explanation"), header[4], key_label)
-        state, detail = compare_number(cells[5], want.get("leading_correction_energy_share"), 3)
+                       want.get("output_group_explanation"), header[4], key_label)
+        state, detail = compare_number(cells[5], want.get("correction_energy_share"), 3)
         report.add("§4.4 解剖表", key_label, header[5], state, detail)
         # the two leading4 overlaps are one cell in the paper
         cell = cells[6]
