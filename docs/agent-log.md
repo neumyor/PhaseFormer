@@ -3212,3 +3212,43 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   16.3–16.5 三处缺陷、16.6 判据表与对照）；`docs/PhaseFormer_L/e18_negative/02_static_check.md` **§7**；
   `docs/PhaseFormer_L_execution_schedule.md` 日志 4 条 + §10.1 pre-flight 三道 + §10.1.1 防线地图新行 +
   **§10.7 同步的正确形式**。
+
+## 2026-09-20 — 第 7 步验收审计的两个静默缺陷：一个会误判失败、一个从不写文件
+
+- 起因：§14/§15 把"审计判据是否够强"收口了，但那是**单向**的。本轮换一个方向问：
+  **判据会不会把合法的东西当成缺失**（过严）？以及**调用方声明的产物是否真的被写出**（空转）？
+- **缺陷 A（严重，已修）**：门值判据原写"**每一行**都要有门值"。但门参数**只存在于三个弱残差臂**
+  （`l_main`/`l_q1_4`/`l_q1_8`），`phase_only`（`no_residual`）、`l_rcrf`（`rcrf_nlinear_plain`）、
+  `a1`（`gold_combo_reliability_s2`）**根本没有这个参数** ⇒ 492 行里 **85 行合法地没有门值**。
+  实测（非推断）：把 `e14_params.py` 在真实 partial 数据上的输出（220 行）放进合成根，
+  用 `--root` 跑**旧版**审计器 → `FAIL gate value recovered from every checkpoint: 85 row(s)
+  without a gate value e.g. Traffic-96/l_rcrf`。即**第 7 步会在 411 个 run 全部训完、所有表都填好之后
+  报告"链条失败"**——代价不是重跑（纯 IO），而是**在最容易被误信的时点给出一个与真结论长得一样的假警报**。
+  **修法**：按行收窄作用域（用表自己的 `gate_param_present` 列做判别式），并**另立一条**判据断言
+  "臂 ↔ 是否有门参数"一致（否则整列恒 `False` 就会让前一条**因为没东西可查而通过**）。
+  修后同一份真产物：`OK 1 ... 0 gated row(s) without a gate value (of 135 gated rows; 85 rows
+  have no gate parameter)`。旁证：这 220 行的 `total_matches_metrics` **0 处不一致**、
+  `total_params` 无一为空、`present but no value = 0`、`value but not present = 0`
+  ⇒ **真产物本来是对的，错的是判据**。
+- **缺陷 B（轻微但真实，已修）**：第 7 步的调用写着 `--json "$LOGDIR/phase2_acceptance_audit.json"`，
+  而 `main()` 里 `args.json` **一次都没出现过** ⇒ 收尾时那份"验收报告 JSON"**静默不存在**。
+  没有机器消费者依赖它（所以不会失败），但这是"文档承诺的产物没落地"——我在收尾清单里要读它，
+  却会找不到文件。**修法**：`Report.to_dict()/write_json()` 写出 `criteria/counts/failing/total_criteria/root`。
+  顺带澄清一个数字：判据总数**不是常数**，24 条是"什么产物都没有"时的**基线**，
+  每多一张存在的表就多登记若干条（参数表存在时 +3），故不能把 24 当成"审计器有 24 条判据"。
+- **校准固化为仓库脚本** `scripts/phaseformer_L/rehearse_audit_controls.py`（13 类对照）：
+  此前 §15.1 的八类对照只在 `/tmp` 临时跑、随会话消失。现在用审计器**自己的 `--root`**
+  （其 docstring 明写"an audit script that can only ever report 'fine' proves nothing"）
+  对合成树断言逐条判决。**校准器当场抓出了我自己修法的漏洞**：#3（无门臂却带门值）首跑是 `PASS`，
+  因为我只比"臂↔是否有门参数"、**没管无门臂上残留的门值**；补上 `stray` 检查后 #3 才按预期 FAIL。
+  这是"把校准写成脚本"而不是"靠记忆"的直接价值：它不只证明判据能挡住**已知**坏输入，
+  还证明**我这次改动自己有没有留下缝**。
+- **方法论（§14+§17 合并）**：三种喂法必须都有——①**真产物**证明判据**不误杀**；
+  ②**扰动产物**证明判据**不放过**；③**调用方声明**证明产物**不空转**。
+  缺一就会剩下一个只在特定输入下才现形的静默缺陷。
+- 验证：`rehearse_audit_controls.py` → **13 类对照全部符合预期**（本地与服务器各跑一次）；
+  服务器全量 `tests/` → **400 passed, 262 subtests passed, 18 warnings（143.49 s），退出码 0**
+  （与上一轮持平，说明审计器改动未破坏任何既有测试）。
+- 记录：`docs/PhaseFormer_L/audit/paper_code_consistency.md` **§17**（17.1 缺陷 A 含真产物前后对照、
+  17.2 缺陷 B、17.3 十三类对照表、17.4 与 §14 合并的方法论）；
+  `docs/PhaseFormer_L_execution_schedule.md` 日志 4 条。
