@@ -3311,3 +3311,72 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   故留在人工清单里（`minipaper_fill_mapping.md` §5 与排期 §10.4 都已登记）。
 - 记录：`docs/PhaseFormer_L/audit/minipaper_fill_mapping.md` **§5**（三处正文的表格）；
   `docs/PhaseFormer_L_execution_schedule.md` §10.4（判据由两件改三件）+ 日志一条。
+
+## 2026-09-20 — 调用检查器漏检一半调用；阶段 A 审计工具落地并接入预检
+
+- 起因：给阶段二预检加一条新检查时发现 `check_pipeline_invocations.py` 报的 `flags inspected` **没有变化**（66 → 66）。
+- **根因**：它的正则 `\$PY'?\s+` 只匹配**单引号**形式（`'$PY' scripts/...`，即 `run_step` 的 `bash -c` 体内写法），
+  而顶层写 `"$PY" scripts/...` ⇒ **完全不匹配**。实测：25 处调用只匹配到 **20 处**，
+  漏掉的 5 处正是 `check_column_contracts.py` / `check_pipeline_invocations.py` / `check_phase2_consumers.py` /
+  `audit_e14_stage_a.py`（**预检自身**）与 **`e19_predictive_power.py`（第 2 步）**。
+  **修法**：正则接受两种引号；并把"尾部"限制到**行尾**（续行已合并，否则会吞掉下一条注释，
+  产生"`--output-root` 收到 46 个裸值"这类**假警报**——假警报会让检查被当成噪音）。修后 **66 → 76 flags、OK**。
+  **四类对照**（改副本、不动真文件）：第 2 步塞假 flag → PROBLEM；预检里塞假 flag → PROBLEM；
+  原文件 → OK；恢复 `--seeds 2021 2022 2023` → PROBLEM。
+- **如实记下该检查的边界**（写进 `declared_flags` docstring）：它只记 `nargs` 的有无 ⇒
+  **分不清** `store_true` 与"取一个值"的 flag，故判据是"**≥2 个裸值才报**"，挡不住单个裸值（`--verify yes`）；
+  做成精确判据需补 `action`/`type`，**现在故意不做**（只收紧阈值会把 `--max-epochs 30` 全误报）。
+  **我最初把对照 3 的期望写错了**（以为单值也该报），查明是该检查的**边界**而非缺陷。
+- **阶段 A 审计工具**（阶段 5 的可复跑仪器，接进预检）：`scripts/phaseformer_L/audit_e14_stage_a.py` 用
+  `e14_read_test.locate_run` 的**同一把臂指纹尺子**逐格核八条不变量：run 唯一可解析 / `metrics.csv` 存在 /
+  `checkpoint` 已记且文件在 / `val_mse` 可用 / **`test_mse`+`test_mae` 为空** / `1 ≤ epochs_completed ≤ 30`
+  （**刻意不写"等于请求轮数"**：早停 `patience=8`）/ `parameter_count` 非空 / `config.json` 未置 `evaluate_test`。
+  实测（真产物）`ok 176 / pending 235 / fail 0`，`test split read during stage A: 0`。
+  **`--self-test` 5/5**，其中"`test_mse` 被填 ⇒ fail"一条**证明"没读 test"不是空话**
+  （真实 `metrics.csv` 50 列里 `test_mse`/`test_mae`/`parameter_count` 都在，已核）。
+  **接入预检**（`--require-complete`）：watcher 只证明"411 目录 + exit 0"——**若某 run 读过 test，
+  这两个条件照样成立**，而"每 checkpoint 只读一次"正是盲测主张的支点、此前**没有任何闸门看它**。
+- **我自己的 fixture 错误**：`--self-test` 首跑时四格共用模板的 `key`，四条判决**塌进同一个字典键**，
+  每格都打印"最后一格"的结果（看起来像"clean 也 fail"）⇒ 给每个合成格独立 `key` 后才对。
+- 记录：`docs/PhaseFormer_L/audit/paper_code_consistency.md` §21、§21.1；`e14_main/05_audit.md` 附；
+  排期 §10.1/§10.1.1 与日志多条。
+
+## 2026-09-20 — §4.4 解剖表校验器读错四个列名：105 格里 63 格"假通过"
+
+- 本会话**最严重**的一处静默缺陷，且它在**最后一跳的校验器**里（不在产物、不在审计器）。
+- **事实**：`verify_minipaper_fill.py` 的 §4.4 解剖表 checker 读 `leading_input_group_label` /
+  `mean_input_group_explanation` / `mean_output_group_explanation` / `leading_correction_energy_share`——
+  那是**原始** `dissection_table.csv` 的列名；而 `e16_writeback.build_dissection` 聚合写 44 表时**改了名**
+  （`input_group_label` / `input_group_explanation` / `output_group_explanation` / `correction_energy_share`）。
+- **后果比 PENDING 更坏**：`label_and_rate` 对"artifact 侧为空"是**跳过**，于是 `label=None, rate=None` 时
+  报 **match**——**从未比较却记为通过**；份额列则 PENDING。故 **105 格里 63 格没被真正验证**，
+  而回填的三条机器判据**都看不见**（PENDING 不是失败，假 match 更不是）。
+- **对照（同一 fixture，仅校验器版本不同）**：修前 `match 84 / PENDING 27`，把某格 rate 由 0.75 改成 0.11
+  **毫无反应（MISMATCH 0）**；修后 `match 105 / PENDING 6`，扰动 → `MISMATCH 1` ✅，
+  把产物改回原始列名 → **列缺失 MISMATCH**（`lacks ['input_group_explanation']`）✅。
+- **修法三处**：①四个真名；②**加"列缺失即 MISMATCH"守卫**（根因级：将来任何改名都不会再退化成静默通过）；
+  ③`label_and_rate` 在 artifact 侧 label 与 rate **皆空**时报 MISMATCH 而非跳过。
+- **同日继续扫同类**（§22.1）：`check_4_3` 的 `|cos|` 只在**两侧都在**时才比较、`check_4_4_dissection` 的
+  overlap 对空值 `continue` ⇒ 两处都会"静默通过"。已改为缺任一侧即 MISMATCH，并加两条**真数据对照**
+  （未改动的 §4.3 → `match 168`；删掉某格 `(cos)` → MISMATCH）。
+- **顺带固化**：`rehearse_minipaper_fill.py`（AST 取生产者列名 + 按规定格式填论文临时副本，**7/7 断言**），
+  同时钉住**列名契约**与 **§4.4 填写格式**。
+- **这次 before/after 是被"我忘了同步"意外成全的**：首跑服务器上仍是旧版校验器（我只改了本地），
+  于是它**原样复现了缺陷**；sync 之后重跑才得到右列 ⇒ 再次印证"验证前先确认服务器版本就是我改的那版"。
+- 记录：`paper_code_consistency.md` §22、§22.1；排期日志两条。
+
+## 2026-09-20 — 收官判据的一个假阳性通道：**产物缺失时三条判据全不报错**
+
+- 前几条修的是"判据本身漏检"；这条是**判据的组合**有缺口——"所有判据都通过，但产物其实没产生"。
+- 三处对"缺文件"的处理都不致命：①`check_builder_outputs.py` 对缺失 CSV 会 `exit 1`，
+  但第 3/4/6 步带 `|| true` ⇒ **被掩盖**；②`read_test_generic.py` 永远 exit 0（已登记例外，由第 7 步兜）；
+  ③第 7 步审计器对缺产物报 **`PENDING`** 而**不是 `FAIL`** ⇒ **`PASS=3, PENDING=22`、exit 0**（实测）。
+- 于是对 **§4.6** 而言三条回填判据**恰好都失效**：其 25 格**本就非空**（装计划文字）⇒ 判据①看不见；
+  产物缺失时校验器给的是 `PENDING` ⇒ 判据②（无 MISMATCH）与③（`blank` 0）都不报错。
+  ⇒ **若 `e18_writeback` 失败（被 `|| true` 掩盖），链条仍打印 `PHASE2_OK`，而 §4.6 的表从未产生。**
+- **修法（判据⑤）**：收官时跑 `audit_phase2_outputs.py` 并要求 **`PENDING` = 0**
+  （该 `PENDING` 的唯一来源就是"产物不存在"）。收官判据因此共**五条**：
+  ①`--inventory` 0；②无 MISMATCH；③`blank` 0；④每节比较格数 ≥ 该节空格数；⑤审计器 `PENDING` 0。
+- **方法论**：修完单个判据后要再问"**这些判据合起来能覆盖哪些失败态**"——
+  单个判据再强，也可能被另一个判据的"善意容忍"（`PENDING`）从旁边绕过去。
+- 记录：`paper_code_consistency.md` §23；排期 §10.4（判据由三条→五条）+ 日志两条。
