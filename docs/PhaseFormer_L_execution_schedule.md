@@ -19,14 +19,36 @@
 | D-2 | §4.2 新格子超参 | **统一用 preset 默认 `gate_init=0.2`、`lr=1e-3`**；复用格保留其 Stage-0 冻结值 | 省下 Stage-0 扩展（约 84 runs）；**表内出现两套超参协议，须在 §4.2 表注显式披露** |
 | D-3 | §4.5 条件性学习范围 | **7 个 test-selected setting** | 新训 24 runs；须披露这 7 个 setting 的来源 |
 | D-4 | §4.6 行 1 平滑复测范围 | **7 个 test-selected setting，2 档** | 新训 42 runs |
+| D-5 | §3.4.3 的开关 `s` 与阈值 `ν*` | **`s` 不进入模型定义**：PhaseFormer-L = 修正器**恒定启用**；`s` 仅作 §4.2/§4.7 的**诊断列**（预测该数据集是否需要电平通道，并如实报告判对/判错） | §4.2 的"PhaseFormer-L（含开关）"与"always-on"两列**合并为一列**；主张 B 由"模型性质"改述为"开关预测力"；**主张 A 变强**（失去在 ETTh1/ETTm1 上自动关闭的能力） |
+| D-6 | A1 行范围 | **按 §4.0 协议全训 24 × 3 = 72 runs** | 见 §2.4：minipaper 的"12 格既有"前提被审计推翻 |
 
-**D-2 的必然后果（必须在表注写明）**：`weak_residual` 行内，7 个复用格用 Stage-0 冻结
-`(gate, lr)`，其余 17 个新格用 preset 默认；两者不可声明为同一超参协议，配对比较只在
-"同一 setting 内 PhaseFormer-L vs `phase_only`"这一层成立。`phase_only` 行同理（6 复用 / 18 新）。
+**D-2 的必然后果（必须在表注写明）：§4.2 表内存在三种 gate 先验，不是两种。**
 
-**§3.4.3 的 `ν*` 冻结次序**：`ν*` 只由 6 个已知 setting 的**训练集**统计量拟合，不需要任何
-§4.2 结果。因此 E19 阶段 1（train-only 统计量）必须先于 E14（主表矩阵）完成并冻结 `ν*`，
-以保住"冻结后盲测"的时序声明。这一步是分钟级 CPU 作业，不占用关键路径。
+| 来源 | `weak_period_residual_gate_init` | 适用格 |
+|---|---|---|
+| 新格（`l_main`/`l_q1_4`/`l_q1_8`） | **0.2**（D-2 preset 默认） | 51 + 51 + 51 + Traffic 36 |
+| preset 自持（`l_rcrf`/`a1`） | **0.5**（`rcrf_nlinear_plain` 与 `gold_combo_*` 在 preset 内部定义，`arm_command` 不注入 0.2） | 84 + 72 |
+| 复用格（Stage-0 冻结） | **0.5 或 0.2**（逐 setting，见 §2.1） | 81 格 |
+
+冒烟实测已确认这三种取值同时出现在产物里（`Electricity-336`：`l_main` gate=0.2、`l_rcrf` gate=0.5、`a1` gate=0.5）。
+
+**D-5 的关键后果：主张 A 变为实质性检验。** 去掉开关后，PhaseFormer-L 在 ETTh1/ETTm1 上不再能"按构造不劣于" matched rerun。§4.1 的先导证据在这两个数据集上是 **−1.3% / −2.7%**，均超过主张 A 的 1.0% 回退上限，因此**主张 A 有可能不达标**；按 §4.0 的报告规则，须如实报告为"未达预注册门槛"，不得改用其他口径重述。这正是 D-5 的代价，也是它作为检验的价值。
+
+**§3.4.3 的 `ν` 冻结结果（训练集，无 test）**：三个候选统计量中只有 `tau_hat_steps` 能分开已知符号的数据集——
+
+| 候选 `ν` | 正类（Weather 96.9 / ETTh2 88.2 / ETTm2 63.6 步） | 负类（ETTh1 51.1 / ETTm1 34.9 步） | 可分离 |
+|---|---|---|---|
+| `cycle_level_std` | 0.507 / 0.418 / 0.348 | 0.371 / 0.489 | **否（反序）** |
+| `last_cycle_shift` | 0.467 / 0.398 / 0.336 | 0.363 / 0.434 | **否（反序）** |
+| `tau_hat_steps` | 96.9 / 88.2 / 63.6 | 51.1 / 34.9 | **是**，可分离区间 (51.11, 63.58) |
+
+**冻结**：`ν = tau_hat_steps`，`ν* = 57.35`（区间中点，规则式定义、只用到训练集统计量）。
+因为 `s` 不进入模型（D-5），`ν*` 只决定**诊断列**的取值，不影响任何训练或模型选择，因此
+即使放错也不会污染主结果。预测结果为：`s=1` ∈ {ETTh2, ETTm2, Weather}（12 个 setting）、
+`s=0` ∈ {ETTh1, ETTm1, Electricity, Traffic}。**Electricity（τ̂=54.5）落在可分离区间内部**，
+其判定对 `ν*` 的位置敏感，须在 §4.7 单独披露；而实测 Electricity-336 的修正器相对 matched
+`phase_only` 是 **+3.6%**（0.16768 → 0.1617，seed 2021），即**开关在 Electricity 上判错**——
+按 minipaper §5.6 如实报告。
 
 ---
 
@@ -95,28 +117,31 @@ Weather-192、Electricity-336。其中 `phase_only` 只复用前 6 个（E8 未�
 含 18 个 `direct_nlinear` + 18 个冻结臂）必须按投影臂排除，只有其中标记
 `weak_residual_projection_arm=direct_nlinear` 的 18 个是 E3 复用格的镜像，不重复计入。
 
-### 2.2 E14 主表矩阵明细
+### 2.2 E14 主表矩阵明细（**已在服务器按 `--verify` 对账通过**，2026-09-18）
+
+`--stage plan --verify` 输出的 `total = 492` 个 cell，其中 **新训 411 runs、复用 81 格**，
+`reuse_cells_resolved = 81`、`missing = []`。
 
 | 行 | 配置 | setting 域 | 复用 | 新训 runs |
 |---|---|---|---:|---:|
-| `phase_only` | `--mechanism no_residual` | 24 | 6 | 18×3 = 54 |
-| PhaseFormer-L（主）/ always-on | `weak_residual` + `weak_period_residual_head_type=shared` | 24 | 7 | 17×3 = 51 |
-| L-q1/4 | `pooled_lowrank`，`pool_factor=1`，`rank=H/4` | 24 | 7 | 17×3 = 51 |
-| L-q1/8 | `pooled_lowrank`，`pool_factor=1`，`rank=H/8` | 24 | 7 | 17×3 = 51 |
-| L-rcrf | `rcrf_nlinear_plain` | 24 | 0 | 24×3 = 72 |
-| A1（incumbent 参照） | `gold_combo_reliability_s2` | 12（6 数据集 × H336/720） | 0 | 12×3 = 36 |
-| Traffic 附录 `phase_only` | 同上行配置 | 4 | 0 | 12 |
-| Traffic 附录 PhaseFormer-L | 同上行配置 | 4 | 0 | 12 |
-| Traffic 附录 L-q1/4 + q1/8 | 同上 | 4 | 0 | 24 |
-| **合计** | | | | **363** |
+| `phase_only` | `--mechanism no_residual` | 24 + Traffic 4 | 6 | 18×3 + 4×3 = **66** |
+| PhaseFormer-L（= always-on，D-5） | `weak_residual` + `head_type=shared`，gate 0.2 | 24 + Traffic 4 | 7 | 17×3 + 4×3 = **63** |
+| L-q1/4 | `pooled_lowrank`，`pool_factor=1`，`rank=H/4` | 24 + Traffic 4 | 7 | 17×3 + 4×3 = **63** |
+| L-q1/8 | `pooled_lowrank`，`pool_factor=1`，`rank=H/8` | 24 + Traffic 4 | 7 | 17×3 + 4×3 = **63** |
+| L-rcrf | `rcrf_nlinear_plain` | 24 + Traffic 4 | 0 | 28×3 = **84** |
+| A1（incumbent 参照，D-6） | `gold_combo_reliability_s2` | 24（不含 Traffic） | 0 | 24×3 = **72** |
+| **合计** | | | **81** | **411** |
 
-**`always-on` 与 PhaseFormer-L（主）共用同一批 run**：`always-on` 就是 `weak_residual`
-在 24 个 setting 上的读数（17 新 + 7 复用）；PhaseFormer-L（主）是其中 `s=1` 的 setting
-取 `weak_residual`、`s=0` 的 setting 取同 setting 的 `phase_only` 读数。因此"24 − 7 = 17"
-计数的是 always-on 的 17 个新 setting，与 minipaper §4.2 的脚注一致。
+**`always-on` 列与 PhaseFormer-L 合并（D-5）**：`s` 不再进入模型定义，PhaseFormer-L 就是
+修正器恒定启用的 `weak_residual`，因此 minipaper §4.2 原表的
+"PhaseFormer-L（含开关 `s`）"与"always-on"两列数值相同，须合并为一列，并把 `s` 移到诊断列。
+`--verify` 的 81 个复用格与 §2.1 的审计清单逐格一致。
+
+**G8 的三类图与 G7 的 28 行由 E15 产出（CPU，无训练）**，不计入本表。
 
 **必答项落点**：(a) ETTh2 四 horizon 对 `phase_only`/Golden 的差距 + FITS 引用数字（外部参照，仓库无源）；
-(b) 开关对 ETTh1/ETTm1 的判定 + always-on 在这两个数据集上的读数；(c) q=1/8 与 direct 的三 seed 差是否 ≤0.5%。
+(b) ETTh1/ETTm1 上的 `g` 均值（D-5 后不再有"开关关小"的能力，改为报告逐 dataset 的 `g` 均值 + 诊断列 `s`）；
+(c) q=1/8 与 direct 的三 seed 差是否 ≤0.5%。
 
 ### 2.3 E17 / E18 明细
 
