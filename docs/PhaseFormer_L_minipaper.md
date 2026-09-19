@@ -46,7 +46,13 @@ its removal hurts the fused forecast even where it improves the branch on its ow
 probe into **PhaseFormer-L**: PhaseFormer plus a gated linear level corrector whose rank is set by the
 predictive spectrum rather than by parameter budget — compressible to 3.5–6.1% of the dense head with
 ≥92% of its value provably retained — and whose gain is predicted, from training data alone, to concentrate
-on datasets with non-stationary cross-cycle level. *[Main results to be filled.]*
+on datasets with non-stationary cross-cycle level. That prediction holds, and it is sharp: across the twelve
+settings of ETTh2, ETTm2 and Weather the corrector improves on the matched phase-only baseline in **12 of 12**
+cases (up to 8.7% MSE), the pre-registered diagnostic assigns `s=1` to **exactly** those twelve settings, and
+the training-set level-memory length correlates with the gain at **ρ = −0.750**. It is not a universal win, and
+we report it as such: the same corrector degrades ETTh1 and ETTm1 by up to 2.7%, and two pre-registered bounds
+are not met — uniform non-degradation, and rank efficiency (the rank-`H/8` variant deviates from the dense
+corrector by 0.72% MSE per setting against a 0.5% bound).
 
 **中文。** PhaseFormer 证明按相位（跨周期同偏移位置）做 token 化，得到的表示对周期形状变化结构不变、且位于
 极低维子空间，因此约 1k 参数即可达到 SOTA。但其理论假设周期局部平稳，非平稳性被留作未来工作。本文证明相位
@@ -57,7 +63,11 @@ on datasets with non-stationary cross-cycle level. *[Main results to be filled.]
 学习：同一方向若从独立回归中冻结得到反而使模型退化，而联合学到的子空间与主干条件性目标对齐，删除它会损害
 融合预测——即便支路自身误差反而变好。这些发现把探针收束为 **PhaseFormer-L**：PhaseFormer 加一条门控线性电平修正器，
 其秩由预测谱而非参数预算决定——可压缩到稠密头参数的 3.5%–6.1% 且可证保留 ≥92% 的价值——并且其增益能仅凭训练
-数据预测为集中在跨周期电平非平稳的数据集上。*[主结果待填。]*
+数据预测为集中在跨周期电平非平稳的数据集上。该预测成立且很锐：在 ETTh2、ETTm2 与 Weather 的 12 个 setting 上，
+修正器相对配对 `phase_only` 基线 **12/12 全部变好**（最多 8.7% MSE），预登记的诊断列把 `s=1` 恰好赋给**这 12 个**
+setting（精确率 12/12），且训练集电平记忆长度与增益的相关系数达 **ρ = −0.750**。它**不是普适增益**，我们照实报告：
+同一修正器在 ETTh1 与 ETTm1 上最多退化 2.7%，且两条预登记界**未达标**——"一致不退化"与"秩效率"
+（rank-`H/8` 变体相对稠密修正器逐 setting 偏差 0.72% MSE，界为 0.5%）。
 
 ---
 
@@ -505,6 +515,46 @@ FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现�
 **必答问题**：(a) ETTh2 四个 horizon 相对 `phase_only` 与 Golden 的差距是否收窄、是否达到 FITS 的引用数字；
 (b) 逐 dataset 报告门值 `g` 的均值；诊断列 `s` 是否把 ETTh1/ETTm1 判为 `s=0`，若判为 `s=1` 则如实报告其表现；
 (c) q=1/8 与 direct 的三 seed 差是否在 ±0.5% 内。
+
+#### 4.2.1 实测判定（2026-09-20；数字取自本表，判定取自 `claims.json`，逐格由 `verify_minipaper_fill.py` 独立复核）
+
+**必答 (a)：ETTh2 四个 horizon 全部收窄了相对 `phase_only` 的差距，但没有四档都"稳定超过 Golden"。**
+Δ vs `phase_only` = **−3.06 / −1.37 / −1.50 / −5.68%**（四个 horizon 的 MSE 均为负，MAE 同向），
+即 **4/4 收窄**；然而"稳定超过 Golden"列只有 **ETTh2-720 为 ✓**，其余三档为 ✗。
+**这两件事不要混读**：收窄的是"相对配对基线"，没达标的是"相对 Golden 的三 seed 稳定超越"。
+
+**必答 (b)：诊断列 `s` 恰好标出"修正器有增益"的那 12 个 setting，但它是单向判据。**
+`s=1` 与 {ETTh2, ETTm2, Weather} × 4 horizon **完全重合**，而**这 12 格的 Δ 全部为负**（−0.52% ～ −8.73%）
+⇒ **`s=1` ⇒ 有增益，12/12，精确率 100%**。**反向不成立**：`s=0` 的格里仍有 **6 格** Δ<0
+（ETTh1-336、ETTh1-720 与 Electricity 四档，见 `claims.json.B.diagnostic_misses`）
+⇒ `s` 是**高精确率、低召回**的诊断列，**不是双向判据**，§5 的限制里按此表述。
+
+逐 dataset 的 `g` 均值给出一个**读数**：ETTh1 ≈ 0.20–0.22、ETTm1 ≈ 0.19–0.20、Electricity ≈ 0.18–0.20，
+而"有增益"的三组多为 **0.04–0.06**（ETTh2-96 = 0.052、ETTm2-96 = 0.052、Weather-96 = 0.052）
+⇒ **门值接近 0 恰是"修正器在干活"的签名**：主干若已把电平吸收掉，门就退火到近乎关闭。
+
+`s` 对 **ETTh1/ETTm1 判为 `s=0`**（与 §4.0 预登记一致），而这两组**实测确实变差**（见下），**如实报告**。
+
+**必答 (c)：不在 ±0.5% 内，故主张 D 判定为 `false`。**
+该主张的口径是**逐 setting 的 |L-q1/8 − L| 的平均值**（`e14_writeback.py:585-597`），
+实测 **|ΔMSE| 平均 0.7183%、|ΔMAE| 平均 0.5343%**，界为 0.5% ⇒ **"rank=H/8 已足够"这一效率主张未达预登记界**。
+**但它不否定参数量结论**：L-q1/8 的总参数确实只有 direct 的约 **17%**
+（h192：**23 863 vs 140 191**，见变体表 `total_params_per_horizon`），
+且它的**宏平均 ΔMSE 还略好于** direct（**−1.31% vs −1.00%**）——
+即"低秩能省参数"成立，"**逐格都能压在 0.5% 以内**"不成立。
+
+| 主张 | 预登记界 | 实测 | 判定 |
+|---|---|---|---|
+| **A** 24 setting 上相对 `phase_only` 的退化 ≤ 1% | 1.0% | 任一指标越界：**ETTh1-96/192/720、ETTm1-96/192/336**；双指标越界：ETTh1-96/192、ETTm1-192/336 | **✗ 不成立** |
+| **B** {ETTh2, ETTm2, Weather} 的 12 个 setting 上**全部**变好 | ≥ 9/12 | **12/12 全部变好** | **✓ 成立** |
+| **C** 相对 Golden 的"稳定超过"与双指标改善（描述性） | — | L **8** 个 setting 稳定超过 Golden（`phase_only` 仅 **2**）；双指标改善 L **12** vs `phase_only` **3** | 见文 |
+| **D** 逐 setting \|L-q1/8 − L\| 的平均 ≤ 0.5% | 0.5% | \|ΔMSE\| **0.7183%**、\|ΔMAE\| **0.5343%** | **✗ 不成立** |
+
+**本节的一句话结论（也是摘要那句话的出处）**：**PhaseFormer-L 不是普适增益**——
+它在**电平非平稳**的 {ETTh2, ETTm2, Weather} 上 **12/12 稳定变好**（最多 **−8.73%** MSE），
+在 **ETTh1/ETTm1 上反而变差**（最多 **+2.66%**），而**"哪里有用"可以由训练集上的电平记忆长度 `τ̂` 事前预测**
+（§4.7：ρ(`τ̂`, ΔMSE) = **−0.750**）——这正是命题 1 所要的形态。
+
 
 ### 4.3 相位补空间的维数（7 数据集，train/validation）
 

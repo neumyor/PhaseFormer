@@ -746,6 +746,14 @@ def check_4_4_dissection(report: Report, root: pathlib.Path,
 #: sentences carry no marker a reader would notice.  Found 2026-09-20 by sweeping
 #: the paper for statements that the fill itself invalidates.
 PLACEHOLDER_MARKERS = ("待填", "空表")
+# The paper's placeholders are BILINGUAL: the abstract carries both
+# "*[主结果待填。]*" and "*[Main results to be filled.]*".  Until 2026-09-20 only the
+# Chinese half was matched, so replacing the Chinese half alone would have made
+# this check report "blank: 0" while the English abstract still announced that the
+# main results were missing -- a false PASS of the acceptance criterion, and the
+# same class of defect as the two section-4.7 tables that a line-anchored grep
+# could not see.  English markers are matched case-insensitively.
+PLACEHOLDER_MARKERS_CI = ("to be filled", "to fill in", "tbd", "todo")
 
 
 def check_placeholders(report: Report, minipaper: pathlib.Path) -> None:
@@ -760,11 +768,13 @@ def check_placeholders(report: Report, minipaper: pathlib.Path) -> None:
     """
     lines = minipaper.read_text(encoding="utf-8").splitlines()
     for number, line in enumerate(lines, start=1):
-        for marker in PLACEHOLDER_MARKERS:
-            if marker in line:
-                report.add("§4/摘要", f"line {number}", marker, "blank",
-                           line.strip()[:160])
-                break
+        lowered = line.lower()
+        hit = next((m for m in PLACEHOLDER_MARKERS if m in line), None)
+        if hit is None:
+            hit = next((m for m in PLACEHOLDER_MARKERS_CI if m in lowered), None)
+        if hit is not None:
+            report.add("§4/摘要", f"line {number}", hit, "blank",
+                       line.strip()[:160])
 
 
 def main() -> int:
