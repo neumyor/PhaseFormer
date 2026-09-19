@@ -106,6 +106,16 @@ if [ -z "$ONLY" ] || [ "$ONLY" -ge 1 ]; then
   if [ "$FROM" -le 1 ]; then
     echo "=== [$(date -Is)] pre-flight: E14 completion guard"
     guard_e14_done || exit 1
+    # Static, sub-second, and it runs BEFORE any expensive stage: it proves that
+    # every column the write-backs demand is one their producers actually write.
+    # This is the generalised form of the e16_writeback label defect, which
+    # otherwise only surfaces after the dissection run has already finished.
+    echo "=== [$(date -Is)] pre-flight: static column contracts"
+    "$PY" scripts/phaseformer_L/check_column_contracts.py --strict \
+      --output "$LOGDIR/phase2_column_contracts.json" || {
+        echo "column contracts are broken; refusing to spend GPU time on stages that cannot write back" >&2
+        exit 1
+      }
   fi
 fi
 
