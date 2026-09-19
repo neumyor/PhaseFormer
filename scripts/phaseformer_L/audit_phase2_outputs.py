@@ -86,6 +86,21 @@ def read_json(path: pathlib.Path):
     return json.loads(path.read_text())
 
 
+#: The only arms whose mechanism owns a ``weak_period_residual_gate`` parameter.
+#: ``phase_only`` (no_residual), ``l_rcrf`` (rcrf_nlinear_plain) and ``a1``
+#: (gold_combo_reliability_s2) have no gate, so their rows carry no gate value.
+GATE_ARMS = ("l_main", "l_q1_4", "l_q1_8")
+
+
+def is_true(value) -> bool:
+    """Read a boolean from a CSV cell the way ``e14_params.py`` writes it.
+
+    CSV has no booleans: the writer emits Python ``True``/``False``, and a
+    missing cell must read as False rather than as the non-empty string "None".
+    """
+    return str(value).strip().lower() in ("true", "1", "yes")
+
+
 def check_exists(report: Report, experiment: str, rel: str, label: str):
     """Record presence, and return the path (or None when absent).
 
@@ -150,13 +165,41 @@ def audit_e14(report: Report) -> None:
                    f"{len(crossed)} row(s) mismatched"
                    + (f" e.g. {crossed[0].get('setting')}/{crossed[0].get('arm')}"
                       if crossed else ""))
-        no_gate = [r for r in rows
+        # The gate only exists in the three weak-residual arms; `phase_only`
+        # (no_residual), `l_rcrf` (rcrf_nlinear_plain) and `a1`
+        # (gold_combo_reliability_s2) have no such parameter at all, so 85 of the
+        # 492 rows legitimately carry no gate value.  Requiring one from *every*
+        # row would have failed this gate after all 411 runs had finished.
+        # The row's own `gate_param_present` column is the discriminator, and the
+        # arm/gate equivalence is asserted separately so that a mis-populated
+        # column cannot pass by being uniformly False.
+        present = [r for r in rows if is_true(r.get("gate_param_present"))]
+        no_gate = [r for r in present
                    if not str(r.get("gate_value_from_checkpoint", "")).strip()]
-        report.add("E14 (§4.2)", "gate value recovered from every checkpoint",
+        mismatched = [r for r in rows
+                      if (str(r.get("arm", "")) in GATE_ARMS)
+                      != is_true(r.get("gate_param_present"))]
+        report.add("E14 (§4.2)", "gate value recovered from every gated checkpoint",
                    "PASS" if not no_gate else "FAIL",
-                   f"{len(no_gate)} row(s) without a gate value"
+                   f"{len(no_gate)} gated row(s) without a gate value "
+                   f"(of {len(present)} gated rows; "
+                   f"{len(rows) - len(present)} rows have no gate parameter)"
                    + (f" e.g. {no_gate[0].get('setting')}/{no_gate[0].get('arm')}"
                       if no_gate else ""))
+        # A mechanism without the parameter cannot produce a value for it, so a
+        # non-empty value on such a row means the table is mis-populated -- the
+        # arm/presence comparison alone would not notice it.
+        stray = [r for r in rows
+                 if not is_true(r.get("gate_param_present"))
+                 and str(r.get("gate_value_from_checkpoint", "")).strip()]
+        inconsistent = mismatched + stray
+        report.add("E14 (§4.2)", "gate presence matches the arm table",
+                   "PASS" if not inconsistent else "FAIL",
+                   f"{len(mismatched)} row(s) whose arm and gate_param_present "
+                   f"disagree, {len(stray)} gateless row(s) carrying a gate value"
+                   + (f" e.g. {inconsistent[0].get('setting')}/"
+                      f"{inconsistent[0].get('arm')}"
+                      if inconsistent else ""))
 
     main = check_exists(report, "E14 (§4.2)", f"{E14}/main_table.csv", "main_table.csv present")
     if main:
