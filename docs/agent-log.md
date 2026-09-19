@@ -3141,3 +3141,26 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   且 E16 无 resume，**决定不做**，改为"先做对再提速"）。
 - 边界：以上检查只覆盖**名字、结构、计数与门禁**，**不判断数值在科学上是否正确**——后者是各实验
   阶段 5 审校的职责。
+
+## 2026-09-20 — 补齐仓库规则要求的验证：全量单测通过（388 passed）
+
+- 起因：对照 `MANAGE_RULES.md` 逐条自查「规则要求我留下什么」，发现**两项此前未做**：
+  ①「验证要求」明列的**轻量验证**（`python -m pytest tests/ -q`）——本日改过**产品代码**
+  （`read_test_generic.py` 的 marker 修复、`e18_writeback.py` 的 None 保护、`e14_writeback.py` 的
+  FITS/空 variant 保护、`evaluate_lowrank_semantic_interventions.py` 的 `RandomRRR-drop` 臂 +286 行），
+  但只做了针对性冒烟与预演，**没有跑仓库既有测试**；②「操作与改动记录」要求的 `docs/agent-log.md`
+  （已在同日上一条补齐三条 2026-09-20 条目）。
+- 命令（服务器；规则里写的是本机 conda `py310`，服务器等价环境为 `time`，含 torch 2.6.0 + Lightning 2.6.5）：
+  ```bash
+  /home/yyk/yyk03/miniconda3/envs/time/bin/python -m pytest tests/test_lowrank_checkpoint_information.py -q
+  /home/yyk/yyk03/miniconda3/envs/time/bin/python -m pytest tests/ -q
+  ```
+- 结果：**`tests/test_lowrank_checkpoint_information.py` 26 passed（14.35 s）**；
+  **全量 `tests/`（37 个测试文件）388 passed, 262 subtests passed, 18 warnings（151.55 s），退出码 0**。
+  即本日对产品代码的全部改动**未破坏任何既有测试**。
+- 18 条 warning 全部是 `e19_predictive_stats.py` 的 `RuntimeWarning: Mean of empty slice`
+  （`np.nanmean` 在退化输入下的预期行为，由 `TestTauHatEstimator::test_flat_level_is_reported_as_non_finite_not_crashing`
+  等用例主动构造），与已记录的「summary 里可能出现非有限值」一致，非缺陷。
+- 覆盖边界：仅 `tests/test_lowrank_checkpoint_information.py` 会触及本日改过的模块；其余 36 个测试文件
+  属其它实验，跑全量是为了满足规则的「轻量验证」要求，而不是因为它们覆盖了我的改动。
+- 记录：`docs/PhaseFormer_L_execution_schedule.md` 的日志（同日补一条）；本文件同日的三条条目见上。

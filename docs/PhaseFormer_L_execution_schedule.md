@@ -431,6 +431,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 实测刷新 ETA | — | 从已完成 run 的 `elapsed_sec` 取实测中位数（不再是外推），发现两处先前估值偏高：①**Weather h720 实测 449 s**（n=2），而 `COST_HINT × 0.7` 给的是 ~840 s——比值约 **0.37**，比我统一采用的 0.7 折扣低得多；②**Electricity h192 实测 848 s**，比 h336（1589 s）与 h720（1285 s）都便宜，说明此前用"Electricity ≈1285 s"统一估是偏高的。按实测折算剩余 289 个 run ≈ **15.3 GPU·h → 1.9 h → ETA ≈ 06:35**，区间 **06:30–08:10**（较 §9.1.2 略提前）。**诚实的不确定性**：Weather 样本仅 n=2 且恰是 hint 最贵的 horizon、ETT 四数据集尚无实测，故只作区间表述 |
 
+| 2026-09-20 | 规则符合性自查 | **补齐两项未做的要求** | 对照 `MANAGE_RULES.md` 逐条自查"规则要求我留下什么"，发现两项未做：①**「验证要求」明列的轻量验证**（`python -m pytest tests/ -q`）——本日改过**产品代码**（`read_test_generic.py` 的 marker 修复、`e18_writeback.py` 的 None 保护、`e14_writeback.py` 的 FITS/空 variant 保护、`evaluate_lowrank_semantic_interventions.py` 的 `RandomRRR-drop` 臂），却只做了针对性冒烟与预演、**没跑仓库既有测试**；②「操作与改动记录」要求的 `docs/agent-log.md`（已补三条 2026-09-20 条目）。**测试结果**：`tests/test_lowrank_checkpoint_information.py` **26 passed（14.35 s）**；全量 `tests/`（37 文件）**388 passed + 262 subtests passed, 18 warnings（151.55 s）, exit 0** → 本日对产品代码的全部改动**未破坏任何既有测试**。18 条 warning 均为 `e19_predictive_stats.py` 的 `np.nanmean` 空切片（退化输入下的预期行为，由测试用例主动构造）。**覆盖边界**：仅 1 个测试文件会触及我改过的模块，跑全量是为满足规则要求 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
