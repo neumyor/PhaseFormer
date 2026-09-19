@@ -123,7 +123,10 @@ run_step 3 "E14 parameter table + reuse ambiguity audit + §4.2 writeback" \
     && '$PY' scripts/phaseformer_L/e14_writeback.py \
       --manifest '$E14_ROOT/stage_a_manifest.json' --results '$E14_ROOT/results.csv' \
       --stats '$E19_ROOT/level_statistics.csv' \
-      --golden docs/PhaseFormer_gold_standard.md --output-root '$E14_ROOT'"
+      --golden docs/PhaseFormer_gold_standard.md --output-root '$E14_ROOT' \
+    && '$PY' scripts/phaseformer_L/check_builder_outputs.py \
+      --csv '$E14_ROOT/main_table.csv' --csv '$E14_ROOT/variant_table.csv' \
+      --output '$E14_ROOT/empty_column_report.json' || true"
 
 # E16's own gate is its --dry-run: it resolves every cell's checkpoint and
 # refuses when one is missing, and `--verify-checkpoint-heads` additionally
@@ -139,7 +142,11 @@ run_step 4 "E16: §4.4 dissection + interventions (63 cells)" \
     && '$PY' scripts/phaseformer_L/e16_writeback.py \
       --intervention '$E16_ROOT/intervention_table.csv' \
       --dissection '$E16_ROOT/dissection_table.csv' \
-      --output-root '$E16_ROOT'"
+      --output-root '$E16_ROOT' \
+    && '$PY' scripts/phaseformer_L/check_builder_outputs.py \
+      --csv '$E16_ROOT/intervention_table_44.csv' \
+      --csv '$E16_ROOT/dissection_table_44.csv' \
+      --output '$E16_ROOT/empty_column_report.json' || true"
 
 # E17: train, assemble, then read test ONCE for the 24 new cells.  The runner
 # refuses --evaluate-test by design and marks the column
@@ -158,7 +165,10 @@ run_step 5 "E17: §4.5 four-arm training (24 runs), assemble, single test read" 
     && '$PY' scripts/phaseformer_L/e17_writeback.py \
       --results '$E17_ROOT/results.with_test.csv' \
       --projector-audit '$E17_ROOT/projectors/projector_audit.json' \
-      --output-root '$E17_ROOT'"
+      --output-root '$E17_ROOT' \
+    && '$PY' scripts/phaseformer_L/check_builder_outputs.py \
+      --csv '$E17_ROOT/conditional_table.csv' \
+      --output '$E17_ROOT/empty_column_report.json' || true"
 
 run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 settings)" \
   bash -c "cd '$REPO' && \
@@ -175,7 +185,10 @@ run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 se
       --results '$E18_ROOT/results.with_test.csv' \
       --e14-results '$E14_ROOT/results.with_test.csv' \
       --truncation '$E18_ROOT/svd_truncation_table_28.csv' \
-      --output-root '$E18_ROOT'"
+      --output-root '$E18_ROOT' \
+    && '$PY' scripts/phaseformer_L/check_builder_outputs.py \
+      --csv '$E18_ROOT/negative_table.csv' \
+      --output '$E18_ROOT/empty_column_report.json' || true"
 # NOTE on --verify semantics, which differ per script and must not be guessed:
 #   e18_negative.py     --verify = "fail if any planned cell has no matching
 #                        completed run", i.e. a stage-5 COMPLETENESS AUDIT.
