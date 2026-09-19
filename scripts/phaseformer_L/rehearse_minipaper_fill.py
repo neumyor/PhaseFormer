@@ -228,6 +228,52 @@ def main() -> int:
         if detail:
             print("      " + detail[0].strip()[:150])
 
+        # 4. regression control: one overlap missing on the artifact side.
+        #    The checker used to `continue` past an empty artifact value and
+        #    report the cell as match on the strength of the other overlap.
+        rows4 = build_artifact(columns)
+        rows4[0]["leading4_input_overlap"] = ""
+        write_artifact(rows4)
+        paper4 = scratch / "paper_overlap.md"
+        paper4.write_text(fill_paper(paper_text, rows), encoding="utf-8")
+        got = run(scratch, paper4)
+        loud = got["counts"].get("MISMATCH", 0) >= 1
+        results.append(loud)
+        print(f"[{'OK  ' if loud else 'FAIL'}] an absent artifact overlap is reported: "
+              f"MISMATCH={got['counts'].get('MISMATCH', 0)}")
+
+        # 5. section 4.3's |cos| comparison, driven by the REAL dimension table and
+        #    the REAL (already filled) paper, so this is a real-data control.
+        e15 = REPO / "research_runs" / "phaseformer_L_e15_dimension_v1"
+        real_table = e15 / "dimension_table.csv"
+        if real_table.is_file():
+            target = scratch / "research_runs" / "phaseformer_L_e15_dimension_v1"
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "dimension_table.csv").write_text(
+                real_table.read_text(), encoding="utf-8")
+            base = run(scratch, MINIPAPER)
+            ok = base["counts"].get("MISMATCH", 0) == 0 and base["counts"].get("match", 0) >= 168
+            results.append(ok)
+            print(f"[{'OK  ' if ok else 'FAIL'}] real section 4.3 untouched: "
+                  f"match={base['counts'].get('match')} MISMATCH={base['counts'].get('MISMATCH', 0)}")
+            # drop the |cos| from one filled 4.3 cell: must become a MISMATCH
+            lines = paper_text.splitlines()
+            start43 = next(i for i, l in enumerate(lines) if l.startswith("### 4.3"))
+            end43 = next(i for i, l in enumerate(lines) if l.startswith("### 4.4"))
+            for i in range(start43, end43):
+                if "(0." in lines[i] or "(0)" in lines[i]:
+                    lines[i] = re.sub(r"\s*\(([-0-9.]+)\)", "", lines[i], count=1)
+                    break
+            stripped = scratch / "paper_no_cos.md"
+            stripped.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            got = run(scratch, stripped)
+            loud = got["counts"].get("MISMATCH", 0) >= 1
+            results.append(loud)
+            print(f"[{'OK  ' if loud else 'FAIL'}] a 4.3 cell that dropped its |cos| is "
+                  f"reported: MISMATCH={got['counts'].get('MISMATCH', 0)}")
+        else:
+            print("[SKIP] real section 4.3 artifact not present; cosine control skipped")
+
     print()
     if all(results):
         print(f"OK: {len(results)} assertion(s) held")

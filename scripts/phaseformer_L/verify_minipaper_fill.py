@@ -176,7 +176,14 @@ def check_4_3(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
             problems = []
             if artifact_template and artifact_template not in template:
                 problems.append(f"template {artifact_template!r} not in {template!r}")
-            if cos_match and artifact_cos not in (None, ""):
+            # A missing side is a gap, not a reason to skip: the earlier form
+            # compared only when BOTH sides existed, so a fill that dropped the
+            # |cos| from the cell was reported as match.
+            if artifact_cos in (None, "") and cos_match:
+                problems.append("the cell shows a |cos| but the artifact has none")
+            elif artifact_cos not in (None, "") and not cos_match:
+                problems.append("the cell shows no |cos| but the artifact has one")
+            elif artifact_cos not in (None, "") and cos_match:
                 shown = float(cos_match.group(1))
                 if abs(shown - round(float(artifact_cos), 3)) >= 1e-9:
                     problems.append(f"|cos| shown {shown} vs artifact {artifact_cos}")
@@ -700,11 +707,14 @@ def check_4_4_dissection(report: Report, root: pathlib.Path,
             if len(numbers) < 2:
                 problems.append(f"expected two numbers, found {numbers}")
             else:
-                for shown, value in zip(numbers, wanted):
+                for name, shown, value in zip(("in", "out"), numbers, wanted):
+                    # An absent artifact side is a gap: `continue` here used to
+                    # report the cell as match on the strength of the other one.
                     if value in (None, ""):
+                        problems.append(f"artifact has no leading4 {name} overlap")
                         continue
                     if abs(float(shown) - round(float(value), 2)) >= 1e-9:
-                        problems.append(f"overlap shown {shown} vs artifact {value}")
+                        problems.append(f"overlap {name} shown {shown} vs artifact {value}")
             report.add("§4.4 解剖表", key_label, header[6],
                        "MISMATCH" if problems else "match",
                        "; ".join(problems) if problems else cell)
