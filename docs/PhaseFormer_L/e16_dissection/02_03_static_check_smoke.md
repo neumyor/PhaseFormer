@@ -397,3 +397,40 @@ python scripts/phaseformer_L/e16_dissection.py --dry-run --verify-checkpoint-hea
 plan 里 `random_rrr: true`、`random_rrr_repeats: 100`，即 minipaper §4.4 要求的
 **随机 RRR 子空间对照**（`RandomRRR-drop` 臂，判据
 `criterion_6_drop_beyond_random_rrr_95pct`）确实在计划内，且重复次数为 100（与 `random` 带一致）。
+
+## 4. 上线前追加：用**真 manifest** 跑 E16 自己的前置门（2026-09-20 05:07，通过）
+
+E16 是全链**唯一的昂贵重跑**（无 `--resume`，3–5 h）。而它的 63 个 cell **全部是 `reused` 格**，
+依赖的 E14 checkpoint 早已定稿——所以它的前置门**不必等 E14 跑完就能先跑一遍**。
+在 E14 仍在训练（137/411）时执行：
+
+```bash
+/home/yyk/yyk03/miniconda3/envs/time/bin/python scripts/phaseformer_L/e16_dissection.py \
+  --dry-run --verify-checkpoint-heads \
+  --e14-root research_runs/phaseformer_L_e14_main_v1 \
+  --output-root research_runs/phaseformer_L_e16_dissection_v1
+```
+
+**结果：exit 0**，日志 `~/niuyiming/logs/e16_pregate.log`。计划事件逐字如下：
+
+```json
+{"event": "plan", "cells": 63, "by_arm": {"l_main": 21, "l_q1_4": 21, "l_q1_8": 21},
+ "by_e14_status": {"reused": 63}, "seeds": [2021, 2022, 2023],
+ "settings": ["ETTh2-720","ETTh2-96","ETTm2-192","ETTm2-96","Electricity-336","Weather-192","Weather-96"],
+ "evaluation_split": "val", "test_split_read": false,
+ "random_repeats": 100, "random_rrr_repeats": 100, "random_rrr": true, "mem_budget_mb": 512.0}
+```
+
+三点值得记下：
+
+1. **63 格全部解析、63 个 checkpoint 全部读通**，头类型逐格核对一致：
+   `l_main` → `dense_shared`（keys=1）、`l_q1_4`/`l_q1_8` → `pooled_lowrank`（keys=2），
+   秩为该 setting 的 `horizon/4` 与 `horizon/8`（实测 r = 12/24/42/48/84/90）。
+2. **§4.4 要求的随机 RRR 子空间对照已确实接线**：`random_rrr: true`、`random_repeats: 100`、
+   `random_rrr_repeats: 100`（不是"计划里有、代码里没有"）。
+3. **协议护栏在位**：`evaluation_split: "val"`、`test_split_read: false` —— E16 自身不读 test。
+4. `--dry-run` **不写任何产物**（跑后 `research_runs/phaseformer_L_e16_dissection_v1/` 仍不存在），
+   即这次预先验证**没有污染**该实验的输出根。
+
+因此第 4 步启动时不会卡在自己的前置门上；剩余不确定性只在训练/评估本身（GPU 时间），
+而这部分无法在 E14 让出卡之前推进。
