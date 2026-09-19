@@ -47,6 +47,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 MINIPAPER = REPO / "docs/PhaseFormer_L_minipaper.md"
 E15 = "research_runs/phaseformer_L_e15_dimension_v1"
 E14 = "research_runs/phaseformer_L_e14_main_v1"
+E16 = "research_runs/phaseformer_L_e16_dissection_v1"
 E17 = "research_runs/phaseformer_L_e17_conditional_v1"
 
 #: displayed column -> (artifact column, decimal places); None dp = exact string.
@@ -387,6 +388,68 @@ def check_4_5(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
                        cell if ok else f"paper={cell!r} expected {expected[0]}/{expected[1]}")
 
 
+def check_4_4_intervention(report: Report, root: pathlib.Path,
+                           minipaper: pathlib.Path) -> None:
+    """Section 4.4's intervention table: the artifact row minus its first field.
+
+    `e16_writeback` emits 11 fields per row -- `model | dataset | H | q/r | ...seven
+    values` -- while the paper's table has 10 columns and NO separate model column,
+    because the model identity is already inside the `q/r` label
+    (`dense（r=96）` / `q=1/4（r=24）` / `q=1/8（r=12）`).  So the mapping is
+
+        artifact_row[1:] == paper_row[0:]
+
+    and the check is a plain field comparison of the ten values.
+    """
+    md = root / E16 / "intervention_table_44.md"
+    block = section_text(minipaper.read_text(encoding="utf-8"), "### 4.4", "### 4.5")
+    header, paper_rows = parse_markdown_table(block, "随机 RRR 子空间 drop")
+    if header is None:
+        report.add("§4.4 干预表", "-", "-", "MISMATCH", "could not find the table header")
+        return
+    if len(header) != 10:
+        report.add("§4.4 干预表", "-", "columns", "MISMATCH",
+                   f"header has {len(header)} columns, expected 10")
+    if not md.is_file():
+        report.add("§4.4 干预表", "-", "artifact", "PENDING", f"{md.name} does not exist yet")
+        return
+
+    artifact = {}
+    for line in md.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) >= 4 and cells[1] not in ("Dataset", "") \
+                and not is_separator(cells):
+            artifact[(cells[1], cells[2], cells[3])] = cells
+
+    if len(paper_rows) != len(artifact):
+        report.add("§4.4 干预表", "-", "row count", "MISMATCH",
+                   f"paper has {len(paper_rows)} rows, artifact has {len(artifact)}")
+    for cells in paper_rows:
+        if len(cells) < 10:
+            report.add("§4.4 干预表", "|".join(cells[:2]), "-", "MISMATCH",
+                       f"row has {len(cells)} cells, expected 10")
+            continue
+        key = (cells[0], cells[1], cells[2])
+        want = artifact.get(key)
+        label = f"{key[0]}-{key[1]}-{key[2]}"
+        if want is None:
+            report.add("§4.4 干预表", label, "-", "MISMATCH",
+                       "no artifact row for this dataset/horizon/q-r")
+            continue
+        for index in range(10):
+            got, expect = cells[index], want[index + 1]
+            if not got:
+                report.add("§4.4 干预表", label, header[index], "blank", "empty paper cell")
+            elif got != expect:
+                report.add("§4.4 干预表", label, header[index], "MISMATCH",
+                           f"paper={got!r} artifact={expect!r}")
+            else:
+                report.add("§4.4 干预表", label, header[index], "match", "")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -408,6 +471,7 @@ def main() -> int:
     check_4_3(report, root, minipaper)
     check_4_2(report, root, minipaper)
     check_4_5(report, root, minipaper)
+    check_4_4_intervention(report, root, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
