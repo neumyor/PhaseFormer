@@ -109,7 +109,7 @@ python scripts/phaseformer_L/e14_read_test.py \
 13. Re-running the same command reports `already_read_from_artifact` for consumed cells and touches no checkpoint again.
 14. Confirm the `protocol` block and `run.gpus` before the §4.2 write-back; `research_runs/` is a synced tree and is never committed.
 
-## 3. 上线前实测：两条分支都在真产物上跑通（2026-09-20 05:2x）
+## 7. 上线前实测：两条分支都在真产物上跑通（2026-09-20 05:2x）
 
 第 1 步（阶段 B 单次 test 读取）有**两条互不相同的分支**，本轮在 E14 仍在训练时把两条都先验了一遍
 （`--dry-run` 不写任何产物，`wrote_outputs: false`）：
