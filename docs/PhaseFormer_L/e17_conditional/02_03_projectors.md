@@ -87,3 +87,34 @@ python scripts/phaseformer_L/e17_conditional_projectors.py \
 
 投影器部分阶段 2/3 通过（并修复 1 个会使 7/7 格全灭的缺陷）。训练部分（24 runs）待 E14 让出 GPU
 后启动；届时可直接复用这 7 个投影器与已解析的复用格。
+
+---
+
+## 6. 训练侧静态检查（`--stage plan --verify`，2026-09-19）
+
+```bash
+python scripts/phaseformer_L/e17_conditional.py --stage plan --verify \
+  --output-root research_runs/phaseformer_L_e17_plan
+# → {"event": "plan_only", "cells": 84, "new_runs": 24}
+```
+
+| # | 检查项 | 结果 |
+|---|---|---|
+| 1 | cell 总数 / 新训数 | **84 / 24**（21 冻结条件 + 3 冻结独立补 Electricity-336），与计划一致 ✓ |
+| 2 | 投影器齐备 | 7/7 `Q1COND.npy` 与 7/7 `Q1.npy`（含 Electricity-336 的新建 `Q1`） |
+| 3 | 走正确的 runner | 24 条命令全部经 `scripts/run_top2_direction_retention.py`——因为 `search_phaseformer.py` **没有** `--basis`，冻结子空间只能由该 wrapper 安装（同时必须给 `weak_residual_projection=frozen_subspace` override，否则 `PhaseFormer.__init__` 抛错） |
+| 4 | 协议常数 | 24/24 为 `--lookback 720 --period 24 --max-epochs 30 --loss huber --percent 100 --require-cuda --resume` |
+| 5 | **逐 setting 冻结超参** | 与 E8 的 `FROZEN` 表逐格一致：ETTh2-96 **0.5/1e-3**、ETTh2-720 **0.5/1e-3**、ETTm2-96 **0.5/3e-4**、ETTm2-192 **0.2/1e-3**、Weather-96 **0.2/3e-4**、Weather-192 **0.5/1e-3**；Electricity-336 为**新格**故用 D-2 默认 **0.2/1e-3** |
+| 6 | 不读 test | 24/24 命令**无** `--evaluate-test` |
+| 7 | 臂标识 | 用新的 `weak_residual_projection_arm` 标签（`e17_frozen_conditional_direction_1` / `e17_frozen_conditional_direction_1`），**不复用** E8 的 `keep_direction_1`，避免两个不同投影器共用一个臂名（E8 的 config 不记录 basis 路径或 sha256） |
+
+### 6.1 需要披露的口径裂缝（已知，不阻塞）
+
+`direct` 与 `PhaseFormer-L（联合）` 两列来自 E14 的 `l_main`；其中**新格**用 D-2 默认
+`(0.2, 1e-3)`，而两条冻结臂用上表的 per-setting 冻结值。因此"冻结 vs 联合"的对比在
+**超参不完全相同**这一层上不是严格配对的（§4.2 的 D-2 披露已覆盖该问题，此处为同一裂缝）。
+代码在每格的 `protocol.frozen_hyperparams_source` 与 `note` 列记录了来源，供表注使用。
+
+## 7. 结论
+
+投影器与训练两侧的静态检查均通过；24 个新 run 具备进入正式运行的条件（待 E14 让出 GPU）。
