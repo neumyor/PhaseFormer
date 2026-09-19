@@ -137,14 +137,29 @@ def main() -> int:
             continue
         got = float(raw)
         want = expected.get((row["dataset"], int(row["horizon"])))
-        ok = want is not None and abs(got - want) < 1e-9
+        # The write-back deliberately rounds to 6 decimals, so compare against the
+        # rounded audit value -- asserting full precision here would report a
+        # write-back that is in fact correct as a mismatch (which it did, first run).
+        ok = want is not None and abs(got - round(float(want), 6)) < 1e-12
         mismatches += 0 if ok else 1
         print(f"  {row['setting']:22s} got={got:.6f} audit="
-              f"{'None' if want is None else format(want, '.6f')} "
+              f"{'None' if want is None else format(float(want), '.6f')} "
               f"{'OK' if ok else 'MISMATCH'}")
 
-    distinct = sorted({str(r.get("frozen_arms_are_distinct")) for r in table})
-    print(f"frozen_arms_are_distinct values: {distinct}")
+    distinct = sorted(r["setting"] for r in table
+                      if str(r.get("frozen_arms_are_distinct")).strip() == "True")
+    print(f"settings flagged as discriminating: {distinct}")
+
+    # The section 4.5 claim is that the two frozen arms are near-redundant
+    # everywhere except one setting; if that set is not exactly {Electricity-336}
+    # the write-up's premise has changed and a human must look.
+    expected_distinct = ["Electricity-336"]
+    if distinct == expected_distinct:
+        print("PASS: discriminating power is concentrated exactly as documented")
+    else:
+        print(f"NOTE: discriminating settings are {distinct}, "
+              f"documented expectation was {expected_distinct}")
+
     print(f"cosine mismatches: {mismatches}")
 
     if mismatches:
