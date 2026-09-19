@@ -140,3 +140,52 @@ dry-run 报 57 条未解析（`l_main` 17、`l_q1_4` 19、`l_q1_8` 21）。原�
 
 **边界**：合成数据仅用于验证代码路径，数值无意义且已删除；真实数值须由 E18 的 78 个正式 run
 与 28-setting 截断分析产生。
+
+---
+
+## 附：row 3（绝对秩截断）**评估路径**的冒烟 —— 通过
+
+> 执行：2026-09-20 03:58（服务器，**CPU**，避免与正在训练的 E14 争 GPU）｜退出码 **0**
+
+### 1. 为什么补做
+
+`e18_svd_truncation.py` 此前只被执行到 `--verify`（解析 28 个 setting 的 checkpoint、
+在 E14 未跑完时**正确拒绝**）。而"**真的去截断一个正确器、并在 val 上评估**"这条路径
+从未跑过——它正是 §4.6 行 3 的数字来源，且排在步骤 6（E18 的 78 个 run 之后）。
+
+### 2. 做法与结果
+
+用**已有的复用 checkpoint**（ETTh2-96 属 test-selected 集合，其 3 个臂的 run 来自既有复用链，
+故现在就可解析），把范围限到一格、秩 10、**子集评估 300 个样本**、CPU：
+
+```text
+{"event": "planned",   "settings": 1, "seeds": 1, "ranks": [10], "problems": 0}
+{"event": "verify_ok", "settings": 1, "seeds": 1, "cells": 1}
+{"event": "evaluated", "setting": "ETTh2-96", "seed": 2021}
+{"event": "finished",  "settings": 1, "table_rows": 1,
+ "table_csv": "/tmp/e18svd_smoke/svd_truncation_table_28.csv"}
+```
+
+`svd_truncation_table_28.csv` 的那一行确实把行 3 需要的三个量都算了出来：
+
+| 列 | 值（本冒烟，**子集**评估） |
+|---|---|
+| `truncated_mse` | 0.16258476 |
+| `trained_lowrank_mse` | 0.20631718 |
+| `full_rank_mse` | 0.16108628 |
+| `gap_truncated_vs_trained_mse_pct` | −21.1967 |
+| `gap_trained_vs_full_mse_pct` | 28.0787 |
+| `records_test` | **False** ✓（协议：不读 test） |
+
+四个产物齐全：`e18_svd_truncation_plan.json`、`e18_svd_truncation_summary.json`、
+`svd_truncation_per_rank.csv`、`svd_truncation_table_28.csv`；
+summary 的键含 `test_split_read`、`records_test`、`protocol_mirrored_from_e14`、
+`worst_truncation_gaps` 等。
+
+### 3. 这一行数字**不是**行 3 的结果（必须写明）
+
+冒烟用了 `--max-eval-samples 300`，即**只评估了 val 的一个子集**，
+所以上表的 MSE 与 gap **不构成 §4.6 行 3 的任何结论**，也不能与论文中的
+"截断 +29%、训练 +0.7%（Electricity-336, r=10）"相比。它证明的只是
+**这条评估路径能跑通、并把三个量写进表里**。正式数字要等 28 个 setting × 3 seed 的
+全量评估（步骤 6）由阶段 5 审校按冻结判据判定。
