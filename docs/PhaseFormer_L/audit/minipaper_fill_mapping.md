@@ -111,12 +111,31 @@ L-q1/4 与 L-q1/8 各 17×3、L-rcrf 28×3=84、A1 24×3=72）。
 
 即"**去掉首列后可直接复制**"，校验仍可用字符串比较（只是先切掉一格）。
 
-### 1.6 §4.5 四臂表（7 行 × 7 列）—— **直接复制** ✓
+### 1.6 §4.5 四臂表（7 行 × 7 列）—— **6 列直接复制＋第 7 列必须聚合** ⚠
 
 产物 `conditional_table.md`（`e17_writeback.py:188`，
 `| %s | %d | %s | %s | %s | %s | %s |` = 7 格）与论文表头**列序逐一对应**：
 `dataset | horizon | direct | 冻结独立 | 冻结条件 | joint | H1`。
 **注意产物文件含表头与分隔线，复制时要跳过前两行。**
+
+**但第 7 列（H1）不是直接复制**——本轮逐字段核对时发现一处口径不一致：
+
+| 项 | 内容 |
+|---|---|
+| 论文表头 | `H1：cond 距离 < indep 距离（**seed 数**）` → 要求一格**种子计数**（形如 `3/3`） |
+| 产物该格 | `h1_seed_majority`，取值是 **`true` / `false` / `evidence_missing`**（逐个 seed 的判定，见 `e17_conditional.py:972-984`） |
+| 可用的底层量 | 结果 CSV 里另有 `h1_ranks`（该 setting/seed 的 rank 行总数）与 `h1_ranks_supporting`（其中支持 H1 的行数）——但它们是**rank 级**计数，**不是 seed 级** |
+
+即：直接把产物那格粘进去，会得到 `true` 而表头写着"（seed 数）"——**表头与内容对不上**。
+
+**正解（有据可依）**：按 setting 把 3 个 seed 的 `h1_cond_gt_indep_seed_majority`
+**聚合成种子计数**——数其中 `"true"` 的个数，渲染成 `N/3`；全为 `evidence_missing` 时写 `evidence_missing`。
+这与本轮之前独立做过的 H1 汇总**完全一致**（当时报的是
+"ETTh2-96/720、ETTm2-96/192 = **3/3 seed**；Weather-96 = **2/3**；Weather-192 = **0/3**；
+Electricity-336 = `evidence_missing`"——那些数正是按 seed 分组数出来的）。
+
+**故 §4.5 的映射修正为**：前 6 列直接复制；第 7 列由结果 CSV 按 setting 聚合 3 个 seed 得到，
+并在回填时用**同一聚合口径**校验（不是与 `conditional_table.md` 的该格比字符串）。
 
 ### 1.7 §4.6 负对照表（5 行 × 5 列）—— **整行替换**，且**有一处需先决策** ⚠
 
