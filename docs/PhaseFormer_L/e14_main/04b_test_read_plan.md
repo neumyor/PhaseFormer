@@ -108,3 +108,39 @@ python scripts/phaseformer_L/e14_read_test.py \
 12. New rows: `status ∈ {read, val_drift}`, `val_relative_difference ≤ 1e-3`, `test_size > 0`, `gate_value_source` set, `nlinear_*`/`gate_value` present for every arm except `phase_only` (no residual branch).
 13. Re-running the same command reports `already_read_from_artifact` for consumed cells and touches no checkpoint again.
 14. Confirm the `protocol` block and `run.gpus` before the §4.2 write-back; `research_runs/` is a synced tree and is never committed.
+
+## 3. 上线前实测：两条分支都在真产物上跑通（2026-09-20 05:2x）
+
+第 1 步（阶段 B 单次 test 读取）有**两条互不相同的分支**，本轮在 E14 仍在训练时把两条都先验了一遍
+（`--dry-run` 不写任何产物，`wrote_outputs: false`）：
+
+**(a) `new` 格分支**（411 格）——取一个**已完成**的真实 run 跑一遍：
+
+```text
+{"event": "fingerprint_check", "constants_equal": true, "differences": [], "parity_cases": 20, "parity_failures": []}
+{"event": "planned", ..., "cells_selected": 1, "manifest_counts": {"new": 411, "reused": 81, "other": 0},
+ "external_evidence_rows": 36, "external_evidence_rejected": 0}
+E14PLAN {"key": "l_main__Traffic-96-s2021", "plan": "rebuild from config.json + restore best checkpoint,
+ re-derive val_mse, then read test exactly once", "status": "planned", ...}
+{"event": "finished", "dry_run": true, "cells": 1, "accepted": 1, "problems": 0, "wrote_outputs": false}
+```
+
+即：**协议指纹与 `e14_main_matrix.py` 完全一致**（`parity_cases: 20`、0 处差异）⇒
+不会在 `preflight_new_cell` 处因 protocol drift 被拒；该格解析到正确的 run 与 checkpoint，
+同时把同 setting 的另外 4 个臂（`no_residual` / `rcrf_nlinear_plain` / 两个 `pooled_lowrank`）
+作为 **near-miss 带理由排除**——这正是"5 个臂共用一个 setting-seed、靠 config 指纹而不是目录名区分"的直接证据。
+
+**(b) `reused` 格分支**（81 格）——用 `--cells-file`（行格式是 `arm:dataset:horizon:seed`，
+**不是** manifest 的 `arm__Dataset-H-sSEED`）一次验完全部 81 格：
+
+```text
+reused cells whose source.test_evidence is empty: 0
+{"event": "finished", "dry_run": true, "cells": 81, "accepted": 81, "problems": 0, "warnings": 0,
+ "by_status": {"reused": 81}, "by_arm": {"l_main": 21, "l_q1_4": 21, "l_q1_8": 21, "phase_only": 18},
+ "wrote_outputs": false}
+```
+
+即 81 格的登记证据**全部齐备**（`source.test_evidence` 无一为空；外部证据表 36 行、0 拒绝），
+不存在"某个复用格没有 test 来源 ⇒ 第 1 步 fail-closed 卡住"的风险。
+**至此第 1 步的两条分支都已在真产物上验证**；剩余不确定性只有**时长**（§9.1 估 ≈1.3 h，
+依据是"单格 1–2 min × 411 / 8 卡"，且满规模解析已实测仅 23.75 s，见 §9.1.1a）。
