@@ -107,7 +107,17 @@ def checkpoint_of(run_dir: Path, record) -> Path | None:
 
 
 def count_params(checkpoint: Path):
-    """Split a checkpoint's parameter count into corrector vs backbone."""
+    """Split a checkpoint's parameter count into corrector vs backbone, and
+    recover the learned fusion gate.
+
+    The gate is a plain parameter (``weak_period_residual_gate``, shape
+    ``(1, 1, enc_in)`` consumed as ``sigmoid``), so it can be read straight from
+    the state dict.  That matters because the E3-lineage runs do **not** record a
+    gate column in ``metrics.csv``, and their cells are exactly the seven
+    test-selected settings the §4.2 gate column and §4.7's ``rho`` versus ``g``
+    most need.  The formula mirrors ``PhaseFormer.learned_residual_gate()``
+    exactly and touches no data and no test split.
+    """
     import torch
 
     payload = torch.load(checkpoint, map_location="cpu", mmap=True, weights_only=False)
@@ -124,7 +134,14 @@ def count_params(checkpoint: Path):
             residual += n
             group = name.split(".")[1] if "." in name else name
             detail[group] = detail.get(group, 0) + n
-    return residual, total, detail
+
+    gate = state.get("weak_period_residual_gate")
+    if gate is not None and hasattr(gate, "float"):
+        gate_value = float(torch.sigmoid(gate.detach().float()).mean().item())
+        gate_channels = int(gate.numel())
+    else:
+        gate_value, gate_channels = None, 0
+    return residual, total, detail, gate_value, gate_channels
 
 
 def main() -> None:
@@ -152,7 +169,7 @@ def main() -> None:
         if checkpoint is None:
             unresolved.append(cell_key(cell) + " (no checkpoint)")
             continue
-        residual, total, detail = count_params(checkpoint)
+        residual, total, detail, gate_value, gate_channels = count_params(checkpoint)
         recorded_total = str(record.get("parameter_count", "")).strip()
         rows.append({
             "arm": cell["arm"],
@@ -166,6 +183,18 @@ def main() -> None:
             "backbone_params": total - residual,
             "residual_share": round(residual / total, 6) if total else None,
             "residual_detail": json.dumps(detail, sort_keys=True),
+            # §4.2's gate column and §4.7's rho versus g both need this, and the
+            # E3-lineage metrics.csv has no gate column, so it is recovered from
+            # the checkpoint instead of being left blank for the 7 reused cells.
+            "gate_value_from_checkpoint": (
+                round(gate_value, 6) if gate_value is not None else None),
+            "gate_param_present": gate_value is not None,
+            "gate_channels": gate_channels,
+            "gate_value_source": (
+                "sigmoid(weak_period_residual_gate).mean() read from the checkpoint "
+                "state dict; mirrors PhaseFormer.learned_residual_gate(); no data and "
+                "no test split touched"
+            ),
             "metrics_parameter_count": int(recorded_total) if recorded_total else None,
             "total_matches_metrics": (
                 int(recorded_total) == total if recorded_total else None
@@ -183,7 +212,8 @@ def main() -> None:
     fields = list(rows[0].keys()) if rows else [
         "arm", "dataset", "horizon", "seed", "setting", "status", "total_params",
         "residual_params", "backbone_params", "residual_share", "residual_detail",
-        "metrics_parameter_count", "total_matches_metrics",
+        "gate_value_from_checkpoint", "gate_param_present", "gate_channels",
+        "gate_value_source", "metrics_parameter_count", "total_matches_metrics",
         "parameter_count_source", "flops_reported", "flops_note"]
     if not args.dry_run:
         with (out_root / "parameter_table.csv").open("w", newline="") as handle:
@@ -198,6 +228,7 @@ def main() -> None:
         "cells_with_parameters": len(rows),
         "unresolved": len(unresolved),
         "total_mismatches": mismatches,
+        "cells_with_gate": sum(1 for r in rows if r["gate_param_present"]),
         "wrote": None if args.dry_run else str(out_root / "parameter_table.csv"),
     }, ensure_ascii=False))
 
