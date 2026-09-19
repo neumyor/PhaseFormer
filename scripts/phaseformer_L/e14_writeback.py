@@ -325,15 +325,23 @@ def main() -> None:
                   and entry["l_main_mae"] < po_mae)
         entry["double_metric_better"] = bool(better)
 
-        # 稳定超过 Golden: mean + sample std strictly below the Golden value.
+        # Two Golden comparisons are reported, because the two governing
+        # documents define them differently:
+        #  * "双指标提升" per PhaseFormer_gold_standard.md §4 = both metrics'
+        #    THREE-SEED MEAN below the Golden value;
+        #  * "稳定超过" per minipaper §4.0 (claim C) = mean PLUS sample std still
+        #    below the Golden value, which also answers the standard's caution
+        #    that a 3-decimal Golden must not turn rounding into a gain.
         for arm in (L_MAIN, PHASE_ONLY):
-            stable = False
-            if entry.get(f"{arm}_mse") is not None:
-                stable = (
-                    entry[f"{arm}_mse"] + (entry[f"{arm}_std_mse"] or 0.0) < gold[0]
-                    and entry[f"{arm}_mae"] + (entry[f"{arm}_std_mae"] or 0.0) < gold[1]
-                )
-            entry[f"{arm}_stable_beyond_golden"] = bool(stable)
+            if entry.get(f"{arm}_mse") is None:
+                entry[f"{arm}_stable_beyond_golden"] = False
+                entry[f"{arm}_double_metric_improvement"] = False
+                continue
+            entry[f"{arm}_double_metric_improvement"] = bool(
+                entry[f"{arm}_mse"] < gold[0] and entry[f"{arm}_mae"] < gold[1])
+            entry[f"{arm}_stable_beyond_golden"] = bool(
+                entry[f"{arm}_mse"] + (entry[f"{arm}_std_mse"] or 0.0) < gold[0]
+                and entry[f"{arm}_mae"] + (entry[f"{arm}_std_mae"] or 0.0) < gold[1])
 
         # Diagnostic column.
         stat = stats.get((dataset, horizon))
@@ -432,11 +440,22 @@ def main() -> None:
     # ---- claim C -----------------------------------------------------------
     claim_c = {
         "minimum_required": None,
+        "definition": "three-seed mean + sample std strictly below Golden on BOTH metrics",
         "stable_beyond_golden_l_main": sum(
             1 for r in rows if r["l_main_stable_beyond_golden"]),
         "stable_beyond_golden_phase_only": sum(
             1 for r in rows if r["phase_only_stable_beyond_golden"]),
         "settings": [r["setting"] for r in rows if r["l_main_stable_beyond_golden"]],
+        # The gold standard's own, weaker rule, reported alongside so the table
+        # note can state both counts instead of conflating them.
+        "double_metric_improvement_definition": "three-seed mean below Golden on BOTH metrics "
+                                                "(PhaseFormer_gold_standard.md §4)",
+        "double_metric_improvement_l_main": sum(
+            1 for r in rows if r["l_main_double_metric_improvement"]),
+        "double_metric_improvement_phase_only": sum(
+            1 for r in rows if r["phase_only_double_metric_improvement"]),
+        "double_metric_improvement_settings": [
+            r["setting"] for r in rows if r["l_main_double_metric_improvement"]],
     }
 
     # ---- claim D -----------------------------------------------------------
@@ -549,6 +568,8 @@ def main() -> None:
                    f"{arm}_n", f"{arm}_gate_mean"]
     fields += ["delta_mse_pct", "delta_mae_pct", "double_metric_better",
                "l_main_stable_beyond_golden", "phase_only_stable_beyond_golden",
+               "l_main_double_metric_improvement",
+               "phase_only_double_metric_improvement",
                "tau_hat_steps", "diagnostic_s", "diagnostic_hit"]
     with (out_root / "main_table.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
@@ -600,6 +621,7 @@ def main() -> None:
         "claim_B": claim_b["verdict"],
         "claim_B_wins": f"{claim_b['wins']}/{claim_b['s1_settings']}",
         "claim_C_stable_beyond_golden": claim_c["stable_beyond_golden_l_main"],
+        "claim_C_double_metric_improvement": claim_c["double_metric_improvement_l_main"],
         "claim_D": claim_d["verdict"],
         "diagnostic_misses": claim_b["diagnostic_misses"],
         "must_answer_a_reaches_fits": must_answer_a["reaches_fits_count"],
