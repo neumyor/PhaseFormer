@@ -402,6 +402,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 回填映射（动手前定清） | — | 在**回填之前**把每张表的"论文列 ↔ 产物列"关系定下来——因为"以为每个工具都会吐出 markdown"正是回填阶段最易犯的错。逐一读**论文表头**与**生产者格式串**（均取源码）。**结论：八处表位中四处可直接复制、四处必须组合。** **可直接复制**：§4.2 主表（`main_table.md`，28 行无表头，列序逐列一致）、§4.4 干预表（`intervention_table_44.md` 是 **11 格**、论文 **10 列**，映射为"**去掉首格模型后逐格相同**"——不丢信息，因论文 `q/r` 列本身即含模型身份 `dense（r=H）`/`q=1/4（r=24）`）、§4.5（`conditional_table.md` 7 格 ↔ 论文 7 列，需跳过表头两行）、§4.6（`negative_table.md` 5 格 ↔ 论文 5 列，同样跳过表头）。**必须组合**：§4.2 臂级变体行（只写 `variant_table.csv`、**无 md**，且论文把 `l_q1_4`/`l_q1_8` **合并为一行**）、§4.4 解剖表（**无 md 写出点**，8 列需从 22+ 列组合，含"label＋explanation"与"input＋output overlap"两处多列合一格）、§4.7（两个 ρ 来自 `predictive_power_summary.json` 的 `predictive_power.spearman[f"{stat}_vs_delta_mse_pct"／"_vs_gate_value"]["rho"]`，键名取自 `e19_predictive_power.py:187-190` 而非推测）。**对校验的含义**：直接复制类用字符串比较（最强）；组合类需映射感知比较且**填完当轮校准**。文档：`docs/PhaseFormer_L/audit/minipaper_fill_mapping.md` |
 
+| 2026-09-20 | §4.7 映射实测核验 | — | `minipaper_fill_mapping.md` §1.8 声称 §4.7 的两个 ρ 来自 `predictive_power.spearman[f"{stat}_vs_delta_mse_pct"]["rho"]` 与 `_vs_gate_value`——**这是我读源码推出来的，未观测过**。用 schema 精确的合成结果表（28 setting、`l_main`/`phase_only` × 3 seed = 168 行，统计量取**真实** `level_statistics.csv`）跑真实工具后观测：`predictive_power` 的键为 `['n_settings','scope','spearman']`，**`spearman` 恰有 6 项 = 3 统计量 × 2 后缀**，六条路径**全部存在且都带 `rho` 键** → 映射由"推理"升级为"实测"。附带再次确认边界：合成值秩退化时 `rho` 全为 `nan`，即 **summary 里可能出现裸 `NaN` 记号**（严格 JSON 解析器会拒绝），验证的是结构而非数值 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据

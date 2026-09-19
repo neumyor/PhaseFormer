@@ -164,6 +164,25 @@ predictive_power.spearman[f"{stat}_vs_gate_value"]["rho"]      -> 与 g 的 ρ
 行序为 `STATISTICS = (cycle_level_std, last_cycle_shift, tau_hat_steps)`。
 键名由 `e19_predictive_power.py:187-190` 生成，**不是**我推测的。
 
+**本节的映射已在真实产物上核验**（2026-09-20）：用一个 schema 精确的合成结果表
+（28 setting、`l_main`/`phase_only` × 3 seed = 168 行，统计量用**真实**的
+`level_statistics.csv`）跑真实工具，观测到：
+
+```text
+predictive_power keys: ['n_settings', 'scope', 'spearman']
+spearman entries: 6            # = 3 个统计量 × 2 个后缀
+  cycle_level_std_vs_delta_mse_pct    present=True   (rho key exists)
+  cycle_level_std_vs_gate_value       present=True
+  last_cycle_shift_vs_delta_mse_pct   present=True
+  last_cycle_shift_vs_gate_value      present=True
+  tau_hat_steps_vs_delta_mse_pct      present=True
+  tau_hat_steps_vs_gate_value         present=True
+```
+
+即**六条路径全部存在且都带 `rho` 键**——本节映射由"读源码推出"升级为"在真实产物上实测"。
+（该次运行用的是合成结果，故 `rho` 全为 `nan`（合成值秩退化）；**验证的是结构、不是数值**。
+这也再次印证前面记录过的边界：**summary 里可能出现裸 `NaN` 记号**，严格 JSON 解析器会拒绝。）
+
 ## 2. 这个区分对**校验**意味着什么
 
 | 类别 | 表 | 可用校验 |
