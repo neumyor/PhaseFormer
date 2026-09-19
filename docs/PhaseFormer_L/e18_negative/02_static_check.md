@@ -62,3 +62,34 @@ checkpoint 来自 E14 的 `l_main`/`l_q1_4`/`l_q1_8`。只有截断代数与三�
 
 阶段 2 通过（11/11 项），并挡下 1 个会使 42 个 run 空转的**退化设计**。允许进入阶段 3
 （冒烟：按 `--max-batches`/短 epoch 在 Electricity-336 与 ETTh2-96 上跑通两类格）。
+
+---
+
+## 5. 行 3（SVD 截断 vs 秩约束训练）的静态检查
+
+```bash
+python scripts/phaseformer_L/e18_svd_truncation.py \
+  --e14-root research_runs/phaseformer_L_e14_main_v1 --output-root /tmp/e18svd \
+  --ranks 10 --seeds 2021 --evaluation-split val --dry-run
+```
+
+| # | 检查项 | 结果 |
+|---|---|---|
+| 1 | setting 数 | **28**（7 数据集 × 4 horizon） |
+| 2 | Traffic 在范围内 | 是（4 个 setting） |
+| 3 | 不读 test | `--evaluation-split` 只接受 `val/validation`，`test` 被 argparse 拒绝；输出每行带 `records_test=false` / `split=val` |
+| 4 | 复用的 7 个 setting | **全部解析为 `reused`**（ETTh2-96/720、ETTm2-96/192、Weather-96/192、Electricity-336），指向 E3 系真实 run |
+| 5 | 秩选择 | 主秩 **r=10**（E11 测到 Electricity-336 反例的那一秩，保持同秩可比）；每 setting 另报原生训练秩（`H/4`、`H/8`） |
+
+### 5.1 静态检查挡下的缺陷：默认范围漏掉 Traffic（24 ≠ 28）
+
+首版 `--datasets` 默认取 `MAIN_DATASETS`（6 个数据集，不含 Traffic），dry-run 计划出 **24 个
+setting**，而 minipaper §4.6 行 3 明确要求 **全 28 setting**（24 主表 + 4 Traffic 附录）。
+这会产出"声称 28、实际 24"的静默缺失——整段 Traffic 被漏掉。已改为
+`ALL_DATASETS = MAIN_DATASETS + TRAFFIC_DATASETS`，复测计划为 **28**，Traffic 4 行在位。
+
+### 5.2 当前未解析项及其性质（**不是缺陷**）
+
+dry-run 报 57 条未解析（`l_main` 17、`l_q1_4` 19、`l_q1_8` 21）。原因是 E14 仍在训练：
+按成本降序，先跑 Traffic 的 `l_main`，因此部分 Traffic 格已可解析、其余臂与 setting 尚未产出。
+**验收判据**：E14 阶段 A 全部结束后重跑，应报 `problems: 0`（28 个 setting × 3 个臂全部解析）。
