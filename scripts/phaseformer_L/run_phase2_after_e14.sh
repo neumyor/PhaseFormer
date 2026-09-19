@@ -201,7 +201,7 @@ run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 se
       --results '$E18_ROOT/results.csv' --gpus '$GPUS' \
     && '$PY' scripts/phaseformer_L/e18_svd_truncation.py --verify \
       --e14-root '$E14_ROOT' --output-root '$E18_ROOT' \
-      --ranks 10 --seeds 2021 2022 2023 --evaluation-split val \
+      --ranks 10 --seeds 2021,2022,2023 --evaluation-split val \
     && '$PY' scripts/phaseformer_L/e18_writeback.py \
       --results '$E18_ROOT/results.with_test.csv' \
       --e14-results '$E14_TEST_CSV' \
