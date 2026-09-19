@@ -30,7 +30,6 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$REPO" || exit 1
 
 LOGDIR=$HOME/niuyiming/logs
-mkdir -p "$LOGDIR"
 
 E14_ROOT=research_runs/phaseformer_L_e14_main_v1
 E16_ROOT=research_runs/phaseformer_L_e16_dissection_v1
@@ -50,6 +49,8 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+mkdir -p "$LOGDIR"
 
 run_step() {
   local n="$1" name="$2"; shift 2
