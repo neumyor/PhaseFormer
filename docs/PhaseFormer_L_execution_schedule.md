@@ -308,3 +308,13 @@ Traffic 为唯一未知量（862 通道、batch 8），须先冒烟实测每 epo
 | 日期 | 单元 | 阶段 | 摘要 |
 |---|---|---|---|
 | 2026-09-18 | — | 登记 | 建立本文；完成侦察（minipaper §4 需求、复用链审计、服务器 8 卡全空闲、6 数据集在服务器、Traffic 缺失）；冻结 D-1–D-4 四项决策；登记 E14–E19 与 465 runs 排期 |
+| 2026-09-18 | E00 | 数据 | 补齐 Traffic：下载 `laiguokun/traffic.txt.gz` → 17,544×862；按仓库约定把末列改名 `OT`（`Dataset_Custom_Multi` 需要），加写出后自校验；`scripts/phaseformer_L/e00_prepare_traffic.py` |
+| 2026-09-18 | 审计 | — | 服务器 690 个 run 全量清点：复用链确认 81 格；**推翻** minipaper 的 A1「12 格既有」（全库 0 个 `gold_combo*`，且旧批用 MAE loss）与「switch 由 6 个已知 setting 拟合」（证据支持 5 个已知符号数据集） |
+| 2026-09-18 | 决策 | — | 用户裁定：门槛按建议值冻结；新格用 preset 默认超参；§4.5 与 §4.6-行1 取 7 个 test-selected setting；**A1 全训 24×3** |
+| 2026-09-18 | E19-1 | 1–4 | 28 setting 训练集电平统计量完成（`phaseformer_L_e19_predictive_v1`）；**`tau_hat_steps` 是唯一能分开已知符号数据集的候选**（可分离区间 51.11–63.58），`cycle_level_std`/`last_cycle_shift` 均为反序 → 冻结 `ν=tau_hat_steps`、`ν*=57.35`；修复 τ̂ 结果侧封顶缺陷（近单位 ρ 曾报出 2176 步 > 720 步窗） |
+| 2026-09-19 | 决策 | — | 用户裁定 **D-5：`s` 不进入模型定义**（PhaseFormer-L 恒定启用），`s` 降为 §4.7 诊断列；`ν*` 因此只影响诊断列、不污染主结果。已回填 minipaper §3.4.1/§3.4.3/§4.0/§4.2/§4.7 与 §5 |
+| 2026-09-19 | E15 | **1–6 完成** | §4.3 的 **28 行表 + 三类图**回填 minipaper；`--verify-existing` 门通过（7/7，moments 相对差 0.0，111/111）；28/28 完成、exit 0、16m42s；阶段 5 审校 11/11 通过。关键新事实：`pred_dims_90` 上界 **7**（Traffic），Traffic 的 `b_1` 一致落在 τ=168 且 `used_var_share(1)` 最高（0.177–0.353） |
+| 2026-09-19 | E14 | 1–4（运行中） | 静态门 `verify_ok`（492 cell / 新训 411 / 复用 81）；冒烟 **18/18** 通过（6 臂 × 3 设定，1 epoch）并实测 Traffic 单 epoch 138 s；19:10 起 8 卡正式运行，按成本降序先发 Traffic |
+| 2026-09-19 | E17 | 2–3（投影器完成） | 7/7 投影器完成、exit 0、`reproduction_failures: []`；独立路线对 E8 的 6 个已发布投影器 `abs_cos = 1.0`。**关键发现：`D_cond` 与 `D_ind` 的首方向在 6/7 setting 上 `│cos│ ≥ 0.9991`（几乎同一方向），仅 Electricity-336 为 0.0066（近正交）** → §4.5 的对照检验力集中在 Electricity-336 一格 |
+| 2026-09-19 | E16/E17‑训练/E18 | 1（代码就绪） | 代码与 `01_plan` 已提交；E16 的 63 cell dry-run 确认其依赖 E14 checkpoint；E17 训练 24 runs、E18 78 runs 待 E14 让出 GPU |
+| 2026-09-19 | 修正 | — | D-4 的「2 档」被证伪并更正：PhaseFormer-L 的 `shared` 头只实现 causal EMA（boxcar 仅在 `pooled_lowrank`），且 `alpha=0.08` 是算子默认值 → 原两档数值上完全相同；改为 `smooth_ratio ∈ {0.5, 1.0}` |
