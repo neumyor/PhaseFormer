@@ -306,9 +306,15 @@ def main() -> None:
     observed_seeds = sorted({len(names) for names in arms_per_seed.values()})
     missing_named = sorted(set(INTERVENTION_ARMS)
                            - {name for names in arms_per_cell.values() for name in names})
-    missing_named_seeds = sorted(set(INTERVENTION_ARMS)
-                                 - {name for names in arms_per_seed.values()
-                                    for name in names})
+    # For each named arm, how many per-seed cells do NOT carry it.  The earlier
+    # "missing entirely from some seed" phrasing returned [] whenever the arm
+    # survived in another seed, which hid exactly the partial gap being looked
+    # for; a per-arm absent-cell count is the honest form.
+    missing_named_seeds = {
+        name: sum(1 for names in arms_per_seed.values() if name not in names)
+        for name in INTERVENTION_ARMS
+    }
+    missing_named_seeds = {k: v for k, v in missing_named_seeds.items() if v}
 
     out_root = Path(args.output_root)
     if not out_root.is_absolute():
