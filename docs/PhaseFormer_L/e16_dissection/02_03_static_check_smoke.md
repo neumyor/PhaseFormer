@@ -253,3 +253,54 @@ E16 具备进入正式运行（63 cell）的条件；因 8 卡正被 E14 占用�
 §4.4 的两张表**可以被机械回填**，无需人工映射；每一项 minipaper 要求的列都有对应产物列，
 且新增对照既出现在干预表也进入了判定判据。schema 冒烟同时再次确认 `algebra_failures: 0`
 与两个头的 `algebra=ok`（dense `rel_gap=2.15e-10`、低秩 `2.97e-05`）。
+
+---
+
+## 8. §4.4 回填工具（`e16_writeback.py`）与 schema 对拍
+
+新增 `scripts/phaseformer_L/e16_writeback.py`，把 E16 的产物重塑成 §4.4 的两张表
+（按 `(臂, setting)` 聚合 3 个 seed）。其内置的 `missing_columns` 检查**对拍真实列名**，
+并在对拍中**抓出一个真缺陷**：
+
+### 8.1 抓到的缺陷：`majority_input_group_label` 这一列不存在
+
+首版按"输入组 / 解释率"取 `majority_input_group_label`，但真实 48 列表头里**没有这一列**——
+E16 写的是每 seed 的 `leading_input_group` + `leading_input_group_label`（cols 13–14），
+以及一个 `majority_input_group` 键（col 33）与它的 `majority_input_group_votes`（col 34）。
+若照首版提交，§4.4 解剖表的"主模式输入组"整列会**静默空白**。
+
+修复：改为对**每 seed 的 `leading_input_group_label` 投票**，并把 E16 自己的
+`majority_input_group` 记入 `e16_majority_input_group` 作为**交叉核对**（两个口径都落盘）。
+
+同时修掉一个 markdown 元组数不匹配（10 个 `%s` 对 11 个参数）——会在生成表行时直接抛
+`TypeError`。
+
+### 8.2 用真实列名做的端到端验证
+
+构造与真实表头**逐列相同**的合成数据（干预表 693 行 = 3 臂 × 7 setting × 3 seed × 11 臂；
+解剖表 63 行）跑通全路径：
+
+```text
+{"event": "finished", "intervention_rows": 21, "dissection_rows": 21,
+ "missing_columns_intervention": [], "missing_columns_dissection": []}
+```
+
+| 检查 | 结果 |
+|---|---|
+| 行数 | 干预表 **21**、解剖表 **21**（3 臂 × 7 setting）✓ |
+| 列数 | 解剖表 33 列 |
+| 输入组标签 | `近端电平/EMA`，票数 `3/3` ✓（修复后不再空白） |
+| 交叉核对列 | `e16_majority_input_group = recent_level` ✓ |
+| 稳定语义判定 | 按 seed 多数：`0/3 → False`、`3/3 → True`，并单列每 seed 判对计数 ✓ |
+| **第 6 条判据** | `criterion_6_seeds_true = 2/3`（新增的随机 RRR 子空间判据被单独追踪）✓ |
+| 随机带 | 同维随机带 `[-0.0040, 0.0040]` 与 RRR 带 `[-0.0060, 0.0060]` 分列 ✓ |
+
+### 8.3 聚合规则（已冻结，保证可复现）
+
+- 数值列取可用 seed 的均值，并**同时给出 std 与 seed 数**，避免 1-seed 格子冒充 3-seed；
+- 稳定语义判定取 **seed 多数（≥2）**，另列每 seed 判对计数与 6 条判据各自的 seed 计数；
+- 随机带的 low/high 取各 seed 边界的均值；"是否超出 95% 零分布"按**百分位**判（另列给出
+  `Semantic-drop` 超出 RRR 带的 seed 数与总数）。
+
+**边界（如实记录）**：合成数据只用于验证代码路径，其数值无意义且已删除；
+真实数值须由 E16 的 63-cell 正式运行产生。
