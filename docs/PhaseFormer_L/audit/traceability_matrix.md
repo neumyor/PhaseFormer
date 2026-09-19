@@ -58,3 +58,47 @@
 minipaper §4 的**每一项**要求都映射到了具体的产出工具与验证审计；**没有设计缺口**。
 剩余的全部是执行（E14 的计算时间与随后的阶段二六步），以及执行后按本表逐项回填。
 EOF
+
+---
+
+## 5. 集成契约核对：每个消费者的列都被生产出来（2026-09-20）
+
+回填工具与上游产物之间是**跨脚本的列名契约**；一处列名不符就会在流水线最后一步才崩。
+本轮把该契约机械核对了一遍。
+
+### 5.1 E14 阶段 B 的产物 → 三个消费者
+
+阶段 B（`e14_read_test.py`）写出 **18 列**：
+
+```text
+arm dataset horizon seed setting status test_mse test_mae nlinear_mse nlinear_mae
+gate_value val_mse recorded_val_mse val_relative_difference test_size run_dir config_hash source
+```
+
+| 消费者 | 它读取的列 | 缺口 |
+|---|---|---|
+| `e14_writeback.py` | arm, dataset, horizon, seed, setting, status, gate_value | **NONE** |
+| `e19_predictive_power.py` | arm, dataset, horizon, seed, test_mse, gate_value | **NONE** |
+| `e18_writeback.py`（作为 `--e14-results`） | arm, dataset, horizon, setting, test_mse, test_mae | **NONE** |
+
+### 5.2 单次读取器的增列 → E17/E18 的消费者
+
+`read_test_generic.py` 在**保留输入全部列**的基础上增加 7 列：
+
+```text
+test_mse test_mae nlinear_mse nlinear_mae gate_value test_read_status val_relative_difference
+```
+
+| 消费者 | 它读取的列 | 缺口 |
+|---|---|---|
+| `e17_writeback.py` | arm, dataset, horizon, seed, setting, source, test_mse, test_mae, `h1_cond_gt_indep_seed_majority` | **NONE**（E17 自身产物即含全部 9 列，读取器只补 test 列） |
+| `e18_writeback.py` | stage, dataset, horizon, seed, level, test_mse, test_mae | **NONE**（E18 的 `RESULTS_FIELDS` 含前 5 列，读取器补后 3 列中的 2 列） |
+
+> **核对中的一次自伤**：首版脚本用正则抽取 E17 的 `RESULTS_FIELDS`，但 E17 的行是**动态构造**的
+> （没有静态字段表），于是正则返回空集，脚本误报 6 个"缺失列"。改用直接 grep 逐个字段确认后，
+> 9/9 全部存在。已记入这里，避免下次再被同一个抽取方式误导——**"我抽取不到" ≠ "它没生产"**。
+
+### 5.3 结论
+
+三组契约（E14→3 个消费者、E17→1 个、E18→1 个）**全部闭合**：每个消费者读取的列都在上游产物中。
+这排除了"流水线跑到最后一步才发现列名不符"这一整类失败。
