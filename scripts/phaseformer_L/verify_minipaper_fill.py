@@ -734,7 +734,13 @@ def check_4_4_dissection(report: Report, root: pathlib.Path,
 
 #: Markers the paper uses to say "this still has to be filled".  They live in
 #: prose, not in cells, so a cell-by-cell comparison cannot see them.
-PLACEHOLDER_MARKERS = ("待填",)
+#:
+#: ``空表`` is included because three sentences describe section 4 as an *empty
+#: pre-registration table* ("预注册空表", "本文 §4 空表", "§4 的全部空表"), which
+#: becomes false the moment the tables are filled -- and unlike ``待填`` those
+#: sentences carry no marker a reader would notice.  Found 2026-09-20 by sweeping
+#: the paper for statements that the fill itself invalidates.
+PLACEHOLDER_MARKERS = ("待填", "空表")
 
 
 def check_placeholders(report: Report, minipaper: pathlib.Path) -> None:
