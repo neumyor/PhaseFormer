@@ -525,8 +525,12 @@ FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现�
 - **产物**：`research_runs/phaseformer_L_e15_dimension_v1/`（`dimension_table.csv`、`leading_direction.csv`、
   `optimal_rank_capture.csv`、`b1_template_detail.csv`、`figures/` 三类图、28 个 `moments_*.npz`）。
 
-预期图：Scree 图（第一根柱 0.66–0.86 量级）；`b_1` 随 lag 的剖面（近端集中 + 指数衰减）与 `a_1` 随 horizon
-的剖面（近似平线）双面板。
+**图（实测，由 `e15_dimension.py` 在 28 个 setting 上生成）**：
+`figures/scree_lambda_spectrum.png`（`λ_1/Σλ` 谱，首根 0.642–0.862）、
+`figures/b1_lag_profile.png`（`b_1` 随 lag 的剖面：近端集中 + 指数衰减，Traffic 一格一致落在 τ=168）、
+`figures/a1_horizon_profile.png`（`a_1` 随 horizon 的剖面：近似平线，常值 `|cos|` 0.890–0.989）。
+（本条原为预注册写法"预期图：…第一根柱 0.66–0.86 量级"，即引用**先导**区间；
+E15 完成后改为报告**实测**值与实际文件名，数值与上文条目一致，未引入新数字。）
 
 ### 4.4 训练头的解剖（PhaseFormer-L 与低秩探针，3 seed）
 
