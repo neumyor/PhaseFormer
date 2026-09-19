@@ -495,6 +495,64 @@ def main() -> None:
                 "filled from an unrelated source.",
     }
 
+    # ---- must-answer (b): gate means and the s diagnostic per dataset -------
+    by_dataset: dict = {}
+    for row in rows:
+        entry = by_dataset.setdefault(row["dataset"], {
+            "settings": 0, "gates": [], "delta_mse": [], "delta_mae": [],
+            "diagnostic_s": set(), "corrector_helps": [],
+        })
+        entry["settings"] += 1
+        if row.get("l_main_gate_mean") is not None:
+            entry["gates"].append(row["l_main_gate_mean"])
+        if row["delta_mse_pct"] is not None:
+            entry["delta_mse"].append(row["delta_mse_pct"])
+        if row["delta_mae_pct"] is not None:
+            entry["delta_mae"].append(row["delta_mae_pct"])
+        if row["diagnostic_s"] is not None:
+            entry["diagnostic_s"].add(int(row["diagnostic_s"]))
+        entry["corrector_helps"].append(row["delta_mse_pct"] is not None
+                                       and row["delta_mse_pct"] < 0)
+    per_dataset = []
+    for dataset, entry in sorted(by_dataset.items()):
+        gate_mean = (round(float(np.mean(entry["gates"])), 6)
+                     if entry["gates"] else None)
+        deltas = [d for d in entry["delta_mse"] if d is not None]
+        per_dataset.append({
+            "dataset": dataset,
+            "settings": entry["settings"],
+            "l_main_gate_mean": gate_mean,
+            "l_main_gate_min": (round(min(entry["gates"]), 6)
+                                if entry["gates"] else None),
+            "l_main_gate_max": (round(max(entry["gates"]), 6)
+                                if entry["gates"] else None),
+            "mean_delta_mse_pct": (round(float(np.mean(deltas)), 4) if deltas else None),
+            "mean_delta_mae_pct": (round(float(np.mean(entry["delta_mae"])), 4)
+                                   if entry["delta_mae"] else None),
+            "diagnostic_s": (sorted(entry["diagnostic_s"])[0]
+                             if len(entry["diagnostic_s"]) == 1
+                             else sorted(entry["diagnostic_s"])),
+            "settings_where_corrector_helps": sum(1 for h in entry["corrector_helps"] if h),
+        })
+    # The minipaper singles out ETTh1 and ETTm1: the diagnostic is supposed to
+    # mark them s=0, and if it marks them s=1 their numbers must be reported as
+    # they are rather than explained away.
+    etth1_ettm1 = [entry for entry in per_dataset
+                   if entry["dataset"] in ("ETTh1", "ETTm1")]
+    must_answer_b = {
+        "question": "minipaper 4.2 (b): report each dataset's mean fusion gate g; "
+                    "does the diagnostic mark ETTh1/ETTm1 s=0, and if it marks them "
+                    "s=1 report their performance as it is?",
+        "frozen_threshold": {"nu": NU_STAT, "nu_star": NU_STAR,
+                             "predicted_s1": list(S1_DATASETS)},
+        "per_dataset": per_dataset,
+        "etth1_ettm1": etth1_ettm1,
+        "etth1_ettm1_all_marked_s0": all(
+            entry["diagnostic_s"] == 0 for entry in etth1_ettm1) if etth1_ettm1 else None,
+        "note": "the diagnostic is NOT part of the model (D-5); it only predicts "
+                "which datasets need the level channel, and every miss is reported.",
+    }
+
     # ---- claim C -----------------------------------------------------------
     claim_c = {
         "minimum_required": None,
@@ -644,6 +702,7 @@ def main() -> None:
     (out_root / "claims.json").write_text(
         json.dumps({"A": claim_a, "B": claim_b, "C": claim_c, "D": claim_d,
                     "must_answer_a": must_answer_a,
+                    "must_answer_b": must_answer_b,
                     "fits_note": FITS_NOTE},
                    indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (out_root / "audit.json").write_text(
@@ -686,6 +745,7 @@ def main() -> None:
         "claim_D": claim_d["verdict"],
         "diagnostic_misses": claim_b["diagnostic_misses"],
         "must_answer_a_reaches_fits": must_answer_a["reaches_fits_count"],
+        "must_answer_b_etth1_ettm1_all_s0": must_answer_b["etth1_ettm1_all_marked_s0"],
     }, ensure_ascii=False))
 
 
