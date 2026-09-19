@@ -87,6 +87,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--results", required=True)
     parser.add_argument("--stats", default="")
+    parser.add_argument("--params", default="",
+                        help="parameter_table.csv from e14_params.py; default: "
+                             "<output-root>/parameter_table.csv")
     parser.add_argument("--golden", required=True)
     parser.add_argument("--output-root", required=True)
     return parser.parse_args()
@@ -160,6 +163,49 @@ def read_stats(path: Path) -> dict:
     return out
 
 
+def read_parameters(path: Path) -> dict:
+    """(arm, horizon) -> parameter accounting, from ``e14_params.py``.
+
+    The corrector's size legitimately depends on the horizon (a rank-``H/4``
+    head at H=720 is 7.5x the size of one at H=96), but it must NOT depend on
+    the seed, so constancy is checked across seeds within a (arm, horizon)
+    rather than across the whole arm.
+    """
+    if not path or not Path(path).exists():
+        return {}
+    cells: dict = {}
+    with Path(path).open(newline="") as handle:
+        for row in csv.DictReader(handle):
+            arm = str(row.get("arm", "")).strip()
+            try:
+                horizon = int(row["horizon"])
+                total = int(row["total_params"])
+                residual = int(row["residual_params"])
+                share = float(row["residual_share"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            entry = cells.setdefault((arm, horizon), {"totals": set(),
+                                                      "residuals": set(),
+                                                      "shares": set(), "n": 0})
+            entry["totals"].add(total)
+            entry["residuals"].add(residual)
+            entry["shares"].add(round(share, 6))
+            entry["n"] += 1
+    out = {}
+    for key, entry in cells.items():
+        if not entry["totals"]:
+            continue
+        out[key] = {
+            "n_seeds": entry["n"],
+            "total_params": sorted(entry["totals"])[0],
+            "residual_params": sorted(entry["residuals"])[0],
+            "residual_share": sorted(entry["shares"])[0],
+            "constant_across_seeds": len(entry["totals"]) == 1
+            and len(entry["residuals"]) == 1,
+        }
+    return out
+
+
 def mean_std(values):
     if not values:
         return None, None, 0
@@ -181,6 +227,8 @@ def main() -> None:
     results = read_results(Path(args.results))
     golden = read_golden(Path(args.golden))
     stats = read_stats(args.stats)
+    params_path = args.params or str(Path(args.output_root) / "parameter_table.csv")
+    params = read_parameters(Path(params_path))
 
     # Which settings each arm is declared on, straight from the manifest.
     declared: dict = {}
@@ -367,6 +415,28 @@ def main() -> None:
                      and r.get("phase_only_mse") is not None]
         entry["macro_delta_mse_pct_main24"] = (
             round(float(np.mean(main_only)), 4) if main_only else None)
+        # §4.2 parameter columns: total (backbone + corrector + gate) and the
+        # corrector alone.  Reported only when the arm resolves for every
+        # horizon; otherwise the list of missing horizons is recorded instead.
+        param_rows = [params.get((arm, r["horizon"])) for r in subset]
+        present = [p for p in param_rows if p]
+        if present and len(present) == len(subset):
+            entry["total_params_per_horizon"] = json.dumps(
+                {str(r["horizon"]): params[(arm, r["horizon"])]["total_params"]
+                 for r in subset}, sort_keys=True)
+            entry["residual_params_per_horizon"] = json.dumps(
+                {str(r["horizon"]): params[(arm, r["horizon"])]["residual_params"]
+                 for r in subset}, sort_keys=True)
+            entry["residual_share_max"] = max(
+                params[(arm, r["horizon"])]["residual_share"] for r in subset)
+            entry["params_constant_across_seeds"] = all(
+                params[(arm, r["horizon"])]["constant_across_seeds"] for r in subset)
+        else:
+            entry["total_params_per_horizon"] = None
+            entry["residual_params_per_horizon"] = None
+            entry["residual_share_max"] = None
+            entry["params_constant_across_seeds"] = None
+
         stable_field = {
             L_MAIN: "l_main_stable_beyond_golden",
             PHASE_ONLY: "phase_only_stable_beyond_golden",
@@ -442,6 +512,10 @@ def main() -> None:
                 "The diagnostic s column is not part of the model (D-5); it "
                 "predicts which datasets need the level channel and any miss is "
                 "reported.",
+                "Parameter counts are read from each checkpoint's parameter "
+                "shapes by e14_params.py and cross-checked against "
+                "metrics.csv:parameter_count; FLOPs are not reported because the "
+                "original Table 4 convention is not reproduced in this repository.",
             ],
         }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
