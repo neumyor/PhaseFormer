@@ -515,3 +515,72 @@ E17 只依赖冻结投影器；E18 只依赖 E14 checkpoint 与自身配置）�
 
 **若日后要提速**，正确的做法是给 E16 加按 cell 的断点续跑，再让第 4 步复用已完成的产物；
 那是"先做对再提速"的顺序，而不是并发化一条尚未跑完的链。
+
+---
+
+## 10. 收尾作业清单（E14 收尾 → 全链结束）
+
+> 目的：把"接下来要做什么、用什么查、填哪张表"写成可执行清单，
+> 使收尾阶段**不靠记忆**，每步都有对应的机器检查。
+> 本节的每条路径/判据都取自本轮之前已核验的产物与工具。
+
+### 10.1 阶段二会自动开始；先确认它**确实**开始了
+
+watcher（`watch_e14_then_phase2.sh`）在 E14 干净结束时（`E14_MAIN_EXIT=0` **且** `runs/` 恰 411 个目录）
+自动启动阶段二，两者条件独立校验。确认方式：
+
+```bash
+cat ~/niuyiming/logs/phase2_watch.status     # 应从 "waiting" 变为 "E14 complete ...; starting phase 2"
+tail -20 ~/niuyiming/logs/phase2.log          # 每步的 === step N: ... / --- step N exit=0
+ls ~/niuyiming/logs/phase2_step*.log          # 逐步日志
+pgrep -af run_phase2_after_e14.sh             # 仍在跑？结束则看 status
+```
+
+**若某步失败**：`run_step` 在第一个非零退出处停止并打印该步日志尾部；
+status 会写 `PHASE2_FAILED rc=N`。重入方式（不需要重跑已成功的步骤）：
+
+```bash
+bash scripts/phaseformer_L/run_phase2_after_e14.sh --from N   # 从第 N 步接着跑
+bash scripts/phaseformer_L/run_phase2_after_e14.sh --only N   # 只跑某一步
+```
+
+重入安全性：①`--from >1` 会跳过 E14 完成守卫；②第 1 步的读取器**幂等**
+（已带 test 指标的行走"原样复制"，除非显式传 `--all-rows`）；③每步的预检
+（列名契约、实参元数）只在 `--from 1` 时执行——**若改动过脚本，先手动跑一次两道预检**。
+
+### 10.2 逐步：期待什么产物 → 用什么查 → 填哪张表
+
+| 步 | 主要产物 | 机器检查 | 对应回填 |
+|---|---|---|---|
+| 1 | `e14_main_v1/results.csv`（492 行）、`test_read_summary.json`、`test_read/` | 管道内 awk 守卫（每行 `test_mse` 非空）+ `test_read_summary.json` 的 `problems` 与 `by_status` | — |
+| 2 | `e19_predictive_v1/predictive_power.csv`、`predictive_power_summary.json` | `check_builder_outputs`（空列）| **§4.7**：3 行 × 2 个 ρ ← `predictive_power.spearman[…]["rho"]`（映射已实测核验） |
+| 3 | `e14_params`→`parameter_table.csv`；`e14_writeback`→`main_table.csv/.md`、`variant_table.csv`、`claims.json`、`audit.json` | `check_builder_outputs`（两次）；`audit.json.settings_incomplete` 应为空；`claims.json` 含 A–D 与两个必答块 | **§4.2 主表**：28 行 ← `main_table.md`，填完立即跑 `verify_minipaper_fill.py`（该类已五类校准） |
+| 4 | `e16_dissection_v1/{dissection,intervention}_table.csv`、`e16_summary.json`、`reference_parity.json`；`e16_writeback`→`*_44.csv`、`intervention_table_44.md` | **§6.2 判据表**：cells 63、`algebra_failures`/`run_metric_failures`/`run_metric_not_comparable` 均 0、`reference_parity_passed` true、`checkpoint_path_mismatches` []、`test_split_read` false、`probe_cells ≈ 72` | **§4.4**：干预表 147 格 ← `intervention_table_44.md` 去掉首格；**解剖表 105 格需组合**，先打印真实取值定写法（见 §10.3） |
+| 5 | `e17_conditional_v1/results.csv` → `results.with_test.csv` → `conditional_table.csv/.md` | 24 个新 cell 均有 test 指标；§4.5 表 7 行且 cos 列非空 | **§4.5**：35 格 ← `conditional_table.md`（跳过其表头两行） |
+| 6 | `e18_negative_v1/results.csv` → `results.with_test.csv`；`svd_truncation_table_28.csv`；`negative_table.csv/.md` | `e18_negative_verify.json` 与 `e18_svd_truncation_summary.json` 的 `problems` 为空 | **§4.6**：用 `negative_table.md` 的 5 行**替换**（25 格）；计划/规模文字建议保留为表下注 |
+| 7 | `phase2_acceptance_audit.json` | **审计器**：不得有 `FAIL`（`PENDING` 允许） | — |
+
+### 10.3 唯一开放项：§4.4 解剖表的单元格写法
+
+收口时点 = **第 4 步跑完之后**。做法：从 `dissection_table_44.csv` 打印 2–3 行真实取值，
+据此定下写法（建议见 `minipaper_fill_mapping.md` §1.4）、回写该节、再写该节的比较器并**当轮校准**。
+**不要现在就把小数位数写死**——只有看到取值分布才知道解释率是 0–1 还是百分数、
+中文标签会不会撑破表格。
+
+### 10.4 回填完成后：两个机器判据 + 一轮人工审校
+
+```bash
+python scripts/phaseformer_L/verify_minipaper_fill.py             # 逐格一致；有 MISMATCH 则 exit 1
+python scripts/phaseformer_L/verify_minipaper_fill.py --inventory  # 空格总数应为 0（当前 485）
+```
+
+**人工审校（机器查不到的判断项）**：①§4.6 表下注是否保留了规模与口径披露；
+②§4.4 表注是否写明"`reference_parity` 只对 6 个 setting 成立、Electricity-336 为新算"；
+③主张 A–D 的判定是否按 §4.0 的**冻结**门槛逐字引用（尤其主张 C 的两种定义须并列给出）；
+④§4.2 表注是否披露三种门先验与 `provenance_note` 的来源；⑤§4.7 表注是否给出 ν* 的冻结与 τ̂ 的有限样本偏差。
+
+### 10.5 最后两件非机器可查的事
+
+1. **摘要**：`*[主结果待填。]*` 需按 §4.2 的结论替换——**只在 §4.2 判定完成后**动，避免先写出与门槛不符的话；
+2. **各实验的独立文档**：每节在回填后补写"阶段 5 审校"与"阶段 6 回填"两段
+   （E14/E16/E17/E18 各自目录下），使"每个实验文档独立命名存放"这一要求对**全部**小节成立。
