@@ -136,8 +136,27 @@ def audit_e14(report: Report) -> None:
                           "parameter_table.csv present")
     if params:
         rows = read_csv(params)
-        report.add("E14 (§4.2)", "parameter table non-empty",
-                   "PASS" if rows else "FAIL", f"{len(rows)} rows")
+        # `e14_params.py` is REPORT-ONLY: it lists cells it could not resolve in
+        # ``unresolved`` and exits 0 anyway, so "non-empty" would pass while half
+        # the matrix is missing.  One row is written per cell, so the count is the
+        # real criterion -- and each row carries a cross-check against the run's own
+        # `metrics.csv:parameter_count`, which must not be False.
+        report.add("E14 (§4.2)", "parameter table covers all 492 cells",
+                   "PASS" if len(rows) == 492 else "FAIL", f"{len(rows)} rows")
+        crossed = [r for r in rows
+                   if str(r.get("total_matches_metrics", "")).strip().lower() == "false"]
+        report.add("E14 (§4.2)", "parameter counts agree with metrics.csv",
+                   "PASS" if not crossed else "FAIL",
+                   f"{len(crossed)} row(s) mismatched"
+                   + (f" e.g. {crossed[0].get('setting')}/{crossed[0].get('arm')}"
+                      if crossed else ""))
+        no_gate = [r for r in rows
+                   if not str(r.get("gate_value_from_checkpoint", "")).strip()]
+        report.add("E14 (§4.2)", "gate value recovered from every checkpoint",
+                   "PASS" if not no_gate else "FAIL",
+                   f"{len(no_gate)} row(s) without a gate value"
+                   + (f" e.g. {no_gate[0].get('setting')}/{no_gate[0].get('arm')}"
+                      if no_gate else ""))
 
     main = check_exists(report, "E14 (§4.2)", f"{E14}/main_table.csv", "main_table.csv present")
     if main:
