@@ -433,6 +433,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 规则符合性自查 | **补齐两项未做的要求** | 对照 `MANAGE_RULES.md` 逐条自查"规则要求我留下什么"，发现两项未做：①**「验证要求」明列的轻量验证**（`python -m pytest tests/ -q`）——本日改过**产品代码**（`read_test_generic.py` 的 marker 修复、`e18_writeback.py` 的 None 保护、`e14_writeback.py` 的 FITS/空 variant 保护、`evaluate_lowrank_semantic_interventions.py` 的 `RandomRRR-drop` 臂），却只做了针对性冒烟与预演、**没跑仓库既有测试**；②「操作与改动记录」要求的 `docs/agent-log.md`（已补三条 2026-09-20 条目）。**测试结果**：`tests/test_lowrank_checkpoint_information.py` **26 passed（14.35 s）**；全量 `tests/`（37 文件）**388 passed + 262 subtests passed, 18 warnings（151.55 s）, exit 0** → 本日对产品代码的全部改动**未破坏任何既有测试**。18 条 warning 均为 `e19_predictive_stats.py` 的 `np.nanmean` 空切片（退化输入下的预期行为，由测试用例主动构造）。**覆盖边界**：仅 1 个测试文件会触及我改过的模块，跑全量是为满足规则要求 |
 
+| 2026-09-20 | 规则符合性自查（第二轮） | **全部合规，无新缺口** | 继续按 `MANAGE_RULES.md` 核对前两轮未查的条款，四项全部通过：①**新实验脚本的说明义务**（规则要求说明数据集路径/关键超参/运行命令/输出目录）——六个 E14–E19 脚本**都**在 docstring 里给了 `Usage::` + 完整解释器路径 + `--output-root` + 数据集引用 ✓；②**不提交机器绝对路径**——新脚本里出现的绝对路径**只有**运行命令里的解释器路径，而规则本身**要求**"运行命令使用完整解释器路径，避免依赖 `conda run` 或激活 shell" ✓（属合规且必需，非违规）；③**不提交大体积/临时/缓存文件**——`git ls-files` 中 `*.pyc`/`__pycache__`/`*.log`/`*.ckpt`/`*.pt` 计数为 **0** ✓；④**最大跟踪文件**仅 524 KB（`uv.lock`）、`agent-log.md` 308 KB，无大体积产物 ✓。**并记一次我自己的假报警**：我最初用 `grep -c 'python scripts/phaseformer_L/'` 判定 `e19_predictive_stats.py` 缺运行命令，实为**命令按反斜杠换行**导致单行模式匹配不到——该文件第 84–90 行确有 `Usage::`。又是"我的检查写错 ≠ 工件缺失" |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
