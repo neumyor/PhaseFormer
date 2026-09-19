@@ -16,6 +16,8 @@
 # Steps (see docs/PhaseFormer_L_execution_schedule.md for the contracts):
 #   1  E14 stage B   single test read for the 411 new cells (e14_read_test.py)
 #   2  E19 stage 2   §4.7 rho columns (e19_predictive_power.py)
+#   5  E17           §4.5 four-arm table (24 runs) + assemble + single test read
+#   6  E18           §4.6 rows 1 and 5 (78 runs) + single test read + row 3
 #   3  E14 writeback §4.2 table + claims A-D + audit (e14_writeback.py)
 #   4  E16           §4.4 dissection + 10-arm interventions, 63 cells
 #   5  E17           §4.5 four-arm table (24 new runs) + assemble
@@ -125,9 +127,20 @@ run_step 4 "E16: §4.4 dissection + interventions (63 cells)" \
       --e14-root '$E14_ROOT' --output-root '$E16_ROOT' \
       --gpus 0 --mem-budget-mb 2048"
 
-run_step 5 "E17: §4.5 four-arm training (24 runs) + assemble" \
-  bash -c "cd '$REPO' && '$PY' scripts/phaseformer_L/e17_conditional.py --stage a --verify \
-      --gpus '$GPUS' --output-root '$E17_ROOT'"
+# E17: train, assemble, then read test ONCE for the 24 new cells.  The runner
+# refuses --evaluate-test by design and marks the column
+# "pending_single_test_read"; read_test_generic.py is that separate stage, and it
+# takes the frozen-subspace basis paths from the results CSV's basis_file column
+# (the wrapper owns those paths; the run config only records that a projection
+# was used).
+run_step 5 "E17: §4.5 four-arm training (24 runs), assemble, single test read" \
+  bash -c "cd '$REPO' && \
+    '$PY' scripts/phaseformer_L/e17_conditional.py --stage a --verify \
+      --gpus '$GPUS' --output-root '$E17_ROOT' \
+    && '$PY' scripts/phaseformer_L/e17_conditional.py --stage assemble \
+      --output-root '$E17_ROOT' \
+    && '$PY' scripts/phaseformer_L/read_test_generic.py \
+      --results '$E17_ROOT/results.csv' --gpus '$GPUS'"
 
 run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 settings)" \
   bash -c "cd '$REPO' && \
@@ -135,6 +148,8 @@ run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 se
       --gpus '$GPUS' --output-root '$E18_ROOT' \
     && '$PY' scripts/phaseformer_L/e18_negative.py --stage all --verify --dry-run \
       --output-root '$E18_ROOT' \
+    && '$PY' scripts/phaseformer_L/read_test_generic.py \
+      --results '$E18_ROOT/results.csv' --gpus '$GPUS' \
     && '$PY' scripts/phaseformer_L/e18_svd_truncation.py --verify \
       --e14-root '$E14_ROOT' --output-root '$E18_ROOT' \
       --ranks 10 --seeds 2021 2022 2023 --evaluation-split val"
