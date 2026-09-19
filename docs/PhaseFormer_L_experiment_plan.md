@@ -319,3 +319,19 @@ minipaper 主张"相位 token 化看不见的部分本质上是一维的跨周�
   （`phase_only` / PhaseFormer-L 含开关 / always-on / L-q1/4 / L-q1/8 / L-rcrf / A1）与 24+4 setting 重排，
   既有同协议三 seed 格子经审计复用。D1/D2 已用 rsync 副本复核（见 agent-log 同日条目），待写入
   低秩 checkpoint 计划表 6 正文。本条为追加记录，未改动 §1–§9 正文。
+
+- **2026-09-20（追加，仅补指针，不改写上文）**：
+  1. **上一条 09-18 追加里的变体行清单已过期**：它写的是"`phase_only` / PhaseFormer-L **含开关** /
+     **always-on** / L-q1/4 / L-q1/8 / L-rcrf / A1"（7 项）。而 minipaper 的 **D-5 裁定（2026-09-19）**
+     明确 `s` **不进入模型**——PhaseFormer-L 就是"修正器恒定启用"的 `weak_residual`，
+     故「含开关」与「always-on」**合并为一行**。**当前变体口径以 minipaper §3.4.2 的 D-5 修订与 §4.2 的表为准**：
+     §4.2 的臂级变体表为 5 行描述性文字；产物侧 `variant_table.csv` 为 **6 个臂**
+     （`phase_only` / `l_main` / `l_q1_4` / `l_q1_8` / `l_rcrf` / `a1`）。
+  2. **上一条的"D1/D2 待写入低秩 checkpoint 计划表 6 正文"已完成**：2026-09-20 已在
+     `docs/PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 的表 6 正文登记那两个数字
+     （`Semantic-drop` 支路变好 **52/72**、融合变差 **72/72**；`Semantic-only` 的 `Δfused MSE` 全格最大
+     **+0.002665**、`q=1/8` 最大 **+0.000967**），并且**从该表自身的 720 行独立复算验证过**。
+     minipaper 顶部的对应披露已同步改为"已登记"。
+  3. **一处命名冲突，须留意**：本计划 §"登记不一致"用的是 **D1–D6**（那一节里 **D5 = 一处计数不一致**），
+     与 minipaper 的 **D-5（决定：`s` 不进入模型）**是**两个不同的东西**。本文件的历史条目同时出现两者，
+     阅读时按上下文区分；后续引用建议写作"**决定 D-5**"与"**登记不一致 D5**"。
