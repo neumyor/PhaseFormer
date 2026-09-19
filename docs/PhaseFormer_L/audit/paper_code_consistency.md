@@ -960,3 +960,47 @@ OK  gate presence matches the arm table: 0 row(s) whose arm and gate_param_prese
 **做法**：用正则扫出 §4 内所有 `数字 + (setting|行|臂|格|run|cell|列)` 形态的陈述（共 30 余处），
 逐条回查。**这类"正文写了一个数、产物给另一个数"的漂移不会让任何脚本报错**——
 脚本自洽、产物自洽，只有**两边对照**才看得见，与 §2 的开篇方法同源。
+
+## 21. 三道 pre-flight 之一**一直在漏检一半的调用**（2026-09-20 发现并修）
+
+`check_pipeline_invocations.py` 的存在理由是"**在昂贵阶段之前**挡住实参写错"
+（目录里那条 `--seeds 2021 2022 2023` 的记录就是它的由来）。本轮给它加一个新检查时，
+往预检里插了一行 `"$PY" scripts/phaseformer_L/audit_e14_stage_a.py ...`，
+随后发现它报的 `flags inspected` **没有变**（66 → 66）——顺着查下去才是真问题。
+
+**根因**：它的匹配正则是
+
+```python
+INVOCATION = re.compile(r"\$PY'?\s+(scripts/[\w/]+\.py)([^&;|]*)")
+```
+
+`\$PY'?\s+` 只吃**单引号**形式（`'$PY' scripts/...`，即 `run_step` 的 `bash -c "..."` 体内写法），
+而流水线顶层的预检与**第 2 步**写的是**双引号**形式（`"$PY" scripts/...`）⇒ **完全不匹配**。
+实测：文件里 25 处调用，正则只匹配到 **20 处**，**漏掉 5 处**：
+
+| 被漏检的调用 | 为什么重要 |
+|---|---|
+| `check_column_contracts.py` / `check_pipeline_invocations.py` / `check_phase2_consumers.py` / `audit_e14_stage_a.py` | **预检自身**——正是"最该被检查"的四条 |
+| `e19_predictive_power.py`（**第 2 步**） | 一个真实的流水线步骤，其 flag 从未被校验过 |
+
+**修法**：正则改为同时接受两种引号形式；并把"尾部"限制到**行尾**（`[^\n&;|]*`）——
+因为反斜杠续行在上文已被合并成一行，不这样做会把尾部的注释块/下一个 `run_step` 一起吞进来
+（实测会产生"`--output-root` 收到 46 个裸值"这类**假警报**，而假警报会让这个检查被当成噪音）。
+修后 **66 → 76** 个 flag 被检查，且 `OK`。
+
+**四类对照**（用 `--pipeline` 指向改动过的副本，不动真文件）：
+
+| # | 对照 | 期望 | 实测 |
+|---|---|---|---|
+| 1 | 在**原先被漏检**的第 2 步里塞一个不存在的 flag | PROBLEM | ✅ `e19_predictive_power.py: --bogus-flag is not declared` |
+| 2 | 在**原先被漏检**的预检里塞一个不存在的 flag | PROBLEM | ✅ `check_phase2_consumers.py: --nonsense is not declared` |
+| 3 | 原文件未改动 | OK | ✅ 76 flags |
+| 4 | 恢复那条真实历史错误（`--seeds 2021 2022 2023`） | PROBLEM | ✅ `--seeds got 3 bare values ... not declared with nargs` |
+
+**同时如实记下这个检查的已知边界**（写进了 `declared_flags` 的 docstring，免得被当成全覆盖）：
+它只记录 flag 是否带 `nargs`，因此**分不清** `store_true`（0 个值）与"恰好取一个值"的 flag——
+两者 `has_nargs` 都是 `False`。所以判据是"**≥2 个裸值才报**"：这挡住了真正咬过流水线的那一类
+（逗号列表 flag 收到 3 个值），但**挡不住**单个裸值（`--verify yes`，argparse 同样会拒）。
+要做成精确判据需要在元数据里记下 `action`/`type`；**现在故意不做**，因为只收紧阈值而不补元数据，
+会把每一个合法的单值 flag（`--max-epochs 30`）都误报。
+**对照 3 我最初写错了期望**（以为"单值也该报"）——查清后确认是**这个检查的边界**，不是缺陷。

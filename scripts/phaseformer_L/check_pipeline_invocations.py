@@ -50,11 +50,31 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 DEFAULT_PIPELINE = HERE / "run_phase2_after_e14.sh"
 
-INVOCATION = re.compile(r"\$PY'?\s+(scripts/[\w/]+\.py)([^&;|]*)")
+# The pipeline writes interpreter invocations in two shapes: single-quoted
+# inside a `bash -c "..."` step body ('$PY' scripts/...), and double-quoted at
+# the top level ("$PY" scripts/...).  The original pattern accepted only the
+# first, so every top-level invocation -- the four pre-flight checks and step 2
+# (E19 stage 2) -- was silently never inspected while the check still reported
+# "every flag is declared".
+# Backslash continuations are joined into one line above, so an invocation's
+# arguments end at the newline: without that, the tail runs on into the next
+# comment block or the following run_step and reports phantom multi-value flags.
+INVOCATION = re.compile(r"""["']?\$PY["']?\s+(scripts/[\w/]+\.py)([^\n&;|]*)""")
 
 
 def declared_flags(script: pathlib.Path) -> dict:
-    """flag -> has_nargs, from the target script's argparse."""
+    """flag -> has_nargs, from the target script's argparse.
+
+    KNOWN LIMIT (measured 2026-09-20): this records only whether ``nargs`` is
+    present, so it cannot distinguish ``action="store_true"`` (0 values) from a
+    flag that takes exactly one value -- both have ``has_nargs == False``.  The
+    arity rule below therefore complains only at **two or more** bare values,
+    which catches the class that actually bit this pipeline (``--seeds 2021 2022
+    2023`` against a comma-list flag) but does **not** catch a single stray value
+    (``--verify yes``), which argparse would also reject.  An exact rule needs
+    ``action``/``type`` recorded here too; that is deliberately not done yet,
+    because tightening it without that metadata would flag every legitimate
+    single value (``--max-epochs 30``)."""
     if not script.is_file():
         return {}
     tree = ast.parse(script.read_text())

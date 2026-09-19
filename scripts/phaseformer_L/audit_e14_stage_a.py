@@ -216,6 +216,10 @@ def main() -> int:
     parser.add_argument("--json", default="", help="write the report as JSON here")
     parser.add_argument("--max-failures", type=int, default=15,
                         help="print at most this many failing cells")
+    parser.add_argument("--require-complete", action="store_true",
+                        help="exit 1 if any cell is still pending; for the phase-2 "
+                             "pre-flight, where the pipeline's own guard has "
+                             "already established that stage A finished")
     parser.add_argument("--self-test", action="store_true",
                         help="calibrate on a scratch root with injected violations")
     args = parser.parse_args()
@@ -285,6 +289,10 @@ def main() -> int:
     if pending:
         print(f"\nStage A is incomplete ({len(pending)} cell(s) still pending) but "
               f"every finished cell satisfies all eight invariants.")
+        if args.require_complete:
+            print("--require-complete: refusing to treat an incomplete stage A as "
+                  "ready")
+            return 1
         return 0
     print("\nStage A complete: all "
           f"{len(new_cells)} cells finished and satisfy all eight invariants.")

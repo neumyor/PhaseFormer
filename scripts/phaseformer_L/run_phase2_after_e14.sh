@@ -131,6 +131,17 @@ if [ -z "$ONLY" ] || [ "$ONLY" -ge 1 ]; then
     # (reused cells carry no command), and the recorded --output-dir of every new
     # cell was a template value.  This runs the consumers' own loaders against
     # the live artifact, before anything expensive starts.
+    # Per-cell stage-A invariants.  The watcher only establishes "411 run dirs
+    # and exit 0", which would still hold if a run had read the test split --
+    # that would break the single-read protocol the paper's blind claim rests on,
+    # and no other gate looks at it.  --require-complete is right here because
+    # the pipeline's own guard has already established that stage A finished.
+    echo "=== [$(date -Is)] pre-flight: stage-A invariants"
+    "$PY" scripts/phaseformer_L/audit_e14_stage_a.py --e14-root "$E14_ROOT" \
+      --require-complete --json "$LOGDIR/phase2_stage_a_audit.json" || {
+        echo "E14 stage A violates an invariant (or is incomplete); refusing to start the chain" >&2
+        exit 1
+      }
     echo "=== [$(date -Is)] pre-flight: phase-2 consumer contracts"
     "$PY" scripts/phaseformer_L/check_phase2_consumers.py \
       --e14-root "$E14_ROOT" \
