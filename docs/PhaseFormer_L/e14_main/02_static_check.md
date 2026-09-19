@@ -35,3 +35,55 @@
 
 阶段 2 全部 6 项通过，且硬门在本轮实际拦截了 2 个会在开跑后才暴露的缺陷（复用格解析失败、
 `KeyError`）。允许进入阶段 3。
+
+---
+
+## 附录：阶段 B（单次 test 读取）的静态检查
+
+> 代码：`scripts/phaseformer_L/e14_read_test.py`｜计划文档：`04b_test_read_plan.md`
+
+### B.1 计划对账（`--dry-run`，不写任何文件、不读 test）
+
+```bash
+python scripts/phaseformer_L/e14_read_test.py \
+  --manifest research_runs/phaseformer_L_e14_main_v1/stage_a_manifest.json \
+  --output-root research_runs/phaseformer_L_e14_main_v1 --dry-run
+```
+
+| 项 | 值 | 判定 |
+|---|---|---|
+| `cells_in_manifest` | **492** | 与阶段 A 的 `total` 一致 ✓ |
+| `cells_selected` | 492 | ✓ |
+| `manifest_counts` | `{"new": 411, "reused": 81}` | 与阶段 A 逐项一致 ✓ |
+| `reused_cells` | **81** | 全部解析成功，复用格走"核对并复制、**不重读**"路径 ✓ |
+| `external_evidence_rows` | **36** | E8 登记的外部 test 读数（18 `phase_only` + 18 `direct_nlinear`）✓ |
+| `external_evidence_rejected` | **0** | 无一条证据被拒 ✓ |
+
+### B.2 门行为核对（**非循环依赖**，重要）
+
+首次运行时退出码为 1，报告 `missing_run`（约 800 条）与 `missing_metrics`（16 条）。逐条核对结论：
+
+- `missing_run`：阶段 A **尚未训练**的 `new` 格（E14 仍在跑第一批 Traffic），符合预期；
+- `missing_metrics`：`run_dir/metrics.csv` 缺失或为空 ⇒ 该格阶段 A **未完成**。
+  源码判据见 `e14_read_test.py:904-908`。
+
+**关键核对：该门不是循环依赖。** 阶段 B 只要求 `metrics.csv` **存在**（阶段 A 的产物），
+**不**要求其中已有 test 指标——因为 test 指标正是阶段 B 要写入的东西。若某格已带 test 指标
+（意味着阶段 A 误传了 `--evaluate-test`），脚本会复制并**标记告警**，而不是拒绝。
+
+因此：阶段 A 全部结束后该门应转为通过；当前的退出码 1 是"阶段 A 未完成"的正确表现。
+
+### B.3 与阶段 A 的指纹一致性（由实现方在阶段 1 记录）
+
+`fingerprint_report()` 导入 `e14_main_matrix` 并断言 `ARMS`、`EXTERNAL_TEST_EVIDENCE` 与
+5 个协议常数**逐项相同**，另跑 20 个合成 config 的 `arm_match` 对拍（0 失败）。
+即"哪个 run 属于哪个臂"只在 `e14_main_matrix` 定义一次，阶段 B 不会与阶段 A 漂移。
+
+### B.4 阶段 B 相对 E8 模板修正的 4 个缺陷
+
+| # | E8 的做法 | 为什么有问题 | 阶段 B 的做法 |
+|---|---|---|---|
+| 1 | 先读 test，再校验 validation 复现 | 会在 val 不匹配时**白白消耗一次 test 读取** | **先 val 门后 test 读**；不通过则 status=`rejected` 且**不读 test**、不报数字 |
+| 2 | 幂等判据用了自己不会写的列 | 重跑会**重复读 test** | 每格 `test_read/<key>.json` + 已消费状态白名单，重跑不重读 |
+| 3 | 硬编码 `attempts/001` | 复用链上有 `attempts/002` 的真实 run（已确认） | 改为 glob `attempts/*/checkpoints/` |
+| 4 | 未记录 `val_mse` 的 run 被静默接受 | 无法校验复现 | 视为 `rejected`，另拒 NaN/0 的 val 与非有限复算值 |
