@@ -87,10 +87,16 @@ def read_json(path: pathlib.Path):
 
 
 def check_exists(report: Report, experiment: str, rel: str, label: str):
+    """Record presence, and return the path (or None when absent).
+
+    Presence is recorded as PASS so the summary counts stay meaningful; only the
+    content checks below can turn a present artifact into a FAIL.
+    """
     path = ROOT / rel
     if not path.is_file():
         report.add(experiment, label, "PENDING", f"{rel} does not exist yet")
         return None
+    report.add(experiment, label, "PASS", "present")
     return path
 
 
