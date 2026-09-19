@@ -342,3 +342,58 @@ per_seed_cells_with_fewer_arms    ['l_main__Weather-96-s2023',
 实际存在 3 个格子缺臂。审计工具的严格性与被审计对象的粒度必须匹配：既然表是按 (臂, setting)
 聚合的，就必须同时检查被聚合掉的 seed 维度。该教训与 §7 的 `missing_columns`、E14 §6 的
 "能解析 ≠ 解析正确"是同一类。
+
+---
+
+## 4. 在 E14 尚未跑完时对**真实 manifest** 复跑本阶段的 dry-run 门（一个"看起来像 bug、其实正确"的结果）
+
+阶段 2 的静态检查此前是在代码修完后做的。本轮在 E14 阶段 A 仍在训练（当时 92/411）时，
+用**真实 manifest** 复跑了正式运行要过的同一道门：
+
+```bash
+python scripts/phaseformer_L/e16_dissection.py --dry-run --verify-checkpoint-heads \
+  --e14-root research_runs/phaseformer_L_e14_main_v1 --output-root /tmp/e16_dryrun
+```
+
+**结果：exit 0 —— 门在 E14 只有 92/411 个 run 时就通过了。**
+
+这个结果**第一眼像是严重的门缺陷**（本该"任一 cell 的 checkpoint 解析不到就拒绝"，
+而 E14 明明还没跑完）。逐项核对后确认是**正确行为**，理由是：
+
+```json
+{"event": "plan", "cells": 63,
+ "by_arm": {"l_main": 21, "l_q1_4": 21, "l_q1_8": 21},
+ "by_e14_status": {"reused": 63},
+ "settings": ["ETTh2-720","ETTh2-96","ETTm2-192","ETTm2-96",
+              "Electricity-336","Weather-192","Weather-96"],
+ "random_repeats": 100, "random_rrr": true, "random_rrr_repeats": 100}
+```
+
+* 63 个 cell 的 `status` **全部是 `reused`**（`by_e14_status: {"reused": 63}`，无一 `new`）；
+* 原因是 §4.4 的 7 个 setting 正是 §4.5 的 **test-selected** 集合，而这三个臂
+  （`l_main`/`l_q1_4`/`l_q1_8`）在这 7 个 setting × 3 seed 上的 21 格**全部来自既有复用链**
+  （`rank_sweep_2_*` 各批次根），21 = 7 × 3 恰好对上；
+* 因此 E16 解析的是**旧的复用 checkpoint**，与 E14 阶段 A 新训的 411 个 run **无关**。
+
+**所以门没有偷懒**：它断言的是"我声明的每个 cell 都能解析到 checkpoint"，而这 63 个 cell
+确实现在就能全部解析。这也是"门通过"与"上游跑完"是两件事的一个实例——
+**门的正确性不取决于上游进度，取决于该阶段自己的输入是否齐备**。
+
+### 4.1 由此得到的一个排期事实（但**本轮不作排期改动**）
+
+既然 E16 不依赖 E14 阶段 A，它在流水线里串行排在第 4 步就**白等了约 6 小时**，
+且其本身约 2 h（单卡、单进程）。理论上现在就跑可把 E14 之后的串行链缩短约 2 h。
+
+**但不改**，理由是**算了才发现的**：本阶段**没有 resume/跳过逻辑**——它的产物
+（`dissection_table.csv`、`intervention_table.csv`、`canonical_modes.csv`、
+`semantic_alignment.csv`、`cross_seed_alignment.csv`、`e16_summary.json`）是**末尾一次性写出**的
+（`e16_dissection.py:2674-2678`、`:2880`），没有按 cell 的断点续跑。因此现在跑一遍，
+流水线第 4 步还会**再跑一遍**，净收益为零、反而多占 2 h 的 GPU 0 与 E14 抢资源
+（E14 才是关键路径）。若要利用这一事实，需要给第 4 步加"产物已存在则跳过"的判定——
+那是对**无人值守**链路的改动，收益约 2 h，风险与收益不成比例，故**明确记录而非实施**。
+
+### 4.2 顺带确认的一项 §4.4 要求已被接线
+
+plan 里 `random_rrr: true`、`random_rrr_repeats: 100`，即 minipaper §4.4 要求的
+**随机 RRR 子空间对照**（`RandomRRR-drop` 臂，判据
+`criterion_6_drop_beyond_random_rrr_95pct`）确实在计划内，且重复次数为 100（与 `random` 带一致）。
