@@ -81,6 +81,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--worker", default="",
                         help="internal: process one row given as json")
+    parser.add_argument("--marker-file", default="",
+                        help="internal: worker mode writes this cell's record JSON "
+                             "here. The dispatcher accepts a cell only when this "
+                             "marker exists and the worker exited 0, so without it "
+                             "every cell is recorded as worker_failed.")
     return parser.parse_args(argv)
 
 
@@ -310,7 +315,8 @@ def dispatch(todo, args, marker_dir: Path, results_path: Path):
                 [sys.executable, str(Path(__file__).resolve()), "--worker",
                  json.dumps(payload), "--results", str(results_path),
                  "--val-tol", str(args.val_tol),
-                 "--max-eval-batches", str(args.max_eval_batches)],
+                 "--max-eval-batches", str(args.max_eval_batches),
+                 "--marker-file", str(marker)],
                 cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, text=True)
             print(json.dumps({"event": "launch", "cell": payload.get("cell"), "slot": slot}),
                   flush=True)
@@ -349,6 +355,19 @@ def main() -> None:
     if args.worker:
         payload = json.loads(args.worker)
         record = read_one(payload, args)
+        # The dispatcher decides success from a per-cell marker (`marker.is_file()
+        # and code == 0`), and the module docstring promises "each freshly read
+        # cell leaves a per-cell JSON marker" -- but no code ever wrote one, so
+        # every cell came back as worker_failed and the test columns stayed empty
+        # for E17 and E18 (phase-2 steps 5 and 6).  Write the marker here, where
+        # the record is produced.  Found by read_test_smoke.py against a real
+        # one-epoch checkpoint.
+        if args.marker_file:
+            marker_path = Path(args.marker_file)
+            marker_path.parent.mkdir(parents=True, exist_ok=True)
+            marker_path.write_text(
+                json.dumps(record, ensure_ascii=False, default=str) + "\n",
+                encoding="utf-8")
         print(json.dumps(record, ensure_ascii=False, default=str))
 
     else:
