@@ -443,6 +443,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 反查审计器判据 | **发现并加强四个过弱判据** | 由 §10.1.3 的防线地图反查："**把关者的判据是否真能挡住它要挡的东西**"。逐条对照后发现四个判据用"非空/存在"代替了真正的计数或一致性判据：①E14 `parameter_table.csv` 原判"non-empty"——而 `e14_params.py` 是**报告型**（解析不到的格列进 `unresolved` 并**照样 exit 0**），半张矩阵缺失也会通过 → 加强为 **行数 = 492**（与 `cells_with_parameters + unresolved = 492` 一致）；②新增 **每行 `total_matches_metrics` 不得为 False**（该工具本会与 run 自身 `metrics.csv:parameter_count` 交叉校验，审计器此前没看）；③新增 **每行 `gate_value_from_checkpoint` 非空**（§4.2 的 `g` 列依赖从 checkpoint 恢复门值）；④E18 原判"results non-empty" → 加强为 **行数 = 78** = 42 平滑（7×3×2）+ 36 边界（6×3×2），由计划计数与**我先前预演的行数算术**两条独立一致。**六类校准全部通过**：492 行一致 → 三项 OK；491 行 → FAIL；一行交叉校验 False → FAIL；一行缺门值 → FAIL；E18 78 行 → OK；E18 77 行 → FAIL 且 exit 1。**方法论收获**：不是逐个看判据是否合理，而是先问"**这条判据要挡住什么**"——一问就发现"非空"挡不住"半张矩阵" |
 
+| 2026-09-20 | 判据覆盖矩阵 | **无"报告却无人接住"的缺口** | 把 §14 的教训系统化：列出六个工具的**全部缺口计数**，逐条指出**哪条审计判据接住它**（或**为何有意不查**）。结果：`e14_read_test` 的 `problems`/`failed_workers` → E14 的"492 行 + 每行有 test"（且该步自身 fail-closed）；`e14_params` 的 `unresolved`/`mismatches`/门值缺失 → §14 新增的三条；`e16_dissection` 的 `algebra_failures`/`run_metric_*` → E16 三条（故每 cell 的 `run_metric_state == "skipped"` 已被间接接住：全量时必须为 `ok`）；其 `parity={"skipped":True}` → E16 的 `reference_parity_passed is True`（键缺失即 FAIL）；`e17_conditional` 的 `failed` → E17 的 24 新 cell + test 指标；`e18_negative`/`e18_svd_truncation`/`e19_predictive_power` 的缺口 → 各自判据。**唯一"有意不查"**是 §4.5 的 `settings_without_evidence`——`evidence_missing` 是**已披露的合法结果**（Electricity-336），当失败会误报。**新增一条**：E17「无缺失的冻结投影器」（投影器缺失属**基础设施故障**而非良性跳过，值得显式报出，否则症状只剩"0 个新 cell"）。**八类对照校准全部通过**（492/491 行、交叉校验 False、缺门值、E18 78/77 行、E17 有/无缺失投影器），详见 `paper_code_consistency.md` §15 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据

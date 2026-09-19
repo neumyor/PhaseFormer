@@ -602,3 +602,43 @@ g | s | stable | provenance_note`（生成点 `e14_writeback.py:678-681`，
 **这条链值得记下**：它不是我事先想到的，而是**先建立"谁把关"的结构认识（防线地图），
 再据此反查"把关者的判据是否够严"**才发现的。若只逐个检查判据，很容易停在"这条判据看起来没问题"；
 而一旦问"**这条判据要挡住什么**"，就会发现"非空"挡不住"半张矩阵"。
+
+---
+
+## 15. 判据覆盖矩阵：**每个"被报告出来的缺口"，由哪条审计判据接住**
+
+§14 的教训是"要问判据**要挡住什么**"。本节把它系统化：把六个工具的**全部缺口计数**列出来，
+逐条指出**是哪条审计判据在接住它**（或**为何有意不查**）——这是"审计器是否完整"的直接证据。
+
+| 工具 | 它报告的缺口 | 接住它的审计判据 |
+|---|---|---|
+| `e14_read_test.py` | `problems`、`failed_workers`、`evidence_rejected_rows` | E14：「results 行数 = 492」+「每行 `test_mse`/`test_mae` 非空」；**且该步自身 fail-closed** ✓ |
+| `e14_params.py` | `unresolved` | E14：「参数表覆盖全部 492 格」（**§14 新增**） |
+| `e14_params.py` | `mismatches`（与 `metrics.csv:parameter_count` 不一致） | E14：「参数计数与 `metrics.csv` 一致」（**§14 新增**） |
+| `e14_params.py` | 门值缺失 | E14：「每个 checkpoint 都能恢复门值」（**§14 新增**） |
+| `e16_dissection.py` | `algebra_failures` | E16：`algebra_failures == 0` ✓ |
+| `e16_dissection.py` | `run_metric_failures`、`run_metric_not_comparable` | E16：两者均为 0 ✓（**故每 cell 的 `run_metric_state == "skipped"` 已被间接接住**：全量运行时它必须是 `ok`） |
+| `e16_dissection.py` | `parity = {"skipped": True}`（传了 `--skip-reference-parity`） | E16：`reference_parity_passed is True` ✓——该键会缺失 → 判 FAIL（"key absent"）✓ |
+| `e17_conditional.py` | `failed`（训练失败格） | E17：「24 个新训 cell 都在」+「每个新 cell 都有 test 指标」✓ |
+| `e17_conditional.py` | `missing_projectors` | E17：**「无缺失的冻结投影器」**（**§15 新增**）——缺失投影器是**基础设施故障**、不是良性跳过，故值得显式报出，否则症状只剩"0 个新 cell" |
+| `e17_conditional.py` | `settings_without_evidence` | **有意不查** ✓：`evidence_missing` 是**已披露的合法结果**（Electricity-336 无 H1 证据，见 §4.5 表注），把它当失败会误报 |
+| `e18_negative.py` | `failed` | E18：「results 行数 = 78」+「每 cell 有 test 指标」✓ |
+| `e18_svd_truncation.py` | `problems`、`unresolved` | E18：`e18_svd_truncation_summary.json` 的 `problems` 须为空 + 「行 3 覆盖 28 setting」✓ |
+| `e19_predictive_power.py` | `settings_without_data` | E19：「预测力表覆盖 28 setting」✓ |
+
+**结论**：**没有"被报告却无人接住"的缺口**；唯一"有意不查"的一项是 §4.5 的 `evidence_missing`，
+且理由已写明（它本身是被披露的合法结果）。**这就是"审计器完整"的可核查形式**——
+不是"我觉得判据够全"，而是逐条把"工具报告的缺口"对到"审计的判据"上。
+
+### 15.1 §15 新增判据的校准（八类对照）
+
+| # | 对照 | 期望 | 实测 |
+|---|---|---|---|
+| 1 | 参数表 492 行且一致 | 三项全 OK、exit 0 | ✅ |
+| 2 | 参数表 491 行 | FAIL、exit 1 | ✅ `FAIL parameter table covers all 492 cells: 491 rows` |
+| 3 | 一行 `total_matches_metrics=False` | FAIL、exit 1 | ✅ `… 1 row(s) mismatched e.g. ETTh1-96-0/l_main` |
+| 4 | 一行缺门值 | FAIL、exit 1 | ✅ `FAIL gate value recovered from every checkpoint …` |
+| 5 | E18 78 行 | OK、exit 0 | ✅ `OK results rows = 78: 78 rows` |
+| 6 | E18 77 行 | FAIL、exit 1 | ✅ |
+| 7 | E17 已标审计、无缺失投影器 | OK、exit 0 | ✅ `OK no missing frozen projectors: 0 missing` |
+| 8 | E17 缺一个投影器 | FAIL、exit 1 | ✅ `FAIL no missing frozen projectors: 1 missing e.g. ['ETTh2_96_Q1.npy']` |
