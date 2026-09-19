@@ -18,7 +18,7 @@
 | D-1 | §4.0 判定门槛 A–D | **按 minipaper 建议值冻结**：A 无一 setting 双指标回退 >1.0%；B s=1 数据集上 ≥3/4 setting 双优；C 不设最低数目；D q=1/8 vs direct 宏平均 │ΔMSE│、│ΔMAE│ ≤0.5% | 写入 minipaper §4.0，去掉"待定"字样 |
 | D-2 | §4.2 新格子超参 | **统一用 preset 默认 `gate_init=0.2`、`lr=1e-3`**；复用格保留其 Stage-0 冻结值 | 省下 Stage-0 扩展（约 84 runs）；**表内出现两套超参协议，须在 §4.2 表注显式披露** |
 | D-3 | §4.5 条件性学习范围 | **7 个 test-selected setting** | 新训 24 runs；须披露这 7 个 setting 的来源 |
-| D-4 | §4.6 行 1 平滑复测范围 | **7 个 test-selected setting，2 档** | 新训 42 runs |
+| D-4 | §4.6 行 1 平滑复测范围与档位 | **7 个 test-selected setting；2 档 = causal EMA `smooth_ratio ∈ {0.5, 1.0}`（`alpha=0.08`）** | 新训 42 runs；**2026-09-19 更正**：早期草案写成 boxcar 0.5 加 causal EMA alpha=0.08，但 PhaseFormer-L 的 `shared` 头只实现 causal EMA（boxcar 仅存在于 `pooled_lowrank`），且 `alpha=0.08` 是算子默认值，两个档位数值上完全相同；已改为同算子的两个不同强度 |
 | D-5 | §3.4.3 的开关 `s` 与阈值 `ν*` | **`s` 不进入模型定义**：PhaseFormer-L = 修正器**恒定启用**；`s` 仅作 §4.2/§4.7 的**诊断列**（预测该数据集是否需要电平通道，并如实报告判对/判错） | §4.2 的"PhaseFormer-L（含开关）"与"always-on"两列**合并为一列**；主张 B 由"模型性质"改述为"开关预测力"；**主张 A 变强**（失去在 ETTh1/ETTm1 上自动关闭的能力） |
 | D-6 | A1 行范围 | **按 §4.0 协议全训 24 × 3 = 72 runs** | 见 §2.4：minipaper 的"12 格既有"前提被审计推翻 |
 
@@ -164,7 +164,7 @@ Weather-192、Electricity-336。其中 `phase_only` 只复用前 6 个（E8 未�
 
 | 子项 | 内容 | 域 | 新训 runs |
 |---|---|---|---:|
-| 行 1 | 输入平滑 2 档复测（boxcar `smooth_ratio=0.5`；causal EMA `alpha=0.08`） | 7 setting × 3 seed × 2 档 | 42 |
+| 行 1 | 输入平滑 2 档复测：causal EMA `smooth_ratio ∈ {0.5, 1.0}`，`alpha=0.08`（见 §1 D-4 更正） | 7 setting × 3 seed × 2 档 | 42 |
 | 行 3 | SVD 截断 vs 秩约束训练扩展到 **28 setting** | 读 E14 的全秩与低秩 checkpoint | 0（评估） |
 | 行 5 | 边界消融 `pooled_lowrank` `rank∈{1,2}`（绝对秩） | 6 setting × 3 seed × 2 rank | 36 |
 | 行 2 / 行 4 | minipaper 标 "—"，**不补做** | — | 0 |
