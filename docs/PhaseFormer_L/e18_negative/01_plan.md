@@ -263,6 +263,11 @@ python scripts/phaseformer_L/e18_svd_truncation.py \
    `unsupported_head_type` 而不是静默截断。
 7. **单 seed 默认**：行 3 默认 `--seeds 2021`（延续 E11 的单 seed 口径）；扩到 3 seed
    会把 validation 前向次数乘以 3（28 setting × 3 seed × (1 全秩 + n 个秩) 次评测）。
+   **2026-09-20 补记（登记口径 vs 工具默认）**：本次**正式运行用的是 3 seed**——流水线第 6 步显式传
+   `--seeds 2021,2022,2023`，与本 paper §4.0 的"seeds 2021/2022/2023"协议一致（不是工具默认的单 seed）。
+   故 `svd_truncation_table_28.csv` 的行数按 **28 setting × 3 seed** 计，而不是 28 行；
+   阶段 5 审校不要把它读成"每 setting 一行"。**成本也随之为默认口径的 3 倍**，且该脚本**无 `--gpus`**
+   （只有 `--device`）⇒ **单卡顺序执行**：排期据此把行 3 的估计从 0.2–0.5 h 更正为 **1.5–2.5 h**。
 8. **行 3 依赖 E14 已完成**：本地**没有任何** E14 产物（`research_runs/` 下无
    `phaseformer_L_e14_main_v1/`），因此本脚本在本地只能做 `--dry-run`/`--verify` 的路径检查，
    真实数值必须在服务器上、E14 stage A 与单次 test 读完成后运行。
