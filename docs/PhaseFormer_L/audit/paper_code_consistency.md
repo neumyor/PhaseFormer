@@ -820,3 +820,82 @@ OK  gate presence matches the arm table: 0 row(s) whose arm and gate_param_prese
 
 三条做法合起来才是完整的："**真产物**证明判据不误杀，**扰动产物**证明判据不放过，"
 **调用方声明**证明产物不空转。三者缺一，就会剩下一个只在特定输入下才现形的静默缺陷。
+
+## 18. §4.4 的臂数是**逐格而定的**（11/12/13），而审计器、回填与论文都写死了它
+
+§17 的教训是"判据的数必须来自产物结构"。本节是它的第三次复现，而且这次**同一处错误出现在三个地方**
+（审计器判据、回填期望值、论文正文），且**审计器那一处会在 E16 那 3–5 小时跑完之后判整链失败**。
+
+### 18.1 三处写死的"11"
+
+| 位置 | 写法 | 后果 |
+|---|---|---|
+| `audit_phase2_outputs.py` | `intervention rows == 63 × 11 = 693`；`len(arms) == 11` | **第 7 步 FAIL**（真实产物既不是 693 行也不是 11 个臂名） |
+| `e16_writeback.py` | `expected_arms = 11`，并以 `len(names) < 11` 判"薄" | 不误报（真实 11–13 ≥ 11），但写进 `arm_coverage.expected_arms_per_cell` 的**期望值是错的** |
+| `PhaseFormer_L_minipaper.md` §4.4 | "10 个登记臂 … 之上再追加 `Independent-RRR-only`、`Conditional-RRR-only` 与新增的 `RandomRRR-drop`，故实际为 **11–12 臂**" | 算术本身就不自洽：10 + 3 = 13，不是 12 |
+
+### 18.2 实测：逐格读该格自己的 checkpoint
+
+臂数由 `build_arm_plan` 的**条件**决定：
+
+| 追加项 | 条件 | 实测 |
+|---|---|---|
+| `PCA-matched-only` / `-drop`（+2） | `semantic_dimension < rank_dim` | **63/63 格成立**（语义张成 36–39，而最小秩为 42、稠密头为 720） |
+| `Independent-RRR-only`（+1） | 恒成立（无 Stage-3 文件时用 train split 现拟合） | 63/63 |
+| `RandomRRR-drop`（+1） | `--random-rrr` 且 `rrr_dimension ≥ 1` | 63/63（该 flag 默认 `True`） |
+| `Conditional-RRR-only`（+1） | 该格存在带 `conditional_basis` 的 Stage-3 文件 | **42/42 低秩格成立**（84 个 `.npz` 全部含该键；稠密头无此文件） |
+
+故 `8 + 2 + 1 + 1 + (0 或 1)` ⇒ **稠密 12 臂、低秩 12 或 13 臂**。逐格（各自 checkpoint 的 encoder、
+各数据集真实语义张成，直接 import `build_bases` 用的 `semantic_basis`/`latent_image`，并复刻其秩与条件）：
+
+| 每格臂数 | 格数 | | 按 E14 臂的行数 |
+|---|---|---|---|
+| 11 | 24 | | `l_main` 252 |
+| 12 | 21 | | `l_q1_4` 255 |
+| 13 | 18 | | `l_q1_8` 243 |
+
+**合计 750 行、13 个不同的臂名**（不是 693 行 / 11 个臂名；`l_main` 的格子没有 `Conditional-RRR-only`）。
+
+### 18.3 我在这条路上先给错了两个数，如实记下
+
+1. **798 行**：第一版探针取"每个臂一个代表 checkpoint"，把该 checkpoint 的秩套到**所有** setting 上
+   （于是 `l_q1_8 ETTh2-96` 被当成 r=42，实际 r=12=96/8），并**假设**低秩格都有 conditional 文件。
+   两个错叠加得到 12/13 臂、798 行。
+2. **750 行**：改成逐格读**该格自己的** checkpoint，并**实际检查** 42 个 Stage-3 文件后得到的数。
+3. 期间还差一点把"11/12/13"写成"12/13"——因为漏了 `semantic_dimension == rank_dim` 的格子
+   （r=12 或 24 且语义张成 36–39 时，两者相等 ⇒ **不**追加 PCA-matched）。
+
+**这与 §9.1.2、§9.1.4 是同一类错误**：拿一个**代表量**（中位 run 时长 / 一个 checkpoint）
+去套一组**构成在变**的对象。判据是：**当结论依赖"每个对象自己的属性"时，就必须逐个对象取，不能取代表。**
+
+### 18.4 修法：判据改成**结构式**，不再写死基数
+
+审计器（`audit_e16`）：
+
+| 判据 | 形式 | 为什么这样写 |
+|---|---|---|
+| `intervention table covers 63 cells` | 63 个 `(arm, setting, seed)` 组 | 基数来自产物自己的分组 |
+| `every cell carries the always-present arms` | 每格必须含 **10 个恒在臂**（8 登记 + `Independent-RRR-only` + `RandomRRR-drop`） | 真正的缺口是"少了一个恒在臂"，而不是"臂数不是 11" |
+| `intervention rows match the runner's count` | 与 `e16_summary.json` 的 `counts.intervention_rows` 相等 | **两件产物互相印证**，不含任何常数 |
+| `per-cell arm counts match the runner's` | 与 `counts.intervention_arms_per_cell` 相等 | 同上；缺该键时降级为 INFO 而不是 FAIL |
+| `intervention arms per cell` | **INFO**：报出臂名数、逐格计数分布、总行数 | 把"数是多少"记录成事实，而不是判据 |
+
+回填（`e16_writeback`）：`expected_arms = len(ALWAYS_PRESENT_ARMS)`（= 10），并把
+`always_present_arms` 写进 `arm_coverage`，`note` 说明"11/12/13 臂的格子都是完整的"。
+
+论文 §4.4：把"11–12 臂（11 为下界）"改成逐格而定的说明，并附实测分布（11/12/13、750 行、13 个臂名）
+与"判据按恒在臂写"的理由。**只改这一处**：§4.4 表格的 21 行 × 10 列结构不受臂数影响。
+
+### 18.5 校准：新增 7 类 E16 对照（合计 20 类，全部符合预期）
+
+| # | 对照 | 期望 | 实测 |
+|---|---|---|---|
+| 1–4 | 合成"真实混形"表（3 臂 × 7 setting × 3 seed = 63 格；稠密 12 臂、低秩 11/13 臂） | 四条判据全 PASS | ✅ |
+| 5 | 某格删掉一个**恒在臂**（`PCA-drop`） | 恒在臂判据 FAIL | ✅ |
+| 6 | 表的总行数与 summary 声明不符 | 互印判据 FAIL | ✅ |
+| 7 | 只有 62 格（缺一格） | 63 格判据 FAIL | ✅ |
+
+**校准器又抓出我搭台的两个错**：合成格键最初用 `ETT-96/192/336` 这类**重名** setting，
+`(arm, setting, seed)` 三元组互相碰撞，63 格被算成 **21** 格（第一次）与 **36** 格（第二次），
+导致两条对照"看起来失败"。换成真实的 7 个 setting 名后才是 63 ✅。
+**这与 §17.3 同类**：校准器的失败同样要先分清"判据错了"还是"我的 fixture 错了"。
