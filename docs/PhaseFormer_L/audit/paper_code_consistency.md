@@ -199,3 +199,76 @@ exit=0
 
 **因此本工具现在的 pass 只意味着"§4.3 的填充与产物一致"**，
 不代表其余小节已核对。这一句是本节最重要的边界说明。
+
+---
+
+## 7. 计划 ↔ 论文 覆盖核对：manifest 是否**恰好**覆盖 §4.2 要求的格子
+
+### 7.1 这正好回到本任务最初的问题
+
+这条任务最初的问题是"minipaper §4 还要求补哪些实验"。前几节核对的是"论文写下的数字"与
+"实现里的常量/产物"是否一致；本节换一个方向核对：**实验计划是否恰好产出论文表格要求的每一个格子**
+——**不多不少**。多了是浪费算力与事后解释负担，少了就是"论文有行、实验无格"，
+而这正是最初要防的事。
+
+数据来源是**真实 manifest**（`stage_a_manifest.json`，492 cells），不是我对它的记忆。
+
+### 7.2 论文侧的要求（从表格读出）
+
+§4.2 的表格经核对是**两张表**：
+
+* 主表 **28 行** = ETTh1/ETTh2/ETTm1/ETTm2/Weather/Electricity 各 4 个 horizon（**24**）
+  ＋ **Traffic 附录 4 行** —— 即"**24+4**"；
+* 其后另有一张**臂级变体小表**（4 行：`weak_residual` shared；L-q1/4 与 L-q1/8；
+  `rcrf_nlinear_plain`；`gold_combo_reliability_s2`）。
+
+（故对 §4.2 段落做整段 `grep '^| '` 会得到 33 行：28 + 变体表 1 行表头 + 4 行数据。
+早先若不知有第二张表，容易把 33 误读为行数异常——此处记下以免重蹈。）
+
+### 7.3 实现侧（真实 manifest）与判定
+
+工具：`scripts/phaseformer_L/check_section42_coverage.py`（可复用、可指向 manifest 副本）。
+
+```text
+all settings: 28 = 24 main + 4 Traffic
+arm         settings seeds reused  new  cells  expected
+a1                24     3      0   72     72  24 settings
+l_main            28     3     21   63     84  28 settings
+l_q1_4            28     3     21   63     84  28 settings
+l_q1_8            28     3     21   63     84  28 settings
+l_rcrf            28     3      0   84     84  28 settings
+phase_only        28     3     18   66     84  28 settings
+total cells: 492 (expected 492)
+PASS
+```
+
+四项都对上了，且**复用计数与各自声明的范围一致**（这是附带的一次交叉验证）：
+
+| 臂 | 复用 | 应然 | 依据 |
+|---|---:|---|---|
+| `l_main`/`l_q1_4`/`l_q1_8` | 21 | 7 test-selected setting × 3 seed | `REUSE_SCOPE` = `REUSE_SETTINGS_FULL` |
+| `phase_only` | 18 | **6** setting × 3 seed | `REUSE_SETTINGS_PHASE_ONLY`——独缺 Electricity-336（E8 未覆盖该格） |
+| `l_rcrf` / `a1` | 0 | 0 | 审计确认二者无可复用格 |
+
+且 `a1` **确实只覆盖 24 个主 setting、不含 Traffic**，与 `ARM_DATASET_EXCLUSIONS` 一致。
+
+### 7.4 检测力校准
+
+| 对照 | 期望 | 实测 |
+|---|---|---|
+| 真实 manifest | 全部一致、exit 0 | ✓ 492 = 492 |
+| **从副本中删掉 `a1` 臂** | 报错并 exit 1 | ✓ `FAIL: total cell count differs` + `FAIL: arms absent from the manifest: ['a1']` |
+
+### 7.5 为什么值得做成可复用脚本
+
+manifest **已经被替换过一次**（2026-09-19 的复用污染事件：`gate_init` 被写入 seed、
+`learning_rate=0.5`，原文件归档为 `stage_a_manifest.prelaunch_contaminated.json`）。
+既然它是会被重建的产物，"计划是否仍恰好覆盖 §4.2"就应当是可随时复算的断言，
+而不是一次性的口头核对。
+
+### 7.6 边界
+
+* 它核对**格子覆盖**（哪些 dataset×horizon×seed×arm 存在），**不**核对格子里的数值；
+* 它不检查 `--verify`（复用解析正确性）——那是 `e14_reuse_audit.py` 的职责；
+* 它只覆盖 §4.2（E14）。§4.4–§4.7 的覆盖由各自的 plan 门负责
+  （E16 的 63 cell、E17 的 84/24、E18 的 78/28 均已在前文核对过）。
