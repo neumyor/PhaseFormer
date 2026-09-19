@@ -122,11 +122,25 @@ run_step 5 "E17: §4.5 four-arm training (24 runs) + assemble" \
   bash -c "cd '$REPO' && '$PY' scripts/phaseformer_L/e17_conditional.py --stage a --verify \
       --gpus '$GPUS' --output-root '$E17_ROOT'"
 
-run_step 6 "E18: §4.6 rows 1+5 (78 runs) then row 3 (28 settings)" \
-  bash -c "cd '$REPO' && '$PY' scripts/phaseformer_L/e18_negative.py --stage all --verify \
+run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 settings)" \
+  bash -c "cd '$REPO' && \
+    '$PY' scripts/phaseformer_L/e18_negative.py --stage all \
       --gpus '$GPUS' --output-root '$E18_ROOT' \
-    && '$PY' scripts/phaseformer_L/e18_svd_truncation.py \
+    && '$PY' scripts/phaseformer_L/e18_negative.py --stage all --verify --dry-run \
+      --output-root '$E18_ROOT' \
+    && '$PY' scripts/phaseformer_L/e18_svd_truncation.py --verify \
       --e14-root '$E14_ROOT' --output-root '$E18_ROOT' \
       --ranks 10 --seeds 2021 2022 2023 --evaluation-split val"
+# NOTE on --verify semantics, which differ per script and must not be guessed:
+#   e18_negative.py     --verify = "fail if any planned cell has no matching
+#                        completed run", i.e. a stage-5 COMPLETENESS AUDIT.
+#                        Passing it on the training invocation makes it refuse
+#                        to start (verified: exit 1, "78 of 78 cells have no
+#                        matching completed run").  Hence train first, then
+#                        audit, as ordered above.
+#   e14_main_matrix.py  --verify = pre-run gate (every declared reuse cell must
+#   e17_conditional.py            resolve) -> passed on the training invocation.
+#   e18_svd_truncation  --verify = resolve every cell's checkpoint before
+#                        evaluating -> passed just before its analysis.
 
 echo "=== [$(date -Is)] phase 2 complete"
