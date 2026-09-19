@@ -329,3 +329,33 @@ phase_only  [(None,            None, None, None, 0.001)]
   逐臂对照与 §6 的污染事件共同覆盖）。
 - 尚未审计 `a1`（`gold_combo_reliability_s2`）的 gate 先验是否为 preset 的 0.5——该臂
   训练开始后须补一条同样的检查。
+
+---
+
+## 11. §4.2 的「来源/披露」列实现（2026-09-19）
+
+minipaper §4.2 表头的最后一列是**来源/披露**，要求逐格标注复用来源并显式披露
+test-set selection。首版回填工具把这一列留空——是一个实打实的缺口（表列存在但无内容）。
+现已补齐：由 manifest 的 `source.root` 与 `status` 逐格生成，markdown 与 CSV 共用**同一个字符串**
+（在行装配处算一次，避免两处不一致）。
+
+实测输出（真实 manifest + 合成指标，仅验证文字逻辑）：
+
+```text
+ETTh2-96       -> phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；
+                  L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/…_v4/…）；L 属 test-selected 集合
+ETTh2-192      -> phase_only=新训 3/3；L=新训 3/3
+Electricity-336-> phase_only=新训 3/3；L=复用 3/3（…_repair_v1/…_v3/rank_sweep_2_stage1）；L 属 test-selected 集合
+Traffic-96     -> 探索性附录，不进入判定；phase_only=新训 3/3；L=新训 3/3
+```
+
+三条判读：
+
+1. **复用的 setting 逐个列出**其来源根目录，读者可自行追溯（而不是笼统写"部分复用"）；
+2. **"属 test-selected 集合"只在真正复用该臂时出现**——`Electricity-336` 的 `phase_only` 是新训
+   （E8 从未覆盖该格），因此**不**带该标注，而它的 `L` 是复用，**带**该标注。这正是 per-arm 粒度
+   披露的意义；
+3. Traffic 行同时带"探索性附录，不进入判定"。
+
+**边界**：本轮只验证了文字生成逻辑（指标为合成数据）；真实的复用来源与状态取自真实 manifest，
+是可信的；最终表内数字仍来自 E14 的正式运行。
