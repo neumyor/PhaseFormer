@@ -201,6 +201,17 @@ def producer_schemas() -> dict:
             REPO_ROOT / "scripts" / "phaseformer_L" / "e17_conditional_projectors.py",
             '"projector_audit.json"',
         ),
+        # E14's parameter table (written by e14_params.py, read by the section 4.2
+        # write-back) and E19's stage-1 level statistics (whose schema is built
+        # at runtime from the row dicts).
+        "e14_parameter_table.csv": _enclosing_function_keys(
+            REPO_ROOT / "scripts" / "phaseformer_L" / "e14_params.py",
+            '"parameter_table.csv"',
+        ),
+        "e19_level_statistics.csv": _enclosing_function_keys(
+            REPO_ROOT / "scripts" / "phaseformer_L" / "e19_predictive_stats.py",
+            "dataset_rows[0].keys()",
+        ),
     }
 
 
@@ -216,28 +227,52 @@ def consumer_keys(path: Path) -> tuple:
     *output* rows as dict literals (``{"dataset": ..., "verdict": ...}``) and
     those keys are written, never demanded of the producer.  So:
 
-    * reads  -- ``row["x"]`` in a load context, and ``row.get("x")``;
-    * writes -- keys of any dict literal, and ``row["x"] = ...`` (store context).
+    * reads        -- ``row["x"]`` in a load context, and ``row.get("x")``;
+    * dict literals -- keys of any dict literal, i.e. output-row construction;
+    * templates    -- f-string-built write keys, matched separately.
+
+    Subscript *stores* are deliberately NOT subtracted -- see the comment below.
     """
     tree = ast.parse(path.read_text())
     reads: set = set()
     writes: set = set()
+    # Both write forms must be subtracted, and the reason is a measured one:
+    #
+    #  * dict literals build OUTPUT rows ({"dataset": ..., "verdict": ...});
+    #  * subscript stores (`entry["x"] = ...`) also define OUTPUT columns, and a
+    #    write-back then READS ITS OWN OUTPUT back -- e16_writeback stores
+    #    `entry["random_band_low_fused_mse"]`, then iterates the built table and
+    #    reads that same key to format the markdown.  Not subtracting stores made
+    #    the checker demand four such output-only names of the producer.
+    #
+    # KNOWN BLIND SPOT (deliberate, and compensated elsewhere): a column read
+    # from an INPUT and re-emitted under the SAME name -- a pass-through such as
+    # tau_hat_steps / test_mse / gate_value -- lands in both sets and is
+    # therefore subtracted, so a producer that failed to write it would NOT be
+    # reported here.  That case is covered instead by check_builder_outputs.py:
+    # a pass-through whose read yields None makes the OUTPUT column empty, and
+    # the empty-column sweep runs after every write-back in the pipeline.  This
+    # checker is kept free of false positives so it can serve as a hard gate;
+    # see docs/.../05_audit.md section 15 for the full discussion.
+    dict_literal: set = set()
+    store: set = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
             if isinstance(node.slice.value, str):
                 if isinstance(node.ctx, ast.Store):
-                    writes.add(node.slice.value)
+                    store.add(node.slice.value)
                 else:
                     reads.add(node.slice.value)
         if isinstance(node, ast.Dict):
             for key in node.keys:
                 if isinstance(key, ast.Constant) and isinstance(key.value, str):
-                    writes.add(key.value)
+                    dict_literal.add(key.value)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             if node.func.attr in {"get", "pop"} and node.args:
                 first = node.args[0]
                 if isinstance(first, ast.Constant) and isinstance(first.value, str):
                     reads.add(first.value)
+    writes |= dict_literal | store
     # Keys can also be built by f-string ("entry[f\"{arm}_mse\"]"), which a
     # literal scan cannot see.  Collect those as patterns so a later literal read
     # of "direct_mse" is recognised as internally constructed rather than a
@@ -270,6 +305,10 @@ CONTRACTS = {
     "e17_writeback.py": ["e17_results.with_test.csv", "e17_projector_audit.json"],
     "e18_writeback.py": ["e18_results.with_test.csv", "e14_results.csv",
                          "e18_svd_truncation_table_28.csv"],
+    # The section 4.2 centrepiece: it reads E14's test-bearing results, E14's
+    # parameter table, and E19's level statistics (for the tau diagnostic).
+    "e14_writeback.py": ["e14_results.csv", "e14_parameter_table.csv",
+                         "e19_level_statistics.csv"],
 }
 
 #: Tokens that are dict/config keys rather than CSV columns; reported separately
