@@ -116,6 +116,14 @@ if [ -z "$ONLY" ] || [ "$ONLY" -ge 1 ]; then
         echo "column contracts are broken; refusing to spend GPU time on stages that cannot write back" >&2
         exit 1
       }
+    # Flag existence is not flag arity: `--seeds 2021 2022 2023` is an argparse
+    # error because --seeds is a comma-list, and that mistake would otherwise
+    # only surface at step 6, after every expensive stage had already run.
+    echo "=== [$(date -Is)] pre-flight: pipeline invocation arity"
+    "$PY" scripts/phaseformer_L/check_pipeline_invocations.py || {
+        echo "pipeline invocations are malformed; refusing to start the chain" >&2
+        exit 1
+      }
   fi
 fi
 
