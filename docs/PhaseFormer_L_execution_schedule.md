@@ -324,3 +324,7 @@ Traffic 为唯一未知量（862 通道、batch 8），须先冒烟实测每 epo
 | 2026-09-19 | E14 | 早期审校 | 前 7 个 cell 逐项过 **8/8 阶段 A 不变量**（含最关键的「阶段 A 绝不读 test」）；纠正审校脚本自身的误判（`epochs_completed == requested` 不是不变量：早停 `patience=8`，且复用格同样早停，两类格子协议一致） |
 | 2026-09-19 | E19-1 | 1–6 完成 | 28 setting 统计量 + `ν*=57.35` 冻结已回填 §4.7 表注与 §3.4.3；审校 9/9 |
 | 2026-09-19 | 工具 | — | `e14_writeback.py`（全量聚合 + 主张 A–D 判定 + §4.2 表行）经合成冒烟跑通全部代码路径，并挡下 Golden 表解析缺陷（正则 `[A-Za-z]+` 匹配不了含数字的 `ETTh1` → 只解析 12/28 行，已修） |
+| 2026-09-19 | G4 闭合 | — | 必答 (a) 需要"FITS 的引用数字"，而仓库金标准无任何外部模型。已补齐 FITS（ICLR 2024 Spotlight, L=720）的 28 个 MSE 到 `docs/PhaseFormer_L_external_refs.md`（来源：官方仓库 `VEWOXIC/FITS` README 的 Result Update 表，2026-09-19 抓取），并接入 `e14_writeback.py` 输出 `fits_mse` 列与 `claims.json` 的 `must_answer_a` 块。**只比 MSE**（源表无 MAE）；FITS 不进入主张 A–D 判定。起点：Golden 的 ETTh2 四格 MSE 全部高于 FITS 1.5%–6.2% |
+| 2026-09-19 | §4.2 参数量列 | — | 补 `e14_params.py`：由 checkpoint 参数**形状**（`mmap` 只读）拆出 `residual_params`/`backbone_params`，与 `metrics.csv:parameter_count` 交叉校验；已解析的 94 个 cell **全部相等**（`total_mismatches: []`）。回填工具按 `(arm, horizon)` 聚合并校验同 horizon 内 3 seed 一致；FLOPs 明确不报（原文 Table 4 口径未复现） |
+| 2026-09-19 | E18 行 3 | — | 挡下默认范围漏 Traffic 的缺陷（24 → **28** setting）；7 个复用 setting 全部解析，其余待 E14 |
+| 2026-09-19 | 阶段二流水线 | — | 新增 `scripts/phaseformer_L/run_phase2_after_e14.sh`：E14 之后的六步（单次 test 读取 → §4.7 ρ → §4.2 回填 → E16 → E17 → E18），带**完成守卫**（实测在 E14 运行时正确拒绝启动，exit 1）与逐步退出码 |

@@ -60,7 +60,27 @@ setting，每格三 seed（2021/2022/2023），并回答必答 (a)(b)(c)。
 `stage_a_manifest.json`、`stage_a_reuse_audit.json`、`stage_a_summary.json`、`runs/<run_id>/`、
 `_logs/<cell>.log`；阶段 B 追加 `results.csv`、`test_read_summary.json`、`test_read/<cell>.json`。
 
-## 7. 静态检查清单（移交阶段 2）
+## 7. 外部参照：必答 (a) 需要的 FITS 数字（G4 已闭合）
+
+minipaper §4.2 的必答 (a) 要求回答"是否达到 **FITS 的引用数字**"，而本仓库的金标准文件
+**不含任何外部模型**（G4）。本轮补齐：FITS（ICLR 2024 Spotlight）在 L=720 下的 MSE 已登记到
+`docs/PhaseFormer_L_external_refs.md`，来源为官方仓库 <https://github.com/VEWOXIC/FITS>
+README 的 "Result Update" 表（该表声明为修复 `drop_last` 缺陷后、与 ICLR 定稿一致的结果），
+抓取日期 2026-09-19。
+
+三条硬约束（已固化到 `e14_writeback.py` 的 `FITS_MSE` 注释与 `claims.json`）：
+
+1. **只比 MSE**：源表只报 MSE、不报 MAE，因此必答 (a) 的 MAE 一侧**留作未比较**，
+   不得用其他来源补造；
+2. FITS 数字**不进入**主张 A–D 的判定（主张 A/B 的配对基线是 matched `phase_only`）；
+3. FITS 与本文环境不同，只作**披露性比较**（同 `PhaseFormer_gold_standard.md` 的环境条款）。
+
+起点对比（Golden vs FITS，MSE）：ETTh2-96 **0.275 vs 0.271**、-192 **0.341 vs 0.331**、
+-336 **0.369 vs 0.354**、-720 **0.402 vs 0.377**——即原始 PhaseFormer 的 ETTh2 在四个 horizon
+上都**高于** FITS，差距随 horizon 从 1.5% 扩大到 6.2%。这决定了必答 (a) 的判读方式：
+PhaseFormer-L 相对 `phase_only` 的改善必须补上这段差额才算"达到 FITS"。
+
+## 8. 静态检查清单（移交阶段 2）
 
 1. `compile()` 通过。
 2. `--stage plan --verify` 输出 `total = 492`、`by_arm` 与 §2 表格逐格相符、`reuse_cells_resolved = 81`、`missing = []`。
