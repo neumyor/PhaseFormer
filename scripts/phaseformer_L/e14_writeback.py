@@ -277,6 +277,21 @@ def main() -> None:
         declared.setdefault(str(cell["arm"]), set()).add(
             (str(cell["dataset"]), int(cell["horizon"])))
 
+    # Provenance per (arm, dataset, horizon): reused cells must be披露ed in the
+    # table's last column, including which root they came from, because the
+    # seven test-selected settings are not a blind sample.
+    provenance: dict = {}
+    for cell in manifest.get("cells", []):
+        key = (str(cell["arm"]), str(cell["dataset"]), int(cell["horizon"]))
+        entry = provenance.setdefault(key, {"reused": 0, "new": 0, "roots": set()})
+        if cell.get("status") == "reused":
+            entry["reused"] += 1
+            source = cell.get("source") or {}
+            if source.get("root"):
+                entry["roots"].add(str(source["root"]).split("/")[-1])
+        else:
+            entry["new"] += 1
+
     settings = sorted(
         {(d, h) for (d, h) in golden},
         key=lambda k: (MAIN_DATASETS.index(k[0]) if k[0] in MAIN_DATASETS else 99,
@@ -385,6 +400,25 @@ def main() -> None:
             entry["diagnostic_hit"] = bool(entry["diagnostic_s"]) == helps
         else:
             entry["diagnostic_hit"] = None
+        # Provenance / disclosure for the table's last column, computed once
+        # here so the markdown and the CSV carry the identical string.
+        notes = []
+        if entry["is_traffic_appendix"]:
+            notes.append("探索性附录，不进入判定")
+        for arm, label in (("phase_only", "phase_only"), (L_MAIN, "L")):
+            prov = provenance.get((arm, dataset, horizon))
+            if not prov:
+                continue
+            parts = []
+            if prov["reused"]:
+                roots = "/".join(sorted(prov["roots"])) or "whitelist"
+                parts.append(f"复用 {prov['reused']}/3（{roots}）")
+            if prov["new"]:
+                parts.append(f"新训 {prov['new']}/3")
+            notes.append(f"{label}={'; '.join(parts)}")
+            if prov["reused"]:
+                notes.append(f"{label} 属 test-selected 集合")
+        entry["provenance_note"] = "；".join(notes)
         rows.append(entry)
 
     # ---- claim A -----------------------------------------------------------
@@ -575,7 +609,7 @@ def main() -> None:
         gate = fmt(row.get("l_main_gate_mean"), 3)
         diag = "—" if row["diagnostic_s"] is None else str(row["diagnostic_s"])
         stable = "✓" if row["l_main_stable_beyond_golden"] else "✗"
-        note = "探索性附录，不进入判定" if row["is_traffic_appendix"] else ""
+        note = row.get("provenance_note", "")
         lines.append("| %s | %d | %s/%s | %s | %s | %s | %s | %s | %s | %s |" % (
             row["dataset"], row["horizon"],
             f"{row['golden_mse']:.3f}", f"{row['golden_mae']:.3f}",
@@ -596,7 +630,8 @@ def main() -> None:
                "l_main_stable_beyond_golden", "phase_only_stable_beyond_golden",
                "l_main_double_metric_improvement",
                "phase_only_double_metric_improvement",
-               "tau_hat_steps", "diagnostic_s", "diagnostic_hit"]
+               "tau_hat_steps", "diagnostic_s", "diagnostic_hit",
+               "provenance_note"]
     with (out_root / "main_table.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
