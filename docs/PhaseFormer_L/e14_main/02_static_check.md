@@ -87,3 +87,37 @@ python scripts/phaseformer_L/e14_read_test.py \
 | 2 | 幂等判据用了自己不会写的列 | 重跑会**重复读 test** | 每格 `test_read/<key>.json` + 已消费状态白名单，重跑不重读 |
 | 3 | 硬编码 `attempts/001` | 复用链上有 `attempts/002` 的真实 run（已确认） | 改为 glob `attempts/*/checkpoints/` |
 | 4 | 未记录 `val_mse` 的 run 被静默接受 | 无法校验复现 | 视为 `rejected`，另拒 NaN/0 的 val 与非有限复算值 |
+
+---
+
+## 附录 B.5：阶段 B 的解析器进度对账（滚动核对，2026-09-20）
+
+阶段 B 的 `--dry-run` 会报告它能否解析每一个 cell。它在 E14 运行期间自然"失败"
+（未训练的新格当然找不到 run），因此不能只看退出码——要看**它是否恰好识别出全部未完成格**。
+
+在阶段 A 完成 88/411 时实测：
+
+```json
+{"event": "finished", "dry_run": true, "cells": 492, "accepted": 161, "problems": 331,
+ "by_status": {"planned": 80, "missing_metrics": 8, "reused": 81, "missing_run": 323},
+ "by_arm": {"l_main": 84, "l_q1_4": 84, "l_q1_8": 84, "l_rcrf": 84, "phase_only": 84, "a1": 72}}
+```
+
+对账：
+
+| 量 | 值 | 含义 |
+|---|---:|---|
+| `cells` | 492 | 与阶段 A manifest 一致 ✓ |
+| `accepted` | **161** | = 80（`planned`，已完成待读 test）+ 81（`reused`） |
+| `problems` | **331** | = 8（`missing_metrics`，run 目录已建但 `metrics.csv` 未落盘，即在跑）+ 323（`missing_run`，尚未发车） |
+| **80 + 8 + 323** | **411** | **恰好等于声明的 411 个新训格** ✓ |
+| `by_arm` | 84×5 + 72 | `a1` 为 72（不含 Traffic），其余各 84 ✓ |
+
+即解析器**完整覆盖**每个新格：已完成的可解析、在跑的识别为"未落盘"、未发车的识别为"无 run"，
+三者相加不重不漏。这是"阶段 B 能在阶段 A 一结束时正确接手"的直接证据，
+而不是等它跑完再看退出码。
+
+另一项同时被确认的事：`--dry-run` 先跑**指纹一致性检查**，输出
+`constants_equal: true, parity_cases: 20, parity_failures: [], differences: []`——
+即阶段 B 与阶段 A 的 `ARMS`、`EXTERNAL_TEST_EVIDENCE` 与 5 个协议常数**在真实仓库上逐项相同**，
+20 个合成 config 的 `arm_match` 对拍全部一致。
