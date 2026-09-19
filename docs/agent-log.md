@@ -3021,3 +3021,26 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   输入方向，后者是*原始电平序列*的自相关时间），须在 §4.7 表注区分，不可混读。
 - 边界：**未读 test**（读取止于验证边界）、未改任何模型代码、未改动既有产物；§4.3 的 7 个先导行
   由既有 `lowrank_data_property_v2` 逐字段复现而非改写。
+
+## 2026-09-19 — E19 阶段 1：§4.7 的 28-setting 训练集电平统计量与 ν* 冻结
+
+- 实验：E19（六阶段文档见 `docs/PhaseFormer_L/e19_predictive/`）。代码 `scripts/phaseformer_L/e19_predictive_stats.py`。
+- 命令：`python scripts/phaseformer_L/e19_predictive_stats.py --datasets ETTh1,ETTh2,ETTm1,ETTm2,Weather,Electricity,Traffic
+  --horizons 96,192,336,720 --num-workers 4 --output-root research_runs/phaseformer_L_e19_predictive_v1`
+- 产物：`level_statistics.csv`（28 行）、`dataset_level_statistics.csv`（7 行）、`nu_star_diagnostic.json`、`run.yaml`。
+- 验证：单元测试 **14/14**（`tests/test_phaseformer_L_e19_stats.py`）；阶段 5 审校 **9/9**；`E19_STATS_EXIT=0`；
+  28/28 setting 完成，CPU 作业。
+- **冻结**：`ν = tau_hat_steps`，`ν* = 57.35` 步（可分离区间 (51.11, 63.58) 的中点，只由训练集统计量决定）。
+  另两个候选 `cycle_level_std` 与 `last_cycle_shift` 在已知增益符号的数据集上**顺序相反**（ETTm1 高于 ETTm2），
+  不具判别力——这一点已写入 §4.7 表注，避免读者误以为三统计量等价。
+- **τ̂ 的有限样本偏差**：只由 K=30 个周期电平的 lag-1 自相关估计，系统性低估（真实 τ 0.43/0.83/1.44/2.80/9.49 →
+  估计 0.35/0.72/1.25/2.17/4.53）。它**单调**，可用于排序与相关，但不得读作绝对记忆长度；偏差表已写入 §4.7 表注。
+- **已知判错**：Electricity 的 τ̂ = 54.46 落在可分离区间内部，而实测其修正器相对 matched `phase_only`
+  为 **+3.6%**（0.16768 → 0.1617，seed 2021），即诊断在该格判错；按 §4.0 报告规则须逐格列出，不调阈值迁就。
+- **两处方向相反的度量**（须在 §4.7 表注区分，防止被读成矛盾）：E19 测得 Traffic 的 τ̂ 仅 25.1 步（全表最低之一），
+  而 E15 测得 Traffic 的 `b_1` 一致落在 τ=168 且 `used_var_share(1)` 最高——前者是*原始电平序列*的自相关时间，
+  后者是*最优线性映射输入方向*的核宽度。
+- 阶段 2/3 挡下的缺陷：τ̂ 封顶原先只作用于 `ρ ≥ 1`，导致近单位 ρ（0.99999）报出 **2176.6 步 > 720 步窗口**；
+  修复为对**结果**封顶并保留单位 ρ 的显式饱和分支，两条路径各有独立测试（首次修复曾误删单位 ρ 分支，被测试立刻抓回）。
+- 边界：**只读训练集**（`run.yaml` 的 `reads_test: false`）、未改任何模型代码、未读 test。
+- 待办：§4.7 的两列 ρ 与诊断准确率需 E14 的单次 test 读取结果，届时由 `e19_predictive_power.py` 回填。
