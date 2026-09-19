@@ -561,7 +561,11 @@ FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现�
 > 与 §4.2 的 test 增益列不同源。稠密 `PhaseFormer-L` 头的有效映射即其 `W`（H×720）；
 > 低秩探针为 `W_dec·W_enc`。跨 seed `leading4` 重叠按 4 维主子空间的两两重叠计。
 
-干预表（每 cell 10 臂；同时报告支路自身与融合误差）：
+干预表（每 cell **10 个登记臂**——`Original` / `Semantic-only` / `Semantic-drop` /
+`Semantic8-only` / `Semantic8-drop` / `Bias-off` / `PCA-only` / `PCA-drop` 共 8 个，
+加同维 `PCA-matched-only` / `PCA-matched-drop` 共 10 个——之上再按该 cell 的可用基向量追加
+`Independent-RRR-only`、`Conditional-RRR-only` 与**新增的 `RandomRRR-drop`**，
+故实际为 **11–12 臂（11 为下界）**；同时报告支路自身与融合误差）：
 
 | Dataset | H | q/r | Semantic-only Δfused | Semantic-drop Δfused | 随机 95% 区间 | PCA-drop | **随机 RRR 子空间 drop**（新增对照） | 支路自身 Δ | 融合 Δ |
 |---|---:|---|---:|---:|---|---:|---:|---:|---:|
