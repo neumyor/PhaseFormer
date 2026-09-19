@@ -282,10 +282,9 @@ def main() -> None:
                  "is_traffic_appendix": dataset == TRAFFIC}
         gold = golden[(dataset, horizon)]
         entry["golden_mse"], entry["golden_mae"] = gold
-        fits = FITS_MSE.get((dataset, horizon))
-        entry["fits_mse"] = fits
-        entry["phaseformer_l_vs_fits_pct"] = (
-            round(pct_change(entry.get("l_main_mse"), fits), 4) if fits else None)
+        # The FITS delta can only be computed once the arm loop below has
+        # populated l_main_mse, so it is filled in after that loop, not here.
+        entry["fits_mse"] = FITS_MSE.get((dataset, horizon))
 
         for arm in ARM_ORDER:
             bucket = results.get((arm, dataset, horizon))
