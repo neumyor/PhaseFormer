@@ -782,16 +782,30 @@ watcher **不会**启动阶段二 ✓。
 | 4 | `e16_dissection_v1/{dissection,intervention}_table.csv`、`e16_summary.json`、`reference_parity.json`；`e16_writeback`→`*_44.csv`、`intervention_table_44.md` | **§6.2 判据表**：cells 63、`algebra_failures`/`run_metric_failures`/`run_metric_not_comparable` 均 0、`reference_parity_passed` true、`checkpoint_path_mismatches` []、`test_split_read` false、`probe_cells ≈ 72` | **§4.4**：干预表 147 格 ← `intervention_table_44.md` 去掉首格；**解剖表 105 格需组合**，先打印真实取值定写法（见 §10.3） |
 | 5 | `e17_conditional_v1/results.csv` → `results.with_test.csv` → `conditional_table.csv/.md` | 24 个新 cell 均有 test 指标；§4.5 表 7 行且 cos 列非空 | **§4.5**：35 格 ← `conditional_table.md`（跳过其表头两行） |
 | 6 | `e18_negative_v1/results.csv` → `results.with_test.csv`；`svd_truncation_table_28.csv`；`negative_table.csv/.md` | `e18_negative_verify.json` 与 `e18_svd_truncation_summary.json` 的 `problems` 为空 | **§4.6**：用 `negative_table.md` 的 5 行**替换**（25 格）；计划/规模文字建议保留为表下注 |
-| 7 | `phase2_acceptance_audit.json` | **审计器**：不得有 `FAIL`（`PENDING` 允许） | — |
+| 7 | `phase2_acceptance_audit.json` | **审计器**：不得有 `FAIL`；**且收官时 `PENDING` 必须为 0**（判据⑤，见 §10.4——该 `PENDING` 的唯一来源是「产物不存在」，故它非零意味着某张表从未产生；假阳性通道记于审计文档 §23） | — |
 
-### 10.3 唯一开放项：§4.4 解剖表的单元格写法
+### 10.3 §4.4 解剖表的单元格写法：**已收口，不再是开放项**（2026-09-20）
 
-收口时点 = **第 4 步跑完之后**。做法：从 `dissection_table_44.csv` 打印 2–3 行真实取值，
-据此定下写法（建议见 `minipaper_fill_mapping.md` §1.4）、回写该节、再写该节的比较器并**当轮校准**。
-**不要现在就把小数位数写死**——只有看到取值分布才知道解释率是 0–1 还是百分数、
-中文标签会不会撑破表格。
+本节原先写着"唯一开放项、收口时点 = 第 4 步跑完之后"，因为"只有看到取值分布才知道解释率是 0–1 还是百分数"。
+**这个问题已从另一条路解决**：不问取值的**观感**，而是从**生产者**读单元格的构造，再用**对照**把写法钉住。
+当前写法与依据：
 
-### 10.4 回填完成后：**三个**机器判据 + 一轮人工审校
+| 论文列 | 产物列 | 渲染 | 依据 |
+|---|---|---|---|
+| 主模式输入组 / 解释率 | `input_group_label` + `input_group_explanation` | `标签 / 两位小数` | 表头自己写作 `组 / 解释率`（斜杠即约定）；生产者判据 `input_explanation >= 0.5` 说明是 **0–1 小数**而非百分数 |
+| 主模式输出组 / 解释率 | `output_group_label` + `output_group_explanation` | 同上 | 同上 |
+| 修正能量份额 | `correction_energy_share` | 三位小数 | 与论文其余能量份额列一致 |
+| 跨 seed `leading4` 重叠 | `leading4_input_overlap` + `leading4_output_overlap` | `in / out` 各两位小数 | 论文一格、产物两列 |
+| 稳定语义判定 | `stable_semantics_verdict` | ✓ / ✗ | 产物为 bool |
+
+**这两件事都由对照钉住，不再依赖人眼**：`rehearse_minipaper_fill.py` 按规定格式填一份论文临时副本 →
+**7/7 断言成立**，其中"把某个 rate 由 0.75 改成 0.11 ⇒ MISMATCH"与"产物改回原始列名 ⇒ **列缺失 MISMATCH**"
+正是写法与列名契约的对照（后者对应审计文档 §22 修掉的"105 格里 63 格假通过"）。
+
+**若真实取值与上述约定不符**（例如某格解释率确实 > 1），那属于**产物与设计不符**，应按缺陷处理，
+**而不是**改写法去迁就它。
+
+### 10.4 回填完成后：**五条**机器判据 + 一轮人工审校
 
 ```bash
 python scripts/phaseformer_L/verify_minipaper_fill.py             # 逐格一致；有 MISMATCH 则 exit 1
