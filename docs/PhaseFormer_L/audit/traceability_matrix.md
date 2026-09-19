@@ -102,3 +102,34 @@ test_mse test_mae nlinear_mse nlinear_mae gate_value test_read_status val_relati
 
 三组契约（E14→3 个消费者、E17→1 个、E18→1 个）**全部闭合**：每个消费者读取的列都在上游产物中。
 这排除了"流水线跑到最后一步才发现列名不符"这一整类失败。
+
+### 5.4 从"手工核对"升级为工具（并已校准检测力）
+
+§5.1–§5.3 的核对当初是**手工**做的，也因此吃过一次自伤（见上方注记：正则抽不到
+E17 的动态字段表，误报 6 个缺失列）。手工核对还有第二个问题——它只证明"**这一次**对得上"，
+无法防止后续改动重新引入同类缺陷。因此两件事：
+
+1. **`scripts/phaseformer_L/check_column_contracts.py`** 把本节的核对自动化。
+   关键设计是**生产者列集从生产者自身源码导出**（`RESULTS_FIELDS`/`TABLE_FIELDS`，
+   或真正构造那些行的函数里的字面量键：既含字典字面量，也含 `record["x"] = {...}`
+   这类下标赋值），消费者列集取它真正 `load` 的名字。因此它不会像文档那样与代码漂移。
+   已加为阶段二预检（`--strict`，亚秒级，在任何耗时步骤之前；不通过就拒绝花 GPU）。
+
+   **检测力已用双向正对照校准**（否则"在已修好的代码上跑出 0 缺口"说明不了任何事）：
+   真树 0 缺口 / exit 0；消费者突变（改回历史上的错误列名
+   `majority_input_group_label`）→ 报出该列；生产者突变（改名一列）→ 报出被点名的列；
+   二者加 `--strict` 均 exit 1。
+
+2. **`scripts/phaseformer_L/rehearse_e17_writeback.py`** 覆盖本节核对**覆盖不到的另一半**：
+   列名对得上，不等于 **join 键绑得上**。§4.5 回填按 `(dataset, horizon)` 连接结果 CSV
+   （horizon 为**字符串**）与投影器审计（horizon 为 **JSON 数字**），不一致时
+   `cosines.get(...)` 全返回 `None`、cos 列静默变空**而不抛异常**。
+   该预演用**真实冻结**的 `projector_audit.json`（不造假）+ 按生产者 schema 合成的结果行，
+   断言每个 setting 的 cos 与其在审计中的值相等，并要求"可区分 setting"恰好是
+   `Electricity-336`。实测 7/7 相等、0 失配，断言成立。详见
+   `docs/PhaseFormer_L/e17_conditional/05b_writeback_rehearsal.md`。
+
+**这两项合起来覆盖的边界**：列名（静态、可自动化）与 join 键类型（需真实工件联调）。
+**仍未覆盖**：列的语义/单位是否正确、以及"列存在但恒为空"——归
+`check_builder_outputs.py` 与各实验阶段 5 审校。故本节结论应读作
+"**名字契约闭合**"，而不是"产物正确"。
