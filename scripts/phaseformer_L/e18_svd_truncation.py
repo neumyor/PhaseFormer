@@ -96,13 +96,19 @@ from scripts.phaseformer_L.e14_main_matrix import (  # noqa: E402
     PERCENT,
     PERIOD,
     SEEDS,
+    TRAFFIC_DATASETS,
     _arm_match,
     parse_list,
 )
 
 # The 28 settings of the §4.6 row-3 extension: 7 datasets x 4 horizons.
+# Traffic MUST be included: minipaper §4.6 row 3 says "全 28 setting", and the
+# 24-setting main table plus the 4-setting Traffic appendix is exactly the 28.
+# Defaulting to MAIN_DATASETS alone silently produced 24 cells, which would have
+# been reported as "all 28" while omitting a whole dataset.
+ALL_DATASETS = tuple(MAIN_DATASETS) + tuple(TRAFFIC_DATASETS)
 SETTINGS = tuple(
-    (dataset, horizon) for dataset in MAIN_DATASETS for horizon in HORIZONS
+    (dataset, horizon) for dataset in ALL_DATASETS for horizon in HORIZONS
 )
 FULL_RANK_ARM = "l_main"
 LOW_RANK_ARMS = ("l_q1_4", "l_q1_8")
@@ -126,7 +132,7 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="explicit stage_a_manifest.json (overrides --e14-root)")
     parser.add_argument("--output-root",
                         default="research_runs/phaseformer_L_e18_negative_v1")
-    parser.add_argument("--datasets", default=",".join(MAIN_DATASETS))
+    parser.add_argument("--datasets", default=",".join(ALL_DATASETS))
     parser.add_argument("--horizons", default=",".join(str(h) for h in HORIZONS))
     parser.add_argument("--seeds", default=str(SEEDS[0]),
                         help="E11's anchor seed is 2021; more seeds multiply "
