@@ -246,3 +246,40 @@ l_main ETTh2-96 s2022   n_valid = 3
 
 记账口径（本次核对）：**41 个 run 目录 = 33 个已完成（有 `metrics.csv`）+ 8 个在跑**，
 与 `done` 事件数严格相等，无重复、无孤儿目录。
+
+---
+
+## 9. §4.2 门值列的双实现交叉验证（2026-09-19）
+
+门值 `g` 是用两种**互相独立**的方式得到的：
+
+| 路线 | 做法 | 出处 |
+|---|---|---|
+| **A** | 从 checkpoint 的 `state_dict["weak_period_residual_gate"]` 直接 `sigmoid(...).mean()` | `e14_params.py`（`mmap` 只读形状/参数，不跑数据） |
+| **B** | 加载同一 checkpoint 建模型，在**训练集**上前向一遍，读模型自身的 `learned_residual_gate()` 并取均值 | `e17_conditional_projectors.py` 的 `revin` 路线（记录于 `projector_audit.json`） |
+
+对 7 个 test-selected setting（seed 2021）逐一比对，并**先核对两条路线用的是不是同一个 checkpoint**：
+
+```text
+setting          A(ckpt)     B(forward)  abs_diff  same checkpoint
+ETTh2-96         0.497043    0.497043    1.3e-08   True
+ETTh2-720        0.505212    0.505212    0.0e+00   True
+ETTm2-96         0.508954    0.508954    4.3e-09   True
+ETTm2-192        0.208258    0.208258    1.9e-08   True
+Electricity-336  0.323671    0.323671    2.0e-08   True
+Weather-96       0.224903    0.224903    6.6e-09   True
+Weather-192      0.392532    0.392533    3.2e-09   True
+compared: 7  worst|diff|: 1.98e-08  same checkpoint: 7/7
+```
+
+- **7/7 用的是同一个 checkpoint**（路径 `realpath` 级相等），因此这是对**同一数值**的两次独立计算，
+  不是两次不同实验的比较；
+- 两路结果的**最差绝对差 1.98e-08**，即 float32 舍入量级。
+
+结论：§4.2 的 `g` 列既可以从 checkpoint 直接取（无需数据、无需 test），也可以由前向重算，
+两者一致；且它同时给 §4.7 的 ρ-vs-`g` 提供了可靠的 `g` 序列。
+
+**边界（如实记录）**：`lowrank_checkpoint_information_v1/conditional_rrr_alignment.csv` 也带
+`gate_mean` 列，可作第三个来源，但它的 cell 是**秩约束**的 q∈{1/16,1/8,1/4} 运行（`checkpoint_path`
+指向 `rank_sweep_2_stage1` 的对应 run），与 `l_main` 稠密头**不是同一个 checkpoint**，
+因此它佐证的是**方法**而非本列的具体数值，不纳入上面的比对。
