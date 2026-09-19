@@ -189,3 +189,31 @@ summary 的键含 `test_split_read`、`records_test`、`protocol_mirrored_from_e
 "截断 +29%、训练 +0.7%（Electricity-336, r=10）"相比。它证明的只是
 **这条评估路径能跑通、并把三个量写进表里**。正式数字要等 28 个 setting × 3 seed 的
 全量评估（步骤 6）由阶段 5 审校按冻结判据判定。
+
+## 7. 阶段 2 追加：基线出处列**曾会 78/78 行全空**（已修）
+
+§4.6 的行 1/行 5 要与 E14 的 `l_main`（PhaseFormer-L）配对，配对出处由
+`e18_negative.load_baseline_index` 从 E14 的 `stage_a_manifest.json` 建立。用**真 manifest**
+跑一遍该函数（而不是读它的源码）时发现：`resolved=63, rejected=21`，21 条拒绝理由全是
+`overrides do not implement l_main`。
+
+**根因**：E18 用 manifest 格记录的 argv 里的 `--overrides` 重推 `_arm_match`，而 **reused 格的 `command` 是 null**
+（stage A 没启动它们，是 E14 复用审计收编来的），于是 `overrides={}`、`head_type` 取不到 `shared` ⇒ 拒绝。
+
+**为何这不是边角**：`SMOOTH_SETTINGS = REUSE_SETTINGS_FULL`（7 个 setting）**正好等于**被复用的那 7 个，
+`RANK12_SETTINGS` 的 6 个也全在其中 ⇒ E18 的 **78 行（42 smooth + 36 rank12）无一例外**。
+
+**影响面**：**§4.6 的数字不受影响**——`e18_writeback.build_row1/build_row5` 的 baseline 取自 E14 的
+`results.csv`（`index_by_setting(e14_rows, arm_filter="l_main")`），与本出处列无关。受损的是**审计链**：
+产物会一边记录 21 条拒绝、一边把 78 行基线出处留空，而 manifest 自己写着 `arm_match_used_for_baselines`。
+
+**修法**（`e18_negative.py`）：为 reused 格加**第二条准入路径**——从它实际指向的 run 的 `config.json`
+用**同一把尺子**（`_arm_match`，E14 复用审计当初用的那个）重推指纹；`gate_init`/`learning_rate` 取自
+该 config，`eval_root` 取 manifest 记下的 `source.root`。config 缺失或 config 不满足 `l_main` ⇒ **照样拒绝**
+（不凭空信任 `source`）；new 格的 argv 路径保持原样，防手改。同时 **new 格的 `eval_root` 改为 manifest
+所在 root**：实测 411 个 new 格记录的 `--output-dir` 全是模板值 `/tmp/e14fix`，若照抄会写进产物。
+
+**验证**（真产物，2026-09-20）：`resolved=84 (new=63, reused=21), rejected=0`，smooth 覆盖 **21/21**；
+12 个单测（`tests/test_phaseformer_L_reuse_baselines.py`，含 4 个否定对照）；全套 400 passed。
+并已固化为阶段 2 pre-flight 判据 C3（`check_phase2_consumers.py`），在 E18 那 3–5 小时**之前**就会失败即停。
+详见 `docs/PhaseFormer_L/audit/paper_code_consistency.md` §16。

@@ -642,3 +642,90 @@ g | s | stable | provenance_note`（生成点 `e14_writeback.py:678-681`，
 | 6 | E18 77 行 | FAIL、exit 1 | ✅ |
 | 7 | E17 已标审计、无缺失投影器 | OK、exit 0 | ✅ `OK no missing frozen projectors: 0 missing` |
 | 8 | E17 缺一个投影器 | FAIL、exit 1 | ✅ `FAIL no missing frozen projectors: 1 missing e.g. ['ETTh2_96_Q1.npy']` |
+
+## 16. 「消费者 ↔ 产物」集成校验：把静态提取器换成真实消费者试跑，并修掉查出的两处真缺陷
+
+§15 收口的是"审计判据是否接得住工具报告的缺口"。本节问的是**更上游的一问**：那些工具**读得进 E14 的产物吗**？
+读不进时的症状不是崩溃而是**静默降级**——步骤 exit 0、表照样写，只是**列是空的**。这正是 §4 六阶段契约里
+"静态检查"要挡的东西，而它此前**没有**判据。
+
+### 16.1 第一次尝试是错的：静态提取器"看不见接收者"
+
+我先用正则扫了五个消费者源码里所有 `X.get("<key>")`，对真 manifest 报出 4 个"缺口"
+（E14 缺 9 键、E16 缺 34 键、E17 缺 5 键、E18 缺 7 键）。**全部是假警报**：这些键的接收者不是 manifest cell，
+而是脚本内部构造的 `config`/`hyper`/`cell`/CSV row 等 dict。教训与 §14 同源——
+**判据必须问"它实际读的是哪个对象"**，而不是"源码里有没有出现过这个字符串"。
+
+改法：**直接调用消费者自己的 loader**（`load_manifest_cells`、`build_e14_index`、`load_baseline_index`、
+`arm_cells`、`build_cell_plan`），对**真产物**跑一遍。这样报出来的缺口才可能是真缺口。
+
+### 16.2 实测的 manifest 结构：492 格、两种形状
+
+| 形状 | 格数 | 键 |
+|---|---|---|
+| `new` | 411 | `{arm, command, dataset, horizon, key, seed, source: null, status}` |
+| `reused` | 81 | `{arm, command: null, dataset, horizon, key, seed, source: {...}, status}` |
+
+`source` 只在 reused 上有值：`{config_hash, gate_init, learning_rate, root, run_dir, test_evidence}`，
+且 81/81 的 `run_dir` 都真实存在并带 `config.json`。**`command` 在 reused 格上是 null**——
+stage A 没有启动它们，它们是复用审计"收编"来的。这一条就是下面缺陷 1 的根因。
+
+### 16.3 缺陷 1（真）：E18 的基线出处列 **78/78 行会全空**
+
+- **现象（实测）**：`load_baseline_index` → `resolved=63, rejected=21`，21 条拒绝理由全是
+  `overrides do not implement l_main`。
+- **根因链**：E18 用 argv 里的 `--overrides` 重新推导 `_arm_match`；reused 格没有 command ⇒
+  `overrides={}` ⇒ `weak_period_residual_head_type` 取不到 ⇒ 与 `l_main` 的 `shared` 头不符 ⇒ 拒绝。
+- **为何不是边角**：E18 的 `SMOOTH_SETTINGS = REUSE_SETTINGS_FULL`（7 个 setting）**正好等于**被复用的那 7 个，
+  而 `RANK12_SETTINGS` 的 6 个 setting 也全在其中 ⇒ E18 的 **78 行（42 smooth + 36 rank12）无一例外**。
+- **影响面（关键的一步）**：**数字不受影响**。`e18_writeback.build_row1` 的 baseline 取自 E14 的
+  `results.csv`（`index_by_setting(e14_rows, arm_filter="l_main")`），不是这些出处列。受损的是**审计链**：
+  产物会一边宣称 21 条拒绝、78 行基线为空，一边在 manifest 里写着 `arm_match_used_for_baselines`。
+- **修法**：为 reused 格增加**第二条准入路径**——从它实际指向的 run 的 `config.json` 用**同一把尺子**
+  （`_arm_match`，即 E14 复用审计当初用的那个）重推指纹，`gate_init`/`learning_rate` 取自该 config，
+  `eval_root` 取 manifest 记下的 `source.root`。config 缺失、或 config 不满足 `l_main` ⇒ **照样拒绝**，
+  不凭空信任 `source`。new 格的 argv 路径保持原样（防手改）。
+- **验证**：真 manifest 上 `resolved=84 (new=63, reused=21), rejected=0`，smooth 覆盖 **21/21**；
+  新增 `tests/test_phaseformer_L_reuse_baselines.py` 12 个单测（含 4 个否定对照：头不对、平滑比非 0、
+  config 缺失、既无 command 又无 `source.run_dir`）。
+
+### 16.4 缺陷 2（真）：每个 new 格记录的 `--output-dir` 是模板值 `/tmp/e14fix`
+
+- **实测**：411 个 new 格**全部**如此；而 `grep -rn e14fix` 在仓库里**零命中** ⇒ 是"用
+  `--output-root /tmp/...` 重建 manifest"留下的模板残留，不是真实评测根。
+- **影响面（逐条核过，不是推断）**：
+  - **E14 stage B 不受影响**：`dispatch_new_cells` 自己用 `--cell` 重新调用 worker，run dir 由
+    `locate_run(output_root/runs)` 按 config 指纹定位，**从不读 `command`**。
+  - **E18 SVD 不致命**：`resolve_run_dir` 在 `out_root/runs` 之后**还会**扫 `e14_root/runs`（同一函数内的
+    双候选设计），所以真实 run 仍能被找到。
+  - **E18 的 `baseline_eval_root` 会**把这个假路径写进产物 ⇒ 已改为：new 格取 **manifest 所在 root**
+    （new 格的 run dir 在训练结束前无法命名，root 是唯一诚实的取值）。
+- **未采用"重建 manifest"**：E14 正在跑，manifest 是 stage B 的权威输入；为一个出处列去重建，
+  风险（键序、复用解析、与在跑批次的一致性）远大于收益。
+
+### 16.5 缺陷 3（运维）：我自己的同步命令**一直是空操作**
+
+`git fetch origin && git merge --ff-only FETCH_HEAD` 这次报 "Already up to date"，但服务器上的 bundle
+`git bundle list-heads` 明明含新提交。根因：`remote.origin.fetch` 是 `+refs/heads/*:refs/remotes/origin/*`，
+而 `git bundle create <file> HEAD` 只写**一个 `HEAD` ref** ⇒ 裸 `git fetch origin` 匹配不到任何 ref，
+**连 `FETCH_HEAD` 都不生成**。正确形式是 `git fetch origin HEAD`（本次已用）。
+判据：`git ls-remote origin` 有值 **≠** `FETCH_HEAD` 有值——同步后必须**实测**服务器 HEAD 变了，而不是看退出码。
+
+### 16.6 已固化为 pre-flight：`check_phase2_consumers.py`
+
+新增 `scripts/phaseformer_L/check_phase2_consumers.py`，并接进 `run_phase2_after_e14.sh` 的既有 pre-flight
+（在**任何昂贵阶段之前**，与列契约、调用元数两项并列）：
+
+| 判据 | 严重度 | 必须成立的事 | 实测（真产物，2026-09-20 05:1x） |
+|---|---|---|---|
+| C1 E14 loader schema | 失败即停 | loader 接受 manifest；492 格形状唯一；`counts.total` 自洽 | ✅ 492 cells, one schema |
+| C2 E17 条件臂索引 | 失败即停 | 声明的 21 个 `l_main` 格全部解析、0 拒绝 | ✅ 21/21，0 拒绝 |
+| C3 E18 基线出处 | 失败即停 | smooth 的每个 (setting, seed) 都有基线、0 拒绝 | ✅ 21/21，`resolved=84`，0 拒绝 |
+| C4 E16 解剖计划 | 信息 | 当前可解析多少格（其 scope 由 E16 自己的默认值决定） | ℹ️ 63 格 |
+| C5 E18 截断计划 | 信息 | 计划可构造；未解析格属**预期**（stage A 未跑完） | ℹ️ 28 setting，13 个带问题 |
+
+C3 就是**能在 E18 那 3–5 小时之前**抓住缺陷 1 的那条判据。八类对照中本轮新增两类：
+本地合成 fixture 的**正对照**（21 个完整 reused 格 → exit 0）与**两类负对照**
+（删掉一个被收编 run 的 `config.json` → `rejected=1`；手改一个 new 格的 overrides → `rejected=1`，
+理由为 `overrides do not implement l_main`），三类行为均符合预期。
+C4/C5 在缺 numpy/torch 时降级为 SKIP 而不是失败（E16 是唯一在导入期需要 numpy/torch 的消费者）。

@@ -445,6 +445,11 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 判据覆盖矩阵 | **无"报告却无人接住"的缺口** | 把 §14 的教训系统化：列出六个工具的**全部缺口计数**，逐条指出**哪条审计判据接住它**（或**为何有意不查**）。结果：`e14_read_test` 的 `problems`/`failed_workers` → E14 的"492 行 + 每行有 test"（且该步自身 fail-closed）；`e14_params` 的 `unresolved`/`mismatches`/门值缺失 → §14 新增的三条；`e16_dissection` 的 `algebra_failures`/`run_metric_*` → E16 三条（故每 cell 的 `run_metric_state == "skipped"` 已被间接接住：全量时必须为 `ok`）；其 `parity={"skipped":True}` → E16 的 `reference_parity_passed is True`（键缺失即 FAIL）；`e17_conditional` 的 `failed` → E17 的 24 新 cell + test 指标；`e18_negative`/`e18_svd_truncation`/`e19_predictive_power` 的缺口 → 各自判据。**唯一"有意不查"**是 §4.5 的 `settings_without_evidence`——`evidence_missing` 是**已披露的合法结果**（Electricity-336），当失败会误报。**新增一条**：E17「无缺失的冻结投影器」（投影器缺失属**基础设施故障**而非良性跳过，值得显式报出，否则症状只剩"0 个新 cell"）。**八类对照校准全部通过**（492/491 行、交叉校验 False、缺门值、E18 78/77 行、E17 有/无缺失投影器），详见 `paper_code_consistency.md` §15 |
 
+| 2026-09-20 | 校验方法修正 | **静态提取器错报 4 个缺口** | 「阶段二消费者读得进 E14 的产物吗」此前无判据。先用正则扫五个消费者源码里的 `X.get("<key>")`，对真 manifest 报出 4 个缺口（E14 缺 9 键、E16 缺 34 键、E17 缺 5 键、E18 缺 7 键）——**全部是假警报**：这些键的接收者是脚本内部构造的 `config`/`hyper`/`cell`/CSV row，不是 manifest cell。改法：**直接调用消费者自己的 loader** 对真产物跑一遍（`load_manifest_cells`/`build_e14_index`/`load_baseline_index`/`arm_cells`/`build_cell_plan`）⇒ 报出来的缺口才可能是真缺口。与 §14 同源教训：判据要问"**它实际读的是哪个对象**" |
+| 2026-09-20 | 集成校验 | **修掉 E18 基线出处列 78/78 行全空的缺陷** | 真 manifest 实测 `load_baseline_index` → `resolved=63, rejected=21`，21 条拒绝全是 `overrides do not implement l_main`。**根因**：manifest 里 **reused 格的 `command` 是 null**（stage A 没启动它们，是复用审计收编来的），E18 却从 argv 的 `--overrides` 重推 `_arm_match` ⇒ `overrides={}`、头类型取不到 `shared` ⇒ 拒绝。**不是边角**：`SMOOTH_SETTINGS = REUSE_SETTINGS_FULL`（7 setting）**正好等于**被复用的那 7 个，`RANK12_SETTINGS` 的 6 个也全在其中 ⇒ **78 行（42+36）无一例外**。**影响面**：**§4.6 数字不受影响**（`build_row1/row5` 的 baseline 取自 E14 `results.csv`，与出处列无关），受损的是**审计链**（产物会记录 21 条拒绝 + 78 行空出处，而 manifest 自称 `arm_match_used_for_baselines`）。**修法**：为 reused 格加第二条准入路径——从其指向的 run 的 `config.json` 用**同一把尺子**（`_arm_match`）重推指纹，`gate_init`/`learning_rate`/`eval_root` 取自该证据；config 缺失或不满足 `l_main` ⇒ **照样拒绝**（不凭空信任 `source`）。同时 new 格 `eval_root` 改为 manifest 所在 root——实测 411 个 new 格记录的 `--output-dir` **全是模板值 `/tmp/e14fix`**（仓库 `grep` 零命中，是重建 manifest 时的残留），照抄会写进产物。**验证**：真产物 `resolved=84 (new=63, reused=21), rejected=0`、smooth 覆盖 21/21；12 个单测（含 4 个否定对照）；全套 **400 passed** |
+| 2026-09-20 | 判据固化为 pre-flight | **C1–C5 接进阶段二 pre-flight；C3 就是能在 3–5 小时之前抓住它的那条** | 新增 `scripts/phaseformer_L/check_phase2_consumers.py`（失败即停：C1 E14 loader 接受 manifest 且 492 格形状唯一、C2 E17 声明的 21 格全解析、C3 E18 smooth 每 (setting,seed) 都有基线且 0 拒绝；信息：C4 E16 当前可解析格数、C5 SVD 计划规模，**未解析格属预期**），接入 `run_phase2_after_e14.sh` 既有 pre-flight（与列契约、调用元数并列，**在任何昂贵阶段之前**）。真产物实测：C1 ✅ 492 cells、C2 ✅ 21/21、C3 ✅ 21/21（`resolved=84`）、C4 ℹ️ 63 格、C5 ℹ️ 28 setting/13 带问题，exit 0。**三类对照**：合成 fixture 正对照 exit 0；删一个被收编 run 的 `config.json` → `rejected=1` exit 1；手改 new 格 overrides → `rejected=1`、理由 `overrides do not implement l_main`。C4/C5 在缺 numpy/torch 时降级 SKIP 而非失败 |
+| 2026-09-20 | 运维修正 | **同步命令一直是空操作** | `git fetch origin && git merge --ff-only FETCH_HEAD` 报 "Already up to date"，但服务器 bundle `list-heads` 明明含新提交。**根因**：`remote.origin.fetch = +refs/heads/*:refs/remotes/origin/*`，而 `git bundle create <file> HEAD` 只写**一个 `HEAD` ref** ⇒ 裸 `git fetch origin` 匹配不到任何 ref，**连 `FETCH_HEAD` 都不生成**。正确形式：`git fetch origin HEAD`（本次已用并实测服务器 HEAD 前移）。判据：`git ls-remote origin` 有值 **≠** `FETCH_HEAD` 有值——同步后必须实测服务器 HEAD 变了 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
@@ -615,7 +620,17 @@ bash scripts/phaseformer_L/run_phase2_after_e14.sh --only N   # 只跑某一步
 
 重入安全性：①`--from >1` 会跳过 E14 完成守卫；②第 1 步的读取器**幂等**
 （已带 test 指标的行走"原样复制"，除非显式传 `--all-rows`）；③每步的预检
-（列名契约、实参元数）只在 `--from 1` 时执行——**若改动过脚本，先手动跑一次两道预检**。
+（列名契约、实参元数、**消费者契约**）只在 `--from 1` 时执行——**若改动过脚本，先手动跑一次三道预检**：
+
+```bash
+"$PY" scripts/phaseformer_L/check_column_contracts.py --strict
+"$PY" scripts/phaseformer_L/check_pipeline_invocations.py
+"$PY" scripts/phaseformer_L/check_phase2_consumers.py --e14-root research_runs/phaseformer_L_e14_main_v1
+```
+
+第三道是 2026-09-20 新增的（详见 `paper_code_consistency.md` §16）：**直接调用阶段二消费者自己的 loader**
+对 E14 真 manifest 跑一遍。它挡的是"**静默降级**"——消费者读不进产物时步骤仍 exit 0、表照样写，只是**列是空的**。
+E18 的基线出处列曾会因此 **78/78 行全空**（reused 格没有 command），而该缺陷没有任何既有判据能看见。
 
 ### 10.1.1 已核验的失败语义：整条链**失败即停（fail-closed）**
 
@@ -629,6 +644,7 @@ bash scripts/phaseformer_L/run_phase2_after_e14.sh --only N   # 只跑某一步
 | 流水线 | `run_step` 在第一个非零退出处停止并打印该步日志尾部 | `run_phase2_after_e14.sh` 的 `run_step` |
 | watcher | 记录 `PHASE2_FAILED rc=N` 到 `phase2_watch.status` | `watch_e14_then_phase2.sh` |
 | E14 完成守卫 | 要求 `E14_MAIN_EXIT=0` **且** `runs/` 恰 411 个目录 | 同上 |
+| 阶段二 pre-flight | 三道静态检查任一失败即**拒绝启动整条链**：列名契约、调用实参元数、**消费者契约**（C1/C2/C3 失败即停；C4/C5 仅信息） | `run_phase2_after_e14.sh` pre-flight 块；`check_phase2_consumers.py` |
 
 即**从 runner 到 watcher 全链 fail-closed**：E14 若有失败格，`E14_MAIN_EXIT` 不会是 0，
 watcher **不会**启动阶段二 ✓。
@@ -768,3 +784,29 @@ if complete.exists():
 （worker 崩溃时它照样 exit 0，只在 summary 列 `rejected`）——那属于**故障被静默**，
 正是本会话修掉的那个 marker 缺陷所暴露的。故它的兜底是审计里"每 cell 都要有 test 指标"那条判据，
 且重跑代价低（读取 + 回填，不重训）。
+
+### 10.7 同步到服务器的**正确形式**（我此前的写法是空操作）
+
+```bash
+# 本地（提交后）
+git bundle create /tmp/pf.bundle HEAD
+scp -q -o ConnectTimeout=25 /tmp/pf.bundle yyk03@11.11.18.3:~/niuyiming/phaseformer_weak_residual.bundle
+
+# 服务器
+cd ~/niuyiming/PhaseFormer
+git fetch origin HEAD          # ← 必须显式写 HEAD，见下
+git merge --ff-only FETCH_HEAD
+git log --oneline -1           # ← 实测 HEAD 是否前移，而不是看退出码
+```
+
+**为什么裸 `git fetch origin` 是空操作**：服务器的 `remote.origin.fetch` 是
+`+refs/heads/*:refs/remotes/origin/*`，而 `git bundle create <file> HEAD` 只写**一个 `HEAD` ref**
+（不写 `refs/heads/*`）⇒ 裸 fetch 匹配不到任何 ref，**连 `.git/FETCH_HEAD` 都不生成**，
+随后 `git merge --ff-only FETCH_HEAD` 自然报 "Already up to date" 而**什么都不做**。
+`git ls-remote origin` 有值 **≠** `FETCH_HEAD` 有值——**判据必须是"服务器 HEAD 是否前移"**。
+
+**同步前后各一条纪律**（承接 §295 行与 2026-09-20 那条"忘了同步"的记录）：
+
+* 同步前确认改动**不触碰 E14 训练路径**：`git diff <旧 HEAD>..<新 HEAD> --name-only | grep -E '^(src/|scripts/search_phaseformer\.py)'`
+  必须**无输出**（E14 正从工作树训练）；
+* 在服务器上验证任何脚本前，先确认"服务器上的版本 == 我改的那版"（比对 HEAD 哈希，或看三态计数是否含新判据）。

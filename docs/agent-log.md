@@ -3164,3 +3164,51 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 覆盖边界：仅 `tests/test_lowrank_checkpoint_information.py` 会触及本日改过的模块；其余 36 个测试文件
   属其它实验，跑全量是为了满足规则的「轻量验证」要求，而不是因为它们覆盖了我的改动。
 - 记录：`docs/PhaseFormer_L_execution_schedule.md` 的日志（同日补一条）；本文件同日的三条条目见上。
+
+## 2026-09-20 — 「消费者 ↔ 产物」集成校验：把静态提取器换成真实消费者试跑，修掉 E18 基线出处列全空的缺陷
+
+- 起因：§15 的判据覆盖矩阵收口了"审计是否接得住工具报告的缺口"，但**更上游的一问没有判据**：
+  那些阶段二工具**读得进 E14 的产物吗**？读不进时的症状不是崩溃而是**静默降级**——步骤 exit 0、
+  表照样写，只是**列是空的**。
+- **第一步我做错了**：写正则扫五个消费者源码里的 `X.get("<key>")`，对真 manifest 报出 4 个"缺口"
+  （E14 缺 9 键、E16 缺 34 键、E17 缺 5 键、E18 缺 7 键）。**全部是假警报**——接收者是脚本内部构造的
+  `config`/`hyper`/`cell`/CSV row，不是 manifest cell。改法是**直接调用消费者自己的 loader**
+  （`load_manifest_cells`/`build_e14_index`/`load_baseline_index`/`arm_cells`/`build_cell_plan`）
+  对真产物跑一遍。与 §14 同源：判据要问"**它实际读的是哪个对象**"，不是"源码里出现过这个字符串"。
+- 实测 manifest 结构：492 格、**两种形状**；`source` 只在 reused 上有值；**reused 格的 `command` 是 null**
+  （stage A 没启动它们，是复用审计收编来的）。这条正是下面缺陷的根因。
+- **缺陷 1（真，已修）**：E18 的基线出处列**曾会 78/78 行全空**。真 manifest 实测
+  `load_baseline_index` → `resolved=63, rejected=21`，21 条拒绝全是 `overrides do not implement l_main`：
+  E18 从 argv 的 `--overrides` 重推 `_arm_match`，而 reused 格没有 command ⇒ `overrides={}` ⇒
+  头类型取不到 `shared` ⇒ 拒绝。**这不是边角**——`SMOOTH_SETTINGS = REUSE_SETTINGS_FULL`（7 setting）
+  **正好等于**被复用的那 7 个，`RANK12_SETTINGS` 的 6 个也全在其中 ⇒ E18 的 78 行（42+36）无一例外。
+  **影响面**：**§4.6 的数字不受影响**（`e18_writeback.build_row1/row5` 的 baseline 取自 E14 的
+  `results.csv`，与这些出处列无关），受损的是**审计链**。**修法**：为 reused 格加**第二条准入路径**——
+  从它实际指向的 run 的 `config.json` 用**同一把尺子**（`_arm_match`）重推指纹，`gate_init`/`learning_rate`/
+  `eval_root` 取自该证据；config 缺失或不满足 `l_main` ⇒ **照样拒绝**，不凭空信任 `source`。
+  真产物复测：`resolved=84 (new=63, reused=21), rejected=0`，smooth 覆盖 **21/21**。
+- **缺陷 2（真，已修）**：411 个 new 格记录的 `--output-dir` **全是模板值 `/tmp/e14fix`**（仓库 `grep` 零命中，
+  是用临时 `--output-root` 重建 manifest 的残留）。逐条核过影响面：**E14 stage B 不受影响**
+  （`dispatch_new_cells` 自己用 `--cell` 重调 worker，run dir 由 `locate_run(output_root/runs)` 按指纹定位，
+  从不读 `command`）；**SVD 不致命**（`resolve_run_dir` 在 `out_root/runs` 之后还会扫 `e14_root/runs`）；
+  但 **E18 的 `baseline_eval_root` 会**把它写进产物 ⇒ 已改为 new 格取 manifest 所在 root。
+  **未采用"重建 manifest"**：E14 正在跑，manifest 是 stage B 的权威输入，为一个出处列去动它风险大于收益。
+- **缺陷 3（运维，已记住）**：我自己的同步命令**一直是空操作**。`git fetch origin && git merge --ff-only FETCH_HEAD`
+  报 "Already up to date"，但服务器 bundle `list-heads` 明明含新提交：`remote.origin.fetch` 是
+  `+refs/heads/*`，而 `git bundle create <file> HEAD` 只写**一个 `HEAD` ref** ⇒ 裸 fetch 匹配不到任何 ref，
+  **连 `FETCH_HEAD` 都不生成**。正确形式 `git fetch origin HEAD`（本次已用并实测服务器 HEAD 前移）。
+  **判据**：`git ls-remote origin` 有值 ≠ `FETCH_HEAD` 有值，必须实测 HEAD 前移。
+- 固化为 pre-flight：新增 `scripts/phaseformer_L/check_phase2_consumers.py`（C1 E14 loader 形状、C2 E17 声明的
+  21 格、C3 E18 smooth 每 (setting,seed) 有基线且 0 拒绝 ⇒ 失败即停；C4/C5 计划规模 ⇒ 信息），接入
+  `run_phase2_after_e14.sh` 既有 pre-flight，**在任何昂贵阶段之前**。**C3 就是能在 E18 那 3–5 小时之前
+  抓住缺陷 1 的那条判据**。真产物实测 exit 0（C1 ✅492 cells、C2 ✅21/21、C3 ✅21/21、C4 ℹ️63 格、C5 ℹ️28 setting）。
+- 对照校准：合成 fixture **正对照** exit 0；**两类负对照**——删一个被收编 run 的 `config.json` →
+  `rejected=1`、exit 1；手改 new 格 overrides → `rejected=1`、理由 `overrides do not implement l_main`、exit 1。
+  （第一版负对照被前一次的破坏"污染"，我把它改成相互独立后重跑才得到可归因的结果。）
+- 验证：`python3 -m pytest tests/test_phaseformer_L_reuse_baselines.py -q` → **12 passed**（含 4 个否定对照：
+  头不对、平滑比非 0、config 缺失、既无 command 又无 `source.run_dir`）；服务器全量
+  **`tests/` 400 passed, 262 subtests passed, 18 warnings（144.76 s），退出码 0**（较上次 388 → +12 即本轮新增）。
+- 记录：`docs/PhaseFormer_L/audit/paper_code_consistency.md` **§16**（含 16.1 方法教训、16.2 实测结构、
+  16.3–16.5 三处缺陷、16.6 判据表与对照）；`docs/PhaseFormer_L/e18_negative/02_static_check.md` **§7**；
+  `docs/PhaseFormer_L_execution_schedule.md` 日志 4 条 + §10.1 pre-flight 三道 + §10.1.1 防线地图新行 +
+  **§10.7 同步的正确形式**。
