@@ -167,3 +167,58 @@ class RendererMatchesVerifierTests(unittest.TestCase):
         self.assertTrue(cell.startswith("组2/周期"))
         numbers = __import__("re").findall(r"[-+]?\d*\.?\d+", cell)
         self.assertEqual(float(numbers[-1]), 0.31)
+
+
+class Section45FillerTests(unittest.TestCase):
+    def test_self_test_passes(self):
+        result = run_self_test(REPO / "scripts" / "phaseformer_L" / "fill_minipaper_45.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_h1_aggregation_is_imported_from_the_verifier(self):
+        """The filler must not carry its own copy of the H1 grouping rule.
+
+        Section 4.5's seventh column is a seed count derived from per-seed verdicts.
+        If the filler and the verifier grouped differently, every H1 cell would be
+        written in a shape the verifier rejects.  The filler imports the verifier's
+        aggregate_h1 for exactly this reason, and this pins that it stays importable.
+        """
+        from scripts.phaseformer_L.fill_minipaper_45 import import_h1, render_h1
+
+        self.assertIs(import_h1(str(REPO)), __import__(
+            "scripts.phaseformer_L.verify_minipaper_fill",
+            fromlist=["aggregate_h1"]).aggregate_h1)
+        self.assertEqual(render_h1((3, 3)), "3/3 seed")
+        self.assertEqual(render_h1((0, 3)), "0/3 seed")
+        self.assertEqual(render_h1("evidence_missing"), "evidence_missing")
+
+
+class Section46FillerTests(unittest.TestCase):
+    def test_self_test_passes(self):
+        result = run_self_test(REPO / "scripts" / "phaseformer_L" / "fill_minipaper_46.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_row_count_mismatch_refuses_to_write(self):
+        """A positional fill with unequal row counts must write nothing."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "negative_table.md"
+            artifact.write_text(
+                "| 操作 | 对照 | 口径 | 既有结果 | 本文补做 |\n|---|---|---|---|---|\n"
+                "| only-one-row | a | b | c | NEW |\n", encoding="utf-8")
+            paper = root / "paper.md"
+            original = (
+                "### 4.6 x\n\n| 操作 | 对照 | 口径 | 既有结果 | 本文补做 |\n"
+                "|---|---|---|---|---|\n| r1 | a | b | c |  |\n| r2 | a | b | c |  |\n\n### 4.7 y\n")
+            paper.write_text(original, encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(REPO / "scripts" / "phaseformer_L" / "fill_minipaper_46.py"),
+                 "--minipaper", str(paper), "--artifact", str(artifact), "--write"],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("refusing a positional fill", result.stderr)
+            self.assertEqual(paper.read_text(encoding="utf-8"), original)
