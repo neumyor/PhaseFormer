@@ -286,16 +286,29 @@ def main() -> None:
     # adds an 11th (`RandomRRR-drop`).  Verify the raw product actually carries
     # them instead of assuming it, so a missing arm surfaces as a flag rather
     # than as a silently thin table.
+    # Cover both granularities.  The §4.4 table aggregates three seeds per
+    # (arm, setting), so an arm missing from only ONE seed would still leave the
+    # aggregated set complete while silently reducing that arm's n -- which is
+    # exactly the kind of gap a per-(arm, setting) check alone cannot see.
     arms_per_cell: dict = {}
+    arms_per_seed: dict = {}
     for row in intervention_rows:
         key = (row["arm"], row["setting"])
         arms_per_cell.setdefault(key, set()).add(row["intervention_arm"])
+        seed_key = (row["arm"], row["setting"], str(row["seed"]))
+        arms_per_seed.setdefault(seed_key, set()).add(row["intervention_arm"])
     expected_arms = 11
     thin = [f"{arm}__{setting}" for (arm, setting), names in arms_per_cell.items()
             if len(names) < expected_arms]
+    thin_seeds = [f"{arm}__{setting}-s{seed}" for (arm, setting, seed), names
+                  in arms_per_seed.items() if len(names) < expected_arms]
     observed = sorted({len(names) for names in arms_per_cell.values()})
+    observed_seeds = sorted({len(names) for names in arms_per_seed.values()})
     missing_named = sorted(set(INTERVENTION_ARMS)
                            - {name for names in arms_per_cell.values() for name in names})
+    missing_named_seeds = sorted(set(INTERVENTION_ARMS)
+                                 - {name for names in arms_per_seed.values()
+                                    for name in names})
 
     out_root = Path(args.output_root)
     if not out_root.is_absolute():
@@ -364,14 +377,20 @@ def main() -> None:
                            "null' is defined on the percentile",
         },
         "arm_coverage": {
-            "cells": len(arms_per_cell),
-            "arms_per_cell_observed": observed,
-            "expected_arms_per_cell": expected_arms,
+            "aggregated_cells": len(arms_per_cell),
+            "aggregated_arms_observed": observed,
             "cells_with_fewer_arms": thin,
+            "per_seed_cells": len(arms_per_seed),
+            "per_seed_arms_observed": observed_seeds,
+            "per_seed_cells_with_fewer_arms": thin_seeds,
+            "expected_arms_per_cell": expected_arms,
             "named_arms_missing_entirely": missing_named,
+            "named_arms_missing_from_some_seed": missing_named_seeds,
             "note": "10 arms per cell per section 4.4, plus this paper's new "
-                    "RandomRRR-drop = 11; a cell below that is flagged rather "
-                    "than silently rendered thin",
+                    "RandomRRR-drop = 11. Both the (arm, setting) aggregate and "
+                    "the (arm, setting, seed) cells are checked, because an arm "
+                    "missing from one seed would leave the aggregate complete "
+                    "while quietly shrinking that arm's n.",
         },
         "disclosures": [
             "the seven settings are test-set-selection-derived, not a blind sample",
@@ -395,6 +414,8 @@ def main() -> None:
         "missing_columns_dissection": missing_d,
         "arms_per_cell_observed": observed,
         "cells_with_fewer_arms": len(thin),
+        "per_seed_arms_observed": observed_seeds,
+        "per_seed_cells_with_fewer_arms": len(thin_seeds),
         "named_arms_missing": missing_named,
     }, ensure_ascii=False))
 
