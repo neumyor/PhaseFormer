@@ -359,3 +359,45 @@ Traffic-96     -> 探索性附录，不进入判定；phase_only=新训 3/3；L=
 
 **边界**：本轮只验证了文字生成逻辑（指标为合成数据）；真实的复用来源与状态取自真实 manifest，
 是可信的；最终表内数字仍来自 E14 的正式运行。
+
+---
+
+## 12. A1 臂的门先验核对（2026-09-19 补做，关闭 §10.3 的遗留项）
+
+§10.3 登记了一项待办：`a1`（`gold_combo_reliability_s2`）训练开始后须补一条与其它臂同类的
+逐臂检查。该臂已于非 Traffic 阶段开始训练，现核对：
+
+```text
+a1 cells with configs: 2
+    ('Electricity', 336)  [(gate=0.5, lr=0.001, head=None, mechanism='gold_combo_reliability_s2')]
+    ('Electricity', 720)  [(gate=0.5, lr=0.001, head=None, mechanism='gold_combo_reliability_s2')]
+```
+
+判读：
+
+1. **gate 为 0.5，不是 0.2**——`gold_combo_reliability_s2` 由 preset 自持门先验，
+   `arm_command` 的 `gate_init=0.2` 注入只对 `mechanism == "weak_residual"` 生效。
+   这与 D-2 的"三种 gate 先验"完全一致，**第四种先验不存在**。
+2. `head=None`：A1 不使用 `weak_period_residual_head_type` 覆盖（其融合由 RCRF 决定），
+   因此不吃 `shared`/`pooled_lowrank` 的任一分支。
+3. `lr=0.001` 与 D-2 的新格默认一致。
+
+至此 §4.2 表内**六种臂的实测超参全部核对完毕**：`phase_only`（无门）、
+`l_main`/`l_q1_4`/`l_q1_8`（gate 0.2）、`l_rcrf`（gate 0.5，preset）、`a1`（gate 0.5，preset）。
+
+## 13. 滚动式阶段 A 不变量审计（2026-09-19，72 个已完成格）
+
+Traffic 阶段（60 格）全部结束后、非 Traffic 阶段进行中做一次滚动审计：
+
+```text
+new cells declared: 411 | completed: 72 | running: 8
+by arm: {'a1': 3, 'l_rcrf': 13, 'l_q1_4': 15, 'l_main': 15, 'l_q1_8': 14, 'phase_only': 12}
+fingerprint/protocol failures: 0
+invariant violations: NONE
+```
+
+即：72 个格上**指纹无歧义（0 失败）、协议字段全合法（0 失败）**，且 7 条不变量
+（epoch 在预算内、**阶段 A 未读 test**、`val_mse` 有限、记录了 best checkpoint、跑在 CUDA 上、
+`lookback=720`、`loss=huber`）**无一条违反**。六个臂至此都已开始产出。
+
+该审计是**滚动**的：随着 run 完成可随时重跑，用于在长任务中途持续确认而非只做首尾两次。
