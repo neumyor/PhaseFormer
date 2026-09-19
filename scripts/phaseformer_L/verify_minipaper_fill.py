@@ -697,6 +697,30 @@ def check_4_4_dissection(report: Report, root: pathlib.Path,
                        cells[7] if seen == want_bool else f"paper={cells[7]!r} artifact={expected!r}")
 
 
+#: Markers the paper uses to say "this still has to be filled".  They live in
+#: prose, not in cells, so a cell-by-cell comparison cannot see them.
+PLACEHOLDER_MARKERS = ("待填",)
+
+
+def check_placeholders(report: Report, minipaper: pathlib.Path) -> None:
+    """Report every remaining "to be filled" marker in the paper's prose.
+
+    Filling the tables does not touch the sentences around them, and the paper
+    carries two such sentences: the abstract's ``*[主结果待填。]*`` and the
+    section-4 status paragraph that declares §4.2/§4.4/§4.5/§4.6 pending.  Left
+    alone, a fully filled paper would still *announce* that its main results are
+    missing, and no cell-level mismatch would appear.  Reported as ``blank``
+    (reported, not failing) so the end state is "blank count is zero".
+    """
+    lines = minipaper.read_text(encoding="utf-8").splitlines()
+    for number, line in enumerate(lines, start=1):
+        for marker in PLACEHOLDER_MARKERS:
+            if marker in line:
+                report.add("§4/摘要", f"line {number}", marker, "blank",
+                           line.strip()[:160])
+                break
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -722,6 +746,7 @@ def main() -> int:
     check_4_6(report, root, minipaper)
     check_4_7(report, root, minipaper)
     check_4_4_dissection(report, root, minipaper)
+    check_placeholders(report, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
