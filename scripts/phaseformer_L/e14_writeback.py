@@ -703,7 +703,13 @@ def main() -> None:
         writer.writerows(rows)
     (out_root / "main_table.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     with (out_root / "variant_table.csv").open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(variant_rows[0].keys()))
+        # Same guard the main table uses for `rows`: an empty variant list means
+        # no arm had any metric, and indexing [0] would raise IndexError --
+        # turning a fully degraded input into a lost section 4.2 artifact
+        # instead of an empty table.  (Found by rehearse_e14_writeback.py.)
+        variant_fields = (list(variant_rows[0].keys()) if variant_rows
+                          else ["arm", "label"])
+        writer = csv.DictWriter(handle, fieldnames=variant_fields)
         writer.writeheader()
         writer.writerows(variant_rows)
     (out_root / "claims.json").write_text(
