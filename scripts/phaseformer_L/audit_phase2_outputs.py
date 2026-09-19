@@ -299,8 +299,11 @@ def audit_e18(report: Report) -> None:
                            "results.with_test.csv present")
     if results:
         rows = read_csv(results)
-        report.add("E18 (§4.6)", "results non-empty",
-                   "PASS" if rows else "FAIL", f"{len(rows)} rows")
+        # One row per cell, and the plan is 42 smoothing rows (7 settings x 3 seeds
+        # x 2 levels) + 36 boundary rows (6 settings x 3 seeds x 2 ranks) = 78 --
+        # the same count the pipeline trains.  "non-empty" would pass a half-run.
+        report.add("E18 (§4.6)", "results rows = 78",
+                   "PASS" if len(rows) == 78 else "FAIL", f"{len(rows)} rows")
         stages = sorted({str(r.get("stage")) for r in rows})
         report.add("E18 (§4.6)", "both stages present (smooth, rank12)",
                    "PASS" if set(stages) == {"smooth", "rank12"} else "FAIL",
