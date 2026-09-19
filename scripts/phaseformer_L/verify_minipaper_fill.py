@@ -226,6 +226,53 @@ def check_4_2(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
                 report.add("§4.2", f"{key[0]}-{key[1]}", header[index], "match", "")
 
 
+def inventory(minipaper: pathlib.Path) -> int:
+    """Count rows/columns/empty cells for every table in section 4.
+
+    Turns "is the fill finished?" from an eyeball question into a number: after a
+    fill, every table that should be complete must report zero empty cells (the
+    tables that carry plan text on purpose are listed separately below).
+    """
+    text = minipaper.read_text(encoding="utf-8")
+    marks = [("4.2", "### 4.2", "### 4.3"), ("4.3", "### 4.3", "### 4.4"),
+             ("4.4", "### 4.4", "### 4.5"), ("4.5", "### 4.5", "### 4.6"),
+             ("4.6", "### 4.6", "### 4.7"), ("4.7", "### 4.7", "## 5")]
+    total_empty = 0
+    for name, start, end in marks:
+        block = section_text(text, start, end)
+        raw = [ln.strip() for ln in block.splitlines() if ln.strip().startswith("|")]
+        # A table is "header line, then a |---| separator, then rows".  Without the
+        # lookahead an earlier version merged adjacent tables (it only opened one
+        # table per section), which is exactly the kind of quiet structural error
+        # this mode exists to expose -- the TOTAL stayed right while the per-table
+        # breakdown was wrong.
+        is_sep = lambda cells: set("".join(cells)) <= set("-: ")
+        cells_of = lambda line: [c.strip() for c in line.strip().strip("|").split("|")]
+        tables = []
+        for index, line in enumerate(raw):
+            cells = cells_of(line)
+            following = cells_of(raw[index + 1]) if index + 1 < len(raw) else None
+            if following is not None and is_sep(following):
+                tables.append({"cols": len(cells), "rows": []})
+                continue
+            # Rows belong to the most recently opened table; the header line
+            # itself opened it above and is deliberately not counted as a row.
+            if not tables or is_sep(cells):
+                continue
+            tables[-1]["rows"].append(cells)
+        print(f"\n=== §{name} ===")
+        for index, table in enumerate(tables, start=1):
+            rows = table["rows"]
+            empty = sum(1 for cells in rows for c in cells if not c)
+            total_empty += empty
+            print(f"  table {index}: {len(rows)} rows x {table['cols']} cols, "
+                  f"empty cells = {empty}")
+    print(f"\nsection 4 empty cells in total: {total_empty}")
+    print("(§4.2 variant, §4.3 and §4.7's second table carry intentional text; "
+          "see minipaper_fill_mapping.md section 4)")
+    return total_empty
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -233,9 +280,15 @@ def main() -> int:
     parser.add_argument("--json", default="", help="write the report as JSON here")
     parser.add_argument("--minipaper", default=str(MINIPAPER),
                         help="override the paper path (for self-tests)")
+    parser.add_argument("--inventory", action="store_true",
+                        help="just count rows/columns/empty cells per table")
     args = parser.parse_args()
     root = pathlib.Path(args.root)
     minipaper = pathlib.Path(args.minipaper)
+
+    if args.inventory:
+        inventory(minipaper)
+        return 0
 
     report = Report()
     check_4_3(report, root, minipaper)

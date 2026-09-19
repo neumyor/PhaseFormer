@@ -167,3 +167,40 @@ predictive_power.spearman[f"{stat}_vs_gate_value"]["rho"]      -> 与 g 的 ρ
 **这张清单本身也是一次校验**：它把"看起来还有很多空表"变成"**精确 485 格 + 1 项决策**"，
 从而可以在回填完成后用同一个脚本重新清点、确认空格归零——即"填完没有"是可机检的，
 不必靠人眼扫表格。
+
+### 4.1 已做成可复用检查：`--inventory`
+
+同一张清单已并入 `verify_minipaper_fill.py`，故**"填完了没有"可机检**：
+
+```text
+python scripts/phaseformer_L/verify_minipaper_fill.py --inventory
+```
+
+实测输出（2026-09-20）：
+
+```text
+=== §4.2 ===  table 1: 28 rows x 10 cols, empty cells = 192
+              table 2:  5 rows x  4 cols, empty cells =   0
+=== §4.3 ===  table 1: 28 rows x 12 cols, empty cells =   0
+=== §4.4 ===  table 1: 21 rows x  8 cols, empty cells = 105
+              table 2: 21 rows x 10 cols, empty cells = 147
+=== §4.5 ===  table 1:  7 rows x  7 cols, empty cells =  35
+=== §4.6 ===  table 1:  5 rows x  5 cols, empty cells =   0
+=== §4.7 ===  table 1:  3 rows x  4 cols, empty cells =   6
+              table 2:  3 rows x  4 cols, empty cells =   0
+section 4 empty cells in total: 485
+```
+
+**完成判据：回填后重跑该命令，总数应为 0**（那三张"刻意带文字"的表本就是 0）。
+
+**两处须记的技术细节**：
+
+1. §4.3 表被解析成 **12 列**，而它实际是 8 列——因为表头与单元格里含**转义竖线**
+   （`\|cos\|`）。这对"空格计数"无影响（空格的判定不受列数影响），但**任何按列索引取值的
+   解析器都必须先处理转义**——否则 §4.3 的列会整体错位。本会话早先就因 `|cos|` 与 `\|cos\|`
+   的转义问题反复修过文档表格，此处再次提醒。
+2. 该 mode 的解析器**修过一次**：初版每节只开一张表，于是把 §4.2 的两张表、
+   §4.4 的两张表各**合并**成一张——**总数仍是对的（485），但逐表明细是错的**。
+   这正是"总数对不等于结构对"的一个实例，也正是这个 mode 存在的意义；
+   修法是用**前瞻一行是否为分隔线**来判定表头（`|---|`），从而正确切分相邻表。
+
