@@ -48,6 +48,7 @@ MINIPAPER = REPO / "docs/PhaseFormer_L_minipaper.md"
 E15 = "research_runs/phaseformer_L_e15_dimension_v1"
 E14 = "research_runs/phaseformer_L_e14_main_v1"
 E16 = "research_runs/phaseformer_L_e16_dissection_v1"
+E18 = "research_runs/phaseformer_L_e18_negative_v1"
 E17 = "research_runs/phaseformer_L_e17_conditional_v1"
 
 #: displayed column -> (artifact column, decimal places); None dp = exact string.
@@ -450,6 +451,72 @@ def check_4_4_intervention(report: Report, root: pathlib.Path,
                 report.add("§4.4 干预表", label, header[index], "match", "")
 
 
+def check_4_6(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> None:
+    """Section 4.6: only the fifth column is filled; columns 1-4 keep the paper's text.
+
+    This is narrower than it first appeared.  `e18_writeback` emits five fields per
+    row, and comparing them with the paper shows the two agree **verbatim for rows
+    2, 3 and 4** (the write-back's `KEPT_AS_DASH` constants are literally the paper's
+    own strings) but differ for rows 1 and 5:
+
+        row 1  操作: paper "输入平滑（boxcar / causal EMA，各 5 档）"
+                     artifact "输入平滑（causal EMA 两个强度）"
+        row 5  作用对象: paper "支路容量（网格之外）"   artifact "支路容量（低秩网格之外）"
+        row 5  口径:     paper "6 setting × 3 seed"     artifact "6 setting × 3 seed × 2 rank"
+
+    The paper's wording describes the PRIOR experiments that columns 3-4 report, so
+    replacing the whole row would rewrite accurate prose.  The fill is therefore the
+    fifth column (本文补做), which takes the artifact's `addendum`; the scale text it
+    displaces belongs in the table note.
+    """
+    md = root / E18 / "negative_table.md"
+    block = section_text(minipaper.read_text(encoding="utf-8"), "### 4.6", "### 4.7")
+    header, paper_rows = parse_markdown_table(block, "本文补做")
+    if header is None:
+        report.add("§4.6", "-", "-", "MISMATCH", "could not find the 4.6 table header")
+        return
+    if len(header) != 5:
+        report.add("§4.6", "-", "columns", "MISMATCH",
+                   f"header has {len(header)} columns, expected 5")
+    if not md.is_file():
+        report.add("§4.6", "-", "artifact", "PENDING", f"{md.name} does not exist yet")
+        return
+
+    artifact = []
+    for line in md.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) == 5 and not is_separator(cells) and cells[0] != "操作":
+            artifact.append(cells)
+    if len(paper_rows) != len(artifact):
+        report.add("§4.6", "-", "row count", "MISMATCH",
+                   f"paper has {len(paper_rows)} rows, artifact has {len(artifact)}")
+        return
+    for index, (cells, want) in enumerate(zip(paper_rows, artifact), start=1):
+        label = f"row {index}"
+        if len(cells) < 5:
+            report.add("§4.6", label, "-", "MISMATCH", f"row has {len(cells)} cells")
+            continue
+        got = cells[4]
+        if not got:
+            report.add("§4.6", label, header[4], "blank", "empty paper cell")
+        elif got != want[4]:
+            report.add("§4.6", label, header[4], "MISMATCH",
+                       f"paper={got!r} artifact={want[4]!r}")
+        else:
+            report.add("§4.6", label, header[4], "match", "")
+        # cross-check the descriptive columns that ARE expected to agree verbatim
+        for column in range(4):
+            if cells[column] == want[column]:
+                report.add("§4.6", label, header[column], "match", "")
+            else:
+                report.add("§4.6", label, header[column], "INFO",
+                           f"paper={cells[column]!r} artifact={want[column]!r} "
+                           f"(allowed to differ; see the docstring)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -472,6 +539,7 @@ def main() -> int:
     check_4_2(report, root, minipaper)
     check_4_5(report, root, minipaper)
     check_4_4_intervention(report, root, minipaper)
+    check_4_6(report, root, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
