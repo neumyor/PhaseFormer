@@ -56,9 +56,25 @@
 
 | 工具 | 用途 |
 |---|---|
+| `scripts/phaseformer_L/e14_params.py` | §4.2 的**参数量列**：读每个 cell checkpoint 的参数**形状**（`torch.load(mmap=True)`，不materialize 权重），拆成 `residual_params`（`weak_period_residual.*`，含门）与 `backbone_params`，并与 `metrics.csv:parameter_count` **交叉校验**。FLOPs 明确**不报**（原文 Table 4 口径未在本仓库复现） |
+| `scripts/phaseformer_L/run_phase2_after_e14.sh` | E14 之后的六步流水线（单次 test 读取 → §4.7 ρ → §4.2 回填 → E16 → E17 → E18），带**完成守卫**（拒绝在 E14 未完成时启动）与逐步退出码 |
 | `scripts/phaseformer_L/e14_writeback.py` | 全量聚合 + 4 项主张判定 + 生成 §4.2 表行；已用**合成**数据跑通全部代码路径（28 行、6 个变体行、4 项主张均产出），合成产物已删除 |
 | `scripts/phaseformer_L/e14_read_test.py` | 阶段 B 的单次 test 读取（先 val 门、后 test 读；幂等） |
 | 本文件 §1 的 8 条不变量 | 全量审校的判据 |
+
+### 4.1 参数量列的口径与已验证结果（2026-09-19）
+
+minipaper §4.2 要求"参数量列按仓库 `metrics.csv` 的 `parameter_count` 口径报告（主干 + 修正器 + 门），
+并单列修正器参数"。初版回填工具**只**输出指标列，漏了参数量列——已补齐并验证：
+
+- 精确性：`e14_params.py` 由 checkpoint 形状求和得到的总参数与 `metrics.csv:parameter_count`
+  在**全部已解析的 94 个 cell 上逐一相等**（`total_mismatches: []`）。
+- 算术抽查：`l_main`/Traffic-96 的 `residual_params = 69,216 = 720×96 + 96`，
+  Traffic-192 `= 138,432 = 720×192 + 192`，与设计一致。
+- 恒定性：回填按 `(arm, horizon)` 聚合，并校验**同一 horizon 内 3 个 seed 的参数完全一致**
+  （`params_constant_across_seeds`）。参数**随 horizon 变化**是设计使然（`rank=H/4` 的桥接层在
+  H=720 时是 H=96 的 7.5 倍），因此不做跨 horizon 的恒定性断言。
+- 全 28 setting 未解析时该列记为 `null` 并在 `audit.json` 中留因，**不用部分数据填充**。
 
 > `e14_writeback.py` 的合成冒烟挡下 1 个缺陷：Golden 表的解析正则原为 `[A-Za-z]+`，
 > 无法匹配含数字的 `ETTh1/ETTh2/ETTm1/ETTm2`，只解析出 12/28 行（Weather/Electricity/Traffic）；
