@@ -1133,3 +1133,15 @@ input_group_label / input_group_explanation / output_group_explanation / correct
 这与 §21 的教训同源：**检查器报"没问题"时，要先问它到底看得见什么**。
 （未把它并进 `check_pipeline_invocations.py`：那条检查的价值在于"极窄但绝不误报"，
 把一个需要解析 Python 语义的取值检查塞进去，反而会引入 §22 那种"假通过"。）
+
+**§21.2（2026-09-20 追加）把"必填 flag 缺失"也纳入该检查**：存在的检查只管
+"**写出来的 flag 是否合法**"，管不了"**该写的 flag 有没有写**"——`required=True` 少一个是 argparse 运行期错误，
+若发生在第 5/6 步就是**在 E16 那 4 小时之后**才失败。这一条**可判定、无假阳性**（与 §21.1 的取值检查不同，
+后者我明确不做），故并入 `check_pipeline_invocations.py`：
+
+* 实现：对每个调用，取目标脚本 `add_argument(..., required=True)` 的 flag 集合，与调用里**出现的 flag** 求差；
+* 实测：**25 个调用、0 个缺失**；
+* 两类对照（改副本）：删掉第 2 步的 `--stats` → `PROBLEM`；
+  删掉 E14 读取器的 `--manifest` → `PROBLEM`（都给出 argparse 会拒的说明）；
+* 该检查自身在预检里跑，故它一旦误报会阻止整链启动 ⇒ 只收"**保证会失败**"的规则，
+  取值/choices 这类需要推断 Python 语义的仍留在人工（见 §21.1）。

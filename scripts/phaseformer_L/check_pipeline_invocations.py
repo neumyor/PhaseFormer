@@ -62,6 +62,30 @@ DEFAULT_PIPELINE = HERE / "run_phase2_after_e14.sh"
 INVOCATION = re.compile(r"""["']?\$PY["']?\s+(scripts/[\w/]+\.py)([^\n&;|]*)""")
 
 
+def required_flags(script: pathlib.Path) -> list:
+    """Flags the tool declares ``required=True``.
+
+    A missing one is an argparse error at run time -- and unlike arity or value
+    checking this rule is decidable with no false positives, so it belongs here:
+    the invocation check should catch anything that is *guaranteed* to fail.
+    """
+    if not script.is_file():
+        return []
+    tree = ast.parse(script.read_text())
+    out: list = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_argument"):
+            continue
+        flags = [arg.value for arg in node.args
+                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                 and arg.value.startswith("--")]
+        for kw in node.keywords:
+            if kw.arg == "required" and getattr(kw.value, "value", False) is True:
+                out.extend(flags)
+    return out
+
+
 def declared_flags(script: pathlib.Path) -> dict:
     """flag -> has_nargs, from the target script's argparse.
 
@@ -116,6 +140,7 @@ def main() -> int:
         script = REPO_ROOT / rel
         flags = declared_flags(script)
         tokens = [strip_quotes(tok) for tok in tail.split()]
+        present = {tok for tok in tokens if tok.startswith("--")}
 
         index = 0
         while index < len(tokens):
@@ -140,8 +165,15 @@ def main() -> int:
                 )
             index = look
 
+        missing = sorted(set(required_flags(script)) - present)
+        if missing:
+            problems.append(
+                f"{rel}: required flag(s) not passed: {missing} -- argparse would "
+                f"reject this invocation")
+
     print(f"pipeline: {args.pipeline}")
     print(f"flags inspected: {checked}")
+
     if problems:
         print(f"\nPROBLEMS ({len(problems)}):")
         for item in problems:
