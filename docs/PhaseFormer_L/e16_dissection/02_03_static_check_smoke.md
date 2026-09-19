@@ -74,3 +74,73 @@ RuntimeError: Error(s) in loading state_dict for PhaseFormer:
 
 价值说明：本次冒烟用**单 cell、2 个 batch** 就发现了会污染整张 §4.4 表的两处缺陷；
 若直接提交 63-cell 正式运行，会在数小时后产出全部错误数值。
+
+---
+
+## 4. 阶段 3 复测（修复后，2026-09-19 20:41）—— **通过**
+
+修复内容（仅改 `e16_dissection.py` 与 `01_plan.md`）：
+
+| 缺陷 | 真实根因 | 修复 |
+|---|---|---|
+| 1「稠密头不变量失败 gap=4.42e-02」 | **不是代数错误，是我（审校方）的判据定义错误**：被 gate 的 `gap` 是"闭式未干预臂在**实际跑过的 2 个 batch**（512/2785 个验证窗口）上的 fused MSE"与 run 记录的**全划分** `val_mse` 之比，子集 ≠ 全划分，该数字不证明任何事；真正做"对拍"的那一列（`..._vs_recorded_fused`）既没有被打印、也没有被 gate | 拆成**两个独立不变量**：①代数证书 = 闭式 `Original` 臂 vs **模型自己的** fused 张量（同一批窗口，逐元素），硬失败即 `SystemExit`；②对 run 指标的核对，在 `--max-batches>0` 或窗口数不等时记为 `comparable=false` + 原因，不再报警 |
+| 2「`l_q1_8` 按 `shared` 头构造」 | **模型 bundle 的缓存键是 `(dataset, horizon, batch_size)`**，导致第一个臂（`l_main`）的 hyperparams 被复用到 `l_q1_8` | 缓存键改为 `(dataset, horizon, arm, batch_size)`；新增 `resolve_expected_head()` 从**该 cell 自己的** `config.json` 读取头类型（plan 阶段即校验）；`describe_branch()` 在 `load_state_dict` 前断言"构造头 = 期望头 = checkpoint 键集合"、低秩臂还断言 `head.rank == cell r` |
+| 3 设备争用 | `--gpus` 默认取 `cuda:0` | 默认改为**空 = CPU**；显式索引在可见设备命名空间内解析并做越界检查；CUDA 不可用时报错而非静默回落 CPU |
+
+另新增一项**只需数秒**的阶段 2 检查：`--dry-run --verify-checkpoint-heads`，用 `mmap` 只读 checkpoint 的键名。
+本次实测输出：
+
+```text
+l_main  ETTh2-96 seed=2021 head=dense_shared   r=0  ckpt=head=dense_shared keys=1
+l_q1_8  ETTh2-96 seed=2021 head=pooled_lowrank r=12 ckpt=head=pooled_lowrank keys=2
+```
+
+即缺陷 2 现在**在跑任何前向之前**就能被抓到。
+
+### 4.1 复测结果
+
+```text
+[cell] l_main ETTh2-96 seed=2021 head=dense_shared   rank_dim=720 pairs=3584 windows=512/2785 algebra=ok(rel_gap=2.15e-10, max_abs=0.00e+00) run_metric=skipped(--max-batches 2 evaluated a subset: 512 of 2785 validation windows) (604.7s)
+[cell] l_q1_8 ETTh2-96 seed=2021 head=pooled_lowrank rank_dim=12  pairs=3584 windows=512/2785 algebra=ok(rel_gap=2.97e-05, max_abs=0.00e+00) run_metric=skipped(...) (4.8s)
+{"event":"finished","cells":2,"intervention_rows":23,"dissection_rows":2,"algebra_failures":0,"run_metric_failures":0,"run_metric_not_comparable":2,...}
+E16_SMOKE_EXIT=0
+```
+
+- **`algebra_failures: 0`**：稠密头的 `rel_gap=2.15e-10`、`max_abs=0`，即
+  `encoder=I, encoder_bias=0, decoder=linear.weight` 的映射**精确**；低秩头 `rel_gap=2.97e-05`，
+  即注册代数里 `W_dec @ encoder_bias` 的重复计入，量级与既有登记（中位 6.3e-07、最差 5.5e-06）同阶。
+- `run_metric=skipped` 是正确行为（`--max-batches 2` 只跑了子集），不是失败。
+- `device: cpu`，未占用正在跑 E14 的 8 张卡。
+
+### 4.2 `reference_parity_passed: false` 的解读（**不是缺陷**）
+
+`reference_parity.json` 把 2 个 cell 的重算列与既有 `lowrank_checkpoint_information_v1` 逐字段比对：
+
+| 字段 | 最大绝对差 | 判读 |
+|---|---:|---|
+| `singular_value`、`singular_value_share` | **0.0** | 精确一致 |
+| `input_group_explanation`、`output_group_explanation` | 3.3e-16 / **0.0** | 精确一致 |
+| `input_dictionary_r2`、`output_dictionary_r2` | 1.1e-16 / **0.0** | 精确一致 |
+| `latent_variance` | **26.5** | 子集伪影 |
+| `correction_energy_share` | **0.0276** | 子集伪影 |
+
+分界很清楚：**依赖 `W`（checkpoint 的映射）的 6 个字段逐位一致**（说明解剖代数完全正确）；
+而 `latent_variance` 与 `correction_energy_share` 是在**被处理窗口**上累加的二阶矩，
+`--max-batches 2` 只覆盖 512/2785 个验证窗口，**必然**不等于全划分的登记值。
+
+因此该 flag 在冒烟下为 false 属预期。据此确定**正式运行的验收判据**：
+
+> 全量运行（`--max-batches 0`）必须在**全部 8 个字段**上给出 `reference_parity_passed: true`。
+> 若仍有字段不一致，才是真缺陷，须逐一追查。
+
+### 4.3 另一处需在正式运行中核对的项
+
+`verdicts` 两个 cell 均为 `not_supported`。这是"跨 seed 稳定语义判定"的输出，
+在**单 seed** 冒烟下必然无法满足"≥2/3 seed 第一名"的判据，属预期；
+正式运行覆盖 3 seed 后才有判别意义。
+
+## 5. 结论（更新）
+
+阶段 2/3 **通过**。冒烟用 2 个 cell、2 个 batch 就抓出 2 个会污染整张 §4.4 表的缺陷
+（其中一个是**缓存键**导致 21 个低秩 cell 全部无法加载），并新增了一项数秒级的零成本前置检查。
+E16 具备进入正式运行（63 cell）的条件；因 8 卡正被 E14 占用，排期在 E14 之后。
