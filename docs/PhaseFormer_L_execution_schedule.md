@@ -439,6 +439,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 恢复代价核验 | **全链唯一昂贵重跑是第 4 步** | 承接失败语义，核实"失败后重跑要付多少"（决定该不该中途干预）。关键在 `search_phaseformer.py:638-644`：若 `metrics.csv` 存在，**带 `--resume` 时打印 `RESUME completed` 并干净 return（退出码 0）**，不带时才 `raise FileExistsError`。而 E14/E17/E18 的命令**都带 `--resume`**（`:468`/`:525`/`:247`），E16 **完全没有**。故：第 1 步幂等、第 3 步分钟级、**第 5/6 步廉价**（dispatch 虽重新发车每格，但已完成的 run 立即 no-op，**不重训**）；**第 4 步（E16）昂贵**——无 `--resume`、无按 cell 检查点、产物末尾一次性写出 → 失败即需**整步重跑 3–5 h**，是全链唯一昂贵重跑；`--from N` 另可跳过节级 ✓。**并诚实记下我一个过早结论**：我先只读 dispatcher、见 `pending = list(cells)` 无发车前跳过，几乎把"重跑会重训所有 run"写进文档；往下多读一层才发现子进程带 `--resume`、结论**正好相反**——"从单层代码推断跨层行为会出错"，好在写进文档前发现 |
 
+| 2026-09-20 | 防线地图（谁 fail-closed） | **第 7 步审计是承重的** | 逐工具核到源码，得到两类（**两类都是有意的，不是缺陷**）：**失败即停**——第 1 步 `e14_read_test.py`（写盘后 `if problems: raise SystemExit`；dry-run 更早拒绝）、第 5/6 步训练 runner（`if failed: raise`）、第 6 步行 3 的 `--verify`（实测 `135 unresolved cells; refusing`）、第 7 步审计（有 FAIL 即非零）；**报告后继续（exit 0）**——第 5/6 步 test 读取（已知例外）、第 2 步 `e19_predictive_power.py`（只在"一个 setting 都算不出"时才停；部分跳过仍 exit 0）、第 3 步 `e14_writeback.py`/`e14_params.py`（**无任何 `raise SystemExit`**，只在 `audit.json` 列 `settings_incomplete`）、第 4 步 `e16_dissection.py`（`algebra_failures` 只进 summary 不抛错）、三个回填工具。**结论**：链条在**入口与最贵的两步**是 fail-closed，在分析/回填层是"报告后继续"——而**第 7 步审计正是为这一层设计的**，它检查的恰是这些工具"报告而非中止"的东西（每 cell 有 test 指标、预测力表覆盖 28 setting、主表 492 行、`algebra_failures` 为 0、行 3 覆盖 28 setting）。**故第 7 步不是装饰、是承重**：若把这些工具改成"失败即停"，链会因一个**良性**跳过而过早停止；留在报告层、由审计统一判定，则跑完全链后一次性给出可信结论。审计跑在最后也因此是对的——它之后没有步骤，"最后才发现"的代价只是我看一眼报告 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
@@ -729,3 +731,36 @@ if complete.exists():
 > 子进程带 `--resume`、对已完成的 run 是干净 no-op——**结论正好相反**。
 > 这与本会话前几次"我的检查写错"同类：**从单层代码推断跨层行为会出错**，
 > 好在这次是在写进文档之前发现的（`--from` 与恢复流程都依赖这个结论）。
+
+### 10.1.3 防线地图：谁**失败即停**、谁**报告后继续**、以及第 7 步审计为何是**承重**的
+
+把 §10.1.1（失败语义）与 §10.1.2（恢复代价）合起来，逐工具核到源码后得到这样一张图
+（**注意：两个类别都是有意设计，不是缺陷**）：
+
+| 层 | 行为 | 依据 |
+|---|---|---|
+| **第 1 步** `e14_read_test.py` | **失败即停**：写盘后 `if problems: raise SystemExit(f"E14 stage B had problems: {problems}")`；dry-run 则更早拒绝（`dry run found problems; refusing to proceed`） | 源码 tail |
+| **第 5/6 步 训练 runner** | **失败即停**：`if failed: raise SystemExit(...)` | `e14_main_matrix.py:702`、`e17_conditional.py:1407`、`e18_negative.py:890` |
+| **第 6 步行 3** `e18_svd_truncation.py` | **失败即停**：`--verify` 对未解析的格子直接拒绝（实测 `135 unresolved cells; refusing to evaluate`） | 实测 |
+| **第 7 步** `audit_phase2_outputs.py` | **失败即停**：有 `FAIL` 则非零退出 | 12 缺陷正对照 |
+| 第 5/6 步 test 读取 `read_test_generic.py` | **exit 0 并报告**（`rejected` 列在 summary 里） | 已知例外，见 §10.1.1 |
+| 第 2 步 `e19_predictive_power.py` | **exit 0 并报告**：只在"**一个 setting 都算不出**"时才停；部分 setting 被跳过（实测半退化输入 → 14 完成 / 14 跳过）仍退出 0 | 实测 + 源码 |
+| 第 3 步 `e14_writeback.py` / `e14_params.py` | **exit 0 并报告**：`audit.json` 里列 `settings_incomplete`，但**不**抛错 | 源码（二者无任何 `raise SystemExit`） |
+| 第 4 步 `e16_dissection.py` | **exit 0 并报告**：summary 里列 `algebra_failures`，但**不**据此抛错 | 源码（`algebra_failures` 只进 summary） |
+| 第 4/5/6 步 回填工具 | exit 0 并报告（未供给的列列为 `None`） | 同上 |
+
+**结论**：链条在**最贵的两步**（训练）与**入口**（第 1 步）是 **fail-closed** 的，
+但在**分析/回填**这些工具上是"报告后继续"。这**不是**疏漏——因为
+**第 7 步验收审计正是为这一层设计的**：它检查的恰是这些工具"报告而不是中止"的东西
+（每 cell 是否有 test 指标、预测力表是否覆盖 28 setting、主表是否 492 行、`algebra_failures` 是否为 0、
+行 3 是否覆盖 28 setting…）。**换句话说，第 7 步不是装饰性的，它是承重的**：
+把这些工具换成"失败即停"会让链因为一个**良性**的跳过而过早停止，
+而把它们留在"报告"层、再由审计统一判定，则**跑完全链后一次性给出可信结论**。
+
+**这也解释了为什么审计跑在最后是对的**：它之后没有别的步骤，所以"最后才发现"的代价只是
+"我要看一眼报告"，而不是"浪费了后续算力"。
+
+**唯一的真例外**仍是 `read_test_generic.py`：它不是"良性跳过"，而是**真的会坏**
+（worker 崩溃时它照样 exit 0，只在 summary 列 `rejected`）——那属于**故障被静默**，
+正是本会话修掉的那个 marker 缺陷所暴露的。故它的兜底是审计里"每 cell 都要有 test 指标"那条判据，
+且重跑代价低（读取 + 回填，不重训）。
