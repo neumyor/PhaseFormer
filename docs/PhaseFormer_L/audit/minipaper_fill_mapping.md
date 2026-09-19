@@ -85,26 +85,18 @@ L-q1/4 与 L-q1/8 各 17×3、L-rcrf 28×3=84、A1 24×3=72）。
 
 **组合方式需要先定下来再填**，否则同一张表里会出现两种写法。
 
-**这一处与 §4.6 不同：**§4.6 我能从回填工具**硬编码的字符串**反推出设计意图（见 §1.7），
-而这里**没有可反推的 ground truth**——`e16_writeback` 根本不渲染这张表。
-更彻底地查过：§4.4 的正文在表格之前**只有标题、没有任何说明**，
-表下注也只解释语义（"只用 validation 划分"、"跨 seed leading4 重叠按 4 维主子空间两两重叠计"），
-**不规定单元格写法**。故这是**最后一处真正开放的格式问题**。
+**这一处已于 2026-09-20 收口——改为从代码与表头直接定，不必等 E16 跑完**：
 
-**建议的写法**（依据是 CSV 里实际可用的列名与含义，而非凭空规定）：
+1. **论文表头自己给了约定**：该列写作 `主模式输入组 / 解释率`，**斜杠**即"组名 / 解释率"；
+2. **量纲有旁证**：生产者的判据 `criterion_2_input_explanation_ge_0p5` 说明解释率是 **0–1 小数**；
+3. **行标签可信**：`model` 取 `ARM_DISPLAY`，与论文行标签 `PhaseFormer-L` / `L-q1/4` / `L-q1/8` **逐字相同**。
 
-| 论文列 | 建议渲染 | 依据列 |
-|---|---|---|
-| 主模式输入组 / 解释率 | `{input_group_label}（{input_group_explanation:.2f}）` | `input_group_label`、`input_group_explanation` |
-| 主模式输出组 / 解释率 | `{output_group_label}（{output_group_explanation:.2f}）` | `output_group_label`、`output_group_explanation` |
-| 修正能量份额 | `{correction_energy_share:.3f}` | `correction_energy_share` |
-| 跨 seed `leading4` 重叠 | `in {leading4_input_overlap:.2f} / out {leading4_output_overlap:.2f}` | `leading4_input_overlap`、`leading4_output_overlap` |
-| 稳定语义判定 | 取判定列（`stable_semantics_verdict` 一类） | — |
+**采用的渲染**：`{组名} / {解释率:.2f}`；修正能量份额 `{:.3f}`；跨 seed 重叠 `{in:.2f} / {out:.2f}`；
+判定用 `✓/✗`。**注意组名本身可能含斜杠**（真实标签有 `周期形状/相位`），故校验器不按斜杠切分，
+而是"以组名开头 + 末尾数字 == 保留两位的解释率"来判（详见 `paper_code_consistency.md` §13）。
 
-**但两名小数/写法仍属表述取舍**，且**只有 E16 真正跑完后才能看到取值分布**
-（例如解释率是 0–1 小数还是 0–100 百分数、`input_group_label` 的中文长度是否撑破表格）。
-故建议：**E16 跑完后先打印几行真实取值，再据实定写法并回写本节**，
-而不是现在把两位小数写死。**这样"最后一处开放格式"就有了确定的收口时点。**
+校验器**已实现并七类校准**（正确配对 `match: 105`；改解释率/改组名/改重叠对/翻转判定/产物少行
+→ 均 MISMATCH；组合格留空 → `blank` 不致命）。
 
 ### 1.5 §4.4 干预表（21 行 × 10 列）—— **直接复制、但要去掉第 1 列** ⚠→✓
 
