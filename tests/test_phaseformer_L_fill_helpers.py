@@ -79,3 +79,91 @@ class RhoFillerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RendererMatchesVerifierTests(unittest.TestCase):
+    """The composed section 4.4 cells must satisfy the verifier that reads them.
+
+    This is the test that matters most for this table: the cells are *composed*
+    rather than copied, so the filler and the verifier are two implementations of
+    the same convention. If they disagree, every cell would be written in a shape
+    the verifier rejects -- and the failure would only appear at fill time. So the
+    filler's rendered cells are fed straight through the verifier's own checker
+    here.
+
+    It also pins the two easy-to-get-wrong details: the explanation rate must be the
+    LAST number in the cell (group labels can contain slashes and digits), and the
+    artifact's leading `model` column must not be written into the paper.
+    """
+
+    ROW = {
+        "model": "PhaseFormer-L", "dataset": "ETTh2", "horizon": "96",
+        "input_group_label": "周期形状/相位", "input_group_explanation": "0.6649",
+        "output_group_label": "近端电平", "output_group_explanation": "0.5",
+        "correction_energy_share": "0.6521771",
+        "leading4_input_overlap": "0.777", "leading4_output_overlap": "0.666",
+        "stable_semantics_verdict": "True",
+    }
+
+    def _paper(self) -> str:
+        return "\n".join([
+            "### 4.4 x",
+            "",
+            "| 模型 | Dataset | H | 主模式输入组 / 解释率 | 主模式输出组 / 解释率 |"
+            " 修正能量份额 | 跨 seed leading4 重叠 | 稳定语义判定 |",
+            "|---|---|---:|---|---|---:|---|---|",
+            "| PhaseFormer-L | ETTh2 | 96 |  |  |  |  |  |",
+            "",
+            "### 4.5 y",
+            "",
+        ])
+
+    def test_rendered_cells_pass_the_verifier(self):
+        import csv
+        import tempfile
+        from pathlib import Path
+
+        from scripts.phaseformer_L.fill_minipaper_44_dissection import render
+        from scripts.phaseformer_L.verify_minipaper_fill import (
+            E16, Report, check_4_4_dissection,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / E16
+            target.mkdir(parents=True)
+            with (target / "dissection_table_44.csv").open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(self.ROW))
+                writer.writeheader()
+                writer.writerow(self.ROW)
+
+            paper = root / "paper.md"
+            paper.write_text(self._paper(), encoding="utf-8")
+
+            # Fill the row the way the tool does, then verify it.
+            lines = paper.read_text(encoding="utf-8").splitlines()
+            cells = [c.strip() for c in lines[4].strip().strip("|").split("|")]
+            lines[4] = "| " + " | ".join(cells[:3] + render(self.ROW)) + " |"
+            paper.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+            report = Report()
+            check_4_4_dissection(report, root, paper)
+
+        states = [row["state"] for row in report.rows]
+        details = [row["detail"] for row in report.rows]
+        self.assertNotIn("MISMATCH", states, details)
+        self.assertNotIn("blank", states, details)
+        # 5 composed columns -> five comparisons for the single row
+        self.assertEqual(len(report.rows), 5, details)
+
+    def test_rate_must_be_the_last_number(self):
+        """A label carrying its own digits must not be mistaken for the rate."""
+        from scripts.phaseformer_L.fill_minipaper_44_dissection import render
+
+        row = dict(self.ROW)
+        row["input_group_label"] = "组2/周期"
+        row["input_group_explanation"] = "0.31"
+        cell = render(row)[0]
+        self.assertTrue(cell.startswith("组2/周期"))
+        numbers = __import__("re").findall(r"[-+]?\d*\.?\d+", cell)
+        self.assertEqual(float(numbers[-1]), 0.31)
