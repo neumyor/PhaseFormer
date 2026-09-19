@@ -41,6 +41,16 @@ import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
+# Reuse the contract checker's source-derived extractor instead of re-writing it:
+# the merged file the write-back consumes is the runner's own fields PLUS the
+# columns read_test_generic stamps on.  Deriving both means this fixture cannot
+# drift from the real artifact -- getting it wrong once made the first run fail
+# with "dict contains fields not in fieldnames: test_mse, test_mae", because E18
+# records `test_mse_recorded` and only the reader supplies `test_mse`.
+from scripts.phaseformer_L import check_column_contracts as cc  # noqa: E402
 
 SETTINGS = (("ETTh1", 96), ("ETTh2", 96), ("ETTm2", 192), ("Weather", 96))
 SMOOTH_LEVELS = ("causal_ema_mid", "causal_ema_max")
@@ -71,8 +81,11 @@ def write_csv(path: pathlib.Path, fields, rows) -> None:
 
 
 def build_fixtures(scratch: pathlib.Path, baseline: bool, blank_metrics: bool):
-    e18_fields = literal_constants(
-        REPO / "scripts/phaseformer_L/e18_negative.py", {"RESULTS_FIELDS"})["RESULTS_FIELDS"]
+    stamped = cc._subscript_store_keys(
+        REPO / "scripts/phaseformer_L/read_test_generic.py")
+    e18_fields = list(dict.fromkeys(
+        literal_constants(REPO / "scripts/phaseformer_L/e18_negative.py",
+                          {"RESULTS_FIELDS"})["RESULTS_FIELDS"] + sorted(stamped)))
     e14_fields = literal_constants(
         REPO / "scripts/phaseformer_L/e14_read_test.py", {"RESULTS_FIELDS"})["RESULTS_FIELDS"]
     trunc_fields = literal_constants(
