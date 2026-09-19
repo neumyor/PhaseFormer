@@ -346,9 +346,16 @@ def main() -> None:
                 else ("checkpoint" if from_ckpt is not None else None))
 
         # Required comparisons.
+        # The guard mirrors the sibling comparison further down
+        # (phaseformer_l_vs_golden_pct): pct_change returns None when the metric
+        # is missing, and round(None, 4) raises.  Without it a single setting
+        # whose test metrics are absent takes down the whole section 4.2 table
+        # instead of rendering that one cell as uncomputable.
         entry["phaseformer_l_vs_fits_pct"] = (
-            round(pct_change(entry.get("l_main_mse"), FITS_MSE[(dataset, horizon)]), 4)
-            if (dataset, horizon) in FITS_MSE else None)
+            None if (dataset, horizon) not in FITS_MSE
+            or entry.get("l_main_mse") is None
+            else round(pct_change(entry.get("l_main_mse"),
+                                  FITS_MSE[(dataset, horizon)]), 4))
         po_mse, po_mae = entry.get("phase_only_mse"), entry.get("phase_only_mae")
         if po_mse is None or entry.get("l_main_mse") is None:
             incomplete.append(entry["setting"] + " (missing phase_only or l_main)")

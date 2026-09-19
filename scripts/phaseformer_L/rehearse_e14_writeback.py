@@ -142,15 +142,25 @@ def run_case(name: str, scratch: pathlib.Path, golden: dict, manifest: dict,
     main = list(csv.DictReader((scratch / "main_table.csv").open()))
     variant = list(csv.DictReader((scratch / "variant_table.csv").open()))
     claims = json.loads((scratch / "claims.json").read_text())
-    print(f"    main_table rows={len(main)} variant rows={len(variant)} "
-          f"(total {len(main) + len(variant)})")
+
+    # The shipped layout is: main_table.csv = one row per Golden setting (28),
+    # of which the Traffic ones carry is_traffic_appendix=True (4) -- that flag,
+    # not a separate file, is what separates the 24 main settings from the
+    # 4-setting appendix; variant_table.csv is the per-arm summary (6 arms).
+    # An earlier version of this rehearsal asserted "main 24 + variant 4" and
+    # reported a false failure against a correct builder.
+    appendix = [r for r in main if str(r.get("is_traffic_appendix")).strip() == "True"]
+    core = len(main) - len(appendix)
+    print(f"    main_table rows={len(main)} (core {core} + appendix {len(appendix)}), "
+          f"variant_table rows={len(variant)}")
 
     failures = 0
-    if len(main) != 24 or len(variant) != 4:
-        print(f"    FAIL: expected the 24+4 structure, got {len(main)}+{len(variant)}")
+    if len(main) != 28 or core != 24 or len(appendix) != 4:
+        print(f"    FAIL: expected 28 rows = 24 core + 4 appendix, got "
+              f"{len(main)} = {core} + {len(appendix)}")
         failures += 1
     else:
-        print("    OK: 24+4 structure holds")
+        print("    OK: the 24+4 structure holds (via is_traffic_appendix)")
 
     # Regression check for the provenance column, which was emitted empty once.
     blank_prov = [r.get("setting") for r in main
@@ -160,15 +170,31 @@ def run_case(name: str, scratch: pathlib.Path, golden: dict, manifest: dict,
     if blank_prov:
         failures += 1
 
-    for key in ("claim_A_either_metric", "claim_B", "claim_C_stable_beyond_golden",
-                "claim_C_double_metric_improvement", "claim_D"):
+    # claims.json carries A-D plus the two must-answer blocks; the flattened
+    # verdicts are emitted on stdout as a single {"event": "finished", ...} line.
+    for key in ("A", "B", "C", "D", "must_answer_a", "must_answer_b"):
         present = key in claims
-        print(f"    claims.{key}: {claims.get(key)!r}"
+        print(f"    claims.json[{key!r}] present: {present}"
               f"{'' if present else '   <-- MISSING'}")
         if not present:
             failures += 1
-    print(f"    must_answer_a reaches_fits_count={claims.get('must_answer_a_reaches_fits')}")
-    print(f"    must_answer_b etth1_ettm1_all_s0={claims.get('must_answer_b_etth1_ettm1_all_s0')}")
+    verdicts = {}
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("{") and '"event": "finished"' in line:
+            try:
+                verdicts = json.loads(line)
+            except Exception:
+                pass
+    for key in ("claim_A_either_metric", "claim_B", "claim_C_stable_beyond_golden",
+                "claim_C_double_metric_improvement", "claim_D",
+                "must_answer_a_reaches_fits", "must_answer_b_etth1_ettm1_all_s0"):
+        present = key in verdicts
+        print(f"    stdout.{key}: {verdicts.get(key)!r}"
+              f"{'' if present else '   <-- MISSING'}")
+        if not present:
+            failures += 1
+    print(f"    claims.A verdict_either_metric={claims.get('A', {}).get('verdict_either_metric')!r}")
     return failures
 
 
