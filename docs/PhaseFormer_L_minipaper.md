@@ -524,15 +524,62 @@ FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现�
 
 ### 4.4 训练头的解剖（PhaseFormer-L 与低秩探针，3 seed）
 
-| Dataset | H | 主模式输入组 / 解释率 | 主模式输出组 / 解释率 | 修正能量份额 | 跨 seed `leading4` 重叠 | 稳定语义判定 |
-|---|---:|---|---|---:|---:|---|
-| （待填） | | | | | | |
+| 模型 | Dataset | H | 主模式输入组 / 解释率 | 主模式输出组 / 解释率 | 修正能量份额 | 跨 seed `leading4` 重叠 | 稳定语义判定 |
+|---|---|---:|---|---|---:|---:|---|
+| PhaseFormer-L | ETTh2 | 96 |  |  |  |  |  |
+| PhaseFormer-L | ETTh2 | 720 |  |  |  |  |  |
+| PhaseFormer-L | ETTm2 | 96 |  |  |  |  |  |
+| PhaseFormer-L | ETTm2 | 192 |  |  |  |  |  |
+| PhaseFormer-L | Weather | 96 |  |  |  |  |  |
+| PhaseFormer-L | Weather | 192 |  |  |  |  |  |
+| PhaseFormer-L | Electricity | 336 |  |  |  |  |  |
+| L-q1/4 | ETTh2 | 96 |  |  |  |  |  |
+| L-q1/4 | ETTh2 | 720 |  |  |  |  |  |
+| L-q1/4 | ETTm2 | 96 |  |  |  |  |  |
+| L-q1/4 | ETTm2 | 192 |  |  |  |  |  |
+| L-q1/4 | Weather | 96 |  |  |  |  |  |
+| L-q1/4 | Weather | 192 |  |  |  |  |  |
+| L-q1/4 | Electricity | 336 |  |  |  |  |  |
+| L-q1/8 | ETTh2 | 96 |  |  |  |  |  |
+| L-q1/8 | ETTh2 | 720 |  |  |  |  |  |
+| L-q1/8 | ETTm2 | 96 |  |  |  |  |  |
+| L-q1/8 | ETTm2 | 192 |  |  |  |  |  |
+| L-q1/8 | Weather | 96 |  |  |  |  |  |
+| L-q1/8 | Weather | 192 |  |  |  |  |  |
+| L-q1/8 | Electricity | 336 |  |  |  |  |  |
+
+> **本表的行与口径（E16，2026-09-19 登记）**：行 = 3 个模型 × 7 个 test-selected setting
+> （ETTh2-96/720、ETTm2-96/192、Weather-96/192、Electricity-336）= **21 行**，每行 3 seed 聚合；
+> 7 个 setting 由 test-set selection 得到，**不是盲测样本**，逐行披露。
+> 全部解剖与干预**只用 validation 划分**（`evaluation_split=val`、`test_split_read=false`），
+> 与 §4.2 的 test 增益列不同源。稠密 `PhaseFormer-L` 头的有效映射即其 `W`（H×720）；
+> 低秩探针为 `W_dec·W_enc`。跨 seed `leading4` 重叠按 4 维主子空间的两两重叠计。
 
 干预表（每 cell 10 臂；同时报告支路自身与融合误差）：
 
 | Dataset | H | q/r | Semantic-only Δfused | Semantic-drop Δfused | 随机 95% 区间 | PCA-drop | **随机 RRR 子空间 drop**（新增对照） | 支路自身 Δ | 融合 Δ |
 |---|---:|---|---:|---:|---|---:|---:|---:|---:|
-| （待填） | | | | | | | | | |
+| ETTh2 | 96 | dense（r=H） |  |  |  |  |  |  |  |
+| ETTh2 | 720 | dense（r=H） |  |  |  |  |  |  |  |
+| ETTm2 | 96 | dense（r=H） |  |  |  |  |  |  |  |
+| ETTm2 | 192 | dense（r=H） |  |  |  |  |  |  |  |
+| Weather | 96 | dense（r=H） |  |  |  |  |  |  |  |
+| Weather | 192 | dense（r=H） |  |  |  |  |  |  |  |
+| Electricity | 336 | dense（r=H） |  |  |  |  |  |  |  |
+| ETTh2 | 96 | q=1/4（r=24） |  |  |  |  |  |  |  |
+| ETTh2 | 720 | q=1/4（r=180） |  |  |  |  |  |  |  |
+| ETTm2 | 96 | q=1/4（r=24） |  |  |  |  |  |  |  |
+| ETTm2 | 192 | q=1/4（r=48） |  |  |  |  |  |  |  |
+| Weather | 96 | q=1/4（r=24） |  |  |  |  |  |  |  |
+| Weather | 192 | q=1/4（r=48） |  |  |  |  |  |  |  |
+| Electricity | 336 | q=1/4（r=84） |  |  |  |  |  |  |  |
+| ETTh2 | 96 | q=1/8（r=12） |  |  |  |  |  |  |  |
+| ETTh2 | 720 | q=1/8（r=90） |  |  |  |  |  |  |  |
+| ETTm2 | 96 | q=1/8（r=12） |  |  |  |  |  |  |  |
+| ETTm2 | 192 | q=1/8（r=24） |  |  |  |  |  |  |  |
+| Weather | 96 | q=1/8（r=12） |  |  |  |  |  |  |  |
+| Weather | 192 | q=1/8（r=24） |  |  |  |  |  |  |  |
+| Electricity | 336 | q=1/8（r=42） |  |  |  |  |  |  |  |
 
 新增"随机 RRR 子空间"对照用于区分"语义有效"与"任意同数量主方向有效"（既有结果中 57/57 单元
 Semantic-drop ≡ PCA-drop，此项此前缺失）。
@@ -541,20 +588,48 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
 
 | Dataset | H | direct | 冻结独立-RRR 方向 1 | 冻结条件-RRR 方向 1 | PhaseFormer-L（联合） | H1：cond 距离 < indep 距离（seed 数） |
 |---|---:|---|---|---|---|---|
-| （待填） | | | | | | |
+| ETTh2 | 96 |  |  |  |  |  |
+| ETTh2 | 720 |  |  |  |  |  |
+| ETTm2 | 96 |  |  |  |  |  |
+| ETTm2 | 192 |  |  |  |  |  |
+| Weather | 96 |  |  |  |  |  |
+| Weather | 192 |  |  |  |  |  |
+| Electricity | 336 |  |  |  |  |  |
 
 预测：冻结独立方向退化；冻结**条件性**方向应明显好于独立方向（此对照此前未做，是区分"冻结本身有害"与
 "独立目标错位"的关键）；联合训练最好。
+
+**本表的行与口径（E17，2026-09-19 登记，含一条重要前置发现）**：
+
+- 行 = 7 个 test-selected setting × 3 seed（每格三 seed 聚合）；7 个 setting 由 test-set selection 得到，
+  不是盲测样本。
+- **`direct` 与 `PhaseFormer-L（联合）` 在本实现下是同一配置**：PhaseFormer-L 的修正器就是与主干
+  联合训练、无瓶颈约束的头。两列数值相同是**构造使然**，不是两次独立实验——表注必须写明。
+- 冻结臂的投影器由各 setting 的 **train split** 单独计算并冻结；投影发生在 `x_last` 中心化之后、
+  线性层之前（沿用 V1/V2 的 `set_projection_basis` 机制）。
+- **前置发现（E17 投影器阶段，2026-09-19）**：`D_cond = y − y_φ` 与 `D_ind = y − x_last` 的**首方向
+  在 6/7 个 setting 上几乎相同**（`│cos│ ≥ 0.9991`：ETTh2-96 0.99962、ETTh2-720 0.99997、
+  ETTm2-96 0.99909、ETTm2-192 0.99993、Weather-96 0.99938、Weather-192 0.99981），
+  只有 **Electricity-336 为 0.0066（近正交）**。
+  因此"冻结独立"与"冻结条件"两条臂在那 6 个 setting 上**按构造等价**（差异仅为浮点级投影器差别），
+  **本对照的真实检验力集中在 Electricity-336 一格**。这条必须写进表注，否则该表的 7 行会被误读为
+  7 次独立检验。
+- 该发现本身**支持命题 2**：首方向是**数据的性质**，不是**目标定义的产物**；只有在 `λ_1/Σλ` 最低
+  （Electricity-336 = 0.662，7 个 setting 中最低）且 `pred_dims_90 = 4` 的 setting 上，目标定义才足以改变首方向。
+- 已核对的独立证据：独立路线对 E8 已发布的 6 个投影器复现 `│cos│ = 1.0`（浮点精度内完全一致）。
+- H1 列沿用既有登记（`PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 表 5，72 行），
+  判定口径为"**seed 内多数 rank 支持**"；该证据**不含 Electricity-336**，该格记 `evidence_missing`，
+  不得推断。
 
 ### 4.6 按能量 vs 按任务：负对照汇总
 
 | 操作 | 作用对象 | 口径 | 结果（既有，test-exposed） | 本文补做 |
 |---|---|---|---|---|
-| 输入平滑（boxcar / causal EMA，各 5 档） | 支路输入 | 7 setting | 14/14 组合无一改善，越平滑越差 | 在 PhaseFormer-L 上复测 2 档（见下注） |
+| 输入平滑（boxcar / causal EMA，各 5 档） | 支路输入 | 7 setting | 14/14 组合无一改善，越平滑越差 | 在 PhaseFormer-L 上复测 2 档（见下注）：**42 runs** = 7 setting × 3 seed × 2 档 |
 | 结构化坐标（周期低秩、共享基、水平/形状、近期周期、可分离） | 支路参数化 | 4 setting | 5/5 双指标退化 1.6%–3.0%；同参数量时间轴对照仅 −0.30%/−0.52% | — |
-| SVD 截断 vs 秩约束训练 | 支路权重 | Electricity-336 r=10 | 截断 +29%，训练 +0.7% | 全 28 setting |
+| SVD 截断 vs 秩约束训练 | 支路权重 | Electricity-336 r=10 | 截断 +29%，训练 +0.7% | **全 28 setting**（r=10）。**口径差异须披露**：既有 E11 为 **test** 口径、单 seed、checkpoint 取自 `rank_sweep_2_stage1`；本表补做部分为 **validation** 口径、checkpoint 取自 §4.2 的 `l_main`/`l_q1_4`/`l_q1_8`——两者只有截断代数与三段式比较结构相同 |
 | 联合低秩训练 q=1/32 | 支路容量 | 7 setting | 保留 92.4%–101.9% 可实现价值 | — |
-| **边界消融：`pooled_lowrank` rank∈{1,2}** | 支路容量（网格之外） | 6 setting × 3 seed | 无 | **预注册预期：相对 direct 退化**，幅度上界由 `1−capture(1/2)`（14%–35% / 3%–18% 的支路价值）经 `g²` 折算；用于量化残项 ε，不影响主张 |
+| **边界消融：`pooled_lowrank` rank∈{1,2}** | 支路容量（网格之外） | 6 setting × 3 seed | 无 | **预注册预期：相对 direct 退化**，幅度上界由 `1−capture(1/2)`（14%–35% / 3%–18% 的支路价值）经 `g²` 折算；用于量化残项 ε，不影响主张；**36 runs** = 6 setting × 3 seed × rank∈{1,2}（**绝对**秩，非 `H/4`、`H/8` 的相对秩） |
 
 > **§4.6 行 1 的「2 档」口径（2026-09-19 更正）**：先导实验的「两个算子」在 PhaseFormer-L 上**不可能都复现**——
 > `smooth_ratio` 的算子取决于头：PhaseFormer-L 用的稠密 `shared` 头把它实现为与 **causal EMA** 的混合
