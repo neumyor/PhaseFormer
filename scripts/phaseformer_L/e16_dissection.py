@@ -600,16 +600,26 @@ def build_cell_plan(args) -> list[dict]:
                 "assumes."
             )
     wanted_seeds = parse_list(args.seeds, int)
-    datasets = (
-        set(parse_list(args.datasets))
-        if args.datasets
-        else {dataset for dataset, _ in TEST_SELECTED_SETTINGS}
-    )
-    horizons = (
-        set(parse_list(args.horizons, int))
-        if args.horizons
-        else {horizon for _, horizon in TEST_SELECTED_SETTINGS}
-    )
+    # The scope is a SET OF PAIRS, not a dataset x horizon cross product.  The
+    # seven test-selected settings are irregular (ETTh2 has 96 and 720 but not
+    # 192/336; Electricity only has 336), so taking the product silently widens
+    # 7 settings to 16 and pulls in cells outside the registered scope.  Any
+    # filter narrows the pair list; it never expands it.
+    wanted_datasets = (set(parse_list(args.datasets)) if args.datasets else None)
+    wanted_horizons = (set(parse_list(args.horizons, int)) if args.horizons else None)
+    settings = [
+        (dataset, horizon)
+        for dataset, horizon in TEST_SELECTED_SETTINGS
+        if (wanted_datasets is None or dataset in wanted_datasets)
+        and (wanted_horizons is None or horizon in wanted_horizons)
+    ]
+    if not settings:
+        raise SystemExit(
+            "--datasets/--horizons filtered the seven test-selected settings "
+            "down to nothing; the scope is a list of pairs, so a dataset alone "
+            "does not imply every horizon"
+        )
+    settings_set = set(settings)
     if not wanted_seeds:
         raise SystemExit("--seeds is empty")
 
@@ -619,8 +629,7 @@ def build_cell_plan(args) -> list[dict]:
             cell
             for cell in resolve_explicit_checkpoints(args.checkpoints, wanted_arms)
             if cell["arm"] in wanted_arms
-            and cell["dataset"] in datasets
-            and cell["horizon"] in horizons
+            and (cell["dataset"], cell["horizon"]) in settings_set
             and cell["seed"] in wanted_seeds
         ]
     else:
@@ -637,9 +646,8 @@ def build_cell_plan(args) -> list[dict]:
         }
         missing: list[str] = []
         for arm in wanted_arms:
-            for dataset in sorted(datasets):
-                for horizon in sorted(horizons):
-                    for seed in wanted_seeds:
+            for dataset, horizon in settings:
+                for seed in wanted_seeds:
                         entry = manifest_cells.get((arm, dataset, horizon, seed))
                         run_dir = None
                         status = "not_in_manifest"
