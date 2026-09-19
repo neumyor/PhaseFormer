@@ -120,6 +120,61 @@ def declared_flags(script: pathlib.Path) -> dict:
     return out
 
 
+#: argparse actions that never consume a value.
+NO_VALUE_ACTIONS = ("store_true", "store_false", "store_const", "count",
+                    "help", "version", "append_const")
+
+
+def value_arity(script: pathlib.Path) -> dict:
+    """flag -> (min_values, max_values), None meaning unbounded.
+
+    Only the *decidable* cases are reported, so this never guesses: a flag whose
+    action is one of NO_VALUE_ACTIONS takes none, a value-taking flag takes at
+    least one unless it declares ``nargs="?"`` or a numeric/``*``/``+`` nargs, and
+    anything unclassifiable is left out entirely.
+    """
+    out: dict = {}
+    if not script.is_file():
+        return out
+    tree = ast.parse(script.read_text())
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_argument"):
+            continue
+        flags = [arg.value for arg in node.args
+                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                 and arg.value.startswith("--")]
+        if not flags:
+            continue
+        action = None
+        nargs = None
+        for kw in node.keywords:
+            if kw.arg == "action" and isinstance(kw.value, ast.Constant):
+                action = kw.value.value
+            elif kw.arg == "nargs":
+                nargs = getattr(kw.value, "value", "<computed>")
+        if action in NO_VALUE_ACTIONS:
+            bounds = (0, 0)
+        elif nargs == "?":
+            bounds = (0, 1)
+        elif nargs in ("*", "+"):
+            bounds = (0, None)
+        elif isinstance(nargs, int):
+            bounds = (nargs, nargs)
+        elif nargs is None and action not in ("store_const",):
+            # argparse's DEFAULT action is "store", which consumes exactly one
+            # value; so a flag that is not a no-value action and does not declare
+            # nargs takes one.  That is what makes "a value-taking flag left
+            # without its value" decidable instead of a guess.
+            bounds = (1, 1)
+        else:
+            bounds = None          # unclassifiable -> stay silent
+        if bounds is not None:
+            for flag in flags:
+                out[flag] = bounds
+    return out
+
+
 def strip_quotes(token: str) -> str:
     return token.strip().strip("'\"")
 
@@ -164,6 +219,30 @@ def main() -> int:
                     f"reject the extras. Use a comma-separated single value."
                 )
             index = look
+
+        arity = value_arity(script)
+        index2 = 0
+        while index2 < len(tokens):
+            token = tokens[index2]
+            if not token.startswith("--"):
+                index2 += 1
+                continue
+            values = []
+            look = index2 + 1
+            while look < len(tokens) and not tokens[look].startswith("--"):
+                values.append(tokens[look])
+                look += 1
+            bounds = arity.get(token)
+            if bounds:
+                low, high = bounds
+                if len(values) < low:
+                    problems.append(
+                        f"{rel}: {token} takes at least {low} value(s) but got none")
+                elif high is not None and len(values) > high:
+                    problems.append(
+                        f"{rel}: {token} takes at most {high} value(s) but got "
+                        f"{len(values)} ({values})")
+            index2 = look
 
         missing = sorted(set(required_flags(script)) - present)
         if missing:

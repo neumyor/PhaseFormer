@@ -1145,3 +1145,22 @@ input_group_label / input_group_explanation / output_group_explanation / correct
   删掉 E14 读取器的 `--manifest` → `PROBLEM`（都给出 argparse 会拒的说明）；
 * 该检查自身在预检里跑，故它一旦误报会阻止整链启动 ⇒ 只收"**保证会失败**"的规则，
   取值/choices 这类需要推断 Python 语义的仍留在人工（见 §21.1）。
+
+**同轮再加上"每个 flag 自己的取值个数"（双向）**：`declared_flags` 原先只记 `nargs` 的有无，
+故判据只能"≥2 个裸值才报"，挡不住 `--verify yes`（store_true 收到值）与 `--manifest --output-root`
+（取值 flag 漏值）这两类**同样保证运行期失败**的写法。现在按 argparse 语义分类：
+
+| 声明形态 | 允许取值数 | 依据 |
+|---|---|---|
+| `action` ∈ {store_true, store_false, store_const, count, help, version, append_const} | **0** | 这些 action 不消耗值 |
+| `nargs="?"` | 0–1 | argparse 定义 |
+| `nargs="*"` / `"+"` | 0–∞ | argparse 定义 |
+| `nargs=<int>` | 恰好 N | argparse 定义 |
+| **其余（即 argparse 的默认 action `store`）** | **恰好 1** | **默认 action 是 `store`，它消耗一个值**——这条正是让"漏值"可判定的依据，而不是猜 |
+| 无法分类（如 `nargs=<计算式>`） | — | **保持沉默**，不猜 |
+
+**实测**：真流水线 `flags inspected: 76` 且 **OK**（即每个 flag 的取值个数都在其声明区间内）；
+三类对照（改副本）分别给出 `--verify takes at most 0 value(s) but got 1`、
+`--manifest takes at least 1 value(s) but got none`、以及未改动 → OK。
+**因此该检查现在覆盖四个可判定维度**：flag 是否存在、多值元数（≥2 裸值且未声明 `nargs`）、
+**必填 flag 是否给出**、**每个 flag 的取值个数（双向）**。仍**不**覆盖取值合法性（choices）——理由见 §21.1。
