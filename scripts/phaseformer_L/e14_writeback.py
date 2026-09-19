@@ -95,8 +95,11 @@ def parse_args() -> argparse.Namespace:
 def read_golden(path: Path) -> dict:
     """Parse the Golden table; values are 3-decimal MSE/MAE."""
     golden = {}
+    # The dataset token must admit digits: only Weather/Electricity/Traffic are
+    # pure letters, while ETTh1/ETTh2/ETTm1/ETTm2 all carry one.  A letters-only
+    # class silently matched 12 of the 28 rows.
     row_re = re.compile(
-        r"^\|\s*([A-Za-z]+)\s*\|\s*(\d+)\s*\|\s*([0-9.]+)\s*\|\s*([0-9.]+)\s*\|"
+        r"^\|\s*([A-Za-z0-9]+)\s*\|\s*(\d+)\s*\|\s*([0-9.]+)\s*\|\s*([0-9.]+)\s*\|"
     )
     for line in path.read_text(encoding="utf-8").splitlines():
         match = row_re.match(line.strip())
