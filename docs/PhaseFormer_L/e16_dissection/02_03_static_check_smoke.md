@@ -197,3 +197,59 @@ E16 具备进入正式运行（63 cell）的条件；因 8 卡正被 E14 占用�
 3. `l_main`（稠密头）与低秩探针的解剖列是否分开标注（`head_kind`）；
 4. `mapped_encoder_bias_absmax` 是否随 cell 记录（低秩头注册代数里 `W_dec @ encoder_bias`
    重复计入的规模，用于解释 2.97e-05 的代数残差）。
+
+---
+
+## 7. §4.4 回填兼容性核对：产物 schema 已捕获（2026-09-19）
+
+§4.4 的两张表要能被**机械回填**，前提是 E16 的产物列覆盖 minipaper 要求的每一项。
+本轮用一个 2-cell 的 schema 冒烟（`--datasets ETTh2 --horizons 96 --seeds 2021 --arms l_main,l_q1_8
+--max-batches 2`，CPU，约 13.6 min）把两张表的**真实列名**取了出来并逐项对照。
+
+### 7.1 `intervention_table.csv`（98 列）
+
+| minipaper §4.4 干预表要求 | E16 对应列 | 核对 |
+|---|---|---|
+| `q/r` | `q_or_r`、`lowrank_rank`、`rank_dim` | ✓ |
+| 10 臂 + 新增 `RandomRRR-drop` | `intervention_arm`（含 `RandomRRR-drop`） | ✓ |
+| `Semantic-only Δfused` | `intervention_arm=="Semantic-only"` 行的 `delta_fused_mse_vs_checkpoint` | ✓ |
+| `Semantic-drop Δfused` | 同上（`Semantic-drop` 行） | ✓ |
+| `随机 95% 区间` | `random_low_fused_mse` / `random_high_fused_mse` | ✓ |
+| `PCA-drop` | `intervention_arm=="PCA-drop"` 行 | ✓ |
+| **`随机 RRR 子空间 drop`（新增对照）** | `intervention_arm=="RandomRRR-drop"` + 独立零分布带：`random_rrr_mean/low/high_fused_mse`、`random_rrr_fused_mse_percentile_of_arm`、`worse_than_random_rrr_95pct_fused_mse`、`reference_matches_random_rrr_band` | ✓ |
+| **支路自身 Δ** | `delta_branch_mse_vs_checkpoint`、`delta_branch_mae_vs_checkpoint` | ✓ |
+| **融合 Δ** | `delta_fused_mse_vs_checkpoint`、`delta_fused_mae_vs_checkpoint` | ✓ |
+| 同维对照是否真同维 | `semantic_pca_dimension_match`、`semantic8_pca_dimension_match`、`random_rrr_dimension_match`、`same_dimension_controls_available` | ✓（显式标注而非隐藏） |
+
+另有两组审计列：不变量 1（`untouched_arm_reproduces_model_fused`、`..._gap_vs_model_fused_relative`、
+`..._fused_max_abs_vs_model`）与不变量 2（`untouched_arm_reproduces_run_metric`、
+`run_metric_check_comparable`、`run_metric_check_note`、`validation_windows_processed`），
+以及 `head_kind`、`test_split_read`。
+
+### 7.2 `dissection_table.csv`（48 列）
+
+| minipaper §4.4 解剖表要求 | E16 对应列 | 核对 |
+|---|---|---|
+| 主模式输入组 / 解释率 | `leading_input_group`、`leading_input_group_label`、`leading_input_group_explanation` | ✓ |
+| 主模式输出组 / 解释率 | `leading_output_group`、`leading_output_group_label`、`leading_output_group_explanation` | ✓ |
+| 修正能量份额 | `leading_correction_energy_share`（另存绝对值 `leading_correction_energy`） | ✓ |
+| 跨 seed `leading4` 重叠 | `cross_seed_leading4_input_overlap`、`cross_seed_leading4_output_overlap`、`cross_seed_pairs` | ✓ |
+| **稳定语义判定** | `stable_semantics_verdict` + 6 条判据列 | ✓ |
+
+**6 条判据**：`criterion_1_group_stable`、`criterion_2_input_explanation_ge_0p5`、
+`criterion_3_output_explanation_ge_0p8`、`criterion_4_drop_beyond_random_95pct`、
+`criterion_5_only_within_0p5pct`、**`criterion_6_drop_beyond_random_rrr_95pct`（本轮新增对照的判据）**。
+
+即新增的"随机 RRR 子空间"对照不只产生一张表，而是**接进了稳定语义判定的第 6 条判据**——
+正是 §4.4 表格注释所说"用于区分'语义有效'与'任意同数量主方向有效'"的那个区分。
+
+### 7.3 `cross_seed_alignment.csv` 在单 seed 冒烟下缺失（符合预期）
+
+该文件由跨 seed 配对写出，1 个 seed 时无配对，故不存在。全量运行（3 seed）应产出；
+列为 §4.6 复核项之一（见 §6.3）。
+
+### 7.4 结论
+
+§4.4 的两张表**可以被机械回填**，无需人工映射；每一项 minipaper 要求的列都有对应产物列，
+且新增对照既出现在干预表也进入了判定判据。schema 冒烟同时再次确认 `algebra_failures: 0`
+与两个头的 `algebra=ok`（dense `rel_gap=2.15e-10`、低秩 `2.97e-05`）。
