@@ -115,9 +115,9 @@ def compare_number(paper_cell: str, artifact_value, dp: int) -> tuple:
             f"paper={got} artifact={artifact_value} rounded={want} dp={dp}")
 
 
-def check_4_3(report: Report, root: pathlib.Path) -> None:
+def check_4_3(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> None:
     path = root / E15 / "dimension_table.csv"
-    block = section_text(MINIPAPER.read_text(encoding="utf-8"), "### 4.3", "### 4.4")
+    block = section_text(minipaper.read_text(encoding="utf-8"), "### 4.3", "### 4.4")
     header, paper_rows = parse_markdown_table(block, "λ_1/Σλ")
     if header is None:
         report.add("§4.3", "-", "-", "MISMATCH", "could not find the 4.3 table header")
@@ -172,11 +172,14 @@ def main() -> int:
     parser.add_argument("--root", default=str(REPO),
                         help="root holding research_runs/")
     parser.add_argument("--json", default="", help="write the report as JSON here")
+    parser.add_argument("--minipaper", default=str(MINIPAPER),
+                        help="override the paper path (for self-tests)")
     args = parser.parse_args()
     root = pathlib.Path(args.root)
+    minipaper = pathlib.Path(args.minipaper)
 
     report = Report()
-    check_4_3(report, root)
+    check_4_3(report, root, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
