@@ -740,8 +740,10 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
 3. 既有 checkpoint 解剖中只有主模式可命名；第 2 个及以后模式跨 seed 不稳定，报告为"多组等价信息通路"。
    Weather 两个 setting 的主模式指向曲率/慢趋势而非电平，是命题的边界而非支持。
 4. "语义有效"与"任意同数量主方向有效"尚未分开（既有 57/57 单元 Semantic-drop ≡ PCA-drop）；§4.4 新增的
-   随机 RRR 子空间对照是解决此项的必要实验，需在 `evaluate_lowrank_semantic_interventions.py` 增加一个臂
-   （分析侧代码，不涉及模型）。
+   随机 RRR 子空间对照是解决此项的必要实验。**该臂已实现**（`evaluate_lowrank_semantic_interventions.py`
+   的 `random_rrr_basis` + `RandomRRR-drop`，分析侧代码、不涉及模型；`e16_dissection.build_arm_plan` 每格
+   都追加该臂），**其结论在 §4.4 报告后回填到本限制条目**——在 §4.4 数字到位前，此处仍按"尚未分开"陈述，
+   不得先行断言该对照已分开或未分开。
 5. 低秩压缩是分析工具与效率选项，不是精度贡献；既有三 seed 结果无普适增益，深档 q=1/16、1/32 有 −0.3%～−0.8%
    的代价，本文明写。
 6. **诊断列 `s` 不是模型的一部分**（D-5）：PhaseFormer-L 恒定启用修正器，`s` 只是 §4.7 的一个事前
