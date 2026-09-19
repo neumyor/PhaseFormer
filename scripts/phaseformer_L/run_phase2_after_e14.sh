@@ -113,10 +113,17 @@ run_step 3 "E14 writeback: §4.2 table + claims A-D + audit" \
     --stats "$E19_ROOT/level_statistics.csv" \
     --golden docs/PhaseFormer_gold_standard.md --output-root "$E14_ROOT"
 
+# E16's own gate is its --dry-run: it resolves every cell's checkpoint and
+# refuses when one is missing, and `--verify-checkpoint-heads` additionally
+# proves each cell's head kind from the checkpoint keys in seconds (this is the
+# check that would have caught the per-cell head bug before any forward pass).
 run_step 4 "E16: §4.4 dissection + interventions (63 cells)" \
-  "$PY" scripts/phaseformer_L/e16_dissection.py \
-    --e14-root "$E14_ROOT" --output-root "$E16_ROOT" \
-    --gpus 0 --mem-budget-mb 2048
+  bash -c "cd '$REPO' && \
+    '$PY' scripts/phaseformer_L/e16_dissection.py --dry-run --verify-checkpoint-heads \
+      --e14-root '$E14_ROOT' --output-root '$E16_ROOT' \
+    && '$PY' scripts/phaseformer_L/e16_dissection.py \
+      --e14-root '$E14_ROOT' --output-root '$E16_ROOT' \
+      --gpus 0 --mem-budget-mb 2048"
 
 run_step 5 "E17: §4.5 four-arm training (24 runs) + assemble" \
   bash -c "cd '$REPO' && '$PY' scripts/phaseformer_L/e17_conditional.py --stage a --verify \
