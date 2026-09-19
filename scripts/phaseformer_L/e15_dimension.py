@@ -1327,7 +1327,7 @@ def main(argv=None) -> int:
                     "b1_best_template": template_name,
                     "b1_best_template_abs_cos": template_cos,
                     "b1_best_template_fine_grid": fine_name,
-                    "b1_best_template_abs_cos_fine_grid": fine_cos,
+                    "b1_best_template_abs_cos_fine_grid": round(float(fine_cos_exact), 6),
                     "b1_best_any_template": {
                         "const": leading_row["cos_const"],
                         "ramp": leading_row["cos_ramp"],
