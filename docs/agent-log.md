@@ -3044,3 +3044,100 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   修复为对**结果**封顶并保留单位 ρ 的显式饱和分支，两条路径各有独立测试（首次修复曾误删单位 ρ 分支，被测试立刻抓回）。
 - 边界：**只读训练集**（`run.yaml` 的 `reads_test: false`）、未改任何模型代码、未读 test。
 - 待办：§4.7 的两列 ρ 与诊断准确率需 E14 的单次 test 读取结果，届时由 `e19_predictive_power.py` 回填。
+
+## 2026-09-20 — E14 阶段 A：492 格矩阵运行、复用污染修复与滚动审计
+
+- 实验：E14（minipaper §4.2 主表；六阶段文档见 `docs/PhaseFormer_L/e14_main/`）。以
+  `~/niuyiming/run_e14_main.sh` 于 2026-09-19 19:10 提交，8 卡并行；矩阵 **492 格 = 411 新训 + 81 复用**
+  （经 manifest 核验，见下方 `check_section42_coverage.py`）。
+- 运行状态（2026-09-20 04:42）：**123/411 完成，0 失败 0 重试**；在飞 run 的写入时间即查询当秒（无卡死）；
+  已走完 Traffic（60）→ Electricity（60）→ 进入 Weather 阶段。
+- **复用污染事件（本日最重要的修复）**：给 §4.2 补门值列时发现 `ETTh2-96` seed-2023 门值为 0.000114
+  （另两 seed ~0.49）。追查确认 `..._20260914_v3` 批次含**配置损坏**的 run（`gate_init=2023` 把 SEED 写进门
+  初始化、`learning_rate=0.5` 为审计网格 500 倍、val_mse 0.294 vs 正常 0.204）。根因：复用解析的
+  `_protocol_ok` 只校验结构性字段、**不校验冻结超参合法性**。修复：新增 `gate_init ∈ (0,1)` 与
+  `learning_rate ∈ (0,1e-2]` 两条判据；替换运行中的 manifest（原文件归档为
+  `stage_a_manifest.prelaunch_contaminated.json`）。影响面仅 3 个复用格；**E3 权威审计对 `lr0.5` 批次的
+  引用数为 0**，故既有数字从未被污染；修复后三格恢复到与 E3 哈希逐字相同的 run。
+- 复用歧义审计（`e14_reuse_audit.py`）：81 格中 **45 格存在多个合法候选，但 0 格有分歧**
+  （候选在 `gate_init`/`learning_rate`/`val_mse` 上完全一致，`val_mse` 离散度 **0.0**），另 **6 个非法候选**
+  被新判据拒绝 → 可把"取了第一个匹配"升级为**已验证的无关性结论**。
+- 门值交叉验证：7/7 test-selected setting 上，由 checkpoint 直接读出的
+  `sigmoid(weak_period_residual_gate)` 与模型 `learned_residual_gate()` 最差差 **1.98e-08**（同一 checkpoint）。
+- 实测耗时（`metrics.csv:elapsed_sec` 中位）：Traffic h96/192/336/720 = **4096 / 2972 / 2585 / 2640 s**；
+  Electricity h96/192/336/720 = **1481 / 848 / 1589 / 1285 s**。据此**修正两处先前估值**：`COST_HINT`
+  整体偏高 30–40%（**早停主导**：Traffic-96 反而最慢，跑满 26–30 epoch）；且 Electricity h192 比 h336/h720
+  都便宜，故用单一均值代表整个数据集是偏高的。
+- 剩余工期（实测折算）：余 289 run ≈ **15.3 GPU·h → 1.9 h → ETA ≈ 06:35**（区间 06:30–08:10，见排期 §9.1.3）。
+- 边界：阶段 A **不读 test**（读取留待阶段 B）；未改任何模型代码；日志的 `done` 事件**无时间戳**，
+  故完成率只能从 `metrics.csv` 的 mtime 取（该测量方法本身也被记为一条工程注意）。
+
+## 2026-09-20 — 阶段二流水线：上线前校对挡下三个会「浪费算力」的缺陷
+
+- 新增 `scripts/phaseformer_L/run_phase2_after_e14.sh`（7 步：E14 单次 test 读取 → §4.7 ρ → §4.2 回填 →
+  E16 → E17 → E18 → 验收审计），带完成守卫（E14 未完成时实测正确拒绝）与逐步退出码；
+  以及 `watch_e14_then_phase2.sh`（E14 干净结束后自动接手；沙箱实测三种门：flag=no+411 不启动、
+  flag=yes+410 不启动、flag=yes+411 启动并记 `PHASE2_OK`；并核实 `E14_MAIN_EXIT` 标记确实由
+  `run_e14_main.sh` 末尾 `echo` 产生——该标记在仓库内**只有读取方、没有写入方**）。
+- **缺陷 ①（跨阶段文件名）**：第 6 步把 `$E14_ROOT/results.with_test.csv` 交给 `e18_writeback.py`，而
+  `e14_read_test.py` 是**就地**填 `results.csv`、从不生产该名（`grep -c with_test` = 0）。后果是第 1–5 步
+  耗时数小时之后才抛 `FileNotFoundError`。根因是同一路径在第 2/3/6 步各写一遍、可互相漂移 →
+  改为**单一声明** `E14_TEST_CSV`，并在**最便宜的第 1 步**加快速失败闸门（读 test 是纯推理、几分钟；
+  第 4–6 步要跑 63+24+78 个 run）。四类 fixture 本地与**服务器 gawk** 各测一遍。
+- **缺陷 ②（实参元数）**：第 6 步 `--seeds 2021 2022 2023` 被 argparse 拒绝（`--seeds` 是逗号列表、
+  非 `nargs`），即 `error: unrecognized arguments` —— 会在**165 个 run 之后**才炸。已改为
+  `--seeds 2021,2022,2023`；并新增 `check_pipeline_invocations.py`（核对每个 flag 已声明 +
+  后跟 ≥2 个裸值的 flag 必须声明 `nargs`），正对照：真流水线 66 个 flag → OK；还原修前写法 → 精确报出且 exit 1。
+  这条此前被漏掉的**方法论缺口**是："flag 存在"与"flag 能接收几个值"是两件事。
+- **缺陷 ③（单次 test 读取的 marker）**：用真实 1-epoch checkpoint 冒烟 `read_test_generic.py`（步骤 5/6 的
+  test 读取）时，worker 明明成功（`status: read`、`test_mse 0.19280`、`val_relative_difference 1.5e-05`）
+  而父进程却全记 `worker_failed`、test 列留空。根因：父进程判定成功的条件是
+  `marker.is_file() and code == 0`（`:325`），而 **worker 分支只 `print` 记录、全文件从未写任何 marker**，
+  尽管模块 docstring 承诺"each freshly read cell leaves a per-cell JSON marker"。若不发现，
+  24+78 个 run 训练完后 §4.5/§4.6 的测试数字会**全空而脚本仍 exit 0**。已补 `--marker-file`，
+  并以**负对照**（不传 `basis_file`）验证"校验不过就不读 test"确实生效。
+- 已用真实输入跑过**每一步的门**：`e14_read_test --dry-run`（正确拒绝且 `wrote_outputs: False`）、
+  `e14_params --dry-run`（**175 个真实 checkpoint** 上 `total_mismatches: []`）、`e14_reuse_audit`、
+  E16 `--dry-run --verify-checkpoint-heads`（**63 cell 全为复用**，故门在 E14 未完成时通过是**正确行为**）、
+  E17 `--stage plan --verify`（84 cell / 24 新训）、E18 verify（训练前**应**失败）与行 3 SVD 门。
+- 机制级冒烟（**每个都执行过一遍**）：E14 阶段 B 读路径（隔离式：把真实 run 复制到仓库内临时根，
+  `--cells-file` 限定单格 → `accepted: 1`、`test_mse 0.1474874`，并实测真实根未被写入）；
+  E19 阶段 2（完整 28 setting；半退化输入 → 14 完成、14 跳过而非崩溃）；E18 行 3 评估路径（CPU、限一格）；
+  E16 回填（**用真实生产者产物**，`missing_columns_*: []`）。
+- E14 回填预演**查出并修掉两处真实缺陷**（"局部缺失 → 整表全丢"）：`round(pct_change(...), 4)` 未防 None
+  → `TypeError`（同文件姊妹比较本就有该保护，属不一致）；`variant_rows[0].keys()` 未防空 → `IndexError`
+  （相邻主表写入本就有 `if rows` 保护）。修后正常路径未变（28/28 行仍算出 FITS 差值）。
+- 边界：以上均为**通路验证**，不是科学结论；合成数值不入任何登记结果；临时根与冒烟产物跑完即删。
+
+## 2026-09-20 — 审计/回填基础设施与论文一致性核对
+
+- `check_column_contracts.py`：4 组"消费者↔生产者"列名契约（E14/E16/E17/E18 回填工具）全部 0 缺口；
+  生产者列集**从其自身源码导出**（含 `RESULTS_FIELDS`、f-string 写键模式、下标赋值键）。
+  **检测力已用双向突变正对照校准**；并如实记录一个**已知盲区**：pass-through 列（读自输入、同名写回输出）
+  会被读写集相减减掉，故生产者漏写它时本检查器不报告——已实测确认该盲区行为，并说明兜底是
+  `check_builder_outputs.py` 的空列扫描（**报告型、不中止**）与阶段 5 审校，而非自动失败。
+- `check_section42_coverage.py`：manifest **恰好**覆盖 §4.2 的要求（28 setting = 24 main + 4 Traffic；
+  五主臂各 28×3=84、`a1` 24×3=72、合计 **492**）；复用计数与各自声明范围一致（21/21/21/**18**/0/0，
+  其中 `phase_only` 独缺 Electricity-336）。正对照：删掉 `a1` → 精确报错、exit 1。
+- `audit_phase2_outputs.py`：阶段 5 验收审计（三态：PASS/FAIL/PENDING），判据**从文档转录**（E16 §6.2 表、
+  E18 验收判据等）；已加为流水线**第 7 步**。**12 缺陷正对照全部报出**。
+- `verify_minipaper_fill.py`：回填校验（论文里的数 == 产物里的数），判据写明为"按**显示精度**比较"
+  （比原始浮点会把正确的舍入报成错误——E17 预演曾如此自伤）。现状：§4.3 **168 格已验证通过**；
+  §4.2 主表(280)、§4.4 干预表(210)、§4.4 解剖表(105)、§4.5(49)、§4.6(5)、§4.7(6) **各有经校准的校验器**
+  （每节 4–7 类对照）。另设 `--inventory`（空格数，当前 **485 → 目标 0**），并发现其**盲区**：
+  §4.6 是"替换文字"型回填、其格本就非空，故完成判据必须**两条并用**（inventory=0 且无 MISMATCH）。
+- 论文 ↔ 实现一致性：§4.0 四个冻结门槛全部对上（A 1.0% ↔ `REGRESSION_BOUND_PCT`、
+  B 3/4 ↔ `CLAIM_B_FRACTION 0.75`、D 0.5% ↔ `CLAIM_D_BOUND_PCT`、C 无门槛）、ν*=**57.35** 在
+  `e14_writeback` 与 `e19_predictive_power` **两处独立声明且相同**。修正三处论文侧问题：
+  §4.4 括号里的臂数（原"10 臂"，实为 **10 个登记臂 + 按可用基向量追加 → 11–12 臂**）、
+  §4.3 段末的"**预期图**"预注册残留（改为报告实测值与实际文件名）、以及**四处披露的事前补齐**
+  （§4.4 的 `reference_parity` 只对 6 setting 成立；§4.6 的 E11 口径差异与行 1/5 的规模/预注册文字
+  先行移至表下注，以免回填顶掉；§4.0 主张 C 的**两种定义**并列）。
+- 回填映射（动手前逐表定清，`docs/PhaseFormer_L/audit/minipaper_fill_mapping.md`）：七处表位中
+  **可直接复制 / 需列映射 / 必须组合 / 替换型**各不相同，且发现两处**预填差异需整行替换**
+  （§4.2 的 Traffic `来源/披露` 是产物串的前缀；§4.4 的 dense 行 `q/r` 预填 `dense（r=H）`
+  而产物写 `dense（r=96）`）。收尾清单与工期投影见排期文档 §10、§9；并有一个**已记录但未实施**的
+  排期优化（第 4/5/6 步彼此独立、E16 单进程会让 7 张卡空闲 3–5 h；因需给无人值守链路加并发语义
+  且 E16 无 resume，**决定不做**，改为"先做对再提速"）。
+- 边界：以上检查只覆盖**名字、结构、计数与门禁**，**不判断数值在科学上是否正确**——后者是各实验
+  阶段 5 审校的职责。
