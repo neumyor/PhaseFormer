@@ -649,6 +649,14 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
   不是盲测样本。
 - **`direct` 与 `PhaseFormer-L（联合）` 在本实现下是同一配置**：PhaseFormer-L 的修正器就是与主干
   联合训练、无瓶颈约束的头。两列数值相同是**构造使然**，不是两次独立实验——表注必须写明。
+- **来源与复用（2026-09-20 补；§4.0 要求"所有复用格在表中标注来源"，本节原缺）**：本表四列里**只有两列含新训格**——
+  `冻结条件-RRR 方向 1`（7 setting × 3 seed = **21 格新训**）与 `冻结独立-RRR 方向 1` 的 **Electricity-336**
+  （1 setting × 3 seed = **3 格新训**，因为 E8 未覆盖 Electricity），合计 **24 个新训 run**。
+  其余**全部是复用**：`direct` 与 `PhaseFormer-L（联合）` 复用 **E14 的 `l_main`**（7 setting × 3 seed = 21 格，
+  即 §4.0 登记的 Stage-0 复用格，两者同源故数值相同）；`冻结独立-RRR 方向 1` 的另外 **6 个 setting**
+  复用 **E8 的既有登记**（`research_runs/top2_direction_retention_v1/results.csv` 中 `arm=keep_direction_1` 的行，
+  读取状态 `read`/`reused` 且与 val 复现差在容差内）。**因此这 7 行不是 7 次独立实验**：
+  `direct`/`联合` 两列是复用、`冻结独立` 列 6/7 行是复用、只有 `冻结条件` 列与 Electricity-336 那一格是新数据。
 - **单元格格式（2026-09-20 补，否则填完后无法读）**：四个臂列的每一格是 **`MSE/MAE`**（各 **3 位小数**，
   由产出者 `e17_writeback.py` 的 markdown 写出点固定），两者都是 **test** 指标、**越低越好**；
   `—` 表示该 setting 该臂无可用记录。第 7 列是 **H1 成立的 seed 数**（`N/3`，见本节末条），
