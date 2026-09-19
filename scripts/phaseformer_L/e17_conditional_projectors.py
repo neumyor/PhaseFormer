@@ -440,34 +440,82 @@ def resolve_e14_run_dir(e14_root: Path, dataset: str, horizon: int, seed: int):
     carrying ``weak_residual_projection`` is a frozen-subspace arm and is never
     an E14 ``l_main`` cell (E14 already excludes those), which is what keeps the
     E17 arms trained later from being mistaken for the phase backbone's source.
+
+    **Reused cells do not live under ``e14_root``.**  E14 deliberately does not
+    copy the audited E3-lineage artifacts: it *reuses* them in place, so
+    ``stage_a_manifest.json`` records ``status="reused"`` with
+    ``source.run_dir`` pointing into the E3 root.  All seven settings E17 needs
+    are reused (they are the test-selected seven), so the manifest must be
+    consulted before globbing, otherwise every cell reports "no run" even though
+    the checkpoint the conditional target needs is present and audited.
     """
     from scripts.phaseformer_L import e14_main_matrix as e14
 
+    candidates: list[tuple[Path, str]] = []
+    manifest_path = e14_root / "stage_a_manifest.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError:
+            manifest = {}
+        for cell in manifest.get("cells", []):
+            if (
+                cell.get("arm") != "l_main"
+                or str(cell.get("dataset")) != dataset
+                or int(cell.get("horizon", -1)) != int(horizon)
+                or int(cell.get("seed", -1)) != int(seed)
+            ):
+                continue
+            source = cell.get("source") or {}
+            run_dir = str(source.get("run_dir", "")).strip()
+            if run_dir:
+                candidates.append((ROOT / run_dir, "manifest_reuse"))
+
     matches = []
     runs_dir = e14_root / "runs"
-    if not runs_dir.is_dir():
-        return None, []
-    for config_path in sorted(runs_dir.glob("*/config.json")):
+    if runs_dir.is_dir():
+        for config_path in sorted(runs_dir.glob("*/config.json")):
+            try:
+                config = json.loads(config_path.read_text())
+            except json.JSONDecodeError:
+                continue
+            if (
+                str(config.get("dataset")) == dataset
+                and int(config.get("horizon", -1)) == int(horizon)
+                and int(config.get("seed", -1)) == int(seed)
+                and e14._arm_match(config, "l_main")
+            ):
+                candidates.append((config_path.parent, "e14_run"))
+
+    # Keep only directories that actually exist and implement l_main.
+    matches = []
+    for run_dir, origin in candidates:
+        config_path = run_dir / "config.json"
+        if not config_path.is_file() or not run_dir.is_dir():
+            continue
         try:
             config = json.loads(config_path.read_text())
         except json.JSONDecodeError:
             continue
-        if (
-            str(config.get("dataset")) == dataset
-            and int(config.get("horizon", -1)) == int(horizon)
-            and int(config.get("seed", -1)) == int(seed)
-            and e14._arm_match(config, "l_main")
-        ):
-            matches.append(config_path.parent)
+        if e14._arm_match(config, "l_main"):
+            matches.append((origin, run_dir))
 
-    def sort_key(run_dir: Path):
+    def sort_key(item):
+        origin, run_dir = item
         has_metrics = (run_dir / "metrics.csv").is_file()
-        return (0 if has_metrics else 1, str(run_dir))
+        # A reused manifest cell is the audited artifact E14 actually reports,
+        # so it wins over an incidental duplicate found by globbing.
+        return (
+            0 if origin == "manifest_reuse" else 1,
+            0 if has_metrics else 1,
+            str(run_dir),
+        )
 
     matches.sort(key=sort_key)
-    return (matches[0] if matches else None), [
-        str(path.relative_to(ROOT)) for path in matches
-    ]
+    return (
+        matches[0][1] if matches else None,
+        [str(path.relative_to(ROOT)) for _, path in matches],
+    )
 
 
 def checkpoint_in_run_dir(run_dir: Path):
