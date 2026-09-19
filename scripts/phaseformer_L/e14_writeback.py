@@ -216,9 +216,16 @@ def read_parameters(path: Path) -> dict:
                 share = float(row["residual_share"])
             except (KeyError, TypeError, ValueError):
                 continue
+            gate = str(row.get("gate_value_from_checkpoint", "")).strip()
             entry = cells.setdefault((arm, horizon), {"totals": set(),
                                                       "residuals": set(),
-                                                      "shares": set(), "n": 0})
+                                                      "shares": set(), "n": 0,
+                                                      "gates": set()})
+            if gate:
+                try:
+                    entry["gates"].add(round(float(gate), 6))
+                except ValueError:
+                    pass
             entry["totals"].add(total)
             entry["residuals"].add(residual)
             entry["shares"].add(round(share, 6))
@@ -232,6 +239,8 @@ def read_parameters(path: Path) -> dict:
             "total_params": sorted(entry["totals"])[0],
             "residual_params": sorted(entry["residuals"])[0],
             "residual_share": sorted(entry["shares"])[0],
+            "gate_from_checkpoint": (sorted(entry["gates"])[0]
+                                     if entry["gates"] else None),
             "constant_across_seeds": len(entry["totals"]) == 1
             and len(entry["residuals"]) == 1,
         }
@@ -305,6 +314,21 @@ def main() -> None:
             entry[f"{arm}_n"] = n
             entry[f"{arm}_gate_mean"] = (
                 round(float(np.mean(bucket["gate"])), 6) if bucket["gate"] else None)
+
+        # §4.2's gate column and §4.7's rho versus g.  results.csv is preferred
+        # (it comes from the single test read), but the E3-lineage metrics.csv
+        # records no gate at all, so for those reused cells the value is read off
+        # the checkpoint by e14_params.py instead.  The source is recorded so the
+        # table note can say which cells came from where.
+        for g_arm in (L_MAIN, "l_q1_4", "l_q1_8"):
+            from_results = entry.get(f"{g_arm}_gate_mean")
+            from_ckpt = (params.get((g_arm, horizon)) or {}).get(
+                "gate_from_checkpoint")
+            entry[f"{g_arm}_gate_mean"] = (
+                from_results if from_results is not None else from_ckpt)
+            entry[f"{g_arm}_gate_source"] = (
+                "results_csv" if from_results is not None
+                else ("checkpoint" if from_ckpt is not None else None))
 
         # Required comparisons.
         entry["phaseformer_l_vs_fits_pct"] = (
@@ -566,6 +590,8 @@ def main() -> None:
     for arm in ARM_ORDER:
         fields += [f"{arm}_mse", f"{arm}_mae", f"{arm}_std_mse", f"{arm}_std_mae",
                    f"{arm}_n", f"{arm}_gate_mean"]
+    for arm in (L_MAIN, "l_q1_4", "l_q1_8"):
+        fields.append(f"{arm}_gate_source")
     fields += ["delta_mse_pct", "delta_mae_pct", "double_metric_better",
                "l_main_stable_beyond_golden", "phase_only_stable_beyond_golden",
                "l_main_double_metric_improvement",
