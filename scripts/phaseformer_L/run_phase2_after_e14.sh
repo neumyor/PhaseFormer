@@ -125,6 +125,19 @@ if [ -z "$ONLY" ] || [ "$ONLY" -ge 1 ]; then
         echo "pipeline invocations are malformed; refusing to start the chain" >&2
         exit 1
       }
+    # Do the consumers actually accept E14's *real* manifest?  A consumer that
+    # mis-reads it fails soft: the step exits 0 and writes a table with empty
+    # columns.  E18's baseline index did exactly that for all 78 of its rows
+    # (reused cells carry no command), and the recorded --output-dir of every new
+    # cell was a template value.  This runs the consumers' own loaders against
+    # the live artifact, before anything expensive starts.
+    echo "=== [$(date -Is)] pre-flight: phase-2 consumer contracts"
+    "$PY" scripts/phaseformer_L/check_phase2_consumers.py \
+      --e14-root "$E14_ROOT" \
+      --json "$LOGDIR/phase2_consumer_contracts.json" || {
+        echo "phase-2 consumers cannot read E14's manifest; refusing to start the chain" >&2
+        exit 1
+      }
   fi
 fi
 
