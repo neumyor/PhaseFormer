@@ -435,6 +435,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 规则符合性自查（第二轮） | **全部合规，无新缺口** | 继续按 `MANAGE_RULES.md` 核对前两轮未查的条款，四项全部通过：①**新实验脚本的说明义务**（规则要求说明数据集路径/关键超参/运行命令/输出目录）——六个 E14–E19 脚本**都**在 docstring 里给了 `Usage::` + 完整解释器路径 + `--output-root` + 数据集引用 ✓；②**不提交机器绝对路径**——新脚本里出现的绝对路径**只有**运行命令里的解释器路径，而规则本身**要求**"运行命令使用完整解释器路径，避免依赖 `conda run` 或激活 shell" ✓（属合规且必需，非违规）；③**不提交大体积/临时/缓存文件**——`git ls-files` 中 `*.pyc`/`__pycache__`/`*.log`/`*.ckpt`/`*.pt` 计数为 **0** ✓；④**最大跟踪文件**仅 524 KB（`uv.lock`）、`agent-log.md` 308 KB，无大体积产物 ✓。**并记一次我自己的假报警**：我最初用 `grep -c 'python scripts/phaseformer_L/'` 判定 `e19_predictive_stats.py` 缺运行命令，实为**命令按反斜杠换行**导致单行模式匹配不到——该文件第 84–90 行确有 `Usage::`。又是"我的检查写错 ≠ 工件缺失" |
 
+| 2026-09-20 | 失败语义核验 | **全链 fail-closed（含一处已记录例外）** | 无人值守链路最危险的失效是"**带着空洞继续走**"（链跑完、表填出，但某些格其实缺）。本轮把该语义**逐层核到源码**：训练 runner **任一格失败即非零退出**（`e14_main_matrix.py:702-703 if failed: raise SystemExit`；`e17_conditional.py:1407`、`e18_negative.py:890-891` 同构）→ `run_step` 在第一个非零退出处停止 → watcher 记 `PHASE2_FAILED` → E14 完成守卫要求 `E14_MAIN_EXIT=0` **且** `runs/` 恰 411 目录，故 E14 若有失败格，**watcher 不会启动阶段二** ✓。**一处例外及其兜底**：`read_test_generic.py` **永远 exit 0**（即使 cell 被拒或 worker 崩溃，只在汇总列 `rejected`）——由**第 7 步验收审计**兜住（E17/E18 各有"每 cell 都要有 test 指标"判据），且代价有限（真出问题只需重跑该步的读取+回填，24/78 个训练 run 仍有效），故**保留其 exit-0 语义不改**，但例外本身必须写明，不能默认"全链都 fail-closed" |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
@@ -606,6 +608,28 @@ bash scripts/phaseformer_L/run_phase2_after_e14.sh --only N   # 只跑某一步
 重入安全性：①`--from >1` 会跳过 E14 完成守卫；②第 1 步的读取器**幂等**
 （已带 test 指标的行走"原样复制"，除非显式传 `--all-rows`）；③每步的预检
 （列名契约、实参元数）只在 `--from 1` 时执行——**若改动过脚本，先手动跑一次两道预检**。
+
+### 10.1.1 已核验的失败语义：整条链**失败即停（fail-closed）**
+
+无人值守链路最危险的失效模式是"**带着空洞继续往下走**"——链跑完了、表填出来了，
+但某些格其实是缺的。本轮把这条语义**逐层核到源码**：
+
+| 层 | 行为 | 位置 |
+|---|---|---|
+| 训练 runner | **任一格失败即非零退出** | `e14_main_matrix.py:702-703` `if failed: raise SystemExit(...)`；`e17_conditional.py:1407`；`e18_negative.py:890-891` 同构 |
+| 训练 runner 的前置门 | 复用解析失败 / 预检失败即拒绝训练 | `e14_main_matrix.py:655`、`e17_conditional.py:1281` |
+| 流水线 | `run_step` 在第一个非零退出处停止并打印该步日志尾部 | `run_phase2_after_e14.sh` 的 `run_step` |
+| watcher | 记录 `PHASE2_FAILED rc=N` 到 `phase2_watch.status` | `watch_e14_then_phase2.sh` |
+| E14 完成守卫 | 要求 `E14_MAIN_EXIT=0` **且** `runs/` 恰 411 个目录 | 同上 |
+
+即**从 runner 到 watcher 全链 fail-closed**：E14 若有失败格，`E14_MAIN_EXIT` 不会是 0，
+watcher **不会**启动阶段二 ✓。
+
+**一个已知且已记录的例外**：`read_test_generic.py`（步骤 5/6 的 test 读取）**永远 exit 0**，
+即使有 cell 被拒或 worker 崩溃——它只在汇总里列 `rejected`（`e14_main/05_audit.md` §16 附近有记录）。
+该例外**由第 7 步验收审计兜住**（E17/E18 各有一条"每个 cell 都要有 test 指标"的判据会判 FAIL），
+且它的代价有限：真出问题时只需**重跑该步的读取与回填**（24/78 个训练 run 仍然有效），
+不必重训。故**保留其 exit-0 语义不改**，但这条例外必须写在文档里，不能默认"全链都 fail-closed"。
 
 ### 10.2 逐步：期待什么产物 → 用什么查 → 填哪张表
 
