@@ -79,3 +79,24 @@ minipaper §4.2 要求"参数量列按仓库 `metrics.csv` 的 `parameter_count`
 > `e14_writeback.py` 的合成冒烟挡下 1 个缺陷：Golden 表的解析正则原为 `[A-Za-z]+`，
 > 无法匹配含数字的 `ETTh1/ETTh2/ETTm1/ETTm2`，只解析出 12/28 行（Weather/Electricity/Traffic）；
 > 已改为 `[A-Za-z0-9]+` 并复测为 28 行。
+
+---
+
+## 5. 主张 C 的两个 Golden 口径（2026-09-19 追加）
+
+两份治理文档对"相对 Golden 的提升"给了**不同**定义，回填工具现在**同时报两个计数**，
+避免把两者混为一谈：
+
+| 口径 | 定义 | 出处 | 用途 |
+|---|---|---|---|
+| **`stable_beyond_golden`** | 三 seed **均值 + 样本 std** 在 **MSE 与 MAE 上都**严格低于 Golden | minipaper §4.0 主张 C（"既有严格标准"） | 主张 C 的**正式计数** |
+| **`double_metric_improvement`** | 三 seed **均值**在 MSE 与 MAE 上都低于 Golden | `docs/PhaseFormer_gold_standard.md` §4（"默认只有 MSE 和 MAE 都低于对应金标准时，才能称为双指标提升"） | 金标准的基准口径，**报告性对照** |
+
+金标准 §4 还特别提示"由于金标准只保留三位小数，差异非常小时还应结合多 seed 方差判断，
+不能把舍入误差当成稳定收益"——`stable_beyond_golden`（加 std）正是对这一提示的回应，
+因此取它作为主张 C 的判据是合适的，**且比金标准本来的口径更严**。
+
+**已用合成数据验证两者确实可区分**（12 vs 13 个 setting，严格口径给出更少的计数），
+说明实现没有把两个定义写成同一个条件。
+
+**表注须同时给出两个计数**并注明各自的定义，否则读者无法判断"稳定超过"是按哪一个口径数的。
