@@ -39,7 +39,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 
 MANIFEST = "research_runs/phaseformer_L_e14_main_v1/stage_a_manifest.json"
 STATS = "research_runs/phaseformer_L_e19_predictive_v1/level_statistics.csv"
-GOLDEN = "docs/PhaseFormer_golden_standard.md"
+GOLDEN = "docs/PhaseFormer_gold_standard.md"
 
 
 def literal_constants(path: pathlib.Path, names: set) -> dict:
