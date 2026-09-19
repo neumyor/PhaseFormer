@@ -441,6 +441,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 防线地图（谁 fail-closed） | **第 7 步审计是承重的** | 逐工具核到源码，得到两类（**两类都是有意的，不是缺陷**）：**失败即停**——第 1 步 `e14_read_test.py`（写盘后 `if problems: raise SystemExit`；dry-run 更早拒绝）、第 5/6 步训练 runner（`if failed: raise`）、第 6 步行 3 的 `--verify`（实测 `135 unresolved cells; refusing`）、第 7 步审计（有 FAIL 即非零）；**报告后继续（exit 0）**——第 5/6 步 test 读取（已知例外）、第 2 步 `e19_predictive_power.py`（只在"一个 setting 都算不出"时才停；部分跳过仍 exit 0）、第 3 步 `e14_writeback.py`/`e14_params.py`（**无任何 `raise SystemExit`**，只在 `audit.json` 列 `settings_incomplete`）、第 4 步 `e16_dissection.py`（`algebra_failures` 只进 summary 不抛错）、三个回填工具。**结论**：链条在**入口与最贵的两步**是 fail-closed，在分析/回填层是"报告后继续"——而**第 7 步审计正是为这一层设计的**，它检查的恰是这些工具"报告而非中止"的东西（每 cell 有 test 指标、预测力表覆盖 28 setting、主表 492 行、`algebra_failures` 为 0、行 3 覆盖 28 setting）。**故第 7 步不是装饰、是承重**：若把这些工具改成"失败即停"，链会因一个**良性**跳过而过早停止；留在报告层、由审计统一判定，则跑完全链后一次性给出可信结论。审计跑在最后也因此是对的——它之后没有步骤，"最后才发现"的代价只是我看一眼报告 |
 
+| 2026-09-20 | 反查审计器判据 | **发现并加强四个过弱判据** | 由 §10.1.3 的防线地图反查："**把关者的判据是否真能挡住它要挡的东西**"。逐条对照后发现四个判据用"非空/存在"代替了真正的计数或一致性判据：①E14 `parameter_table.csv` 原判"non-empty"——而 `e14_params.py` 是**报告型**（解析不到的格列进 `unresolved` 并**照样 exit 0**），半张矩阵缺失也会通过 → 加强为 **行数 = 492**（与 `cells_with_parameters + unresolved = 492` 一致）；②新增 **每行 `total_matches_metrics` 不得为 False**（该工具本会与 run 自身 `metrics.csv:parameter_count` 交叉校验，审计器此前没看）；③新增 **每行 `gate_value_from_checkpoint` 非空**（§4.2 的 `g` 列依赖从 checkpoint 恢复门值）；④E18 原判"results non-empty" → 加强为 **行数 = 78** = 42 平滑（7×3×2）+ 36 边界（6×3×2），由计划计数与**我先前预演的行数算术**两条独立一致。**六类校准全部通过**：492 行一致 → 三项 OK；491 行 → FAIL；一行交叉校验 False → FAIL；一行缺门值 → FAIL；E18 78 行 → OK；E18 77 行 → FAIL 且 exit 1。**方法论收获**：不是逐个看判据是否合理，而是先问"**这条判据要挡住什么**"——一问就发现"非空"挡不住"半张矩阵" |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据

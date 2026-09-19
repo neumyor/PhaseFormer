@@ -578,3 +578,27 @@ g | s | stable | provenance_note`（生成点 `e14_writeback.py:678-681`，
 
 **回填阶段的机器判据已完备**：填完后 ①`--inventory` 总数 → 0（填空型）、
 ②`verify_minipaper_fill.py` 无 MISMATCH（含替换型的 §4.6）。**无待定项、无未校准的解析器。**
+
+---
+
+## 14. 由"防线地图"反查审计器：**四个过弱的判据**已加强并校准
+
+§10.1.3 的防线地图指出一个结构性事实：**分析/回填层是"报告后继续"（exit 0），
+真正把关的是第 7 步验收审计**。于是应当反问一句——**审计器的判据是否真的覆盖了那些"报告出来的东西"？**
+逐条对照后发现**四个判据过弱**（用"非空/存在"代替了真正的计数或一致性判据），已全部加强：
+
+| 原判据 | 问题 | 加强为 | 依据 |
+|---|---|---|---|
+| `parameter_table.csv present` + **`non-empty`** | `e14_params.py` 是**报告型**（把解析不到的格列进 `unresolved` 并**照样 exit 0`）；"非空"会在**半张矩阵缺失**时通过 | **行数 = 492**（每个 cell 一行，与 `cells_with_parameters + unresolved = 492` 一致） | 源码 + dry-run 实测 175+317=492 |
+| （无） | `e14_params` 会与 run 自身的 `metrics.csv:parameter_count` 交叉校验，但审计器没看 | **每行 `total_matches_metrics` 不得为 False** | 源码 |
+| （无） | §4.2 的 `g` 均值列要求"每个 checkpoint 都能恢复门值"（E3 系 `metrics.csv` 无门值列，必须从 checkpoint 读） | **每行 `gate_value_from_checkpoint` 非空** | `e14_params` 的门值回退路径 |
+| `results non-empty`（E18） | 同上：半跑的 E18 也能通过 | **行数 = 78** = 42 平滑（7 setting × 3 seed × 2 档）+ 36 边界（6 setting × 3 seed × 2 秩） | 计划计数与**我先前预演的行数算术**两条独立一致 |
+
+**六类校准全部通过**：①492 行且一致 → 三项全 OK；②491 行 → `FAIL parameter table covers all 492 cells: 491 rows`；
+③一行 `total_matches_metrics=False` → `FAIL … 1 row(s) mismatched e.g. ETTh1-96-0/l_main`；
+④一行缺门值 → `FAIL gate value recovered from every checkpoint …`；
+⑤E18 78 行 → `OK results rows = 78`；⑥E18 77 行 → `FAIL results rows = 78: 77 rows`（且 exit 1）。
+
+**这条链值得记下**：它不是我事先想到的，而是**先建立"谁把关"的结构认识（防线地图），
+再据此反查"把关者的判据是否够严"**才发现的。若只逐个检查判据，很容易停在"这条判据看起来没问题"；
+而一旦问"**这条判据要挡住什么**"，就会发现"非空"挡不住"半张矩阵"。
