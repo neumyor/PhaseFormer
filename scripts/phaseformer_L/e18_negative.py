@@ -314,16 +314,69 @@ def cell_key(cell: dict) -> str:
 # E14 baseline resolution (row 1 annex only)
 # --------------------------------------------------------------------------
 
+def reused_arm_evidence(entry: dict) -> tuple:
+    """Re-derive a *reused* cell's arm fingerprint from the run it adopted.
+
+    A ``reused`` manifest entry carries no ``command``: stage A did not launch
+    it, E14 adopted it from an earlier registered root after its own reuse audit
+    passed (``e14_main_matrix._arm_match``).  So the argv path cannot be used
+    for these cells -- and it is not a corner case, because the 7 row-1 settings
+    of minipaper §4.6 *are* exactly the reused ones.
+
+    The adopted run is on disk, so the fingerprint is re-derived from that run's
+    own ``config.json`` with the same ``_arm_match`` test.  Returns
+    ``(evidence, None)`` on success or ``(None, reason)`` on failure; a
+    ``source`` dict is never trusted on its own.
+    """
+    source = entry.get("source") or {}
+    if not isinstance(source, dict) or not source.get("run_dir"):
+        return None, "reused cell has neither a command nor source.run_dir"
+    run_dir = Path(str(source["run_dir"]))
+    if not run_dir.is_absolute():
+        run_dir = ROOT / run_dir
+    config = run_config(run_dir)
+    if config is None:
+        return None, f"reused run dir has no readable config.json: {run_dir}"
+    if not _arm_match(config, "l_main"):
+        return None, f"reused run config does not implement l_main: {run_dir}"
+    hyper = config.get("hyperparams", {}) or {}
+    # The root, not the run dir: E14's own cells are named
+    # ``<root>/runs/<run-id>`` and the manifest records that root verbatim.
+    root = source.get("root")
+    return {
+        "source": "e14_stage_a_manifest:reused_config",
+        "arm": "l_main",
+        "status": entry.get("status"),
+        "run_dir": str(source["run_dir"]),
+        "gate_init": hyper.get("weak_period_residual_gate_init"),
+        "learning_rate": hyper.get("learning_rate"),
+        "eval_root": str(root) if root else repo_relative(run_dir.parent),
+    }, None
+
+
 def load_baseline_index(path: Path) -> tuple:
     """Index E14's ``l_main`` cells from its stage-A manifest.
 
     Returns ``(index, report)`` with ``index[(dataset, horizon, seed)] = {...}``.
-    A manifest entry is accepted only when its command carries no
-    ``--evaluate-test`` flag and implements the ``l_main`` arm.  This function
-    only *records* provenance; it never changes what E18 trains.
+    A manifest entry is accepted only when it carries no ``--evaluate-test`` flag
+    and implements the ``l_main`` arm, checked by one of two paths:
+
+    * ``new`` cells were launched by stage A and carry their argv, so the
+      fingerprint is re-derived from ``--overrides`` (an entry whose command was
+      hand-edited is rejected);
+    * ``reused`` cells carry no command, so ``reused_arm_evidence`` re-derives
+      the fingerprint from the adopted run's ``config.json``.
+
+    ``eval_root`` is recorded from evidence, never from a template: for a reused
+    cell it is the adopted root the manifest recorded, and for a new cell it is
+    the root that holds this manifest (``path.parent``), because a new cell's run
+    directory is only named once the run exists.
+
+    This function only *records* provenance; it never changes what E18 trains.
     """
     report = {"path": str(path), "exists": path.is_file(), "cells": 0,
-              "resolved": 0, "rejected": []}
+              "resolved": 0, "resolved_new": 0, "resolved_reused": 0,
+              "rejected": []}
     index: dict = {}
     if not report["exists"]:
         report["rejected"].append({"reason": "manifest file does not exist"})
@@ -334,6 +387,7 @@ def load_baseline_index(path: Path) -> tuple:
         report["rejected"].append({"reason": "manifest has no 'cells' list"})
         return index, report
     report["cells"] = len(entries)
+    e14_root = repo_relative(path.parent)
     for entry in entries:
         argv = entry.get("command") or []
         if "--evaluate-test" in argv:
@@ -344,34 +398,46 @@ def load_baseline_index(path: Path) -> tuple:
             continue
         if entry.get("arm") != "l_main":
             continue
-        overrides = {}
-        if "--overrides" in argv:
-            overrides = json.loads(argv[argv.index("--overrides") + 1])
-        # The manifest records the arm's command; re-derive the fingerprint from
-        # the arm table so an entry whose command was hand-edited is rejected.
-        candidate = {
-            "mechanism": MECHANISM,
-            "horizon": int(entry["horizon"]),
-            "hyperparams": overrides,
-        }
-        if not _arm_match(candidate, "l_main"):
-            report["rejected"].append({
-                "cell": entry.get("key"),
-                "reason": "overrides do not implement l_main",
-            })
-            continue
+        status = entry.get("status")
+        if argv:
+            overrides = {}
+            if "--overrides" in argv:
+                overrides = json.loads(argv[argv.index("--overrides") + 1])
+            # The manifest records the arm's command; re-derive the fingerprint
+            # from the arm table so an entry whose command was hand-edited is
+            # rejected.
+            candidate = {
+                "mechanism": MECHANISM,
+                "horizon": int(entry["horizon"]),
+                "hyperparams": overrides,
+            }
+            if not _arm_match(candidate, "l_main"):
+                report["rejected"].append({
+                    "cell": entry.get("key"),
+                    "reason": "overrides do not implement l_main",
+                })
+                continue
+            evidence = {
+                "source": "e14_stage_a_manifest",
+                "arm": "l_main",
+                "status": status,
+                "run_dir": (entry.get("source") or {}).get("run_dir"),
+                "gate_init": overrides.get("weak_period_residual_gate_init"),
+                "learning_rate": overrides.get("learning_rate"),
+                "eval_root": e14_root,
+            }
+            path_kind = "resolved_new"
+        else:
+            evidence, reason = reused_arm_evidence(entry)
+            if evidence is None:
+                report["rejected"].append({"cell": entry.get("key"),
+                                           "reason": reason})
+                continue
+            path_kind = "resolved_reused"
         key = (entry["dataset"], int(entry["horizon"]), int(entry["seed"]))
-        index[key] = {
-            "source": "e14_stage_a_manifest",
-            "arm": "l_main",
-            "status": entry.get("status"),
-            "run_dir": (entry.get("source") or {}).get("run_dir"),
-            "gate_init": overrides.get("weak_period_residual_gate_init"),
-            "learning_rate": overrides.get("learning_rate"),
-            "eval_root": (argv[argv.index("--output-dir") + 1]
-                          if "--output-dir" in argv else None),
-        }
+        index[key] = evidence
         report["resolved"] += 1
+        report[path_kind] += 1
     return index, report
 
 
