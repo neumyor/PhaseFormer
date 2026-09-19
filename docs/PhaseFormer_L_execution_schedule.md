@@ -406,6 +406,9 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | E14 剩余工期双投影 | **纠正一处 4 倍误估** | E14 日志的 `done` 事件**无时间戳**，故完成率改从文件系统取（`metrics.csv` 的 mtime 即完成时刻）：115/411，近 15/30/60/120 分钟为 0.20/0.33/0.35/0.37 per min，整体 0.22/min。**投影 A（朴素）**按 0.35/min 外推剩 296 → **14.1 h、ETA 18:32**。**投影 B（按成本，推荐）**先由真实 manifest 逐数据集算"还剩什么"：Traffic 0、Electricity 8、Weather 48、ETTm1 72、ETTm2 48、ETTh1 72、ETTh2 48 = **296**（与实测脚本的 remaining **完全一致**，交叉验证 ✓），按实测/修正后单 run 成本合计 **≈23.1 GPU·h → 2.9 h → ETA ~07:20**。**差距 4 倍且朴素的那个错**：调度按**成本降序**发车，当前速率反映的是**最贵批次**（Traffic 0.7–1.1 h/run），而剩下的是**最便宜批次**（ETTh1/ETTh2 仅 37–85 s/run），把最贵批次的速率外推到最便宜批次必然严重高估。最大不确定性：Weather 占 9.1/23.1 ≈ **39%**，其成本用 `COST_HINT × 0.7`（外推），故区间 **2.5–4 h → ETA 07:00–08:20**；全链约 **19:00–20:00** 收尾，早于先前按"E14 到 11:00"的估计 |
 
+| 2026-09-20 | 收尾作业清单 | — | 新增 §10：把"E14 收尾 → 全链结束"要做什么写成可执行清单，使收尾阶段**不靠记忆**。含：①**确认阶段二真的开始了**（watcher 的两个独立条件、`phase2_watch.status`、逐步日志、`pgrep` 检查）；②**失败重入方式**（`--from N`/`--only N`）与重入安全性（`--from>1` 跳过完成守卫；第 1 步读取器**幂等**；两道预检只在 `--from 1` 时跑）；③**逐步的"产物 → 机器检查 → 填哪张表"对照表**（第 3 步填 §4.2 主表并即时跑校验器；第 4 步填 §4.4 干预表 147 格 + 解剖表 105 格需组合；第 5 步 §4.5 35 格；第 6 步 §4.6 用 5 行**替换** 25 格）；④**唯一开放项**（§4.4 写法）的收口时点；⑤回填后的**两个机器判据**（`verify_minipaper_fill.py` 逐格一致 + `--inventory` 空格应为 0）与**五项人工审校**（表注披露、主张引用冻结门槛、C 的两种定义并列等）；⑥最后两件非机器可查的事（摘要只在 §4.2 判定后替换；各节补写阶段 5/6 文档） |
+| 2026-09-20 | 清单自身核对 | — | 清单写完后**对着代码逐条核过**（清单错了比没清单更糟）：六个检查脚本 + 六个实验脚本**全部存在**；`--from`/`--only` 确由 `run_phase2_after_e14.sh` 实现、`--list` 输出 7 步；清单里写的 `main_table.{csv,md}`/`variant_table.csv`/`dissection_table_44.csv`/`intervention_table_44.{csv,md}`/`conditional_table.{csv,md}`/`negative_table.{csv,md}` **与各 write-back 的写出点逐字一致**。（其间我先用不带 `.py` 的路径自查，报了 2 个假的 MISSING——又是一个"我的检查写错、而非工件缺失"的例子，已用带扩展名的复核澄清。） |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
@@ -584,3 +587,16 @@ python scripts/phaseformer_L/verify_minipaper_fill.py --inventory  # 空格总�
 1. **摘要**：`*[主结果待填。]*` 需按 §4.2 的结论替换——**只在 §4.2 判定完成后**动，避免先写出与门槛不符的话；
 2. **各实验的独立文档**：每节在回填后补写"阶段 5 审校"与"阶段 6 回填"两段
    （E14/E16/E17/E18 各自目录下），使"每个实验文档独立命名存放"这一要求对**全部**小节成立。
+
+### 10.6 本清单自身的核对
+
+清单里的每条引用都在写完后**对着代码逐条核过**，以免清单本身出错（清单错了比没有清单更糟）：
+
+* **脚本存在性**：`verify_minipaper_fill.py`、`check_builder_outputs.py`、`check_column_contracts.py`、
+  `check_pipeline_invocations.py`、`audit_phase2_outputs.py`、`check_section42_coverage.py`
+  与六个实验脚本**全部存在**；
+* **CLI 选项**：`--from` / `--only` 确实由 `run_phase2_after_e14.sh` 实现，`--list` 输出 7 步；
+* **产物文件名**：清单里写的 `main_table.{csv,md}`、`variant_table.csv`、
+  `dissection_table_44.csv`、`intervention_table_44.{csv,md}`、`conditional_table.{csv,md}`、
+  `negative_table.{csv,md}` **与各 write-back 的写出点逐字一致**
+  （`e14_writeback.py`、`e16_writeback.py:366`、`e17_writeback.py`、`e18_writeback.py`）。
