@@ -70,7 +70,28 @@ L-q1/4 与 L-q1/8 各 17×3、L-rcrf 28×3=84、A1 24×3=72）。
 | **跨 seed `leading4` 重叠** | `leading4_input_overlap` **＋** `leading4_output_overlap`（论文一格，产物两列） |
 | 稳定语义判定 | `stable_semantics_verdict` 一类审计列 |
 
-**组合方式需要先定下来再填**（例如两列如何并列、保留几位），否则同一张表里会出现两种写法。
+**组合方式需要先定下来再填**，否则同一张表里会出现两种写法。
+
+**这一处与 §4.6 不同：**§4.6 我能从回填工具**硬编码的字符串**反推出设计意图（见 §1.7），
+而这里**没有可反推的 ground truth**——`e16_writeback` 根本不渲染这张表。
+更彻底地查过：§4.4 的正文在表格之前**只有标题、没有任何说明**，
+表下注也只解释语义（"只用 validation 划分"、"跨 seed leading4 重叠按 4 维主子空间两两重叠计"），
+**不规定单元格写法**。故这是**最后一处真正开放的格式问题**。
+
+**建议的写法**（依据是 CSV 里实际可用的列名与含义，而非凭空规定）：
+
+| 论文列 | 建议渲染 | 依据列 |
+|---|---|---|
+| 主模式输入组 / 解释率 | `{input_group_label}（{input_group_explanation:.2f}）` | `input_group_label`、`input_group_explanation` |
+| 主模式输出组 / 解释率 | `{output_group_label}（{output_group_explanation:.2f}）` | `output_group_label`、`output_group_explanation` |
+| 修正能量份额 | `{correction_energy_share:.3f}` | `correction_energy_share` |
+| 跨 seed `leading4` 重叠 | `in {leading4_input_overlap:.2f} / out {leading4_output_overlap:.2f}` | `leading4_input_overlap`、`leading4_output_overlap` |
+| 稳定语义判定 | 取判定列（`stable_semantics_verdict` 一类） | — |
+
+**但两名小数/写法仍属表述取舍**，且**只有 E16 真正跑完后才能看到取值分布**
+（例如解释率是 0–1 小数还是 0–100 百分数、`input_group_label` 的中文长度是否撑破表格）。
+故建议：**E16 跑完后先打印几行真实取值，再据实定写法并回写本节**，
+而不是现在把两位小数写死。**这样"最后一处开放格式"就有了确定的收口时点。**
 
 ### 1.5 §4.4 干预表（21 行 × 10 列）—— **直接复制、但要去掉第 1 列** ⚠→✓
 
