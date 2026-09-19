@@ -847,3 +847,19 @@ git log --oneline -1           # ← 实测 HEAD 是否前移，而不是看退�
 * 同步前确认改动**不触碰 E14 训练路径**：`git diff <旧 HEAD>..<新 HEAD> --name-only | grep -E '^(src/|scripts/search_phaseformer\.py)'`
   必须**无输出**（E14 正从工作树训练）；
 * 在服务器上验证任何脚本前，先确认"服务器上的版本 == 我改的那版"（比对 HEAD 哈希，或看三态计数是否含新判据）。
+
+### 10.8 阶段二结束后要补写的文档（清单**已对着现存文件核过**）
+
+六阶段契约要求每个实验的文档独立命名存放。现状盘点（`ls docs/PhaseFormer_L/*/`，2026-09-20）：
+
+| 实验 | 目录 | 已有 | **待补** |
+|---|---|---|---|
+| E14 §4.2 主表 | `e14_main/` | `01_plan` `02_static_check` `03_smoke` `04_run` `04b_test_read_plan` `05_audit` `05c_writeback_rehearsal` | 阶段 A 收尾 + **阶段 B 测试读取**的 4 记录（追加进 `04_run`）、最终 5 审校、6 回填 |
+| E15 §4.3 维数表 | `e15_dimension/` | `01`–`06` **齐全** | — |
+| E16 §4.4 解剖/干预 | `e16_dissection/` | `01_plan` `02_03_static_check_smoke` `05b_writeback_rehearsal` | **`04_run`**、**`05_audit`**、**`06_writeback`** |
+| E17 §4.5 四臂 | `e17_conditional/` | `01_plan` `02_03_projectors` `05b_writeback_rehearsal` | **`04_run`**、**`05_audit`**、**`06_writeback`** |
+| E18 §4.6 负对照 | `e18_negative/` | `01_plan` `02_static_check` `05b_writeback_rehearsal` | **`04_run`**、**`05_audit`**、**`06_writeback`** |
+| E19 §4.7 预测力 | `e19_predictive/` | `01`–`06`（阶段 1） | **阶段 2**（第 2 步的 ρ 列）的 4/5/6 记录，追加进现有 `04_run`/`05_audit`/`06_writeback` |
+
+共 **12 处文档产出**（E14 三处、E16 三处、E17 三处、E18 三处，另有 E19 阶段 2 三处追加）。
+每处都写**实测数字**，不写"占位"——这些是最后一批必须落地的交付物，故在此列明，避免收尾时漏写。
