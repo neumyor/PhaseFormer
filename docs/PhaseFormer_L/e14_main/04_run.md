@@ -112,3 +112,57 @@ setsid nohup ~/niuyiming/run_e14_main.sh > ~/niuyiming/logs/e14_main_retry.log 2
 
 **注意**：`Electricity` 占待完成量的 42%（28.13/66.53），与 E10 记录的
 "Electricity-336 占 7 setting 总计算量 42%" 同量级——高通道数设定的计算代价是这一阶段的主要成本。
+
+---
+
+## 8. 实测耗时 vs `COST_HINT`（2026-09-20 03:05，81 个已完成格）
+
+已完成的 81 个格（Traffic 60 + Electricity 21）的 `elapsed_sec` 实测中位数与 `COST_HINT` 对比：
+
+| setting | n | 实测中位 | = 小时 | `COST_HINT` | 比值 |
+|---|---:|---:|---:|---:|---:|
+| Traffic-96 | 15 | 4095.6 s | 1.138 | 4200 | **0.98** |
+| Traffic-192 | 15 | 2972.1 s | 0.826 | 4200 | 0.71 |
+| Traffic-336 | 15 | 2584.8 s | 0.718 | 4200 | 0.62 |
+| Traffic-720 | 15 | 2639.9 s | 0.733 | 4200 | 0.63 |
+| Electricity-336 | 3 | 1273.2 s | 0.354 | 1717 | 0.74 |
+| Electricity-720 | 18 | 1284.5 s | 0.357 | 2000 | **0.64** |
+
+**`COST_HINT` 整体偏高约 30–40%**（Traffic-96 除外，比值 0.98）。
+
+### 8.1 原因：早停使 horizon 成为耗时的**弱**预测子
+
+各类 run 的 `epochs_completed` 分布（实测）：
+
+| setting | 观察到的 epoch 数 |
+|---|---|
+| Traffic-96 | 26, 28, 29, 30 |
+| Traffic-192 | 18, 21, 23, 24, 25, 27, 28, 29, 30 |
+| Traffic-336 | 16, 19, 20, 21, 22, 24, 28, 30 |
+| Traffic-720 | **12–26**, 30 |
+| Electricity-336 | 16, 22, 26 |
+| Electricity-720 | **11–24**, 30 |
+
+即：**horizon 越小反而越慢**——Traffic-96 普遍跑满 26–30 个 epoch（最慢），
+而 Traffic-720 有相当一部分在 12–17 个 epoch 就因验证损失不再改善而早停。
+`COST_HINT` 是按 horizon 单调递增假设的（来自历史中位数，且当时未区分早停），
+因此对高 horizon 系统性高估。
+
+Traffic-96 的 4096 s 与冒烟实测（138 s/epoch × 30 epoch = 4140 s）**完全吻合**，
+说明该档没有早停、`elapsed_sec` 的计量可靠。
+
+### 8.2 对剩余工期的影响
+
+用**实测中位数**替换 `COST_HINT` 中的 Electricity 值（1300 s/run 量级），剩余工作量从
+66.53 GPU·h 降到约 **46 GPU·h → 约 5.8 h（8 卡）**，即阶段 A 预计在 **约 08:50** 结束
+（而非先前估计的 10:30）。
+
+未测档（Weather、四个 ETT 系）仍沿用 `COST_HINT`，因此该数字仍有向上偏差的余地——
+但方向是"更快"，不是"更慢"。
+
+### 8.3 一条工程注意
+
+**已完成的 run 其 `status.json` 会被覆写**为 `{"status": "completed", "completed_at": ...}`，
+**丢掉 `started_at`**。因此事后无法从 `status.json` 反推墙钟耗时；
+`metrics.csv` 的 `elapsed_sec`（第 33 列）才是可靠来源。本轮最初的测量脚本因依赖
+`started_at` 而错误地报告"0 个已完成格"——是**测量方法**的问题，不是产物缺失。
