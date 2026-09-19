@@ -92,6 +92,16 @@ def parse_markdown_table(block: str, header_needle: str):
     return None, []
 
 
+def is_separator(cells) -> bool:
+    """A markdown table separator row (|---|---|) contains only dashes, colons, spaces.
+
+    Written as a named helper because the inverted form of this test silently
+    skipped EVERY data row of a table whose cells happen to contain no dash --
+    which is what the 4.5 calibration's positive control caught.
+    """
+    return set("".join(cells)) <= set("-: ")
+
+
 def as_float(raw: str):
     """Parse a paper cell; tolerate ``+0.0481``, ``−1.2`` (U+2212), ``0.950``."""
     cleaned = (raw.replace("−", "-").replace("–", "-").replace("+", "")
@@ -198,7 +208,8 @@ def check_4_2(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) >= 2:
+        if len(cells) >= 2 and cells[0] not in ("Dataset", "") \
+                and not is_separator(cells):
             artifact[(cells[0], cells[1])] = cells
 
     if len(paper_rows) != len(artifact):
@@ -329,7 +340,8 @@ def check_4_5(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) >= 2 and cells[0] not in ("Dataset", "") and set("".join(cells)) > set("-: "):
+        if len(cells) >= 2 and cells[0] not in ("Dataset", "") \
+                and not is_separator(cells):
             artifact[f"{cells[0]}-{cells[1]}"] = cells
     h1 = aggregate_h1(root)
 
