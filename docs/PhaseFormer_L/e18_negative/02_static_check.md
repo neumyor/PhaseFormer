@@ -217,3 +217,24 @@ summary 的键含 `test_split_read`、`records_test`、`protocol_mirrored_from_e
 12 个单测（`tests/test_phaseformer_L_reuse_baselines.py`，含 4 个否定对照）；全套 400 passed。
 并已固化为阶段 2 pre-flight 判据 C3（`check_phase2_consumers.py`），在 E18 那 3–5 小时**之前**就会失败即停。
 详见 `docs/PhaseFormer_L/audit/paper_code_consistency.md` §16。
+
+### 5.3 刷新（2026-09-20 05:3x）：未解析项**全部**是"尚未训练"，0 处结构性缺失
+
+§5.2 当时把未解析项判为"尚未训练、不是缺陷"，但那是**分类**判断。本轮把它做成**可证伪的计数**
+（脚本直接调 `e18_svd_truncation.load_manifest` / `build_plan`，对每个未解析的 (setting, seed, arm)
+回查 manifest 是否**声明**该格）：
+
+```text
+plan entries: 28, carrying problems: 12          # 随 E14 推进从 13 降到 12
+cells declared but not yet trained: 36
+cells that do not exist in the manifest at all: 0
+manifest arm coverage per setting:
+   settings with [3] arms -> {3: 28}            # 28 个 setting 全部带 l_main/l_q1_4/l_q1_8
+```
+
+**结论**：
+* **0 个"永远无法解析"的格**——第 6 步行 3 的 `--verify` 在 E14 跑完后必然能全解析；
+  即"会在 E16 那 3–5 小时之后才卡住"这一类风险**已排除**（若真有结构性缺失，链条会在第 6 步停下，
+  而那时已经付掉了 E16 的全部算力）；
+* 未解析项 = **已声明但尚未训练的 36 格**（12 个 setting × 3 臂 × 1 seed 的一部分），随 E14 收敛而减少；
+* 28 个 setting 的**三臂覆盖完整**（无 setting 缺臂）。
