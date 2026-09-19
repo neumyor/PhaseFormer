@@ -62,7 +62,9 @@ while :; do
     exit "$rc"
   fi
 
-  if [ "$(date +%s)" -gt "$deadline" ]; then
+  # -ge, not -gt: with MAX_WAIT_HOURS=0 the budget is already exhausted at the
+  # first iteration, and a strict -gt would instead sleep once more.
+  if [ "$(date +%s)" -ge "$deadline" ]; then
     echo "TIMEOUT waiting for E14 at $(date -Is) (flag=$flag runs=$runs)" > "$MARK"
     exit 3
   fi
