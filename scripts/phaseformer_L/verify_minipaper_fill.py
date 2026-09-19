@@ -46,6 +46,7 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parents[2]
 MINIPAPER = REPO / "docs/PhaseFormer_L_minipaper.md"
 E15 = "research_runs/phaseformer_L_e15_dimension_v1"
+E14 = "research_runs/phaseformer_L_e14_main_v1"
 
 #: displayed column -> (artifact column, decimal places); None dp = exact string.
 SECTION_4_3_COLUMNS = {
@@ -167,6 +168,64 @@ def check_4_3(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
                        "; ".join(problems) if problems else template)
 
 
+def check_4_2(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> None:
+    """Section 4.2 main table: compare each cell with the builder's own markdown row.
+
+    This one is a plain field comparison rather than a numeric one, and it can be:
+    `e14_writeback` emits its rows with exactly the paper's ten columns in exactly
+    this order (dataset | horizon | golden_mse/mae | phase_only | PhaseFormer-L |
+    Δ | g | s | stable | provenance).  Comparing the produced row text against the
+    paper's row text is therefore the strongest available check -- it verifies not
+    just the numbers but the column mapping and the provenance note as well.
+    """
+    md = root / E14 / "main_table.md"
+    block = section_text(minipaper.read_text(encoding="utf-8"), "### 4.2", "### 4.3")
+    header, paper_rows = parse_markdown_table(block, "Golden MSE/MAE")
+    if header is None:
+        report.add("§4.2", "-", "-", "MISMATCH", "could not find the 4.2 table header")
+        return
+    if len(header) != 10:
+        report.add("§4.2", "-", "columns", "MISMATCH",
+                   f"header has {len(header)} columns, expected 10")
+    if not md.is_file():
+        report.add("§4.2", "-", "artifact", "PENDING", f"{md.name} does not exist yet")
+        return
+
+    artifact: dict = {}
+    for line in md.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) >= 2:
+            artifact[(cells[0], cells[1])] = cells
+
+    if len(paper_rows) != len(artifact):
+        report.add("§4.2", "-", "row count", "MISMATCH",
+                   f"paper has {len(paper_rows)} rows, artifact has {len(artifact)}")
+    for cells in paper_rows:
+        if len(cells) < 10:
+            report.add("§4.2", "|".join(cells[:2]), "-", "MISMATCH",
+                       f"row has {len(cells)} cells, expected 10")
+            continue
+        key = (cells[0], cells[1])
+        want = artifact.get(key)
+        if want is None:
+            report.add("§4.2", f"{key[0]}-{key[1]}", "-", "MISMATCH",
+                       "no artifact row for this dataset/horizon")
+            continue
+        for index in range(10):
+            got_cell, want_cell = cells[index], want[index]
+            if not got_cell:
+                report.add("§4.2", f"{key[0]}-{key[1]}", header[index], "blank",
+                           "empty paper cell")
+            elif got_cell != want_cell:
+                report.add("§4.2", f"{key[0]}-{key[1]}", header[index], "MISMATCH",
+                           f"paper={got_cell!r} artifact={want_cell!r}")
+            else:
+                report.add("§4.2", f"{key[0]}-{key[1]}", header[index], "match", "")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -180,6 +239,7 @@ def main() -> int:
 
     report = Report()
     check_4_3(report, root, minipaper)
+    check_4_2(report, root, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
