@@ -198,6 +198,19 @@ def _has_test_metrics(run_dir: Path) -> bool:
     return False
 
 
+# Sanity bounds on the frozen hyperparameters.  Structural equality is not
+# enough: the `rank_sweep_2_multiseed_stage1_20260914_v3` batch contains runs
+# where the SEED was written into the gate init (gate_init=2022, gate_init=2023)
+# together with learning_rate=0.5, i.e. 500x the audited grid.  Those runs match
+# every structural field (mechanism, head, lookback, loss, epochs, percent,
+# period) yet train very differently -- their val_mse is ~0.29 against ~0.204 for
+# the real runs -- so accepting one silently contaminates a setting's 3-seed
+# mean.  A gate init outside (0, 1) is invalid by construction (it is fed through
+# logit), and no audited cell uses a learning rate above 1e-3.
+GATE_INIT_EXCLUSIVE_RANGE = (0.0, 1.0)
+LEARNING_RATE_MAX = 1e-2
+
+
 def _protocol_ok(config) -> tuple[bool, list[str]]:
     checks = [
         ("lookback", config.get("lookback"), LOOKBACK),
@@ -207,6 +220,30 @@ def _protocol_ok(config) -> tuple[bool, list[str]]:
         ("period", config.get("period"), PERIOD),
     ]
     failures = [f"{n}={got} != {want}" for n, got, want in checks if got != want]
+
+    hyper = config.get("hyperparams", {}) or {}
+    gate = hyper.get("weak_period_residual_gate_init")
+    if gate is not None:
+        try:
+            gate_value = float(gate)
+        except (TypeError, ValueError):
+            failures.append(f"gate_init={gate!r} is not numeric")
+        else:
+            low, high = GATE_INIT_EXCLUSIVE_RANGE
+            if not (low < gate_value < high):
+                failures.append(
+                    f"gate_init={gate_value} outside the valid open interval "
+                    f"({low}, {high}) -- e.g. a seed written into the gate init")
+    lr = hyper.get("learning_rate")
+    if lr is not None:
+        try:
+            lr_value = float(lr)
+        except (TypeError, ValueError):
+            failures.append(f"learning_rate={lr!r} is not numeric")
+        else:
+            if not (0.0 < lr_value <= LEARNING_RATE_MAX):
+                failures.append(
+                    f"learning_rate={lr_value} outside (0, {LEARNING_RATE_MAX}]")
     return (not failures), failures
 
 
@@ -368,11 +405,16 @@ def resolve_reuse(arm: str, wanted: set, evidence: dict) -> tuple[dict, list]:
                 continue
             if key in index:
                 continue  # keep the first whitelisted root's match; deterministic
+            hyper = config.get("hyperparams", {}) or {}
             index[key] = {
                 "run_dir": str(run_dir.relative_to(ROOT)),
                 "config_hash": config.get("config_hash"),
                 "root": root_rel,
                 "test_evidence": "inline metrics.csv" if inline_test else external,
+                # Recorded so the §4.2 table note can name each reused cell's
+                # actual hyperparameters instead of asserting one protocol.
+                "gate_init": hyper.get("weak_period_residual_gate_init"),
+                "learning_rate": hyper.get("learning_rate"),
             }
     return index, rejected
 
