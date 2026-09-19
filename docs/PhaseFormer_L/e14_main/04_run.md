@@ -47,3 +47,37 @@
 3. **阶段 B**（`e14_read_test.py`）在所有 checkpoint 冻结后执行**单次** test 读取，
    写入 `results.csv` 与 `test_read_summary.json`；
 4. 之后进入阶段 5（审校）与阶段 6（回填）。
+
+---
+
+## 5. 中断恢复路径（2026-09-19 追加）
+
+调度器（`e14_main_matrix.py --stage a`）的 pending 队列在**内存**中，因此若调度进程本身被杀，
+未发车的 cell 不会自动重排。恢复方式：
+
+```bash
+cd ~/niuyiming/PhaseFormer
+# 直接重跑同一命令即可：runner 带 --resume，已完成格会打印
+#   RESUME completed: <run_id>
+# 并立即返回，不会重复训练。
+setsid nohup ~/niuyiming/run_e14_main.sh > ~/niuyiming/logs/e14_main_retry.log 2>&1 < /dev/null &
+```
+
+设计上支持这一点的依据（`scripts/search_phaseformer.py:644-650`）：
+完成判据是 `runs/<run_id>/metrics.csv` **存在**；带 `--resume` 时命中即返回，
+且 `run_id` 由 config hash 决定、与调度顺序无关。因此重跑是**幂等**的，
+只会补齐缺失的 cell。
+
+**运行期间禁止**：对 training 进程会导入的路径做 `git reset --hard`（`src/**`、
+`scripts/search_phaseformer.py`）。本轮期间的所有同步都先核对 `git diff --name-status`
+不涉及这两处；只新增 `scripts/phaseformer_L/**` 与 `docs/**` 是安全的。
+
+## 6. 实测吞吐（用于外推 ETA）
+
+| 时刻 | done | launched | failed |
+|---|---:|---:|---:|
+| 19:13（首批发车） | 0 | 8 | 0 |
+| 20:19 | **8** | 15 | **0** |
+
+首批 8 个 Traffic cell 在约 **69 分钟**内全部完成，与冒烟实测的单 epoch 138 s × 30 epoch ≈ 69 min 一致。
+按此吞吐外推：Traffic 60 个 run ≈ 8.6 h，其余 351 个 run ≈ 6.8 h，E14 阶段 A 合计约 **15 h**。
