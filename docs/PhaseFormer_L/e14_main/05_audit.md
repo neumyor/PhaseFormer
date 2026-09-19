@@ -501,3 +501,43 @@ OK  e18_writeback.py       invocations=1 flags=4 defined=4
 
 **一个例外**：`test -s` 那类"参数存在但语义需人来判断"的问题（如 `--verify` 在各脚本中
 含义不同，见脚本文末注释）无法由本项校核覆盖，只能靠逐条语义核对，已在脚本内以注释固化。
+
+### 14.6 全部阶段边界的文件名核对（同一缺陷类别的系统排查）
+
+§14.1 查出的缺陷属于**一类**问题（"上游产物的名字 ≠ 下游引用的名字"），因此对阶段 2
+的**每一处**跨阶段引用都做了生产者↔消费者核对，而不只是修掉那一处：
+
+| 被消费的文件 | 消费者（步） | 生产者 | 写入点 | 结论 |
+|---|---|---|---|---|
+| `$E14_ROOT/results.csv` | 2, 3, 6 | `e14_read_test.py` | `output_root / "results.csv"` L1572 | ✓（本轮修正点） |
+| `$E19_ROOT/level_statistics.csv` | 2, 3 | `e19_predictive_stats.py` | E19 阶段 1 已产出（本会话已验证） | ✓ |
+| `docs/PhaseFormer_gold_standard.md` | 3 | —（手工文档） | 存在，3599 B | ✓ |
+| `$E16_ROOT/dissection_table.csv` | 4 | `e16_dissection.py` | `output_dir / …` L2674 | ✓ |
+| `$E16_ROOT/intervention_table.csv` | 4 | `e16_dissection.py` | `output_dir / …` L2675 | ✓ |
+| `$E16_ROOT/*_44.csv` | 4 | `e16_writeback.py` | L323–324 | ✓ |
+| `$E17_ROOT/results.csv` | 5 | `e17_conditional.py` | `--results-name` 默认 `results.csv` | ✓ |
+| `$E17_ROOT/results.with_test.csv` | 5 | `read_test_generic.py` | `results_path.with_suffix(".with_test.csv")` L358 | ✓ |
+| `$E17_ROOT/projectors/projector_audit.json` | 5 | `e17_conditional_projectors.py` | `output_dir / …` L1003 | ✓ **已存在**（33572 B） |
+| `$E17_ROOT/conditional_table.csv` | 5 | `e17_writeback.py` | L204 | ✓ |
+| `$E18_ROOT/results.csv` | 6 | `e18_negative.py` | `out_root / "results.csv"` L871 | ✓ |
+| `$E18_ROOT/svd_truncation_table_28.csv` | 6 | `e18_svd_truncation.py` | `output_root / …` L932 | ✓ |
+| `$E18_ROOT/negative_table.csv` | 6 | `e18_writeback.py` | L295 | ✓ |
+
+两点与 E14 那处不同的、需要写下来的结论：
+
+1. **`projector_audit.json` 没有生产者被编入流水线**，这是**有意**的而非遗漏：
+   `e17_conditional_projectors.py` 属于**冻结阶段**，其产物（7 个 setting 的
+   `Q1*/Q1COND/Q1INDREVIN` 基向量 + `projector_audit.json`）是 §4.5 要**冻结**的对象，
+   训练期不得重算。已在服务器核实该目录 9 月 19 日 19:57 生成、`projector_audit.json`
+   33572 B 存在，路径与第 5 步实参**逐字一致**，故契约成立。
+   （代价是这条依赖是隐式的：若该目录被删，第 5 步会在训练之后才失败。已记于此表备查。）
+
+2. **第 5 步的 `--stage a` 之后又显式跑一次 `--stage assemble`** 是**冗余但无害**的：
+   按 `--stage` 的 help，`a` 的定义就是"train the 24 new cells, **then assemble**"。
+   重复 assemble 是幂等的，且顺序上位于 `read_test_generic.py` **之前**，
+   因此不会覆盖带 test 的 `results.with_test.csv`。保留它的理由是：即使 `a` 在
+   部分 run 失败时仍装配出部分矩阵（脚本 L1343 注释），这一步也能给出确定的失败点。
+
+**未覆盖项（需诚实说明）**：本项核对的只是"名字对得上"。它不能证明**内容**语义正确
+（例如某个 CSV 的行键与下游 join 键是否一致、单位是否相同）。这一层只能靠各实验的
+阶段 5 审校按设定的验收阈值逐项判断，本表不替代它。
