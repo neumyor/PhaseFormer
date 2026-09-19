@@ -295,6 +295,11 @@ def inventory(minipaper: pathlib.Path) -> int:
     print(f"\nsection 4 empty cells in total: {total_empty}")
     print("(§4.2 variant, §4.3 and §4.7's second table carry intentional text; "
           "see minipaper_fill_mapping.md section 4)")
+    print("NOTE: 'empty cells = 0' does NOT mean 'needs no filling'.  Section 4.6's 25 "
+          "cells are all non-empty because they currently hold PLAN TEXT, and the fill "
+          "must replace that text -- so this count cannot see that table at all.  That "
+          "is precisely why acceptance needs the auditor criterion (PENDING = 0) on top "
+          "of this inventory: a table whose cells were never empty is invisible here.")
     return total_empty
 
 
