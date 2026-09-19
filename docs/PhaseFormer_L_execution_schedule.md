@@ -472,6 +472,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 第 6 步行 3 的**结构性就绪度**（可证伪计数，非分类判断） | **0 处结构性缺失** ⇒ "会在 E16 之后才卡住"的风险排除 | 行 3 的 `e18_svd_truncation --verify` 在任一格 run dir 未解析时**拒绝评估**，故"某个 setting 永远解析不了"会让链条在**付掉 E16 那 3–5 小时之后**停下。直接调 `e18_svd_truncation.load_manifest`/`build_plan`，对每个未解析的 `(setting, seed, arm)` 回查 manifest 是否**声明**该格：**未训练 36 格 / manifest 中根本没有 0 格**，且 **28 个 setting 全部带 `l_main`+`l_q1_4`+`l_q1_8` 三臂**（`{3: 28}`）。即未解析项**全部**属"已声明、尚未训练"（计划条目随 E14 推进由 13 降到 12）；`--verify` 在 E14 收尾后必然全解析。记录在 `e18_negative/02_static_check.md` §5.3 |
 
+| 2026-09-20 | 阶段 A 的**阶段 5 工具**落地并复跑全矩阵 | **155 ok / 256 pending / 0 fail；"阶段 A 没读 test" 155/155 成立** | 八条阶段 A 不变量原先只**手工过了前 7 个 cell**、脚本写在临时目录。新增 `scripts/phaseformer_L/audit_e14_stage_a.py`（逐格用 `e14_read_test.locate_run` 的**同一把臂指纹尺子**解析）：run 唯一可解析 / `metrics.csv` 存在 / 记了 `checkpoint` 且文件存在 / `val_mse` 可用 / **`test_mse`+`test_mae` 为空** / `1 ≤ epochs_completed ≤ 30`（**刻意不写"等于请求轮数"**：早停 `patience=8`） / `parameter_count` 非空 / `config.json` 未置 `evaluate_test`。未跑完报 PENDING 且 exit 0，已完成格违反才 exit 1。实测：`ok 155, pending 256, fail 0`，`test split read during stage A: 0 cell(s)`。**`--self-test` 5 条断言全成立**，其中"`test_mse` 被填 ⇒ fail"一条**证明"没读 test"不是空话**（真实矩阵上读出 0 是"确实没读"，不是"判据查错了列"；真实 metrics.csv 50 列里 `test_mse`/`test_mae`/`parameter_count` 都在，已核）。记录在 `e14_main/05_audit.md` |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据

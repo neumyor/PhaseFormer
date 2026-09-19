@@ -793,3 +793,54 @@ E14 单次 test 读取、E16（63 cells）、E17（24 runs）、E18 训练（78 
 该门只能判断"值的**个数**与写法是否合法"，**不能**判断单个值在语义上是否正确——
 例如 `--e14-results` 指向一个存在但错误的文件，它照样通过；那由 §14 的命名契约、
 §15 的列名契约与各实验阶段 5 审校负责。三者覆盖的维度不同，不能互相替代。
+
+## 附：`audit_e14_stage_a.py` —— 阶段 5 的可复跑工具（2026-09-20）
+
+阶段 A 的八条不变量**最初是手工过的前 7 个 cell**（`execution_schedule.md` 2026-09-19），
+那个校核脚本当时写在临时目录、随会话消失。本轮把它落成仓库内工具，并对**整张矩阵**复跑：
+
+```bash
+python scripts/phaseformer_L/audit_e14_stage_a.py \
+  --e14-root research_runs/phaseformer_L_e14_main_v1 [--json OUT.json]
+```
+
+逐格（用 `e14_read_test.locate_run` 解析——即阶段 B 读取器用的**同一把臂指纹尺子**）：
+
+| # | 不变量 | 为什么 |
+|---|---|---|
+| 1 | run 目录能解析，且**唯一**（多于一个 = 两格争同一 run） | 歧义匹配会让阶段 B 读错 checkpoint |
+| 2 | `metrics.csv` 存在 | 该格已完成 |
+| 3 | `metrics.csv` 记了 `checkpoint` 且该文件存在 | 阶段 B 要恢复它 |
+| 4 | `val_mse` 非空可解析 | 阶段 B 的复现门要用 |
+| 5 | **`test_mse`/`test_mae` 为空** | 阶段 A **绝不读 test**——整个"只读一次"协议靠这条 |
+| 6 | `1 ≤ epochs_completed ≤ 30` | **刻意不写成"等于请求轮数"**：早停 `patience=8` 对新格与复用格一视同仁，写成相等是早期审校脚本的误判 |
+| 7 | `parameter_count` 非空 | 参数表要拿它交叉校验 |
+| 8 | run 的 `config.json` 未置 `evaluate_test` | 协议面防线 |
+
+**未跑完的格报 PENDING（exit 0），已完成格违反任何一条才 exit 1** —— 与审计器的三态约定一致。
+
+**实测（2026-09-20 05:3x，E14 仍在跑）**：
+
+```text
+cells: 492 (declared total 492)   new: 411  reused: 81
+stage A, per cell:  ok 155   pending 256   fail 0
+test split read during stage A: 0 cell(s) (must be 0)
+Stage A is incomplete (256 cell(s) still pending) but every finished cell satisfies all eight invariants.
+```
+
+**校准（`--self-test`，5 条断言全部成立）** —— 用自己的合成根注入四种情形：
+
+```text
+[OK] self-test clean: ok (expected ok)
+[OK] self-test reads_test: fail (expected fail) -- ['test_mse is populated: stage A must never read test']
+[OK] self-test zero_epochs: fail (expected fail) -- ['epochs_completed=0.0 outside 1..30']
+[OK] self-test no_parameter_count: fail (expected fail) -- ['parameter_count missing']
+[OK] exactly one cell flagged for reading test: 1
+```
+
+第 2 条尤其重要：它**证明"没读 test"这条判据不是空话**（真实矩阵上读出 0 是因为确实没读，
+而不是因为判据写错了列）；真实 `metrics.csv` 的头 50 列里 `test_mse`/`test_mae`/`parameter_count` 都存在（已核）。
+
+> **一次我自己的 fixture 错误**：`--self-test` 首跑时四格共用模板的 `key`，
+> 于是四条判决**塌进同一个字典键**、每格都打印"最后一格"的结果（看起来像"clean 也 fail"）。
+> 修法是给每个合成格一个独立 `key`。与 §17.3、§15.1 同类：**先分清是工件坏了还是我的搭台错了**。
