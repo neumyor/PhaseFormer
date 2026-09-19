@@ -401,3 +401,103 @@ invariant violations: NONE
 `lookback=720`、`loss=huber`）**无一条违反**。六个臂至此都已开始产出。
 
 该审计是**滚动**的：随着 run 完成可随时重跑，用于在长任务中途持续确认而非只做首尾两次。
+
+---
+
+## 14. 跨阶段产物命名契约：一处会导致阶段 2 第 6 步失败的缺陷（已修）
+
+阶段 2 是**无人值守**的长链（E14 阶段 B → E19 → E14 汇总 → E16 → E17 → E18），
+因此本轮在等待阶段 A 的空档做了两件事：**逐条校核每个调用的实参**，以及
+**校核阶段之间传递的文件名**。第二项查出一个真实缺陷。
+
+### 14.1 缺陷
+
+两个"读 test"脚本的产物命名**不对称**：
+
+| 脚本 | 产物 | 位置 |
+|---|---|---|
+| `e14_read_test.py` | **就地**填充 `results.csv` 的 `test_mse`/`test_mae` | `<output_root>/results.csv` |
+| `read_test_generic.py`（E17/E18 用） | 另写**同级副本** `<results>.with_test.csv` | `results.with_test.csv` |
+
+而 `run_phase2_after_e14.sh` 第 6 步把 `--e14-results '$E14_ROOT/results.with_test.csv'`
+交给 `e18_writeback.py`。经核实：
+
+* `grep -c with_test scripts/phaseformer_L/e14_read_test.py` → **0**，该文件从不生产此名；
+* `e14_read_test.py` 的写盘路径是 `results_path = output_root / "results.csv"`（第 1572 行）；
+* `read_test_generic.py` 的输出是 `results_path.with_suffix(".with_test.csv")`（第 358 行）。
+
+即第 6 步实参指向一个**永远不会存在**的文件。后果不是"缺一列"，而是
+`read_csv` 抛 `FileNotFoundError` 使第 6 步整体失败——**在第 1–5 步已经耗时数小时之后**。
+
+同一误解还留在了 `e18_writeback.py` 的 `Usage` 示例（第 31 行），一并修正为 `results.csv`。
+
+### 14.2 修复：把契约声明一次，而不是重复三处
+
+根因是同一个路径在**第 2、3、6 步各写了一遍**，因此可以互相漂移。修法是引入单一来源：
+
+```bash
+# e14_read_test.py 就地填充 results.csv，而 read_test_generic.py 另写
+# results.with_test.csv —— 这是契约，不是风格选择。
+E14_TEST_CSV="$E14_ROOT/results.csv"
+```
+
+第 2、3、6 步全部改用 `$E14_TEST_CSV`。E17/E18 自己的 `--results` 仍为
+`results.with_test.csv`（它们确实由 `read_test_generic.py` 生产），保持正确。
+
+### 14.3 顺带加上的快速失败闸门
+
+既然该缺陷的代价"在最后一步才显现"，就在**最便宜的第 1 步**加闸门：读 test 是纯推理，
+几分钟即完成；而第 4–6 步要跑 63+24+78 个 run。因此让第 1 步在产物缺少
+`test_mse` 时立即中止，远优于在数小时后才发现。
+
+闸门逻辑（对每个 fixture 实测通过，**在服务器 gawk 上复测通过**，见 §14.4）：
+
+```bash
+test -s "$E14_TEST_CSV" && awk -F, '...c==0||t==0||n!=t -> exit 1' "$E14_TEST_CSV"
+```
+
+四类 fixture 的实测结果：
+
+| fixture | 期望 | 实测 |
+|---|---|---|
+| 文件不存在 | 失败 | exit 1 ✓ |
+| 全部行 `test_mse` 非空 | 通过 | exit 0，`rows=2 with_test=2` ✓ |
+| 一行 `test_mse` 为空 | 失败 | exit 1，`rows=2 with_test=1` ✓ |
+| 整列 `test_mse` 缺失 | 失败 | exit 1 ✓ |
+
+### 14.4 为什么要在服务器上再测一次
+
+闸门是 `awk` + shell 转义写的，而**转义错误在静态检查里完全看不见**——`bash -n` 通过、
+`python -m compile` 也通过，只有真正执行才会暴露（本会话已多次被转义/引号问题咬到）。
+本地是 BSD awk、服务器是 **gawk**，两者对 `\$`、`\"` 的处理路径不同，所以
+用**从已同步脚本里抽出来的同一段原文**在服务器上跑同一组 fixture，结果与本地一致。
+
+### 14.5 实参校核：19 个调用、0 个未定义参数
+
+对阶段 2 的每个 `$PY scripts/…` 调用，抽取其 `--flag` 并与目标脚本 `add_argument`
+的定义集求差：
+
+```
+OK  e14_params.py          invocations=1 flags=2 defined=4
+OK  e14_reuse_audit.py     invocations=1 flags=2 defined=3
+OK  e14_writeback.py       invocations=1 flags=5 defined=6
+OK  check_builder_outputs  invocations=4 flags=2 defined=4
+OK  e16_dissection.py      invocations=2 flags=6 defined=28
+OK  e16_writeback.py       invocations=1 flags=3 defined=3
+OK  e17_conditional.py     invocations=2 flags=4 defined=24
+OK  read_test_generic.py   invocations=2 flags=2 defined=13
+OK  e17_writeback.py       invocations=1 flags=3 defined=3
+OK  e18_negative.py        invocations=2 flags=5 defined=13
+OK  e18_svd_truncation.py  invocations=1 flags=6 defined=14
+OK  e18_writeback.py       invocations=1 flags=4 defined=4
+未定义参数：0/12
+```
+
+并逐脚本核对了**必填参数**（`required=True`）是否都已提供：
+`e14_read_test`(manifest) / `read_test_generic`(results) / `e14_writeback`(manifest,results,golden,output-root)
+/ `e18_writeback`(results,e14-results,truncation,output-root) / `e19_predictive_power`(stats,results,output-root)
+/ `e16_writeback`(intervention,dissection,output-root) / `e17_writeback`(results,output-root)
+/ `e14_params`,`e14_reuse_audit`(manifest,output-root) / `check_builder_outputs`(csv) —— 全部已提供。
+
+**一个例外**：`test -s` 那类"参数存在但语义需人来判断"的问题（如 `--verify` 在各脚本中
+含义不同，见脚本文末注释）无法由本项校核覆盖，只能靠逐条语义核对，已在脚本内以注释固化。
