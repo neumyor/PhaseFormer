@@ -181,3 +181,24 @@ Traffic-96 的 4096 s 与冒烟实测（138 s/epoch × 30 epoch = 4140 s）**完
 **收尾时本节应补**：`E14_MAIN_EXIT` 的值与 END 时间、411/411 的最终计数、
 `audit_e14_stage_a.py --require-complete` 的判决（预检里也会跑一次），以及 §4 各格最终的 `来源/披露` 取值分布。
 **这些都必须等到阶段 A 真正结束后才有数**，故不预填。
+
+## 10. 训练代码在整张矩阵上**逐字节未变**（2026-09-20 核实，可供论文协议部分引用）
+
+一个审稿式的问题："这 411 个格子是**同一版代码**训出来的吗？"本轮把它核到字节级：
+
+| 检查 | 结果 |
+|---|---|
+| 启动提交（取 `e14_main.log` 里启动器自己打印的 `HEAD:` 行） | `f870b1a` — "Include the A1 row and the Traffic appendix in the E14 default matrix" |
+| 启动至今变动的文件总数 | **77**（`docs/` 43、`scripts/` 33、`tests/` 1） |
+| 其中落在**训练入口或模型代码**上的 | **`scripts/search_phaseformer.py` 与 `src/**`：0 个**（`git diff --name-only f870b1a..HEAD -- scripts/search_phaseformer.py src/` 输出为空） |
+| 训练入口是否从 `scripts/` 里导入任何模块 | **没有**（`grep -E "^(from\|import) scripts"` 无命中；它只导入 stdlib、第三方与 `src.*`） |
+| 唯一落在 E14 代码路径上的改动 | `scripts/phaseformer_L/e14_main_matrix.py`（**+42 行、无删改**：两个合法性常量、`_protocol_ok` 的两条 gate/lr 越界检查、复用索引里多记 `gate_init`/`learning_rate`）。它对 **stage B 的指纹门**做过**实跑**核验：`constants_equal: true, differences: [], parity_cases: 20, parity_failures: []`，且该步 dry-run `accepted: 1, problems: 0, wrote_outputs: false` ⇒ **不影响**；对**正在跑**的训练亦无影响（启动器在启动时已导入其内存版本，且它写出的 manifest 本就排除了那批污染 run） |
+
+**结论**：**411 个格子由同一份字节相同的训练代码（`scripts/search_phaseformer.py` + `src/**`）训出**
+——启动后改动的 33 个脚本**全部属于阶段二/分析层**（它们只在 E14 结束后运行）与预检/回填工具。
+这条可以作为论文协议部分的事实陈述，而不只是"我们注意过"。
+
+> **方法论（本轮的价值所在）**：这不是"顺手看一眼"，而是先问"**有没有哪个我改过的文件其实在跑着的实验的代码路径上**"，
+> 再按"启动提交 → HEAD"的**字节级 diff** 回答。发现一个（`e14_main_matrix.py`）之后**没有靠推理**下结论，
+> 而是把它的消费者（stage B 的指纹门）**实跑**一遍。若当时只推理"应该是纯增量、应该没事"，
+> 就会漏掉"万一改了既有常量 ⇒ 第 1 步拒绝启动"这一支。
