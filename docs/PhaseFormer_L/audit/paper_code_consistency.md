@@ -899,3 +899,39 @@ OK  gate presence matches the arm table: 0 row(s) whose arm and gate_param_prese
 `(arm, setting, seed)` 三元组互相碰撞，63 格被算成 **21** 格（第一次）与 **36** 格（第二次），
 导致两条对照"看起来失败"。换成真实的 7 个 setting 名后才是 63 ✅。
 **这与 §17.3 同类**：校准器的失败同样要先分清"判据错了"还是"我的 fixture 错了"。
+
+## 19. 收尾校验：审计器**读取的每个列名**都与产出者逐一核对（无缺陷）
+
+§17、§18 都是在"拿真产物喂判据"时发现的。本轮把这条做法**系统化地跑完最后一遍**：
+审计器读的每一张表、每一个列名，都回到**写它的那个脚本**核对。
+`check_column_contracts.py` 覆盖的是"**回填工具需要什么列** ↔ 产出者写了什么列"；
+它**不**覆盖"**审计器**读什么列"——这条缝就是本节补的（口径不同，故逐项人工过一遍而不是硬塞进那个脚本）。
+
+| 审计器读取 | 期望列/键 | 产出者 | 实测 |
+|---|---|---|---|
+| E14 `results.csv` | `test_mse`、`test_mae` | `e14_read_test.py` | ✅ |
+| E14 `parameter_table.csv` | `arm`、`setting`、`total_matches_metrics`、`gate_value_from_checkpoint`、`gate_param_present` | `e14_params.py` | ✅ 20 列，220 行真实数据实测 |
+| E14 `main_table.csv` | `is_traffic_appendix`、`provenance_note`、`setting` | `e14_writeback.py` | ✅ 28 = 24 + 4 |
+| E14 `variant_table.csv` | 6 行 | `e14_writeback.py`（`ARMS` 6 个） | ✅ |
+| E14 `claims.json` | `A`/`B`/`C`/`D`/`must_answer_a`/`must_answer_b` | `e14_writeback.py` | ✅ |
+| E16 `e16_summary.json` | `cells`、`algebra_failures`、`run_metric_failures`、`run_metric_not_comparable`、`reference_parity_passed`、`checkpoint_path_mismatches`、`test_split_read`、`counts.intervention_rows`、`counts.intervention_arms_per_cell` | `e16_dissection.py` | ✅ 全键存在 |
+| E16 `reference_parity.json` | `probe_cells` | `e16_dissection.py` | ✅ **实测 72**（两个参照文件各 36 个匹配键：6 setting × 3 seed × 2 低秩臂；Electricity-336 不在参照内，故 42−6=36） |
+| E16 `intervention_table.csv` | `arm`、`setting`、`seed`、`intervention_arm`、含 `random_rrr` 的列 | `e16_dissection.py` | ✅ |
+| E16 `dissection_table.csv` | 21 行（3 臂 × 7 setting） | `e16_dissection.py` | ✅ |
+| E17 `conditional_table.csv` | `setting`、`conditional_vs_independent_direction_cos` | `e17_writeback.py`（`:166`） | ✅ |
+| E17 `results.with_test.csv` | `status`、`test_mse` | `e17_conditional.py` + `read_test_generic.py` | ✅（`status` 在 `RESULTS_FIELDS`；`test_mse` 由读取器追加） |
+| E17 `e17_summary.json` | `projector_audit_present`、`missing_projectors` | `e17_conditional.py` | ✅ |
+| E18 `results.with_test.csv` | `stage`、`test_mse` | `e18_negative.py` + `read_test_generic.py` | ✅ |
+| E18 `svd_truncation_table_28.csv` | `setting`（28 个） | `e18_svd_truncation.py` | ✅ |
+| E18 `negative_table.csv` | `row`（1..5） | `e18_writeback.py`（`:150`） | ✅ |
+| E19 `predictive_power.csv` | `setting`（28 个） | `e19_predictive_power.py`（`:246`） | ✅ |
+
+**结论：本轮未发现新的列名缺陷**（此前发现的 `test_mse` 追加、`random_rrr*` 列、`conditional_vs_independent_direction_cos`
+都是既有修复留下的正确状态）。这条校验的价值在于**排除**了一类静默失败：
+审计器读一个不存在的列名时不会崩，只会把**整列**判成"缺失"
+（如 E18 的"78 行全部没读 test"），而那会在全链跑完后才现形。
+
+**顺带确认写回工具不会"假失败"**：四个 write-back 里只有 `e16_writeback.py:90` 与 `e18_writeback.py:79` 的
+`raise SystemExit("missing input: ...")`，即**输入文件缺失**才停；没有任何一处把**行数/臂数**写成硬判据
+（这正是 §18 修掉的那一处）。故第 3/4/6 步里 `check_builder_outputs.py ... || true` 掩盖不了真正的口径缺陷——
+真正的口径缺陷只可能落在最后一关，也就是 §14/§17/§18 反复校准的那一层。
