@@ -52,6 +52,28 @@ REPO_ROOT = HERE.parents[1]
 # Producer-side extraction
 # --------------------------------------------------------------------------
 
+def _subscript_store_keys(path: Path) -> set:
+    """Literal ``row["x"] = ...`` keys -- columns a script ADDS to a row.
+
+    Used for read_test_generic.py, which preserves every input column and stamps
+    extra ones onto each row.  Deriving this from source keeps the modelled
+    producer set honest: an earlier hand-written model listed only
+    ``TEST_COLUMNS`` (2) while the script actually adds 7, which would have made
+    the checker report a false gap the moment a consumer read one of the other 5.
+    """
+    keys: set = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
+                and isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, str)):
+            keys.add(node.slice.value)
+    # Drop private scratch keys ("_index") and environment-variable assignments
+    # such as env["CUDA_VISIBLE_DEVICES"] = ... which are stores to a dict but are
+    # not columns of any table.  Column names in these artifacts are lower-case
+    # snake_case, so an all-caps name is an env var, not a column.
+    return {k for k in keys if not k.startswith("_") and not k.isupper()}
+
+
 def _dict_keys_in(node: ast.AST) -> set:
     """Literal string keys *defined* under ``node``.
 
@@ -176,7 +198,8 @@ def producer_schemas() -> dict:
     svd = REPO_ROOT / "scripts" / "phaseformer_L" / "e18_svd_truncation.py"
     generic = REPO_ROOT / "scripts" / "phaseformer_L" / "read_test_generic.py"
 
-    generic_cols = _literal_assignment(generic, {"TEST_COLUMNS"}).get("TEST_COLUMNS", set())
+    # What the single-reader stamps onto each row, read from its own assignments.
+    generic_cols = _subscript_store_keys(generic)
 
     intervention = _enclosing_function_keys(e16, "intervention_rows.append") | _band_summary_keys()
     dissection = _function_dict_keys(e16, {"dissection_rows"}) | _band_summary_keys()
