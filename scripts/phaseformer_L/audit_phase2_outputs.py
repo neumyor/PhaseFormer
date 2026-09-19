@@ -266,6 +266,22 @@ def audit_e17(report: Report) -> None:
         report.add("E17 (§4.5)", "projector audit has 7 settings",
                    "PASS" if len(obj) == 7 else "FAIL", f"got {len(obj)}")
 
+    # A missing projector is an infrastructure failure, not a benign skip: the
+    # frozen bases are what the two frozen arms train against.  Its consequence is
+    # also visible downstream (no runs -> no cells), but an explicit check names the
+    # actual cause instead of leaving "0 new cells" as the only symptom.
+    summary = check_exists(report, "E17 (§4.5)", f"{E17}/e17_summary.json",
+                           "e17_summary.json present")
+    if summary:
+        obj = read_json(summary)
+        present = obj.get("projector_audit_present")
+        report.add("E17 (§4.5)", "projector audit flag set by the runner",
+                   "PASS" if present else "FAIL", f"projector_audit_present={present!r}")
+        missing = obj.get("missing_projectors") or []
+        report.add("E17 (§4.5)", "no missing frozen projectors",
+                   "PASS" if not missing else "FAIL",
+                   f"{len(missing)} missing" + (f" e.g. {missing[:2]}" if missing else ""))
+
     results = check_exists(report, "E17 (§4.5)", f"{E17}/results.with_test.csv",
                            "results.with_test.csv present")
     if results:
