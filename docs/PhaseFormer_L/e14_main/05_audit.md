@@ -228,3 +228,21 @@ l_main ETTh2-96 s2022   n_valid = 3
 - "一致"的口径是 `gate_init` / `learning_rate` / `val_mse`（8 位小数）+ 是否存在 test 指标；
   不比较 checkpoint 文件本体（哈希级比较只对 §6.5 的 3 格做过）。
 - 若将来新增白名单根目录，须重跑本审计。
+
+---
+
+## 8. 一条工程注意（2026-09-19 记录，避免后续误读）
+
+`run_id` **只编码 mechanism，不编码臂**：`l_main`、`l_q1_4`、`l_q1_8` 三者的目录名都是
+`confirm_<dataset>_h<H>_weak_residual_p24_...`，区别只在 `config.json` 的
+`weak_period_residual_head_type` 与 `weak_period_residual_rank`。
+因此：
+
+- **不能用目录名推断"某个臂跑到第几个"**。本次据此一度误判调度器停滞
+  （看到 `traffic_h720_weak_residual` 仍在跑，就以为已完成的 `l_main` 又跑了一遍）；
+  实际是 `l_q1_8` 的 h720 三格尚未完成。用 `done` 事件统计才是权威口径。
+- 任何"按名找 run"的逻辑都必须回到 `config.json` 做指纹匹配（本线的解析器都遵守这一点，
+  包括 `_arm_match` / `find_run_dir` / E16–E18 的解析器）。
+
+记账口径（本次核对）：**41 个 run 目录 = 33 个已完成（有 `metrics.csv`）+ 8 个在跑**，
+与 `done` 事件数严格相等，无重复、无孤儿目录。
