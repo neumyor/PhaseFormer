@@ -474,6 +474,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 阶段 A 的**阶段 5 工具**落地并复跑全矩阵 | **155 ok / 256 pending / 0 fail；"阶段 A 没读 test" 155/155 成立** | 八条阶段 A 不变量原先只**手工过了前 7 个 cell**、脚本写在临时目录。新增 `scripts/phaseformer_L/audit_e14_stage_a.py`（逐格用 `e14_read_test.locate_run` 的**同一把臂指纹尺子**解析）：run 唯一可解析 / `metrics.csv` 存在 / 记了 `checkpoint` 且文件存在 / `val_mse` 可用 / **`test_mse`+`test_mae` 为空** / `1 ≤ epochs_completed ≤ 30`（**刻意不写"等于请求轮数"**：早停 `patience=8`） / `parameter_count` 非空 / `config.json` 未置 `evaluate_test`。未跑完报 PENDING 且 exit 0，已完成格违反才 exit 1。实测：`ok 155, pending 256, fail 0`，`test split read during stage A: 0 cell(s)`。**`--self-test` 5 条断言全成立**，其中"`test_mse` 被填 ⇒ fail"一条**证明"没读 test"不是空话**（真实矩阵上读出 0 是"确实没读"，不是"判据查错了列"；真实 metrics.csv 50 列里 `test_mse`/`test_mae`/`parameter_count` 都在，已核）。记录在 `e14_main/05_audit.md` |
 
+| 2026-09-20 | **上线前一次性快照**（八道闸门同一次跑，05:34:17，E14 = 158/411） | **8/8 全绿** | ①列契约 `--strict` → rc 0；②调用元数 → 全声明、无单值多值；③消费者契约 → `C1 ✅492 cells, one schema` / `C2 ✅21/21, 0 rejected` / `C3 ✅21/21（resolved=84, 0 rejected）`、`OK: phase-2 consumers accept the live E14 manifest`；④审计器 20 类对照全符合预期；⑤阶段 A 审计 → `ok 158 / pending 253 / fail 0`，`test split read during stage A: 0 cell(s)`；⑥阶段 A 审计 `--self-test` → 5/5；⑦回填校验（产物齐备）→ `match 168 / blank 2 / PENDING 6`（`blank 2` = 两处正文占位，待回填后清零；`PENDING 6` = §4.7 两列 ρ）；⑧`--inventory` → **485**（回填前基线）。**含义**：链条启动时不存在任何已知的"闸门会误拒"或"闸门形同虚设"——四类缺陷（§17 门值判据、§18 臂数、`--json` 空转、E18 基线出处）都已修并有对照；三处未完成项（253 个待训格、两处正文占位、6 个 ρ）都是**按计划在后续阶段完成**的，不是缺陷 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
