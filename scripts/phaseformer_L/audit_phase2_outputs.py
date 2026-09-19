@@ -114,7 +114,9 @@ def audit_e14(report: Report) -> None:
                    "PASS" if len(rows) == 492 else "FAIL", f"got {len(rows)}")
         report.add("E14 (§4.2)", "every row carries test_mse and test_mae",
                    "PASS" if not blank else "FAIL",
-                   f"{len(blank)} blank row(s)" + (f" e.g. {blank[0].get('setting')}" if blank else ""))
+                   f"{len(blank)} blank row(s)"
+                   + (f" e.g. {blank[0].get('setting') or blank[0].get('arm') or '<no setting column>'}"
+                      if blank else ""))
 
     summary = check_exists(report, "E14 (§4.2)",
                            f"{E14}/test_read_summary.json", "single test read summary")

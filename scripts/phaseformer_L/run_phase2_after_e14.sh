@@ -24,6 +24,7 @@
 #                   + §4.5 write-back
 #   6  E18           §4.6 rows 1+5 (78 runs) + single test read + row 3
 #                   (28 settings) + §4.6 write-back
+#   7  audit         stage-5 acceptance audit over every experiment's artifacts
 #
 # Nothing here reads or writes outside research_runs/ and the two log files.
 
@@ -229,5 +230,13 @@ run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 se
 #   e17_conditional.py            resolve) -> passed on the training invocation.
 #   e18_svd_truncation  --verify = resolve every cell's checkpoint before
 #                        evaluating -> passed just before its analysis.
+
+# Stage 5 entry point: verify the documented acceptance criteria of every
+# experiment from the artifacts that now exist.  It exits non-zero only when a
+# present artifact CONTRADICTS a documented criterion, so a failure here means
+# "the numbers need a human before write-up", not "the chain broke".
+run_step 7 "stage 5: acceptance audit over the phase-2 artifacts" \
+  "$PY" scripts/phaseformer_L/audit_phase2_outputs.py \
+    --json "$LOGDIR/phase2_acceptance_audit.json"
 
 echo "=== [$(date -Is)] phase 2 complete"
