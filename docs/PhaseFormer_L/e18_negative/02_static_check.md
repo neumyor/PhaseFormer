@@ -93,3 +93,50 @@ setting**，而 minipaper §4.6 行 3 明确要求 **全 28 setting**（24 主�
 dry-run 报 57 条未解析（`l_main` 17、`l_q1_4` 19、`l_q1_8` 21）。原因是 E14 仍在训练：
 按成本降序，先跑 Traffic 的 `l_main`，因此部分 Traffic 格已可解析、其余臂与 setting 尚未产出。
 **验收判据**：E14 阶段 A 全部结束后重跑，应报 `problems: 0`（28 个 setting × 3 个臂全部解析）。
+
+---
+
+## 6. §4.6 回填工具（`e18_writeback.py`）
+
+§4.6 是五行汇总表，最后一列"本文补做"才是本文的工作。新增
+`scripts/phaseformer_L/e18_writeback.py`，只填**行 1/3/5**，并把**行 2/4 固定为 "—"**
+（minipaper 明确说不补做）——代码里以常量 `KEPT_AS_DASH` 落地，防止后来者顺手补上。
+
+### 6.1 数据来源与配对口径
+
+| 行 | 来源 | 配对基线 |
+|---|---|---|
+| 行 1（平滑 2 档） | E18 的 `results.with_test.csv` 中 `stage=="smooth"` 的行 | 同一 setting 的 **E14 `l_main`** test MSE/MAE |
+| 行 3（SVD 截断） | E18 的 `svd_truncation_table_28.csv` | 同一 setting 的**全秩**与**秩约束训练**结果 |
+| 行 5（绝对秩 1/2） | E18 的 `results.with_test.csv` 中 `stage=="rank12"` 的行 | 同上（E14 `l_main`） |
+
+**所有补做数字都是同 setting、同 seed 的配对比较**（基线自身的超参不同，见 D-2 披露），
+因此表内可比，但不能与金标准直接比较。
+
+### 6.2 用真实列名做的端到端验证
+
+构造与真实表头相同的合成数据（行 1+5 共 78 行 = 42+36；基线 21 行；截断表 9 行）跑通全路径：
+
+```text
+{"event": "finished", "row1": "no cell improves both metrics",
+ "row1_mean_delta_mse_pct": 1.3081, "row3_mean_gap_pct": 4.821,
+ "row3_worst": "Electricity-336", "row5_mean_delta_mse_pct": 17.6312,
+ "row5_degraded_cells": 12}
+```
+
+| 检查 | 结果 |
+|---|---|
+| 行数 | **5** 行 ✓ |
+| 行 2/4 | 均为 `—` ✓ |
+| 行 1 判定 | 逐 cell 判"是否**双指标**同时改善"，输出改善/未改善清单 ✓ |
+| 行 3 最差 setting | 正确挑出 **Electricity-336**（既有反例锚点）✓ |
+| 行 5 退化 cell 数 | 逐个列出 ✓ |
+
+### 6.3 已写入结果的披露
+
+- 行 3 为 **validation 口径**，而既有 E11 为 **test 口径**——只有截断代数与三段式结构相同；
+- 行 5 **不得**读作"秩-2 必要/不必要"的证据（minipaper §5 第 5 条）；
+- 行 1/5 的基线来自 E14，其超参与被比格不同（D-2），配对只在同 setting 内成立。
+
+**边界**：合成数据仅用于验证代码路径，数值无意义且已删除；真实数值须由 E18 的 78 个正式 run
+与 28-setting 截断分析产生。
