@@ -21,7 +21,7 @@
 | **§4.4** 解剖表（21 行） | `e16_dissection.py` → `e16_writeback.py` | `dissection_table_44.csv` | 不变量 1（代数证书，硬失败）、臂覆盖（(臂,setting) 与 (臂,setting,seed) 双粒度）、schema 对拍 0 缺列、空列扫描 0 问题 | 工具就绪，待运行 |
 | **§4.4** 干预表（21×11 臂，含随机 RRR） | 同上 | `intervention_table_44.csv` | 不变量 2（vs run 指标）、`RandomRRR-drop` 零分布带、同维对照显式标注、`criterion_6_drop_beyond_random_rrr_95pct` 进入判定 | 工具就绪，待运行 |
 | **§4.4** 参照复现 | — | `reference_parity.json` | 6 个可比 setting 上 8 字段；**Electricity-336 无参照**（E10 排除），披露为"新算非复现" | 判据已定 |
-| **§4.5** 四臂表（7 行） | `e17_conditional_projectors.py` → `e17_conditional.py` → `read_test_generic.py` → `e17_writeback.py` | `conditional_table.csv` | 投影器复现门（独立路线对 E8 的 6 个投影器 `abs_cos=1.0`）、H1 来源为 Stage-3 CSV、`direct==joint` 自查、|cos| 判定可区分性 | 工具就绪 |
+| **§4.5** 四臂表（7 行） | `e17_conditional_projectors.py` → `e17_conditional.py` → `read_test_generic.py` → `e17_writeback.py` | `conditional_table.csv` | 投影器复现门（独立路线对 E8 的 6 个投影器 `abs_cos=1.0`）、H1 来源为 Stage-3 CSV、`direct==joint` 自查、│cos│ 判定可区分性 | 工具就绪 |
 | **§4.5** H1 列（seed 数） | `e17_conditional.py` | `h1_*` 四列 | 用文件自带 `seed` 列分组（不依赖位置约定）；Electricity-336 记 `evidence_missing` 不推断 | 已实测 4/6 为 3/3、Weather-192 为 0/3 |
 | **§4.6** 行 1 平滑 2 档 | `e18_negative.py` → `read_test_generic.py` → `e18_writeback.py` | `negative_table.csv` 行 1 | 两档**数值上确实不同**（卡点已固化）；逐 cell 判"双指标是否同时改善" | 工具就绪 |
 | **§4.6** 行 3 SVD 截断 28 setting | `e18_svd_truncation.py` | `svd_truncation_table_28.csv` | 范围 **28**（含 Traffic，曾被漏为 24）；**validation 口径**与既有 E11 的 test 口径差异显式披露 | 工具就绪 |
