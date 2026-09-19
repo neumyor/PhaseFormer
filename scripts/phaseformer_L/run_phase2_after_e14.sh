@@ -16,12 +16,14 @@
 # Steps (see docs/PhaseFormer_L_execution_schedule.md for the contracts):
 #   1  E14 stage B   single test read for the 411 new cells (e14_read_test.py)
 #   2  E19 stage 2   §4.7 rho columns (e19_predictive_power.py)
-#   5  E17           §4.5 four-arm table (24 runs) + assemble + single test read
-#   6  E18           §4.6 rows 1 and 5 (78 runs) + single test read + row 3
-#   3  E14 writeback §4.2 table + claims A-D + audit (e14_writeback.py)
-#   4  E16           §4.4 dissection + 10-arm interventions, 63 cells
-#   5  E17           §4.5 four-arm table (24 new runs) + assemble
-#   6  E18           §4.6 rows 1 and 5 (78 runs) + row 3 over 28 settings
+#   3  E14 params    parameter table + gate fallback (e14_params.py)
+#      E14 reuse     reuse ambiguity audit (e14_reuse_audit.py)
+#      E14 writeback §4.2 table + claims A-D + audit (e14_writeback.py)
+#   4  E16           §4.4 dissection + interventions (63 cells) + write-back
+#   5  E17           §4.5 training (24 runs) + assemble + single test read
+#                   + §4.5 write-back
+#   6  E18           §4.6 rows 1+5 (78 runs) + single test read + row 3
+#                   (28 settings) + §4.6 write-back
 #
 # Nothing here reads or writes outside research_runs/ and the two log files.
 
