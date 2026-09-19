@@ -282,6 +282,21 @@ def main() -> None:
     intervention, missing_i = build_intervention(intervention_rows)
     dissection, missing_d = build_dissection(dissection_rows)
 
+    # §4.4 says the intervention table reports 10 arms per cell, and this paper
+    # adds an 11th (`RandomRRR-drop`).  Verify the raw product actually carries
+    # them instead of assuming it, so a missing arm surfaces as a flag rather
+    # than as a silently thin table.
+    arms_per_cell: dict = {}
+    for row in intervention_rows:
+        key = (row["arm"], row["setting"])
+        arms_per_cell.setdefault(key, set()).add(row["intervention_arm"])
+    expected_arms = 11
+    thin = [f"{arm}__{setting}" for (arm, setting), names in arms_per_cell.items()
+            if len(names) < expected_arms]
+    observed = sorted({len(names) for names in arms_per_cell.values()})
+    missing_named = sorted(set(INTERVENTION_ARMS)
+                           - {name for names in arms_per_cell.values() for name in names})
+
     out_root = Path(args.output_root)
     if not out_root.is_absolute():
         out_root = ROOT / out_root
@@ -348,6 +363,16 @@ def main() -> None:
                            "percentile is averaged because 'worse than the 95% "
                            "null' is defined on the percentile",
         },
+        "arm_coverage": {
+            "cells": len(arms_per_cell),
+            "arms_per_cell_observed": observed,
+            "expected_arms_per_cell": expected_arms,
+            "cells_with_fewer_arms": thin,
+            "named_arms_missing_entirely": missing_named,
+            "note": "10 arms per cell per section 4.4, plus this paper's new "
+                    "RandomRRR-drop = 11; a cell below that is flagged rather "
+                    "than silently rendered thin",
+        },
         "disclosures": [
             "the seven settings are test-set-selection-derived, not a blind sample",
             "the reference dissection artifacts cover only 6 settings; "
@@ -368,6 +393,9 @@ def main() -> None:
         "dissection_rows": len(dissection),
         "missing_columns_intervention": missing_i,
         "missing_columns_dissection": missing_d,
+        "arms_per_cell_observed": observed,
+        "cells_with_fewer_arms": len(thin),
+        "named_arms_missing": missing_named,
     }, ensure_ascii=False))
 
 
