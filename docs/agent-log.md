@@ -2999,3 +2999,25 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 边界：**未删除任何文件、日志或 checkpoint**（原启动命令仍可从服务器侧对应 nohup 日志还原以便重启）；
   **未触碰其它用户的任务**（test06 的纯 CPU `botbin` 进程未受影响）。未改任何模型代码、未训练、未读 test。
 - 后续：GPU 0–7 共 8 张卡现已全部可用；单卡任务按 `CUDA_VISIBLE_DEVICES=N` 选卡，启动前先 `nvidia-smi` 确认。
+
+## 2026-09-19 — E15：§4.3 相位补空间维数（28 setting，train/validation）
+
+- 实验：E15（六阶段文档见 `docs/PhaseFormer_L/e15_dimension/`）。代码 `scripts/phaseformer_L/e15_dimension.py`。
+- 命令：`python scripts/phaseformer_L/e15_dimension.py --datasets ETTh1,ETTh2,ETTm1,ETTm2,Weather,Electricity,Traffic
+  --horizons 96,192,336,720 --seq-len 720 --save-moments --output-root research_runs/phaseformer_L_e15_dimension_v1`
+- 产物：`research_runs/phaseformer_L_e15_dimension_v1/`（`dimension_table.csv`、`b1_template_detail.csv`、
+  `leading_direction.csv`、`optimal_rank_capture.csv`、`leading_directions.npz`、28 个 `moments_*.npz`、
+  `figures/` 三类图、`dimension_summary.json`）。
+- 验证：`--verify-existing` 门通过（7/7 setting，二阶矩相对差 0.0，111/111 项通过）；正式运行 **28/28 完成**，
+  退出码 0，wall-clock 16m42s；阶段 5 审校 11/11 项通过（行数/表头/网格/空值/来源/数值域/先导区间/
+  图/矩文件/辅助产物/与既有 7 行一致）。
+- 回填：minipaper **§4.3 的 28 行表 + 表注 6 条**（train/validation 口径与 §4.2 test 增益不同源；
+  21 新增 7 复用；模板定义与 2 位小数参照的分辨率；`λ_1/Σλ` 分母语义；产物路径）。
+- 已知偏差：报告 §2.6(c) 是 **2 位小数参照**，ETTh2-96 位于舍入边界（本脚本 0.5749 vs 报告 0.58，
+  其余 6 个 setting 逐位相同）；已在表注披露，精确值另存 `b1_template_detail.csv`。
+- 关键新事实：`pred_dims_90` 实测上界为 **7**（Traffic-192/336），先导"2–4 维"未覆盖 Traffic；
+  `PR` 上界 2.29（Traffic）；Traffic 的 `b_1` 一致落在 **τ=168** 且 `used_var_share(1)` 最高
+  （0.177–0.353），与 E19 测得的最低 `τ̂`（25.1 步）**方向相反**——两者度量不同（前者是*最优线性映射*的
+  输入方向，后者是*原始电平序列*的自相关时间），须在 §4.7 表注区分，不可混读。
+- 边界：**未读 test**（读取止于验证边界）、未改任何模型代码、未改动既有产物；§4.3 的 7 个先导行
+  由既有 `lowrank_data_property_v2` 逐字段复现而非改写。
