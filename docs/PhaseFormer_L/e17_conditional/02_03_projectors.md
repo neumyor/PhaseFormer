@@ -106,7 +106,7 @@ python scripts/phaseformer_L/e17_conditional.py --stage plan --verify \
 | 4 | 协议常数 | 24/24 为 `--lookback 720 --period 24 --max-epochs 30 --loss huber --percent 100 --require-cuda --resume` |
 | 5 | **逐 setting 冻结超参** | 与 E8 的 `FROZEN` 表逐格一致：ETTh2-96 **0.5/1e-3**、ETTh2-720 **0.5/1e-3**、ETTm2-96 **0.5/3e-4**、ETTm2-192 **0.2/1e-3**、Weather-96 **0.2/3e-4**、Weather-192 **0.5/1e-3**；Electricity-336 为**新格**故用 D-2 默认 **0.2/1e-3** |
 | 6 | 不读 test | 24/24 命令**无** `--evaluate-test` |
-| 7 | 臂标识 | 用新的 `weak_residual_projection_arm` 标签（`e17_frozen_conditional_direction_1` / `e17_frozen_conditional_direction_1`），**不复用** E8 的 `keep_direction_1`，避免两个不同投影器共用一个臂名（E8 的 config 不记录 basis 路径或 sha256） |
+| 7 | 臂标识 | 用新的 `weak_residual_projection_arm` 标签（`e17_frozen_conditional_direction_1` / `e17_frozen_independent_direction_1`），**不复用** E8 的 `keep_direction_1`，避免两个不同投影器共用一个臂名（E8 的 config 不记录 basis 路径或 sha256） |
 
 ### 6.1 需要披露的口径裂缝（已知，不阻塞）
 
