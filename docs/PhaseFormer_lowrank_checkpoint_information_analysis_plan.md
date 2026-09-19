@@ -1141,6 +1141,20 @@ min_{W,c} Σ ||y - y_hat||²
 
 `vs random 95%` 是该 arm 的 fused MSE 在 100 个同维随机子空间对照中的分位数；仅 drop 类 arm 具有必要性含义。
 
+**表 6 的两个汇总数字（2026-09-20 登记，按 minipaper §4.1 的 D1/D2 披露要求）**——
+下表 720 行 = **72 个 cell × 10 个臂**，逐行复算得到：
+
+| 汇总量 | 值 | 口径 |
+|---|---|---|
+| `Semantic-drop`：支路自身 MSE **变好**的 cell 数 | **52 / 72** | 逐 cell（`Δbranch MSE < 0`） |
+| `Semantic-drop`：融合 MSE **变差**的 cell 数 | **72 / 72** | 逐 cell（`Δfused MSE > 0`） |
+| `Semantic-only`：`Δfused MSE` 全 72 格**最大值** | **+0.002665**（≈ +0.0027） | **逐 cell 最大值**（非 3-seed 均值） |
+| `Semantic-only`：其中 `q=1/8` 格的最大值 | **+0.000967**（≈ +0.0010） | 同上，限 `q=1/8` |
+
+**此前"`Semantic-only` ≤ +0.0006"的说法是 3-seed 均值口径，且偏小**；按**逐 cell 最大值**更正是
+minipaper §4.1 的更正项，现登记在此。两个数（52/72 与 +0.002665/+0.000967）由 minipaper 侧
+**独立复算同一张表**得到，与本表一致。
+
 | Setting | q/rank | Arm | correction R² | Δbranch MSE | Δfused MSE | Δfused MAE | vs random 95% |
 |---|---|---|---|---|---|---|---|
 | ETTh2-720 | q=1/16 (r=45) | Bias-off | 0.9673 | -0.003369 | +0.003821 | +0.001447 | — |

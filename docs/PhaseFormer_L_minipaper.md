@@ -12,8 +12,10 @@
 > 的单向 rsync 副本（720 行 = 72 cell × 10 臂）复算：Semantic-drop 下支路自身 MSE 变好 **52/72**、融合 MSE 变差
 > **72/72**、相对上升中位 **+30.43%**（范围 +5.72%～+51.65%）——与 §4.1 引用一致；Semantic-only 的 Δfused MSE
 > 全 72 格最大 **+0.0027**（q=1/8 格最大 +0.0010），此前"≤ +0.0006"为 3-seed 均值口径且偏小，**已按全格最大值
-> 更正**。两项数字尚未写入 `PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 的表 6 正文，对外引用前
-> 应先补登记（执行计划 D1/D2）。
+> 更正**。两项数字**已于 2026-09-20 登记**于 `PhaseFormer_lowrank_checkpoint_information_analysis_plan.md`
+> 的**表 6 正文**（执行计划 D1/D2 的要求已满足）；登记时从表 6 的 **720 行独立复算**验证：
+> `Semantic-drop` 支路变好 **52/72**、融合变差 **72/72** 逐 cell 成立；`Semantic-only` 的 `Δfused MSE`
+> 全格最大 **+0.002665**、`q=1/8` 最大 **+0.000967**（即上文 +0.0027 / +0.0010 的原始精度）。
 >
 > **2026-09-18 修订（风险收敛）**：§3.4 / §4.0 / §4.2 / §5 按"只基于既有实现、不新增模型代码"重写。
 > PhaseFormer-L 现定义为**既有** `weak_residual`（静态门）/ `rcrf_nlinear_plain`（可靠度门）+ `shared` 或
