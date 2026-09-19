@@ -28,7 +28,7 @@ Usage::
 
     python scripts/phaseformer_L/e18_writeback.py \\
         --results research_runs/phaseformer_L_e18_negative_v1/results.with_test.csv \\
-        --e14-results research_runs/phaseformer_L_e14_main_v1/results.with_test.csv \\
+        --e14-results research_runs/phaseformer_L_e14_main_v1/results.csv \\
         --truncation research_runs/phaseformer_L_e18_negative_v1/svd_truncation_table_28.csv \\
         --output-root research_runs/phaseformer_L_e18_negative_v1
 """

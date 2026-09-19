@@ -42,6 +42,14 @@ E18_ROOT=research_runs/phaseformer_L_e18_negative_v1
 E19_ROOT=research_runs/phaseformer_L_e19_predictive_v1
 GPUS=0,1,2,3,4,5,6,7
 
+# E14's test-bearing CSV.  NOTE the asymmetry, which is a real contract and not a
+# style choice: e14_read_test.py fills test_mse/test_mae into `results.csv` IN
+# PLACE, whereas read_test_generic.py (used for E17/E18) writes a SEPARATE
+# `<results>.with_test.csv` sibling.  Declaring the E14 path once keeps steps 2, 3
+# and 6 from drifting apart -- they had, and step 6 pointed at a
+# `results.with_test.csv` that E14 never produces.
+E14_TEST_CSV="$E14_ROOT/results.csv"
+
 FROM=1
 ONLY=""
 while [ $# -gt 0 ]; do
@@ -102,13 +110,16 @@ if [ -z "$ONLY" ] || [ "$ONLY" -ge 1 ]; then
 fi
 
 run_step 1 "E14 stage B: single test read" \
-  "$PY" scripts/phaseformer_L/e14_read_test.py \
-    --manifest "$E14_ROOT/stage_a_manifest.json" --output-root "$E14_ROOT" \
-    --gpus "$GPUS" --retries 1 --poll-seconds 15 --num-workers 4
+  bash -c "cd '$REPO' && \
+    '$PY' scripts/phaseformer_L/e14_read_test.py \
+      --manifest '$E14_ROOT/stage_a_manifest.json' --output-root '$E14_ROOT' \
+      --gpus '$GPUS' --retries 1 --poll-seconds 15 --num-workers 4 \
+    && test -s '$E14_TEST_CSV' \
+    && awk -F, 'NR==1{for(i=1;i<=NF;i++) if(\$i==\"test_mse\") c=i} NR>1{if(c&&\$c!=\"\")n++;t++} END{printf \"E14 test-bearing rows=%d with_test=%d\n\",t,n; if(c==0||t==0||n!=t){print \"E14 results.csv is missing a populated test_mse column; refusing to continue\"; exit 1}}' '$E14_TEST_CSV'"
 
 run_step 2 "E19 stage 2: §4.7 rho columns" \
   "$PY" scripts/phaseformer_L/e19_predictive_power.py \
-    --stats "$E19_ROOT/level_statistics.csv" --results "$E14_ROOT/results.csv" \
+    --stats "$E19_ROOT/level_statistics.csv" --results "$E14_TEST_CSV" \
     --output-root "$E19_ROOT"
 
 # The parameter table and the reuse-ambiguity audit must exist BEFORE the
@@ -121,7 +132,7 @@ run_step 3 "E14 parameter table + reuse ambiguity audit + §4.2 writeback" \
     && '$PY' scripts/phaseformer_L/e14_reuse_audit.py \
       --manifest '$E14_ROOT/stage_a_manifest.json' --output-root '$E14_ROOT' \
     && '$PY' scripts/phaseformer_L/e14_writeback.py \
-      --manifest '$E14_ROOT/stage_a_manifest.json' --results '$E14_ROOT/results.csv' \
+      --manifest '$E14_ROOT/stage_a_manifest.json' --results '$E14_TEST_CSV' \
       --stats '$E19_ROOT/level_statistics.csv' \
       --golden docs/PhaseFormer_gold_standard.md --output-root '$E14_ROOT' \
     && '$PY' scripts/phaseformer_L/check_builder_outputs.py \
@@ -183,7 +194,7 @@ run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 se
       --ranks 10 --seeds 2021 2022 2023 --evaluation-split val \
     && '$PY' scripts/phaseformer_L/e18_writeback.py \
       --results '$E18_ROOT/results.with_test.csv' \
-      --e14-results '$E14_ROOT/results.with_test.csv' \
+      --e14-results '$E14_TEST_CSV' \
       --truncation '$E18_ROOT/svd_truncation_table_28.csv' \
       --output-root '$E18_ROOT' \
     && '$PY' scripts/phaseformer_L/check_builder_outputs.py \
