@@ -27,6 +27,19 @@ form: with ``r(h) = W h + b`` and a subspace basis ``Q`` (``P = Q Q^T``),
 
 so ``h`` is cached once per checkpoint and all arms, including the 100 random
 controls, are replayed without any further forward pass.
+
+Two random controls are kept, because they answer different questions and the
+existing data cannot separate them (minipaper section 4.4 and 5.4: in 57/57
+dimension-matched cells ``Semantic-drop`` is numerically identical to
+``PCA-drop``):
+
+* the legacy ``random_*`` band draws random orthonormal bases in the whole
+  latent space at the fixed ``min(rank, 6)`` dimension; and
+* the ``random_rrr_*`` band (``RandomRRR-drop``) draws random subspaces *of the
+  Semantic-drop dimension* inside the branch's RRR-achievable subspace (the
+  Stage 3 independent-RRR basis stored in ``subspaces/*.npz``), which is the
+  control "any equally-dimensioned direction the branch can reach would do the
+  same".  It is on by default; ``--no-random-rrr`` disables it.
 """
 
 from __future__ import annotations
@@ -73,6 +86,42 @@ def random_orthogonal_basis(
     gaussian = rng.standard_normal((dimension, rank))
     basis, _ = np.linalg.qr(gaussian)
     return np.ascontiguousarray(basis[:, :rank])
+
+
+def random_rrr_basis(
+    pool_basis: np.ndarray, dimension: int, rng: np.random.Generator
+) -> np.ndarray:
+    """Random ``dimension``-dimensional subspace of ``span(pool_basis)``.
+
+    ``pool_basis`` is an orthonormal ``(ambient, d)`` basis of the admissible
+    family -- here the branch's RRR-achievable subspace.  Drawing Gaussian
+    coordinates in that family and orthonormalizing them gives the Haar-uniform
+    basis of a uniformly random ``dimension``-dimensional subspace of its span.
+
+    This is what separates "the named semantic directions are effective" from
+    "any equally-dimensioned direction the branch can reach is equally
+    effective" (minipaper sections 4.4 and 5.4): the legacy
+    :func:`random_orthogonal_basis` draws in the whole latent space instead,
+    which mixes in directions the branch was trained to ignore.  The legacy
+    band is *kept*: the two bands answer different questions and the already
+    filled tables quote the legacy one.
+    """
+    pool = np.asarray(pool_basis, dtype=np.float64)
+    if pool.ndim != 2:
+        raise ValueError("pool_basis must be a 2-D orthonormal basis")
+    draw = max(1, min(int(dimension), pool.shape[1]))
+    gaussian = rng.standard_normal((pool.shape[1], draw))
+    basis, _ = np.linalg.qr(pool @ gaussian)
+    return np.ascontiguousarray(basis[:, :draw])
+
+
+def legacy_random_band_dimension(ambient: int) -> int:
+    """Dimension of the legacy whole-space random band, ``max(1, min(rank, 6))``.
+
+    Named so that the recorded ``random_band_dimension`` column cannot drift
+    from the value :func:`random_drop_band` actually uses.
+    """
+    return max(1, min(int(ambient), 6))
 
 
 def semantic_basis(dataset: str, limit: int | None = None) -> np.ndarray:
@@ -222,6 +271,10 @@ def random_drop_band(
     rng: np.random.Generator,
     chunk: int = 32,
     block_elements: int = 40_000_000,
+    *,
+    dimension: int | None = None,
+    pool_basis: np.ndarray | None = None,
+    bases: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fused MSE/MAE of ``count`` random same-dimension drop arms.
 
@@ -235,13 +288,52 @@ def random_drop_band(
     A per-arm Python loop over the largest validation split of this analysis
     (thousands of windows, hundreds of channels) dominates the runtime, which is
     why the evaluation is vectorised.
+
+    Three optional keywords extend the same machinery without changing the
+    default path (which stays byte-for-byte the legacy ``min(rank, 6)``
+    whole-latent-space band):
+
+    * ``dimension`` -- drop dimension of the band (default: the legacy rule);
+    * ``pool_basis`` -- orthonormal ``(ambient, d)`` basis of an admissible
+      family; the arms are then drawn inside its span with
+      :func:`random_rrr_basis` instead of in the whole latent space;
+    * ``bases`` -- pre-drawn ``(count, ambient, k)`` arms.  Callers that stream
+      a cell in blocks must draw once and pass the same arms to every block,
+      otherwise the reported band would mix different arms across blocks and
+      understate its spread.
     """
     count = max(int(count), 1)
-    dimension = max(1, min(rank, 6))
-    # (arms, r, k)
-    bases = np.stack(
-        [random_orthogonal_basis(rank, dimension, rng) for _ in range(count)]
-    ).astype(np.float64)
+    if bases is None:
+        if dimension is None:
+            dimension = max(1, min(rank, 6))
+        if pool_basis is None:
+            dimension = max(1, min(int(dimension), rank))
+            bases = np.stack(
+                [random_orthogonal_basis(rank, dimension, rng) for _ in range(count)]
+            ).astype(np.float64)
+        else:
+            pool = np.asarray(pool_basis, dtype=np.float64)
+            if pool.shape[0] != rank:
+                raise ValueError(
+                    f"pool_basis has ambient dimension {pool.shape[0]}, the "
+                    f"hidden state has {rank}"
+                )
+            # The pool has to be orthonormal for the draws to be uniform
+            # subspaces of its span; the check is once per band, not per draw.
+            pool_orthonormality = float(
+                np.abs(pool.T @ pool - np.eye(pool.shape[1])).max()
+            )
+            if pool_orthonormality > 1e-8:
+                raise ValueError(
+                    "pool_basis must be orthonormal, "
+                    f"max|Q^T Q - I| = {pool_orthonormality:.3e}"
+                )
+            dimension = max(1, min(int(dimension), pool.shape[1]))
+            bases = np.stack(
+                [random_rrr_basis(pool, dimension, rng) for _ in range(count)]
+            ).astype(np.float64)
+    else:
+        bases = np.asarray(bases, dtype=np.float64)
     samples = hidden.shape[0]
     mse = np.zeros(count)
     mae = np.zeros(count)
@@ -314,6 +406,55 @@ def broadcast_per_sample(
     value = value.reshape(samples, -1, channels).mean(axis=1, keepdims=True)
     del horizon
     return value
+
+
+def band_summary(
+    arm_name: str,
+    name: str,
+    band_mse: np.ndarray | None,
+    band_mae: np.ndarray | None,
+    metrics: dict,
+) -> dict:
+    """Rank one arm against one null band of random drop subspaces.
+
+    ``name`` is the bare family tag; with ``name="random"`` the emitted keys
+    are exactly the legacy ones (``random_mean_fused_mse``, ...,
+    ``reference_matches_random_band``), so the existing columns keep their
+    names and values.  ``random_rrr`` is the new band drawn inside the
+    RRR-achievable subspace.  A band that was not evaluated for this cell
+    emits ``<name>_available=False`` and nothing else.
+    """
+    if band_mse is None or band_mae is None:
+        return {f"{name}_available": False}
+    low_band_mse, high_band_mse = np.percentile(band_mse, RANDOM_QUANTILES)
+    low_band_mae, high_band_mae = np.percentile(band_mae, RANDOM_QUANTILES)
+    is_sensitivity_arm = arm_name.endswith("-drop")
+    return {
+        f"{name}_available": True,
+        f"{name}_mean_fused_mse": float(band_mse.mean()),
+        f"{name}_mean_fused_mae": float(band_mae.mean()),
+        f"{name}_low_fused_mse": float(low_band_mse),
+        f"{name}_high_fused_mse": float(high_band_mse),
+        f"{name}_low_fused_mae": float(low_band_mae),
+        f"{name}_high_fused_mae": float(high_band_mae),
+        f"{name}_fused_mse_percentile_of_arm": float(
+            100.0 * np.mean(band_mse <= metrics["fused_mse"])
+        ),
+        f"{name}_fused_mae_percentile_of_arm": float(
+            100.0 * np.mean(band_mae <= metrics["fused_mae"])
+        ),
+        f"worse_than_{name}_95pct_fused_mse": bool(
+            is_sensitivity_arm and metrics["fused_mse"] > high_band_mse
+        ),
+        f"worse_than_{name}_95pct_fused_mae": bool(
+            is_sensitivity_arm and metrics["fused_mae"] > high_band_mae
+        ),
+        f"reference_matches_{name}_band": bool(
+            is_sensitivity_arm
+            and low_band_mse <= metrics["fused_mse"] <= high_band_mse
+            and low_band_mae <= metrics["fused_mae"] <= high_band_mae
+        ),
+    }
 
 
 def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
@@ -428,49 +569,87 @@ def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
     if requested:
         arms = [arm for arm in arms if arm[0] in requested]
 
+    # ---- RandomRRR-drop: null band inside the RRR-achievable subspace ------
+    # ``independent`` is the latent image of the independent reduced-rank
+    # regression fitted on the train split (Stage 3), i.e. the family of input
+    # directions this branch can actually read; every probe cell of the analysis
+    # carries it in ``subspaces/*.npz``.  The band below draws random subspaces
+    # *inside that family* at the dimension of ``Semantic-drop`` -- the arm whose
+    # necessity claim it calibrates -- instead of inside the whole latent space.
+    # In the existing data ``Semantic-drop`` and ``PCA-drop`` are numerically
+    # identical in 57/57 dimension-matched cells, so "the semantics are
+    # effective" and "any equally-dimensioned leading direction is effective"
+    # cannot be told apart without this control (minipaper sections 4.4/5.4).
+    rrr_pool = independent
+    random_rrr_enabled = bool(getattr(args, "random_rrr", False))
+    random_rrr_repeats = max(1, int(getattr(args, "random_rrr_repeats", 1) or 1))
+    rrr_pool_dimension = int(rrr_pool.shape[1]) if rrr_pool is not None else 0
+    # The band is dimension-matched to ``Semantic-drop`` (the full semantic
+    # subspace image), not to the legacy ``min(rank, 6)`` control, which keeps a
+    # different dimension in every cell of this analysis; both bands are kept.
+    rrr_dimension = (
+        max(1, min(int(semantic_full.shape[1]), rrr_pool_dimension))
+        if rrr_pool_dimension
+        else 0
+    )
+    random_rrr_available = bool(
+        random_rrr_enabled and rrr_pool is not None and rrr_dimension >= 1
+    )
+    random_rrr_dimension_match = bool(
+        random_rrr_available and rrr_dimension == int(semantic_full.shape[1])
+    )
+    # A pool that already spans the whole latent space (true for every
+    # rank-bottlenecked probe cell, whose latent space is entirely
+    # RRR-reachable) makes the RRR family coincide with the ambient one; the
+    # flag is recorded instead of hiding it.
+    random_rrr_pool_covers_ambient = bool(rrr_pool_dimension >= rank_dim)
+    random_rrr_reference: np.ndarray | None = None
+    if random_rrr_available and (not requested or "RandomRRR-drop" in requested):
+        # One deterministic draw of the same family, on its own stream: the
+        # arm's own row is this subspace, the band is the null distribution.
+        random_rrr_reference = random_rrr_basis(
+            rrr_pool, rrr_dimension, np.random.default_rng(RANDOM_SEED + 2)
+        )
+        arms.append(("RandomRRR-drop", random_rrr_reference, "drop"))
+
     random_mse, random_mae = random_drop_band(
         hidden, decoder_weight, decoder_bias, encoder_bias, sigma, last_abs,
         gate, phase_abs, target, rank_dim, args.random_repeats, rng,
     )
     random_count = int(args.random_repeats)
 
-    low_mse, high_mse = np.percentile(random_mse, RANDOM_QUANTILES)
-    low_mae, high_mae = np.percentile(random_mae, RANDOM_QUANTILES)
+    if random_rrr_available:
+        random_rrr_mse, random_rrr_mae = random_drop_band(
+            hidden, decoder_weight, decoder_bias, encoder_bias, sigma, last_abs,
+            gate, phase_abs, target, rank_dim, random_rrr_repeats,
+            # A stream of its own, so neither band changes the other's draws.
+            np.random.default_rng(RANDOM_SEED + 1),
+            dimension=rrr_dimension, pool_basis=rrr_pool,
+        )
+    else:
+        random_rrr_mse = None
+        random_rrr_mae = None
 
+    # The percentile lines that used to sit here moved into ``band_summary``
+    # when the second band was added, so that E16 assembles the same columns for
+    # the bands it streams in blocks instead of forking the convention.
     def summarise_against_random(arm_name: str, metrics: dict) -> dict:
-        """Rank one arm against the 100 same-dimension random subspaces.
+        """Rank one arm against every random control band of this cell.
 
-        The random controls are matched on dimension only, exactly as the
-        plan prescribes, so they are a calibration band for "how much does
-        removing an arbitrary eight-dimensional subspace hurt", not a
-        variance-matched control.
+        The legacy whole-latent-space band is matched on dimension only, exactly
+        as the plan prescribes, so it calibrates "how much does removing an
+        arbitrary subspace hurt" without being a variance-matched control.  The
+        ``random_rrr`` band added for minipaper section 4.4 is matched on
+        dimension *and* drawn from the branch's RRR-achievable subspace, so it
+        additionally controls for the direction family.
         """
-        is_sensitivity_arm = arm_name.endswith("-drop")
-        return {
-            "random_mean_fused_mse": float(random_mse.mean()),
-            "random_mean_fused_mae": float(random_mae.mean()),
-            "random_low_fused_mse": float(low_mse),
-            "random_high_fused_mse": float(high_mse),
-            "random_low_fused_mae": float(low_mae),
-            "random_high_fused_mae": float(high_mae),
-            "random_fused_mse_percentile_of_arm": float(
-                100.0 * np.mean(random_mse <= metrics["fused_mse"])
-            ),
-            "random_fused_mae_percentile_of_arm": float(
-                100.0 * np.mean(random_mae <= metrics["fused_mae"])
-            ),
-            "worse_than_random_95pct_fused_mse": bool(
-                is_sensitivity_arm and metrics["fused_mse"] > high_mse
-            ),
-            "worse_than_random_95pct_fused_mae": bool(
-                is_sensitivity_arm and metrics["fused_mae"] > high_mae
-            ),
-            "reference_matches_random_band": bool(
-                is_sensitivity_arm
-                and low_mse <= metrics["fused_mse"] <= high_mse
-                and low_mae <= metrics["fused_mae"] <= high_mae
-            ),
-        }
+        summary = band_summary(arm_name, "random", random_mse, random_mae, metrics)
+        summary.update(
+            band_summary(
+                arm_name, "random_rrr", random_rrr_mse, random_rrr_mae, metrics
+            )
+        )
+        return summary
 
     for arm_name, basis, mode in arms:
         metrics = arm_metrics(
@@ -488,6 +667,45 @@ def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
             "arm": arm_name,
             "subspace_dimension": int(basis.shape[1]) if basis is not None else 0,
             "random_repeats": int(random_count),
+            # Dimension bookkeeping of the controls.  ``PCA-drop`` is
+            # ``rank_dim`` wide while ``Semantic-drop`` is only as wide as the
+            # semantic dictionary allows, so the two "same-dimension" controls
+            # are not dimension-matched in every cell of this analysis; the
+            # flags below record that instead of silently redefining a column
+            # the already filled tables quote, and ``random_rrr_dimension`` is
+            # the genuinely dimension-matched control added for section 4.4.
+            "semantic_dimension": int(semantic_full.shape[1]),
+            "semantic8_dimension": int(semantic_small.shape[1]),
+            "pca_dimension": int(pca.shape[1]) if pca is not None else 0,
+            "random_band_dimension": int(legacy_random_band_dimension(rank_dim)),
+            "random_rrr_repeats": int(random_rrr_repeats),
+            "random_rrr_available": bool(random_rrr_available),
+            "random_rrr_dimension": int(rrr_dimension),
+            "random_rrr_pool_dimension": int(rrr_pool_dimension),
+            "random_rrr_pool_source": (
+                "stage3_independent_rrr_subspace_file"
+                if random_rrr_available
+                else ""
+            ),
+            "random_rrr_pool_covers_ambient": bool(random_rrr_pool_covers_ambient),
+            "semantic_pca_dimension_match": bool(
+                pca is not None and int(pca.shape[1]) == int(semantic_full.shape[1])
+            ),
+            "semantic8_pca_dimension_match": bool(
+                pca is not None and int(pca.shape[1]) == int(semantic_small.shape[1])
+            ),
+            "semantic_random_band_dimension_match": bool(
+                int(legacy_random_band_dimension(rank_dim))
+                == int(semantic_full.shape[1])
+            ),
+            "random_rrr_dimension_match": bool(random_rrr_dimension_match),
+            "same_dimension_controls_available": bool(
+                random_rrr_dimension_match
+                or (
+                    pca is not None
+                    and int(pca.shape[1]) == int(semantic_full.shape[1])
+                )
+            ),
             "baseline_branch_mse": baseline["branch_mse"],
             "baseline_branch_mae": baseline["branch_mae"],
             "baseline_fused_mse": baseline["fused_mse"],
@@ -531,6 +749,27 @@ def main() -> None:
     parser.add_argument("--cells", default="")
     parser.add_argument("--max-batches", type=int, default=0)
     parser.add_argument("--random-repeats", type=int, default=100)
+    parser.add_argument(
+        "--random-rrr-repeats",
+        type=int,
+        default=100,
+        help="draws of the RandomRRR-drop null band (random subspaces of the "
+        "branch's RRR-achievable subspace); independent of --random-repeats, "
+        "which governs the legacy whole-latent-space band",
+    )
+    parser.add_argument(
+        "--random-rrr",
+        dest="random_rrr",
+        action="store_true",
+        default=True,
+        help="evaluate the RandomRRR-drop arm and its null band (default: on)",
+    )
+    parser.add_argument(
+        "--no-random-rrr",
+        dest="random_rrr",
+        action="store_false",
+        help="disable the RandomRRR-drop arm and its null band",
+    )
     parser.add_argument("--semantic-rank", type=int, default=8)
     parser.add_argument(
         "--arms-limit",
@@ -556,6 +795,14 @@ def main() -> None:
     parser.add_argument("--start-index", type=int, default=0)
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
+
+    # ``--random-rrr`` is on by default (the RandomRRR-drop control is what
+    # section 4.4 of the minipaper asks for); ``--no-random-rrr`` turns it off
+    # for a replay of the pre-existing arm set.  Both spellings share the dest,
+    # and argparse applies the first registered action's default, hence the
+    # explicit ``default=True`` above.
+    if not hasattr(args, "random_rrr"):
+        args.random_rrr = True
 
     # ``--full-audit-math`` wins over ``--skip-audit-math``, so both flags have a
     # defined meaning instead of the second one silently doing nothing.
