@@ -3252,3 +3252,43 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - 记录：`docs/PhaseFormer_L/audit/paper_code_consistency.md` **§17**（17.1 缺陷 A 含真产物前后对照、
   17.2 缺陷 B、17.3 十三类对照表、17.4 与 §14 合并的方法论）；
   `docs/PhaseFormer_L_execution_schedule.md` 日志 4 条。
+
+## 2026-09-20 — §4.4 臂数是**逐格而定**的（11/12/13）：审计器、回填、论文三处都写死了 11
+
+- 起因：§17 的教训是"判据的数必须来自产物结构"。本轮逐条核对 E16 的**精确计数类**判据时发现，
+  同一处错误同时出现在**三个地方**，而审计器那一处**会在 E16 那 3–5 小时跑完之后判整链失败**。
+- **三处写死的"11"**：①审计器 `intervention rows == 63×11 = 693` 且 `len(arms) == 11`；
+  ②回填 `e16_writeback.expected_arms = 11`（不误报，但写进 `arm_coverage.expected_arms_per_cell`
+  的期望值是错的）；③论文 §4.4 正文"10 个登记臂 + 追加 `Independent-RRR-only`/`Conditional-RRR-only`/
+  `RandomRRR-drop` ⇒ **11–12 臂**"——**算术本身就不自洽**（10+3=13）。
+- **逐格实测**（直接 import `build_bases` 用的 `semantic_basis`/`latent_image`，复刻其条件，逐格读该格
+  **自己的** checkpoint）：`PCA-matched-only/-drop` 在 **63/63 格**成立（语义张成 36–39 < 最小秩 42、
+  稠密头 720）；`Independent-RRR-only`（无 Stage-3 文件时用 train split 现拟合）与 `RandomRRR-drop`
+  （`--random-rrr` 默认 True）**恒在**；`Conditional-RRR-only` 在 **42/42 低秩格**成立
+  （84 个 Stage-3 `.npz` 全部含 `conditional_basis`；稠密头无此文件，故 `l_main` 的格子不带它）
+  ⇒ **11 臂 24 格、12 臂 21 格、13 臂 18 格，合计 750 行、13 个不同的臂名**
+  （按 E14 臂：`l_main` 252 / `l_q1_4` 255 / `l_q1_8` 243）。
+- **我在这条路上先给了两个错的数（如实记录）**：①**798 行**——第一版探针取"每臂一个代表 checkpoint"，
+  把该 checkpoint 的秩套到**所有** setting 上（于是 `l_q1_8 ETTh2-96` 被当成 r=42，实际 r=12=96/8），
+  并且**假设**低秩格都有 conditional 文件，两个错叠加；②**750 行**——改成逐格读该格自己的 checkpoint、
+  并实际检查 42 个 Stage-3 文件后的数。此外还差一点把"11/12/13"写成"12/13"：漏了
+  `semantic_dimension == rank_dim` 的格子（r=12 或 24 且张成 36–39 时两者相等 ⇒ **不**追加 PCA-matched）。
+  **与 §9.1.2、§9.1.4 同类**：拿一个**代表量**去套一组**构成在变**的对象。判据是：
+  **当结论依赖"每个对象自己的属性"时，必须逐个对象取，不能取代表。**
+- **修法（不含任何常数的结构式判据）**：审计器改四条——「63 个 `(arm, setting, seed)` 组」、
+  「每格必须含 **10 个恒在臂**（8 登记 + `Independent-RRR-only` + `RandomRRR-drop`）」、
+  「总行数与 `e16_summary.json` 的 `counts.intervention_rows` 相等」、
+  「逐格臂数与 `counts.intervention_arms_per_cell` 相等」（缺该键时降级 INFO 而非 FAIL）；
+  臂数本身降级为 INFO（报出臂名数、逐格分布、总行数）。回填的 `expected_arms` 改为
+  `len(ALWAYS_PRESENT_ARMS) = 10` 并把 `always_present_arms` 写进 `arm_coverage`。
+  论文 §4.4 正文改为逐格而定 + 实测分布 + "判据按恒在臂写"的理由；
+  §4.4 表格 21 行 × 10 列结构不受影响。
+- **校准**：`rehearse_audit_controls.py` 新增 7 类 E16 对照，**合计 20 类全部符合预期**
+  （本地与服务器各跑一次）。**校准器又抓出我搭台的两个错**：合成格键最初用 `ETT-96/192/336`
+  这类**重名** setting，`(arm, setting, seed)` 三元组碰撞，63 格被算成 21 格、再算成 36 格，
+  两条对照于是"看起来失败"；换成真实 7 个 setting 名后才是 63 ✅（与 §17.3 同类：先分清
+  "判据错了"还是"我的 fixture 错了"）。
+- 另：核对"真产物喂判据"的路径，确认修后审计器在真实 probe 根上只剩一条**预期内**的 FAIL
+  （`parameter table covers all 492 cells: 220 rows`，E14 尚未跑完），门值两条判据均 OK。
+- 记录：`docs/PhaseFormer_L/audit/paper_code_consistency.md` **§18**；
+  `docs/PhaseFormer_L_execution_schedule.md` 日志 4 条；`docs/PhaseFormer_L_minipaper.md` §4.4 表注。
