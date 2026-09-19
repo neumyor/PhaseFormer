@@ -122,6 +122,7 @@ train split 上现场拟合（`lowrank_checkpoint_core.independent_rrr`，ridge 
 
 | 对象 | 来源 | 说明 |
 |---|---|---|
+| 支路头类 | **每个 cell 自己的 `config.json`**（`weak_period_residual_head_type` + rank/pool_factor），与 `--arms` 的期望**交叉核对**，并再对 checkpoint 的键集合核对一次（`describe_branch`）；三者不一致即报错退出，绝不把某个臂的 checkpoint 载入另一个臂的模型 |
 | checkpoint | E14 `stage_a_manifest.json` | `status=reused` 的 cell 用 `source.run_dir`（E3 系）；`status=new` 的 cell 在 `<e14-root>/runs/*` 内按 `e14_main_matrix._arm_match` 匹配（不同 tie-break 会产生候选，逐 cell 记录 `alternative_run_dirs`）。run 内的 checkpoint 以 `metrics.csv` 的 `checkpoint` 列（run 自己恢复用于 validation 的那一份）为准，glob `attempts/*/checkpoints/best.ckpt` 仅作回退；规则逐 cell 记为 `checkpoint_source`，因为"未干预臂 vs run 记录 `val_mse`"的不变量核对必须对同一份文件 |
 | 解剖量（模式/语义/能量） | **全部重算** | 用 §2 的注册函数；探针行与既有产物做 `checkpoint_inventory.csv` 路径对账，路径一致的 cell 逐字段比较（`reference_parity.json`，容差 1e-6） |
 | 干预臂（探针 9 臂 + 语义臂） | **全部重算** | 同一 `arm_metrics`，因此与既有表 6 可直接对账；重算的理由是 E14 的复用解析与低秩清单**选点规则不同**，可能指向不同的重复训练产物，而 §4.4 必须解剖 §4.2 主表真正使用的那一份 |
@@ -152,6 +153,9 @@ dense 头的隐状态是 720 维中心化输入，一个 cell 的 `(samples, cha
   `mean(contribution²)` 代数等价），隐状态二阶矩（≤720²）供 PCA 与 `latent_variance`，
   臂指标由**逐块调用注册 `arm_metrics`** 后按 pair 数加权汇总，
   `correction_reconstruction_r2` 由全局参考能量重新装配（分子来自块内 `correction_rmse`）；
+* loader/模型 bundle 按 `(dataset, horizon, arm, batch_size)` 缓存：`l_main` 是 dense `shared` 头，
+  `l_q1_4`/`l_q1_8` 是 `pooled_lowrank`（秩随 cell 不同），跨臂共享 bundle 会给两条探针臂建错头
+  （首次冒烟正是在全部 21 个 `l_q1_8` cell 上报 state_dict 不匹配）；
 * 每个 cell 走**两遍** validation：第一遍只累计"一阶基所需统计量"，第二遍带全部基评估臂与带
   （PCA 控制需要隐状态协方差，而缓存隐状态正是被禁止的分配）。
 
@@ -162,8 +166,18 @@ dense 头的隐状态是 720 维中心化输入，一个 cell 的 `(samples, cha
 --evaluation-split {val,validation} --random-repeats --random-rrr-repeats
 --random-rrr/--no-random-rrr --rrr-pool-space {revin,standardized}
 --semantic-rank --modes --mem-budget-mb --channel-block --max-batches --num-workers
---gpus --data-root --reference-root --skip-reference-parity --allow-missing-cells --dry-run
+--gpus --data-root --reference-root --skip-reference-parity --verify-checkpoint-heads
+--algebra-tolerance --allow-algebra-mismatch --allow-missing-cells --dry-run
 ```
+
+**设备**：`--gpus` 默认**空 = CPU**（因此冒烟不会静默占用正在跑 E14 的卡）；给数值时按
+**本进程可见命名空间**解释（`CUDA_VISIBLE_DEVICES=4,5 --gpus 1` → 物理卡 5），并核对
+`torch.cuda.device_count()`，越界或 CUDA 不可用即报错退出而不是静默回退 CPU。
+`--verify-checkpoint-heads` 在 `--dry-run` 下用 `mmap` 只读 checkpoint 的参数名，
+要求其蕴含的头类与 `--arms` 一致（阶段 2 的加载前检查）。
+`--max-batches` 只是冒烟/调试旋钮：它使**不变量 2**（对 run 记录 `val_mse` 的复核）变成
+"子集 vs 全集"而**不可比**，此时逐 cell 记为 `run_metric_check_comparable=false` 并给出原因，
+不再报 FAILED；**不变量 1**（代数 vs 模型自身 fused，同窗口）不受影响，仍是每个 cell 的凭证。
 
 `<output-root>/`：
 
@@ -218,9 +232,13 @@ dense 头的隐状态是 720 维中心化输入，一个 cell 的 `(samples, cha
    只影响 `output_covariance_correlation_max` 一列；E16 不缓存张量，无法跨 cell 汇总。
 7. **注册代数把映射后的 encoder bias 计了两次**（隐状态里已含 `encoder_bias`，
    `arm_metrics` 又加了一次 `W_dec @ encoder_bias`）：E16 **照抄**该约定（因为它喂已被引用的表），
-   并逐 cell 记录 `mapped_encoder_bias_absmax` 与
-   `untouched_arm_gap_vs_recorded_fused`（"未干预臂 vs 模型自身输出"的偏差）。
-   dense 头 `encoder_bias = 0`，该偏差为 0。
+   并逐 cell 记录 `mapped_encoder_bias_absmax`、`untouched_arm_gap_vs_model_fused`（同窗口、
+   代数 vs 模型自身 fused）与 `untouched_arm_gap_vs_run_metric`。
+   **dense 头 `encoder_bias = 0`，该项严格为零**：其代数与模型输出只在 float32 上不同
+   （本地实测相对 fused-MSE 差 4.9e-16，见 §10；探针头上该偏差来自这条双重计入约定，
+   量级 8.5e-6 相对，仍远低于 1e-3 的容差）。
+   首次冒烟的 `gap=4.42e-02` **不是**代数误差：那是把只跑了 2 个 batch 的子集指标与 run 记录的
+   **全 validation** `val_mse` 相比的差（§11.1）。
 8. **解码器帧 vs 有效映射帧**：探针 cell 的 `singular_value` 来自有效映射，而模式能量在解码器帧
    （照抄 `低秩计划 §11.4`）；dense 头两帧相同。表内两列都给出，不混用。
 9. **哪些 cell 是主表读数**：`l_main`/`l_q1_4`/`l_q1_8` 的 7 setting 在 E14 中是 D-2 的
@@ -237,16 +255,27 @@ dense 头的隐状态是 720 维中心化输入，一个 cell 的 `(samples, cha
 4. `--dry-run` 打印的 cell 数 = `--arms` × 7 setting × 3 seed（默认 63），
    并逐个打印解析到的 checkpoint 路径；dry-run 不写任何产物（已做，见 §10）。
 5. `--arms phase_only` / `--arms l_rcrf` 报错退出并说明原因（已做）。
-6. 每个 cell 的 `untouched_arm_reproduces_run_metric` 为真、`validation_pairs` 与 loader 一致；
-   `untouched_arm_gap_vs_recorded_fused` 在 dense 上应为 float32 量级（~1e-7），
-   在探针上等于 §8.7 的 bias 项的效应。
-7. `dissection_table.csv` 行数 = 63；`intervention_table.csv` 行数 = Σ 每 cell 臂数
+6. **不变量 1（代数凭证，任何 batch 数下都成立）**：每个 cell 的
+   `untouched_arm_reproduces_model_fused` 为真，`untouched_arm_gap_vs_model_fused_relative`
+   在 dense 上应为 float32 量级（≤1e-6）、在探针上等于 §8.7 双重计入 bias 的效应（~1e-5），
+   默认容差 1e-3（`--algebra-tolerance` 可调），超出即**报错退出**（该 cell 的所有臂都不可用），
+   或在显式给出 `--allow-algebra-mismatch` 时逐行标 `false` 并列入 summary。
+7. **不变量 2（仅在全 validation 上可比）**：`--max-batches 0` 且
+   `validation_windows_processed == run_recorded_val_size` 时 `run_metric_check_comparable=true`，
+   此时 `untouched_arm_reproduces_run_metric` 必须为真；否则该项记为 `false` 并在
+   `run_metric_check_note` 写出原因（子集/无记录），不得当作 FAILED。
+8. `--dry-run --verify-checkpoint-heads` 逐 cell 打印
+   `head=<期望头类> r=<rank> ckpt=<解析规则> | checkpoint head=<键集合蕴含的头类>`，
+   且二者**全部一致**（这是阶段 2 的加载前检查；不一致即退出并列出 cell）。
+9. `dissection_table.csv` 行数 = 63；`intervention_table.csv` 行数 = Σ 每 cell 臂数
    （dense 12、探针 10–12，取决于 npz 是否含 `conditional_basis`）；
    `reference_parity.json.passed` 在路径一致的 cell 上为真，容差 1e-6。
-8. `--random-repeats 10 --max-batches 2` 的冒烟跑通，并记录单 cell 秒数。
-9. `--no-random-rrr` 与默认输出的差异**只**是 `RandomRRR-drop` 行与 `random_rrr_*` 列。
-10. 抽查 1 个 dense cell 的 `Sum_k correction_energy_k ≤ total_correction_energy`，
+10. `--random-repeats 10 --max-batches 2` 的冒烟跑通（预期：不变量 1 通过、不变量 2 记 skipped），
+    并记录单 cell 秒数。
+11. `--no-random-rrr` 与默认输出的差异**只**是 `RandomRRR-drop` 行与 `random_rrr_*` 列。
+12. 抽查 1 个 dense cell 的 `Sum_k correction_energy_k ≤ total_correction_energy`，
     以及 `correction_energy_share ∈ [0,1]`。
+13. 设备：默认（`--gpus` 为空）必须打印 `device: cpu`；`--gpus <越界>`/CUDA 不可用时报错退出。
 
 ## 10. 本机已做的验证（无 torch / 无 checkpoint / 不读 test）
 
@@ -274,6 +303,81 @@ dense 头的隐状态是 720 维中心化输入，一个 cell 的 `(samples, cha
     对账报告（一致/路径不一致两种情形）、CSV 写出；
   * CLI：`--dry-run`（不写产物）、`--evaluation-split test` 被拒、`--arms phase_only` 被拒、
     `--help` 列全 flag。
+* §11 的三处修复后追加的验证（同一套 numpy 桩 + 假 torch）：
+  * **不变量 1**：dense 头相对 fused-MSE 差 `4.9e-16`、`max|fused_arm − fused_model| = 0`；
+    探针头 `8.5e-06`（即 §8.7 的双重计入 bias）；两者都远低于 1e-3 容差；
+    且**在 `--max-batches 1` 下同样成立**（这正是快速冒烟要看的）；
+  * **不变量 2**：`--max-batches 1` → `comparable=false`、`note="--max-batches 1 evaluated a subset: 6 of 12 validation windows"`；
+    无 cap 且窗口数与 `run_val_size` 一致 → `comparable=true`；无记录 `val_mse` → 不可比；
+  * **头解析**：`l_main+shared→dense_shared`、`l_q1_4/l_q1_8+pooled_lowrank→pooled_lowrank`；
+    反向配对（`l_q1_8+shared`、`l_main+pooled_lowrank`）、dense 模型载入 pooled checkpoint
+    （及反向）、臂与已建头不一致、rank 与 config 不一致——**六种错配全部在载入前报错退出**；
+  * **设备**：默认/`cpu`/`none`/空 → CPU（即使 CUDA 可用）；`--gpus 0` 而 CUDA 不可用 → 报错；
+    伪造 CUDA（可见 2 卡、`CUDA_VISIBLE_DEVICES=4,5`）下 `--gpus 1 → cuda:1`、`--gpus 2` → 越界报错。
 * **未能验证**：真实 torch/CUDA 前向、真实 checkpoint、真实 dataset（本机无 torch、无数据）、
   真实 `stage_a_manifest.json`（E14 尚未在本地产出）、真实运行时间与内存峰值。
   这些只能由服务器上的 stage 3（冒烟）与 stage 4（正式跑）确认。
+
+## 11. 阶段 3 冒烟退回的 3 个缺陷与修复（2026-09-19）
+
+阶段 3 用单 cell / 2 batch 的冒烟命令暴露了 3 个缺陷（详见 `02_03_static_check_smoke.md`）。
+本节记录修复内容与修复后的**预期行为**，供重新冒烟时逐条核对。
+
+### 11.1 缺陷 1：不变量把"子集 vs 全集"报成失败（数值正确性）
+
+冒烟输出 `invariant=FAILED gap=4.42e-02`。根因**不是** dense 头映射错，而是原来的检查定义：
+它把"只跑了 `--max-batches 2`（512 窗口）的闭式未干预臂 fused MSE"与 **run 记录的全
+validation（2065 窗口）`val_mse`** 相减。子集均值与全集均值本来就不同，因此该差异既不能
+证明代数错、也不能在子集上成立。
+
+修复：把不变量拆成两个，逐 cell 分别记录：
+
+| | 不变量 1（代数凭证） | 不变量 2（run 指标复核） |
+|---|---|---|
+| 比较对象 | 闭式 `Original` 臂 vs **模型自己在同批窗口上的 fused 输出** | 闭式 `Original` 臂 vs run 的 `metrics.csv:val_mse` |
+| 列 | `untouched_arm_reproduces_model_fused`、`..._gap_vs_model_fused[_relative]`、`..._fused_rmse_vs_model`、`..._fused_max_abs_vs_model`、`model_fused_mse_same_windows` | `untouched_arm_reproduces_run_metric`、`..._gap_vs_run_metric`、`run_metric_check_comparable`、`run_metric_check_note`、`run_recorded_val_size`、`validation_windows_processed` |
+| 在 `--max-batches` 下 | **仍然成立**（同窗口） | **不可比**，记为 `comparable=false` + 原因，不报 FAILED |
+| 失败后果 | **报错退出**（该 cell 所有臂都不可用），容差 `--algebra-tolerance`（默认 1e-3 相对） | 仅记录（除非全集下确实超差） |
+
+dense 头的代数与模型输出只在 float32 上不同（本地实测 4.9e-16 相对、`max|Δ|=0`），
+所以修复后冒烟应打印形如：
+
+```text
+[cell] l_main ETTh2-96 seed=2021 head=dense_shared rank_dim=720 pairs=3584 windows=512/2065   algebra=ok(rel_gap=~1e-07, max_abs=~1e-04) run_metric=skipped(--max-batches 2 evaluated a subset: 512 of 2065 validation windows)
+```
+
+**必须披露的限制**：`--max-batches` 下不变量 2 不可用，因此不能据此声称"复现了 run 指标"；
+正式运行（`--max-batches 0`）才会打开它。反过来说，`--max-batches` 下的冒烟仍然能验证
+代数、臂表、带、分块与表格装配，这正是阶段 3 需要的。
+
+### 11.2 缺陷 2：头类型没有按 cell 解析（加载正确性）
+
+`l_q1_8` 被按 `shared` 构造模型 → 21 个 cell 全部 `load_state_dict` 失败。
+根因：loader/模型 bundle 只按 `(dataset, horizon, batch_size)` 缓存，第一个臂
+（`l_main`）的 `hyperparams`（含 `head_type=shared`）被后续臂复用。
+
+修复（三重保护，全部在**载入之前**）：
+
+1. `resolve_expected_head(cell)`：从该 cell 自己的 `config.json` 读
+   `weak_period_residual_head_type`，与 `--arms` 的期望头类交叉核对（`l_main`↔`shared`、
+   `l_q1_4`/`l_q1_8`↔`pooled_lowrank`），在 `build_cell_plan` 阶段即执行（dry-run 就会拦下）；
+2. bundle/模型缓存键改为 `(dataset, horizon, arm, batch_size)`，并用同一个 `hyperparams` 对象
+   建 loader 与模型（`build_loaders` 会把 `time_mark_dim` 写回该对象）；
+3. `describe_branch(cell, model, state)`：核对"config 期望头类 = 已建模型头类 = checkpoint 键集合
+   蕴含的头类"，并核对 pooled 头的 `rank` 与 config 的 `q` 一致；任一不一致即报错并同时打印两侧内容。
+
+新增 `--dry-run --verify-checkpoint-heads`：用 `mmap` 只读每个 checkpoint 的参数名，打印
+`head=<期望> | checkpoint head=<键集合>`，不一致即退出（阶段 2 的加载前检查）。
+
+### 11.3 缺陷 3：设备选择与 E14 争用（工程）
+
+原实现默认 `--gpus 0` 且只要 CUDA 可用就走 GPU，于是在 8 卡全被 E14 占用时静默抢卡。
+修复：`--gpus` 默认**空 = CPU**；给数值时按**本进程可见命名空间**解释
+（`CUDA_VISIBLE_DEVICES=4,5 --gpus 1` → 物理卡 5，与 `torch.cuda.set_device` 一致），
+越界或 CUDA 不可用即报错退出；启动行与 summary 记录
+`device / CUDA_VISIBLE_DEVICES / visible_device_count / gpu_name`。
+
+**成本提示**：冒烟单 cell 588 s 主要来自 CPU 上 4 次 PhaseFormer 前向（2 遍 × 2 batch）＋
+train 统计；63 cell 正式跑在 CPU 上不现实（数十小时量级），正式运行应显式
+`--gpus N`（等一张空闲卡）或用 6 卡退化路径；冒烟本身可以用
+`--max-batches 2 --random-repeats 10` 在 CPU 上完成。

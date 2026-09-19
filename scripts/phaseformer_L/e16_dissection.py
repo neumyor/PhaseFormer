@@ -196,6 +196,12 @@ CRITERION_INPUT_EXPLANATION = 0.50
 CRITERION_OUTPUT_EXPLANATION = 0.80
 CRITERION_SUFFICIENT_TOLERANCE = 0.005  # +0.5 % on both fused metrics
 CRITERION_SEED_MAJORITY = 2  # out of three seeds
+# Relative tolerance of the closed-form untouched arm against the model's own
+# fused output on the same windows.  The registered evaluator's audited cells sat
+# at 6.3e-07 (median) / 5.5e-06 (worst) for the same reconstruction, so 1e-3 is
+# three orders of magnitude of head-room for float32 round-trips while still
+# catching a wrong head mapping.
+ALGEBRA_RELATIVE_TOLERANCE = 1e-3
 
 
 def parse_list(raw, cast=str) -> list:
@@ -304,7 +310,14 @@ def build_parser() -> argparse.ArgumentParser:
         "that changes every number it touches",
     )
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--gpus", default="0")
+    parser.add_argument(
+        "--gpus", default="",
+        help="comma-separated CUDA device indices to use, interpreted in the "
+        "process's *visible* namespace (so CUDA_VISIBLE_DEVICES applies first); "
+        "empty (the default) runs on CPU and therefore cannot silently contend "
+        "with a running E14 matrix.  'cpu'/'none' are accepted as explicit CPU.  "
+        "Only the first index is used: E16 is a single-process analysis",
+    )
     parser.add_argument(
         "--data-root", default="",
         help="optional override root replacing the leading 'all_datasets/' part "
@@ -317,6 +330,27 @@ def build_parser() -> argparse.ArgumentParser:
         "for the Stage 3 subspace files of the probe cells",
     )
     parser.add_argument("--skip-reference-parity", action="store_true")
+    parser.add_argument(
+        "--algebra-tolerance", type=float, default=ALGEBRA_RELATIVE_TOLERANCE,
+        help="relative tolerance of the closed-form untouched arm against the "
+        "model's own fused output on the same windows; the registered cells sat "
+        "at 6e-07 to 6e-06 for the same reconstruction",
+    )
+    parser.add_argument(
+        "--allow-algebra-mismatch", action="store_true",
+        help="do NOT abort when the closed-form untouched arm fails to reproduce "
+        "the model's own fused output on the same windows.  The cell's rows are "
+        "then written with untouched_arm_reproduces_model_fused=false and listed "
+        "in the summary, so the numbers stay visibly marked instead of silently "
+        "used; the default is to abort, because a mismatch invalidates every arm "
+        "of that cell",
+    )
+    parser.add_argument(
+        "--verify-checkpoint-heads", action="store_true",
+        help="with --dry-run: read each checkpoint's parameter names (keys only, "
+        "mmap) and require the head class they imply to match the arm, so a "
+        "wrongly resolved run directory is caught before any model is built",
+    )
     parser.add_argument(
         "--allow-missing-cells", action="store_true",
         help="continue when a wanted cell has no checkpoint yet (default: fail, "
@@ -440,14 +474,21 @@ def checkpoint_in_run_dir(run_dir: Path) -> tuple[Path | None, str]:
 
 
 def read_run_metrics(run_dir: Path) -> dict:
-    """``val_mse`` / ``val_mae`` of the run, plus its test-read marker.
+    """``val_mse``/``val_mae`` of the run plus the metadata the invariant needs.
 
-    ``test_read`` is recorded only so the audit can show that E14 had already
+    ``test_mse_recorded`` is kept only so the audit can show that E14 had already
     taken its single test read (legacy E8 runs keep it in an external summary);
-    E16 itself never reads it.
+    E16 itself never reads it.  ``val_size`` is the run's own validation window
+    count, which turns "did this run score the whole validation split?" into a
+    checkable comparison instead of an assumption -- it is what makes the
+    untouched-arm comparison against the run metric meaningful or explicitly
+    not comparable.
     """
     path = run_dir / "metrics.csv"
-    row = {"val_mse": None, "val_mae": None, "test_mse_recorded": False}
+    row = {
+        "val_mse": None, "val_mae": None, "test_mse_recorded": False,
+        "val_size": None, "train_size": None, "epochs_completed": None,
+    }
     if not path.is_file():
         return row
     with path.open(newline="") as handle:
@@ -457,8 +498,40 @@ def read_run_metrics(run_dir: Path) -> dict:
     for key in ("val_mse", "val_mae"):
         raw = str(first.get(key, "")).strip()
         row[key] = float(raw) if raw else None
+    for key in ("val_size", "train_size", "epochs_completed"):
+        raw = str(first.get(key, "")).strip()
+        try:
+            row[key] = int(float(raw)) if raw else None
+        except ValueError:
+            row[key] = None
     row["test_mse_recorded"] = bool(str(first.get("test_mse", "")).strip())
     return row
+
+
+def checkpoint_head_keys(path: Path) -> tuple[set[str], str]:
+    """Head parameter names stored in a checkpoint, and the class they imply.
+
+    Used by ``--verify-checkpoint-heads`` to validate the resolved head *before*
+    any model is built.  ``mmap=True`` keeps this keys-only inspection cheap (the
+    weights are never materialised); if the archive or the torch build does not
+    support it, the plain load is the fallback.
+    """
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=False, mmap=True)
+    except Exception:
+        try:
+            payload = torch.load(path, map_location="cpu", weights_only=False)
+        except Exception as error:  # unreadable checkpoint
+            return set(), f"unreadable ({type(error).__name__}: {error})"
+    state = payload.get("state_dict", payload) if isinstance(payload, dict) else {}
+    if not hasattr(state, "keys"):
+        return set(), "no state_dict in the checkpoint"
+    heads = state_dict_head_keys(dict(state))
+    if "weak_period_residual.encoder.weight" in heads:
+        return heads, "pooled_lowrank"
+    if "weak_period_residual.linear.weight" in heads:
+        return heads, "dense_shared"
+    return heads, "unknown"
 
 
 def config_of_run_dir(run_dir: Path) -> dict:
@@ -578,14 +651,48 @@ def finish_cell_record(cell: dict) -> dict:
     metrics = read_run_metrics(cell["run_dir"])
     cell["selected_val_mse"] = metrics["val_mse"]
     cell["selected_val_mae"] = metrics["val_mae"]
+    cell["run_val_size"] = metrics["val_size"]
+    cell["run_train_size"] = metrics["train_size"]
+    cell["run_epochs_completed"] = metrics["epochs_completed"]
     cell["run_mse_csv_has_test_metric"] = metrics["test_mse_recorded"]
     cell["setting"] = f"{cell['dataset']}-{cell['horizon']}"
     cell["q_label"] = SUPPORTED_ARMS[cell["arm"]]["q_label"]
     rank = hyper.get("weak_period_residual_rank")
     cell["lowrank_rank"] = int(rank) if rank not in (None, "") else 0
+    cell["expected_head"] = resolve_expected_head(cell)
     cell["run_dir_rel"] = str(cell["run_dir"].relative_to(REPO_ROOT))
     cell["checkpoint_rel"] = str(cell["checkpoint"].relative_to(REPO_ROOT))
     return cell
+
+
+def resolve_expected_head(cell: dict) -> str:
+    """Head class the cell's *own run config* must describe, cross-checked.
+
+    The head is a property of the cell, not of the run order: ``l_main`` is the
+    dense ``shared`` NLinear head while ``l_q1_4``/``l_q1_8`` are the
+    ``pooled_lowrank`` bottleneck.  Reading it here (and re-checking it against
+    the built model and the checkpoint's key set in :func:`describe_branch`)
+    keeps a wrong-arm checkpoint from being loaded into the wrong model, which is
+    exactly the failure a smoke test hit: ``l_q1_8`` was built as ``shared`` and
+    ``load_state_dict`` raised on every one of its 21 cells.
+    """
+    arm_head = SUPPORTED_ARMS[cell["arm"]]["head"]
+    configured = str(cell.get("head_type", "") or "shared")
+    if arm_head == "dense":
+        if configured != "shared":
+            raise SystemExit(
+                f"{cell['run_dir_rel']}: arm {cell['arm']!r} is the dense "
+                f"PhaseFormer-L row but the run config says "
+                f"weak_period_residual_head_type={configured!r}"
+            )
+        return "dense_shared"
+    if configured != "pooled_lowrank":
+        raise SystemExit(
+            f"{cell['run_dir_rel']}: arm {cell['arm']!r} needs "
+            f"weak_period_residual_head_type=pooled_lowrank but the run config says "
+            f"{configured!r}"
+        )
+    return "pooled_lowrank"
 
 
 def build_cell_plan(args) -> list[dict]:
@@ -887,9 +994,50 @@ def instrument_branch(model, head_kind: str):
                 delattr(head, attribute)
 
 
-def describe_branch(model, state: dict) -> dict:
-    """Guards without which the closed-form arm algebra would be wrong."""
+def state_dict_head_keys(state: dict) -> set[str]:
+    """Parameter names of the residual head as they appear in the checkpoint."""
+    names = set()
+    for key in ("weak_period_residual.linear.weight", "weak_period_residual.encoder.weight",
+                "weak_period_residual.decoder.weight"):
+        if key in state:
+            names.add(key)
+    return names
+
+
+def describe_branch(cell: dict, model, state: dict) -> dict:
+    """Resolve the branch from the *built model and the checkpoint*, with guards.
+
+    The head is a property of the cell, so three things are cross-checked before
+    any arithmetic happens: the head class the run config implies
+    (``cell['expected_head']``), the head class the built model actually carries,
+    and the parameter names the checkpoint actually stores.  A mismatch is a
+    hard error that names both sides -- silently loading a pooled checkpoint into
+    a dense model (or vice versa) is what the first smoke test hit on all 21
+    ``l_q1_8`` cells.
+    """
     head = model.weak_period_residual
+    if isinstance(head, PooledLowRankWeakPeriodResidualHead):
+        built_head = "pooled_lowrank"
+        head_keys = {"weak_period_residual.encoder.weight", "weak_period_residual.decoder.weight"}
+    elif isinstance(head, WeakPeriodResidualHead):
+        built_head = "dense_shared"
+        head_keys = {"weak_period_residual.linear.weight"}
+    else:
+        raise SystemExit(f"unsupported residual head for E16: {type(head).__name__}")
+    expected_head = str(cell.get("expected_head") or "")
+    if expected_head and expected_head != built_head:
+        raise SystemExit(
+            f"{cell['setting']} seed={cell['seed']} arm={cell['arm']}: the built model "
+            f"has the {built_head} head but the run config says {expected_head!r}"
+        )
+    missing_keys = sorted(key for key in head_keys if key not in state)
+    if missing_keys:
+        present = sorted(key for key in state if key.startswith("weak_period_residual."))
+        raise SystemExit(
+            f"{cell['setting']} seed={cell['seed']} arm={cell['arm']}: the built model "
+            f"has the {built_head} head but the checkpoint lacks {missing_keys}; it "
+            f"stores {present}.  The checkpoint does not belong to this cell."
+        )
     if getattr(model.args, "use_adaptive_weak_period_gate", False) or getattr(
         model.args, "use_adaptive_residual_gate", False
     ):
@@ -925,6 +1073,12 @@ def describe_branch(model, state: dict) -> dict:
                 "have to fold the pooling operator in, and no cell of the section "
                 "4.4 scope uses pooling"
             )
+        if int(cell.get("lowrank_rank") or 0) and int(head.rank) != int(cell["lowrank_rank"]):
+            raise SystemExit(
+                f"{cell['setting']} seed={cell['seed']} {cell['arm']}: the built head has "
+                f"rank={int(head.rank)} but the run config plans r={int(cell['lowrank_rank'])} "
+                "(the rank is the cell's `q`, so this is a mis-resolved run directory)"
+            )
         return {
             "head_kind": "pooled_lowrank",
             "encoder_weight": state["weak_period_residual.encoder.weight"].detach().double().cpu().numpy(),
@@ -934,7 +1088,9 @@ def describe_branch(model, state: dict) -> dict:
             "pooled_len": int(head.pooled_len),
             "pool_factor": int(head.pool_factor),
             "rank_dim": int(head.rank),
+            "head_rank": int(head.rank),
             "hidden_kind": "latent_bottleneck",
+            "head_parameters_present": sorted(head_keys & set(state)),
         }
     if isinstance(head, WeakPeriodResidualHead):
         if head.projection_basis is not None:
@@ -954,7 +1110,9 @@ def describe_branch(model, state: dict) -> dict:
             "pooled_len": ambient,
             "pool_factor": 1,
             "rank_dim": ambient,
+            "head_rank": 0,
             "hidden_kind": "centered_input",
+            "head_parameters_present": sorted(head_keys & set(state)),
         }
     raise SystemExit(f"unsupported residual head for E16: {type(head).__name__}")
 
@@ -986,6 +1144,14 @@ class CellAccumulator:
         self.reference_sq = 0.0
         self.recorded_fused_sq = 0.0
         self.recorded_fused_abs = 0.0
+        # Same-window algebra invariant: the closed-form untouched arm against
+        # the model's own froze output, element by element, over exactly the
+        # windows this run processed.  Unlike a comparison with the run's
+        # recorded validation metric it stays valid under ``--max-batches``.
+        self.channels = 0
+        self.algebra_sq = 0.0
+        self.algebra_absmax = 0.0
+        self.algebra_samples = 0
         self.residual_sum = np.zeros(self.horizon)
         self.residual_gram = np.zeros((self.horizon, self.horizon))
         self.arm: dict[str, dict] = {}
@@ -1023,6 +1189,7 @@ class CellAccumulator:
         correction = (mapped + bias_term[None, :, None]) * sigma
         pairs = int(samples * channels)
         self.pairs += pairs
+        self.channels = max(self.channels, int(channels))
         self.elements += pairs * horizon
         flat_hidden = hidden.reshape(-1, self.rank_dim)
         self.hidden_sum += flat_hidden.sum(axis=0)
@@ -1056,12 +1223,30 @@ class CellAccumulator:
         decoder_bias: np.ndarray,
         encoder_bias: np.ndarray,
         arms,
+        model_fused: np.ndarray | None = None,
     ) -> None:
-        """Pass 2: every intervention arm, through the registered algebra."""
+        """Pass 2: every intervention arm, through the registered algebra.
+
+        When ``model_fused`` (the model's own output for this block) is given, the
+        closed-form *untouched* arm is also compared with it element by element.
+        That is the invariant that proves the algebra, and unlike a comparison
+        with the run's recorded ``val_mse`` it is valid on a subset of batches.
+        """
         correction_reference = (
             np.einsum("ncr,hr->nhc", hidden, decoder_weight)
             + affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
         ) * sigma
+        if model_fused is not None:
+            # exactly the ``identity`` arm of ``arm_metrics``
+            branch_reference = last_abs + correction_reference
+            fused_reference = (1.0 - gate) * phase + gate * branch_reference
+            difference = fused_reference - model_fused
+            self.algebra_sq += float(np.sum(difference ** 2))
+            self.algebra_absmax = max(
+                self.algebra_absmax, float(np.abs(difference).max())
+            )
+            self.algebra_samples += int(difference.size)
+            del branch_reference, fused_reference, difference
         for arm_name, basis, mode in arms:
             metrics = arm_metrics(
                 hidden, decoder_weight, decoder_bias, encoder_bias, gate,
@@ -1142,6 +1327,14 @@ class CellAccumulator:
             "reference_sq": self.reference_sq,
             "recorded_fused_mse": self.recorded_fused_sq / elements,
             "recorded_fused_mae": self.recorded_fused_abs / elements,
+            "channels": int(self.channels),
+            "processed_windows": (
+                int(self.pairs // self.channels) if self.channels else 0
+            ),
+            "algebra_fused_rmse": float(
+                np.sqrt(self.algebra_sq / max(self.algebra_samples, 1))
+            ),
+            "algebra_fused_max_abs": float(self.algebra_absmax),
             "hidden_mean": mean_hidden,
             "hidden_covariance": covariance,
             "output_moments": CenteredMoments(
@@ -1459,11 +1652,18 @@ def run_cell(
                             decoder_weight, decoder_bias, encoder_bias, dec_vt,
                         )
                     else:
+                        model_fused_block = (
+                            fused[:, :, c0:c1].double().cpu().numpy()
+                            if pass_name == "arms"
+                            else None
+                        )
                         accumulator.add_arm_block(
                             hidden_block, sigma_block, gate_block, phase_block,
                             target_block, last_abs_block, decoder_weight,
                             decoder_bias, encoder_bias, cell["arms"],
+                            model_fused=model_fused_block,
                         )
+                        del model_fused_block
                         accumulator.add_band_block(
                             hidden_block, sigma_block, gate_block, phase_block,
                             target_block, last_abs_block, decoder_weight,
@@ -1624,15 +1824,73 @@ def run_cell(
 
     baseline = accumulator.arm_metrics("Original")
     recorded_val_mse = cell.get("selected_val_mse")
+    model_fused_mse = float(statistics["recorded_fused_mse"])
+    # ---- invariant 1 (always valid): the algebra reproduces the model output
+    #      on exactly the windows processed.  This is the check that certifies
+    #      every arm of this cell; it does not depend on how many batches ran.
+    algebra_gap = abs(model_fused_mse - baseline["fused_mse"])
+    algebra_gap_relative = algebra_gap / max(abs(model_fused_mse), 1e-12)
+    algebra_tolerance = float(getattr(args, "algebra_tolerance", ALGEBRA_RELATIVE_TOLERANCE))
+    algebra_ok = bool(algebra_gap_relative <= algebra_tolerance)
+    # ---- invariant 2 (only meaningful on the full validation split): the
+    #      untouched arm reproduces the validation metric the training run
+    #      recorded.  ``--max-batches`` and any window-count mismatch make that
+    #      comparison a subset-versus-full comparison, so it is reported as not
+    #      comparable instead of failing.
+    processed_windows = int(statistics["processed_windows"])
+    run_val_size = cell.get("run_val_size")
+    capped = bool(int(args.max_batches))
+    subset = bool(run_val_size and processed_windows != int(run_val_size))
+    run_metric_comparable = bool(
+        recorded_val_mse not in (None, "")
+        and not capped
+        and not subset
+    )
     if recorded_val_mse in (None, ""):
         recorded_gap = float("nan")
+        run_metric_note = "the run records no val_mse"
     else:
         recorded_gap = abs(baseline["fused_mse"] - float(recorded_val_mse))
-    recorded_fused_gap = abs(statistics["recorded_fused_mse"] - baseline["fused_mse"])
+        if capped:
+            run_metric_note = (
+                f"--max-batches {int(args.max_batches)} evaluated a subset: "
+                f"{processed_windows} of {run_val_size or '?'} validation windows"
+            )
+        elif subset:
+            run_metric_note = (
+                f"processed {processed_windows} windows but the run recorded "
+                f"val_size={int(run_val_size)}; the comparison is subset-versus-full"
+            )
+        else:
+            run_metric_note = "full validation split"
     reproduces = bool(
-        recorded_val_mse not in (None, "")
+        run_metric_comparable
         and recorded_gap <= max(1e-3, 1e-3 * abs(float(recorded_val_mse)))
     )
+    if not algebra_ok and not bool(args.allow_algebra_mismatch):
+        raise SystemExit(
+            f"the closed-form untouched arm does not reproduce the model's own "
+            f"fused output for {cell['setting']} seed={cell['seed']} "
+            f"arm={cell['arm']} (head={spec['head_kind']}): relative fused-MSE gap "
+            f"{algebra_gap_relative:.3e} (absolute {algebra_gap:.3e}), element-wise "
+            f"RMS {statistics['algebra_fused_rmse']:.3e}, max "
+            f"{statistics['algebra_fused_max_abs']:.3e} over "
+            f"{processed_windows} windows, tolerance "
+            f"{algebra_tolerance:.1e}.  Every arm of this cell would be "
+            f"wrong, so the cell is not reported.  Inspect head_kind / decoder "
+            f"mapping, mapped_encoder_bias_absmax "
+            f"({mapped_encoder_bias_absmax:.3e}) and the fusion flags.  Pass "
+            "--allow-algebra-mismatch to record the cell as flagged instead."
+        )
+    if not algebra_ok:
+        print(
+            f"[warn] {cell['setting']} seed={cell['seed']} arm={cell['arm']}: the "
+            f"closed-form untouched arm differs from the model's own fused output by "
+            f"{algebra_gap_relative:.3e} (relative) and "
+            f"--allow-algebra-mismatch is in force: every arm row of this cell "
+            "carries untouched_arm_reproduces_model_fused=false",
+            flush=True,
+        )
 
     intervention_rows = []
     for arm_name, basis, _mode in cell["arms"]:
@@ -1664,9 +1922,24 @@ def run_cell(
             "baseline_fused_mse": baseline["fused_mse"],
             "baseline_fused_mae": baseline["fused_mae"],
             "recorded_run_val_mse": "" if recorded_val_mse is None else recorded_val_mse,
+            # invariant 1: the algebra vs the model's own fused output, same
+            # windows -- valid under --max-batches and the certificate for every
+            # arm in this row.
+            "untouched_arm_reproduces_model_fused": algebra_ok,
+            "untouched_arm_gap_vs_model_fused": algebra_gap,
+            "untouched_arm_gap_vs_model_fused_relative": algebra_gap_relative,
+            "untouched_arm_fused_rmse_vs_model": statistics["algebra_fused_rmse"],
+            "untouched_arm_fused_max_abs_vs_model": statistics["algebra_fused_max_abs"],
+            "model_fused_mse_same_windows": model_fused_mse,
+            # invariant 2: the algebra vs the run's recorded validation metric,
+            # only comparable when the whole validation split was processed.
             "untouched_arm_reproduces_run_metric": reproduces,
             "untouched_arm_gap_vs_run_metric": recorded_gap,
-            "untouched_arm_gap_vs_recorded_fused": recorded_fused_gap,
+            "run_metric_check_comparable": run_metric_comparable,
+            "run_metric_check_note": run_metric_note,
+            "run_recorded_val_size": "" if not run_val_size else int(run_val_size),
+            "validation_windows_processed": processed_windows,
+            "algebra_tolerance": algebra_tolerance,
             "mapped_encoder_bias_absmax": mapped_encoder_bias_absmax,
             "validation_pairs": statistics["pairs"],
             "semantic_dimension": int(bases["semantic_dimension"]),
@@ -1732,9 +2005,18 @@ def run_cell(
             "band_block_elements": block_sizes["band_block_elements"],
         },
         "invariant": {
+            "untouched_arm_reproduces_model_fused": algebra_ok,
+            "untouched_arm_gap_vs_model_fused": algebra_gap,
+            "untouched_arm_gap_vs_model_fused_relative": algebra_gap_relative,
+            "untouched_arm_fused_rmse_vs_model": statistics["algebra_fused_rmse"],
+            "untouched_arm_fused_max_abs_vs_model": statistics["algebra_fused_max_abs"],
+            "model_fused_mse_same_windows": model_fused_mse,
             "untouched_arm_reproduces_run_metric": reproduces,
             "untouched_arm_gap_vs_run_metric": recorded_gap,
-            "untouched_arm_gap_vs_recorded_fused": recorded_fused_gap,
+            "run_metric_check_comparable": run_metric_comparable,
+            "run_metric_check_note": run_metric_note,
+            "run_recorded_val_size": "" if not run_val_size else int(run_val_size),
+            "validation_windows_processed": processed_windows,
             "mapped_encoder_bias_absmax": mapped_encoder_bias_absmax,
             "validation_pairs": statistics["pairs"],
         },
@@ -2129,6 +2411,53 @@ def serialise(value):
 
 
 # ---------------------------------------------------------------------------
+# Device selection
+# ---------------------------------------------------------------------------
+def resolve_device(args) -> tuple["torch.device", dict]:
+    """CPU unless ``--gpus`` names a device, and never by accident.
+
+    The default is CPU on purpose: E16 is an analysis job that may run while the
+    E14 matrix holds every GPU, and a smoke test must not silently land on a busy
+    card (the first smoke run did, and took 588 s for a two-batch cell).  An
+    explicit ``--gpus N`` is resolved in the process's *visible* namespace, i.e.
+    ``CUDA_VISIBLE_DEVICES=4,5 ... --gpus 1`` uses physical device 5, which is
+    both what ``torch.cuda.set_device`` does and what ``nvidia-smi`` will show.
+    """
+    import os
+
+    report = {
+        "cuda_available": bool(torch.cuda.is_available()),
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        "requested": str(args.gpus),
+        "visible_device_count": int(torch.cuda.device_count()) if torch.cuda.is_available() else 0,
+        "gpu_name": "",
+    }
+    raw = str(args.gpus or "").strip()
+    if raw in ("", "cpu", "none", "CPU"):
+        return torch.device("cpu"), report
+    indices = parse_list(raw, int)
+    if not indices:
+        return torch.device("cpu"), report
+    if not torch.cuda.is_available():
+        raise SystemExit(
+            f"--gpus {raw!r} was given but CUDA is not available in this process "
+            "(check CUDA_VISIBLE_DEVICES and the installed torch build); refusing "
+            "to fall back to CPU silently"
+        )
+    index = int(indices[0])
+    if index < 0 or index >= report["visible_device_count"]:
+        raise SystemExit(
+            f"--gpus {raw!r} selects device {index}, but only "
+            f"{report['visible_device_count']} device(s) are visible to this "
+            f"process (CUDA_VISIBLE_DEVICES={report['cuda_visible_devices']!r}); "
+            "the index is interpreted in the visible namespace"
+        )
+    torch.cuda.set_device(index)
+    report["gpu_name"] = str(torch.cuda.get_device_name(index))
+    return torch.device("cuda", index), report
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 def main() -> None:
@@ -2163,23 +2492,49 @@ def main() -> None:
                 ensure_ascii=False,
             )
         )
+        head_disagreements: list[str] = []
         for cell in cells:
-            print(
+            line = (
                 f"{cell['arm']:<8} {cell['setting']:<16} seed={cell['seed']} "
-                f"status={cell['e14_status']:<14} rank={cell['lowrank_rank']:<4} "
-                f"{cell['checkpoint_rel']}",
-                flush=True,
+                f"status={cell['e14_status']:<14} head={cell['expected_head']:<14} "
+                f"r={cell['lowrank_rank']:<4} "
+                f"ckpt={cell['checkpoint_source']:<12} {cell['checkpoint_rel']}"
+            )
+            if args.verify_checkpoint_heads:
+                keys, inferred = checkpoint_head_keys(cell["checkpoint"])
+                line += f" | checkpoint head={inferred} keys={len(keys)}"
+                if inferred in ("unknown",) or inferred.startswith(
+                    ("unreadable", "no state_dict")
+                ):
+                    head_disagreements.append(
+                        f"{cell['arm']} {cell['setting']} seed={cell['seed']}: the head "
+                        f"class cannot be established from the checkpoint "
+                        f"({inferred}) at {cell['checkpoint_rel']}"
+                    )
+                elif inferred != cell["expected_head"]:
+                    head_disagreements.append(
+                        f"{cell['arm']} {cell['setting']} seed={cell['seed']}: "
+                        f"checkpoint implies {inferred!r}, the cell needs "
+                        f"{cell['expected_head']!r} ({cell['checkpoint_rel']})"
+                    )
+            print(line, flush=True)
+        if head_disagreements:
+            raise SystemExit(
+                "checkpoint/head disagreements (the run directory resolution would "
+                "load the wrong head):\n  " + "\n  ".join(head_disagreements)
             )
         return
 
     output_dir = REPO_ROOT / args.output_root
     output_dir.mkdir(parents=True, exist_ok=True)
-    device = torch.device("cpu")
-    if torch.cuda.is_available():
-        gpu = (parse_list(args.gpus, int) or [0])[0]
-        torch.cuda.set_device(gpu)
-        device = torch.device("cuda", gpu)
-    print(f"device: {device}", flush=True)
+    device, device_report = resolve_device(args)
+    print(
+        f"device: {device} "
+        f"(CUDA_VISIBLE_DEVICES={device_report['cuda_visible_devices']!r}, "
+        f"visible devices={device_report['visible_device_count']}, "
+        f"requested={args.gpus!r})",
+        flush=True,
+    )
 
     registry = build_registry(load_dataset_info())
     unknown = sorted({cell["dataset"] for cell in cells} - set(registry))
@@ -2235,7 +2590,12 @@ def main() -> None:
             models.clear()  # keep at most one setting's artefacts alive
             loaders.clear()
             cached_setting = setting_key
-        loader_key = (dataset, horizon, int(cell["batch_size"]))
+        # The key carries the ARM: l_main needs the dense ``shared`` head while
+        # l_q1_4/l_q1_8 need ``pooled_lowrank`` with a cell-specific rank, so a
+        # loader/model bundle shared across arms would build the wrong head for
+        # two of the three arms (the first smoke run raised a state-dict mismatch
+        # on all 21 l_q1_8 cells for exactly that reason).
+        loader_key = (dataset, horizon, cell["arm"], int(cell["batch_size"]))
         if loader_key not in loaders:
             # ``build_loaders`` writes ``time_mark_dim`` into the hyperparams dict
             # it is given, so the *same object* has to reach ``build_model`` --
@@ -2269,7 +2629,7 @@ def main() -> None:
             "state_dict"
         ]
         model.load_state_dict(state, strict=True)
-        spec = describe_branch(model, state)
+        spec = describe_branch(cell, model, state)
         model.to(device).eval()
         cell_started = time.time()
         payload = run_cell(
@@ -2278,12 +2638,21 @@ def main() -> None:
         )
         payloads.append(payload)
         del state
+        invariant = payload["invariant"]
+        run_metric_state = (
+            "ok" if invariant["untouched_arm_reproduces_run_metric"]
+            else ("skipped" if not invariant["run_metric_check_comparable"] else "FAILED")
+        )
         print(
             f"[cell] {cell['arm']:<8} {cell['setting']:<16} seed={seed} "
             f"head={spec['head_kind']:<16} rank_dim={spec['rank_dim']:<4} "
             f"pairs={payload['statistics']['pairs']} "
-            f"invariant={'ok' if payload['invariant']['untouched_arm_reproduces_run_metric'] else 'FAILED'} "
-            f"gap={payload['invariant']['untouched_arm_gap_vs_run_metric']:.2e} "
+            f"windows={invariant['validation_windows_processed']}"
+            f"/{invariant['run_recorded_val_size'] or '?'} "
+            f"algebra=ok(rel_gap={invariant['untouched_arm_gap_vs_model_fused_relative']:.2e},"
+            f" max_abs={invariant['untouched_arm_fused_max_abs_vs_model']:.2e}) "
+            f"run_metric={run_metric_state}"
+            f"({invariant['run_metric_check_note']}) "
             f"({time.time() - cell_started:.1f}s)",
             flush=True,
         )
@@ -2319,11 +2688,23 @@ def main() -> None:
         verdicts[row["stable_semantics_verdict"]] = (
             verdicts.get(row["stable_semantics_verdict"], 0) + 1
         )
-    invariant_failures = [
+    algebra_failures = [
         f"{payload['cell']['arm']}|{payload['cell']['setting']}|{payload['cell']['seed']}"
         for payload in payloads
-        if not payload["invariant"]["untouched_arm_reproduces_run_metric"]
+        if not payload["invariant"]["untouched_arm_reproduces_model_fused"]
     ]
+    run_metric_failures = [
+        f"{payload['cell']['arm']}|{payload['cell']['setting']}|{payload['cell']['seed']}"
+        for payload in payloads
+        if payload["invariant"]["run_metric_check_comparable"]
+        and not payload["invariant"]["untouched_arm_reproduces_run_metric"]
+    ]
+    run_metric_not_comparable = {
+        f"{payload['cell']['arm']}|{payload['cell']['setting']}|{payload['cell']['seed']}":
+            payload["invariant"]["run_metric_check_note"]
+        for payload in payloads
+        if not payload["invariant"]["run_metric_check_comparable"]
+    }
     summary = {
         "experiment": "E16 (minipaper 4.4 dissection + intervention table)",
         "reads_test": False,
@@ -2411,7 +2792,16 @@ def main() -> None:
             "verdicts": verdicts,
         },
         "invariants": {
-            "untouched_arm_failures": invariant_failures,
+            "algebra_certificate": (
+                "untouched_arm_reproduces_model_fused compares the closed-form "
+                "untouched arm with the model's own fused output on exactly the "
+                "windows processed; it is valid under --max-batches and certifies "
+                "every arm of a cell"
+            ),
+            "algebra_tolerance_relative": float(args.algebra_tolerance),
+            "algebra_failures": algebra_failures,
+            "run_metric_failures": run_metric_failures,
+            "run_metric_not_comparable": run_metric_not_comparable,
             "per_cell": {
                 f"{payload['cell']['arm']}|{payload['cell']['setting']}|{payload['cell']['seed']}":
                     payload["invariant"]
@@ -2484,6 +2874,7 @@ def main() -> None:
             "torch": torch.__version__,
             "numpy": np.__version__,
             "device": str(device),
+            "device_report": device_report,
         },
     }
     (output_dir / "e16_summary.json").write_text(
@@ -2516,7 +2907,9 @@ def main() -> None:
                 "intervention_rows": len(intervention_rows),
                 "dissection_rows": len(dissection),
                 "verdicts": verdicts,
-                "invariant_failures": len(invariant_failures),
+                "algebra_failures": len(algebra_failures),
+                "run_metric_failures": len(run_metric_failures),
+                "run_metric_not_comparable": len(run_metric_not_comparable),
                 "reference_parity_passed": parity.get("passed", None),
                 "elapsed_seconds": round(summary["elapsed_seconds"], 1),
             },
