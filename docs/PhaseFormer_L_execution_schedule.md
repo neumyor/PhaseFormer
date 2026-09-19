@@ -509,6 +509,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 训练代码在整张矩阵上**逐字节未变**（可引用的协议事实） | 启动至今 77 个文件变动，**训练入口与 `src/**`：0 个**；唯一落在 E14 路径上的 `e14_main_matrix.py` 已实跑核验 | 回答审稿式问题"411 格是同一版代码训的吗"：启动提交 `f870b1a`（取自 log 的 `HEAD:` 行）→ HEAD 共 **77 个文件**变动（`docs/` 43、`scripts/` 33、`tests/` 1），而 **`scripts/search_phaseformer.py` 与 `src/**` 一个都没变**（diff 为空）；且训练入口**不从 `scripts/` 导入任何模块**（只 stdlib + 第三方 + `src.*`）。唯一落在 E14 代码路径上的是 `e14_main_matrix.py`（**+42 行无删改**：两个合法性常量 + `_protocol_ok` 的两条 gate/lr 越界检查 + 复用索引多记 `gate_init`/`learning_rate`）——它对 **stage B 的指纹门**做了**实跑**核验（`constants_equal: true`、`parity_cases: 20`、`parity_failures: []`、dry-run `problems: 0`）⇒ 不影响；对正在跑的训练亦无影响。**故 411 格由同一份字节相同的训练代码训出**；改动的 33 个脚本全属阶段二/分析层与工具链 |
 
+| 2026-09-20 | 用**第 1 步自己的逐格前置检查**在真实矩阵上预跑 | **220/220 通过、0 拒绝**（提前几十分钟拿到先手） | §3 验的是"两条分支能跑"；本轮验的是"在这个正在跑的真实矩阵上，第 1 步会不会拒绝某些格"。直接调 `e14_read_test.preflight_new_cell(cell, ROOT, ignore_protocol_drift=False)`——即 worker 读 test **之前**跑的那一段（协议漂移 / run 解析 / checkpoint 解析，且源码里**失败即停**）：`accepted 220 / refused 0 / pending 191` ⇒ **已完成的 220 格第 1 步一个都不会拒**。这比"等链跑起来看"多出几十分钟先手。**顺带记一次我自己的读法错误**：第一版把 payload 里空的 `status` 当成拒绝（报"215 格会被拒"）；查明 `status='planned'` 是**上一层 `plan_cell` 才贴的**，此处为空是正常形状——**真正的判据是"有没有抛 SystemExit"**，改后才是 220/220 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据

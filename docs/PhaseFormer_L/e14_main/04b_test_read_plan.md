@@ -144,3 +144,26 @@ reused cells whose source.test_evidence is empty: 0
 不存在"某个复用格没有 test 来源 ⇒ 第 1 步 fail-closed 卡住"的风险。
 **至此第 1 步的两条分支都已在真产物上验证**；剩余不确定性只有**时长**（§9.1 估 ≈1.3 h，
 依据是"单格 1–2 min × 411 / 8 卡"，且满规模解析已实测仅 23.75 s，见 §9.1.1a）。
+
+## 4. 上线前把**该步自己的逐格前置检查**在已完成的格子上跑完（2026-09-20 06:17，220/220 通过）
+
+§3 验的是"两条分支能跑"；本节验的是"**在这个正在跑的真实矩阵上，第 1 步会不会拒绝某些格子**"。
+用的就是第 1 步**自己的**函数 `e14_read_test.preflight_new_cell(cell, output_root, ignore_protocol_drift=False)`
+——即 worker 在读 test 之前跑的那一段（协议漂移、run 解析、checkpoint 解析都在其中，且**失败即停**）。
+
+```text
+finished cells preflighted: 220
+  accepted (no drift, run + checkpoint resolved): 220
+  refused (would stop step 1): 0
+  still pending: 191
+```
+
+**含义**：**已完成的 220 格，第 1 步一个都不会拒绝**；剩余 191 格待跑完后再由该步自身复检。
+这比"等链跑起来看"多出**几十分钟的先手**——若某格会因协议漂移或 run/checkpoint 解析失败被拒，
+现在就能看出来并处理，而不是在链条启动后才停在第 1 步。
+
+> **一次我自己的读法错误（如实记录）**：第一版脚本把 payload 里**空的** `status` 当成"拒绝"，
+> 于是报"215 格会被拒"。查明：`preflight_new_cell` 返回的是 **(payload, context)**，
+> `planned` 这个状态是**上一层 `plan_cell` 才贴上的**，所以此处 `status` 为空是正常形状——
+> **真正的判据是"有没有抛异常"**（漂移与未解析在源码里是 fail-closed 的 `SystemExit`）。
+> 改按"是否抛异常"统计后才是 220/220。这与本会话其它几次同源：**先分清是工件坏了还是我的读法错了**。
