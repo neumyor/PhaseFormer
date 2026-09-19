@@ -271,13 +271,23 @@ def main() -> None:
     row5 = build_row5(e18_rows, baseline)
 
     def summarise(row, addend):
+        def pct_cell(value, prefix):
+            """Render a percentage, or an em dash when it could not be computed.
+
+            Without this a missing baseline (or a cell whose test metrics were
+            never read) renders as the literal string "平均 ΔMSE None%" straight
+            into the minipaper table.  The rehearsal in
+            rehearse_e18_writeback.py exercises exactly that degraded path.
+            """
+            return "—" if value is None else f"{prefix}{value}%"
+
         return {
             "row": row["row"], "operation": row["operation"],
             "target": row["target"], "scope": row["scope"],
             "existing": addend, "addendum": row["verdict"] if row["row"] == 1
-            else (f"28 setting 平均截断惩罚 {row.get('mean_gap_pct')}%"
+            else (pct_cell(row.get("mean_gap_pct"), "28 setting 平均截断惩罚 ")
                   if row["row"] == 3
-                  else f"平均 ΔMSE {row.get('mean_delta_mse_pct')}%"),
+                  else pct_cell(row.get("mean_delta_mse_pct"), "平均 ΔMSE ")),
         }
 
     table = [
