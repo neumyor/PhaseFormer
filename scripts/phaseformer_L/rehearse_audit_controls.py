@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import subprocess
 import sys
 import tempfile
@@ -69,11 +70,17 @@ def full_table() -> list:
     return rows
 
 
-def run_auditor(root: Path) -> dict:
-    """Run the auditor against ``root`` and return {criterion: (state, detail)}."""
-    proc = subprocess.run(
-        [sys.executable, str(AUDITOR), "--root", str(root)],
-        capture_output=True, text=True, cwd=str(REPO))
+def run_auditor(root: Path, json_path: Path | None = None) -> dict:
+    """Run the auditor against ``root`` and return {criterion: (state, detail)}.
+
+    ``json_path`` also exercises ``--json``, which step 7 passes: the flag was
+    declared and parsed but never used, so the promised acceptance-report file
+    was silently never written.
+    """
+    argv = [sys.executable, str(AUDITOR), "--root", str(root)]
+    if json_path is not None:
+        argv += ["--json", str(json_path)]
+    proc = subprocess.run(argv, capture_output=True, text=True, cwd=str(REPO))
     verdicts = {}
     for line in proc.stdout.splitlines():
         stripped = line.strip()
@@ -89,7 +96,9 @@ def run_auditor(root: Path) -> dict:
                 verdicts[name] = (state, detail)
                 break
     return {"verdicts": verdicts, "rc": proc.returncode,
-            "stdout": proc.stdout, "stderr": proc.stderr}
+            "stdout": proc.stdout, "stderr": proc.stderr,
+            "json": json.loads(json_path.read_text()) if json_path
+            and json_path.is_file() else None}
 
 
 def check(label: str, verdicts: dict, criterion: str, expected: str,
@@ -177,6 +186,20 @@ def main() -> int:
         verdicts = run_auditor(root)["verdicts"]
         check("all-gateless table", verdicts, GATE_CRITERION, "PASS", results)
         check("all-gateless table", verdicts, ARM_CRITERION, "PASS", results)
+
+        # 8. --json must actually write step 7's acceptance report.
+        report_path = root / "nested" / "acceptance.json"
+        payload = run_auditor(root, json_path=report_path)["json"]
+        results.append(bool(payload))
+        print(f"  [{'OK  ' if payload else 'FAIL'}] --json writes the report: "
+              f"{'written with %d criteria' % payload['total_criteria'] if payload else 'missing'}")
+        if payload:
+            results.append(payload.get("total_criteria", 0) == len(payload["criteria"]))
+            print(f"  [OK  ] --json total_criteria matches its criteria list: "
+                  f"{payload['total_criteria']}")
+            results.append(isinstance(payload.get("failing"), list))
+            print("  [OK  ] --json carries a failing list: "
+                  f"{payload.get('failing')}")
 
     print()
     if all(results):

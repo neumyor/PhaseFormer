@@ -66,6 +66,33 @@ class Report:
     def fails(self) -> list:
         return [r for r in self.rows if r["state"] == "FAIL"]
 
+    def counts(self) -> dict:
+        counts: dict = {}
+        for row in self.rows:
+            counts[row["state"]] = counts.get(row["state"], 0) + 1
+        return counts
+
+    def to_dict(self) -> dict:
+        """Machine-readable form of the report.
+
+        Step 7 invokes the auditor with ``--json``, so this is the acceptance
+        audit's durable artifact; before 2026-09-20 the flag was declared and
+        parsed but never used, so the promised file was silently never written.
+        """
+        return {
+            "root": str(ROOT),
+            "criteria": list(self.rows),
+            "counts": self.counts(),
+            "failing": [f"{r['experiment']} / {r['criterion']}" for r in self.fails()],
+            "total_criteria": len(self.rows),
+        }
+
+    def write_json(self, path) -> None:
+        target = pathlib.Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(self.to_dict(), indent=2,
+                                     ensure_ascii=False) + "\n", encoding="utf-8")
+
     def print(self) -> None:
         current = None
         for row in self.rows:
@@ -438,10 +465,12 @@ def main() -> int:
 
     report.print()
 
-    counts = {}
-    for row in report.rows:
-        counts[row["state"]] = counts.get(row["state"], 0) + 1
+    counts = report.counts()
     print(f"\nsummary: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+
+    if args.json:
+        report.write_json(args.json)
+        print(f"report written: {args.json}")
 
     failed = report.fails()
     if failed:
