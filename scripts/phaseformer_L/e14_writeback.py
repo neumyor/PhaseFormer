@@ -81,6 +81,38 @@ NU_STAT = "tau_hat_steps"
 NU_STAR = 57.35
 S1_DATASETS = ("ETTh2", "ETTm2", "Weather")
 
+# External citation, NOT a local result.  FITS (ICLR 2024 Spotlight) MSE at
+# lookback 720, transcribed from the official repository's final results table
+# (https://github.com/VEWOXIC/FITS, README "Result Update"), fetched 2026-09-19,
+# which states those numbers match the ICLR camera-ready version after the
+# `drop_last` bug fix.  Needed by minipaper §4.2 must-answer (a), which asks
+# whether ETTh2 reaches "the FITS numbers"; the repository's own Golden file
+# contains no external model at all.  The source table reports MSE ONLY, so no
+# FITS MAE is recorded here and none may be inferred.  Provenance and caveats:
+# docs/PhaseFormer_L_external_refs.md.
+FITS_MSE = {
+    ("ETTh1", 96): 0.372, ("ETTh1", 192): 0.404,
+    ("ETTh1", 336): 0.427, ("ETTh1", 720): 0.424,
+    ("ETTh2", 96): 0.271, ("ETTh2", 192): 0.331,
+    ("ETTh2", 336): 0.354, ("ETTh2", 720): 0.377,
+    ("ETTm1", 96): 0.303, ("ETTm1", 192): 0.337,
+    ("ETTm1", 336): 0.366, ("ETTm1", 720): 0.415,
+    ("ETTm2", 96): 0.162, ("ETTm2", 192): 0.216,
+    ("ETTm2", 336): 0.268, ("ETTm2", 720): 0.348,
+    ("Weather", 96): 0.143, ("Weather", 192): 0.186,
+    ("Weather", 336): 0.236, ("Weather", 720): 0.307,
+    ("Electricity", 96): 0.134, ("Electricity", 192): 0.149,
+    ("Electricity", 336): 0.165, ("Electricity", 720): 0.203,
+    ("Traffic", 96): 0.385, ("Traffic", 192): 0.397,
+    ("Traffic", 336): 0.410, ("Traffic", 720): 0.448,
+}
+FITS_NOTE = (
+    "FITS MSE is an external citation (github.com/VEWOXIC/FITS, fetched "
+    "2026-09-19), MSE-only by construction; see "
+    "docs/PhaseFormer_L_external_refs.md. Used for must-answer (a); it never "
+    "enters claims A-D."
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -250,6 +282,10 @@ def main() -> None:
                  "is_traffic_appendix": dataset == TRAFFIC}
         gold = golden[(dataset, horizon)]
         entry["golden_mse"], entry["golden_mae"] = gold
+        fits = FITS_MSE.get((dataset, horizon))
+        entry["fits_mse"] = fits
+        entry["phaseformer_l_vs_fits_pct"] = (
+            round(pct_change(entry.get("l_main_mse"), fits), 4) if fits else None)
 
         for arm in ARM_ORDER:
             bucket = results.get((arm, dataset, horizon))
@@ -272,6 +308,9 @@ def main() -> None:
                 round(float(np.mean(bucket["gate"])), 6) if bucket["gate"] else None)
 
         # Required comparisons.
+        entry["phaseformer_l_vs_fits_pct"] = (
+            round(pct_change(entry.get("l_main_mse"), FITS_MSE[(dataset, horizon)]), 4)
+            if (dataset, horizon) in FITS_MSE else None)
         po_mse, po_mae = entry.get("phase_only_mse"), entry.get("phase_only_mae")
         if po_mse is None or entry.get("l_main_mse") is None:
             incomplete.append(entry["setting"] + " (missing phase_only or l_main)")
@@ -357,6 +396,38 @@ def main() -> None:
         "winning_settings": wins,
         "verdict": len(wins) >= need if s1_rows else None,
         "diagnostic_misses": misses,
+    }
+
+    # ---- must-answer (a): ETTh2 versus FITS --------------------------------
+    etth2 = []
+    for row in rows:
+        if row["dataset"] != "ETTh2" or row["fits_mse"] is None:
+            continue
+        etth2.append({
+            "setting": row["setting"],
+            "golden_mse": row["golden_mse"],
+            "fits_mse": row["fits_mse"],
+            "phase_only_mse": row.get("phase_only_mse"),
+            "phaseformer_l_mse": row.get("l_main_mse"),
+            "phaseformer_l_vs_phase_only_pct": row["delta_mse_pct"],
+            "phaseformer_l_vs_golden_pct": (
+                None if row.get("l_main_mse") is None else
+                round(pct_change(row["l_main_mse"], row["golden_mse"]), 4)),
+            "phaseformer_l_vs_fits_pct": row.get("phaseformer_l_vs_fits_pct"),
+            "reaches_fits_mse": (
+                None if row.get("l_main_mse") is None
+                else bool(row["l_main_mse"] <= row["fits_mse"])),
+        })
+    must_answer_a = {
+        "question": "minipaper 4.2 (a): does ETTh2 close the gap to phase_only and "
+                    "Golden, and does it reach the cited FITS numbers?",
+        "fits_source": "github.com/VEWOXIC/FITS README 'Result Update', fetched 2026-09-19",
+        "fits_reports_mae": False,
+        "settings": etth2,
+        "reaches_fits_count": sum(1 for e in etth2 if e["reaches_fits_mse"]),
+        "note": "MSE only: the FITS table reports no MAE, so must-answer (a) is "
+                "answered on MSE and the MAE side is left uncompared rather than "
+                "filled from an unrelated source.",
     }
 
     # ---- claim C -----------------------------------------------------------
@@ -473,7 +544,7 @@ def main() -> None:
     out_root.mkdir(parents=True, exist_ok=True)
 
     fields = ["dataset", "horizon", "setting", "is_traffic_appendix",
-              "golden_mse", "golden_mae"]
+              "golden_mse", "golden_mae", "fits_mse", "phaseformer_l_vs_fits_pct"]
     for arm in ARM_ORDER:
         fields += [f"{arm}_mse", f"{arm}_mae", f"{arm}_std_mse", f"{arm}_std_mae",
                    f"{arm}_n", f"{arm}_gate_mean"]
@@ -490,7 +561,9 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(variant_rows)
     (out_root / "claims.json").write_text(
-        json.dumps({"A": claim_a, "B": claim_b, "C": claim_c, "D": claim_d},
+        json.dumps({"A": claim_a, "B": claim_b, "C": claim_c, "D": claim_d,
+                    "must_answer_a": must_answer_a,
+                    "fits_note": FITS_NOTE},
                    indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (out_root / "audit.json").write_text(
         json.dumps({
@@ -530,6 +603,7 @@ def main() -> None:
         "claim_C_stable_beyond_golden": claim_c["stable_beyond_golden_l_main"],
         "claim_D": claim_d["verdict"],
         "diagnostic_misses": claim_b["diagnostic_misses"],
+        "must_answer_a_reaches_fits": must_answer_a["reaches_fits_count"],
     }, ensure_ascii=False))
 
 
