@@ -78,6 +78,15 @@ ARMS = {
 
 MAIN_ARMS = ("phase_only", "l_main", "l_q1_4", "l_q1_8", "l_rcrf")
 OPTIONAL_ARMS = ("a1",)
+# Default matrix: every §4.2 variant row.  A1 is trained from scratch under the
+# §4.0 protocol because the minipaper's "12 格既有" premise was refuted by the
+# 2026-09-18 audit (no gold_combo artifact exists on either side, and the
+# agent-log A1 batch used MAE loss rather than Huber).  User decision
+# 2026-09-18: train A1 on the 24 main settings x 3 seeds = 72 runs.
+DEFAULT_ARMS = MAIN_ARMS + OPTIONAL_ARMS
+# The Traffic appendix covers the main table only; A1 is not a minipaper
+# Traffic row, so it is not trained there.
+ARM_DATASET_EXCLUSIONS = {"a1": {"Traffic"}}
 
 # Audited reuse scope: the seven test-selected settings (minipaper §4.1/§4.2).
 REUSE_SETTINGS_FULL = (
@@ -130,9 +139,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage", choices=["plan", "smoke", "a"], default="plan")
     parser.add_argument("--output-root", default="research_runs/phaseformer_L_e14_main_v1")
     parser.add_argument("--gpus", default="0,1,2,3,4,5,6,7")
-    parser.add_argument("--arms", default=",".join(MAIN_ARMS),
-                        help="comma list; default excludes the optional A1 row")
-    parser.add_argument("--datasets", default=",".join(MAIN_DATASETS))
+    parser.add_argument("--arms", default=",".join(DEFAULT_ARMS),
+                        help="comma list; default is every §4.2 variant row")
+    parser.add_argument("--datasets", default=",".join(MAIN_DATASETS + TRAFFIC_DATASETS))
     parser.add_argument("--horizons", default=",".join(str(h) for h in HORIZONS))
     parser.add_argument("--seeds", default=",".join(str(s) for s in SEEDS))
     parser.add_argument("--num-workers", type=int, default=4)
@@ -271,15 +280,21 @@ def load_external_test_evidence() -> tuple[dict, list]:
                 if not arms:
                     continue
                 if not str(row.get("test_mse", "")).strip():
-                    rejected.append({"source": spec["path"], "reason": "empty test_mse",
-                                     "row": {k: row.get(k) for k in
-                                             ("dataset", "horizon", "seed", arm_value and spec["arm_column"])}})
+                    rejected.append({
+                        "source": spec["path"],
+                        "reason": "empty test_mse",
+                        "cell": f"{row.get('dataset')}-{row.get('horizon')}"
+                                f"-s{row.get('seed')}",
+                    })
                     continue
                 status = str(row.get(spec["status_column"], "")).strip()
                 if status not in spec["status_ok"]:
-                    rejected.append({"source": spec["path"],
-                                     "reason": f"test_read_status={status!r}",
-                                     "row": {k: row.get(k) for k in ("dataset", "horizon", "seed")}})
+                    rejected.append({
+                        "source": spec["path"],
+                        "reason": f"test_read_status={status!r}",
+                        "cell": f"{row.get('dataset')}-{row.get('horizon')}"
+                                f"-s{row.get('seed')}",
+                    })
                     continue
                 raw_val = str(row.get(spec["val_column"], "")).strip()
                 if raw_val:
@@ -289,7 +304,8 @@ def load_external_test_evidence() -> tuple[dict, list]:
                                 "source": spec["path"],
                                 "reason": f"val_relative_difference {raw_val} > "
                                           f"{spec['val_tolerance']}",
-                                "row": {k: row.get(k) for k in ("dataset", "horizon", "seed")},
+                                "cell": f"{row.get('dataset')}-{row.get('horizon')}"
+                                        f"-s{row.get('seed')}",
                             })
                             continue
                     except ValueError:
@@ -438,7 +454,10 @@ def build_cells(args, reuse) -> list:
 
     cells = []
     for arm in arms:
+        excluded = ARM_DATASET_EXCLUSIONS.get(arm, set())
         for dataset in datasets:
+            if dataset in excluded:
+                continue
             for horizon in horizons:
                 for seed in seeds:
                     key = (dataset, horizon, seed)
