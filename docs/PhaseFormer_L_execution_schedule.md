@@ -437,6 +437,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 失败语义核验 | **全链 fail-closed（含一处已记录例外）** | 无人值守链路最危险的失效是"**带着空洞继续走**"（链跑完、表填出，但某些格其实缺）。本轮把该语义**逐层核到源码**：训练 runner **任一格失败即非零退出**（`e14_main_matrix.py:702-703 if failed: raise SystemExit`；`e17_conditional.py:1407`、`e18_negative.py:890-891` 同构）→ `run_step` 在第一个非零退出处停止 → watcher 记 `PHASE2_FAILED` → E14 完成守卫要求 `E14_MAIN_EXIT=0` **且** `runs/` 恰 411 目录，故 E14 若有失败格，**watcher 不会启动阶段二** ✓。**一处例外及其兜底**：`read_test_generic.py` **永远 exit 0**（即使 cell 被拒或 worker 崩溃，只在汇总列 `rejected`）——由**第 7 步验收审计**兜住（E17/E18 各有"每 cell 都要有 test 指标"判据），且代价有限（真出问题只需重跑该步的读取+回填，24/78 个训练 run 仍有效），故**保留其 exit-0 语义不改**，但例外本身必须写明，不能默认"全链都 fail-closed" |
 
+| 2026-09-20 | 恢复代价核验 | **全链唯一昂贵重跑是第 4 步** | 承接失败语义，核实"失败后重跑要付多少"（决定该不该中途干预）。关键在 `search_phaseformer.py:638-644`：若 `metrics.csv` 存在，**带 `--resume` 时打印 `RESUME completed` 并干净 return（退出码 0）**，不带时才 `raise FileExistsError`。而 E14/E17/E18 的命令**都带 `--resume`**（`:468`/`:525`/`:247`），E16 **完全没有**。故：第 1 步幂等、第 3 步分钟级、**第 5/6 步廉价**（dispatch 虽重新发车每格，但已完成的 run 立即 no-op，**不重训**）；**第 4 步（E16）昂贵**——无 `--resume`、无按 cell 检查点、产物末尾一次性写出 → 失败即需**整步重跑 3–5 h**，是全链唯一昂贵重跑；`--from N` 另可跳过节级 ✓。**并诚实记下我一个过早结论**：我先只读 dispatcher、见 `pending = list(cells)` 无发车前跳过，几乎把"重跑会重训所有 run"写进文档；往下多读一层才发现子进程带 `--resume`、结论**正好相反**——"从单层代码推断跨层行为会出错"，好在写进文档前发现 |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
@@ -693,3 +695,37 @@ python scripts/phaseformer_L/verify_minipaper_fill.py --inventory  # 空格总�
   `dissection_table_44.csv`、`intervention_table_44.{csv,md}`、`conditional_table.{csv,md}`、
   `negative_table.{csv,md}` **与各 write-back 的写出点逐字一致**
   （`e14_writeback.py`、`e16_writeback.py:366`、`e17_writeback.py`、`e18_writeback.py`）。
+
+### 10.1.2 已核验的**恢复代价**：重跑一步是便宜还是昂贵
+
+承接 §10.1.1（失败语义），本节核实"失败后重跑要付多少"——这决定了我该不该在无人值守的中途干预。
+
+**关键代码**（`scripts/search_phaseformer.py:638-644`）：
+
+```python
+complete = run_dir / "metrics.csv"
+if complete.exists():
+    if args.resume:
+        print(f"RESUME completed: {rid}")
+        return                      # ← 已完成的 run 干净地 no-op、退出码 0
+    raise FileExistsError(f"completed experiment already exists: {rid}")
+```
+
+而 E14 / E17 / E18 的命令**都带 `--resume`**（`e14_main_matrix.py:468`、`e17_conditional.py:525`、
+`e18_negative.py:247`），E16 则**完全没有** `--resume`（计数 0）。
+
+| 步 | 失败后重跑的实际代价 |
+|---|---|
+| 1（411 次 test 读取） | 廉价：读取器幂等（已带 test 指标的行走"原样复制"） |
+| 3（三个回填/审计工具） | 分钟级：纯 IO，直接覆盖写出 |
+| 5 / 6（E17 24 run / E18 78 run） | **廉价**：dispatch 会重新发车每个 cell，但 **已完成的 run 会打印 `RESUME completed` 并立即以 0 退出**，故只付"重新解析+逐格 no-op"的时间，**不重训** ✓ |
+| **4（E16）** | **昂贵**：无 `--resume`、也无按 cell 的 checkpoint，产物还是**末尾一次性写出** → 失败即需**整步重跑（3–5 h）**，这是全链唯一的昂贵重跑 ✗ |
+| `--from N` | 跳过节级：已成功的步不必重跑 ✓ |
+
+**因此无人值守中若第 4 步失败，代价是 3–5 h 而非全链重来**；其余步失败都可在分钟级恢复。
+
+> **诚实记下我自己的一个过早结论**：我先只读了 dispatcher，看到 `pending = list(cells)`
+> （**没有**发车前跳过），就准备把"重跑一步会重训所有 run"写进文档。往下多读一层才发现
+> 子进程带 `--resume`、对已完成的 run 是干净 no-op——**结论正好相反**。
+> 这与本会话前几次"我的检查写错"同类：**从单层代码推断跨层行为会出错**，
+> 好在这次是在写进文档之前发现的（`--from` 与恢复流程都依赖这个结论）。
