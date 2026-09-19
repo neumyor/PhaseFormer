@@ -109,11 +109,19 @@ run_step 2 "E19 stage 2: §4.7 rho columns" \
     --stats "$E19_ROOT/level_statistics.csv" --results "$E14_ROOT/results.csv" \
     --output-root "$E19_ROOT"
 
-run_step 3 "E14 writeback: §4.2 table + claims A-D + audit" \
-  "$PY" scripts/phaseformer_L/e14_writeback.py \
-    --manifest "$E14_ROOT/stage_a_manifest.json" --results "$E14_ROOT/results.csv" \
-    --stats "$E19_ROOT/level_statistics.csv" \
-    --golden docs/PhaseFormer_gold_standard.md --output-root "$E14_ROOT"
+# The parameter table and the reuse-ambiguity audit must exist BEFORE the
+# write-back, because the write-back reports the parameter columns and takes the
+# gate fallback from them.
+run_step 3 "E14 parameter table + reuse ambiguity audit + §4.2 writeback" \
+  bash -c "cd '$REPO' && \
+    '$PY' scripts/phaseformer_L/e14_params.py \
+      --manifest '$E14_ROOT/stage_a_manifest.json' --output-root '$E14_ROOT' \
+    && '$PY' scripts/phaseformer_L/e14_reuse_audit.py \
+      --manifest '$E14_ROOT/stage_a_manifest.json' --output-root '$E14_ROOT' \
+    && '$PY' scripts/phaseformer_L/e14_writeback.py \
+      --manifest '$E14_ROOT/stage_a_manifest.json' --results '$E14_ROOT/results.csv' \
+      --stats '$E19_ROOT/level_statistics.csv' \
+      --golden docs/PhaseFormer_gold_standard.md --output-root '$E14_ROOT'"
 
 # E16's own gate is its --dry-run: it resolves every cell's checkpoint and
 # refuses when one is missing, and `--verify-checkpoint-heads` additionally
@@ -125,7 +133,11 @@ run_step 4 "E16: §4.4 dissection + interventions (63 cells)" \
       --e14-root '$E14_ROOT' --output-root '$E16_ROOT' \
     && '$PY' scripts/phaseformer_L/e16_dissection.py \
       --e14-root '$E14_ROOT' --output-root '$E16_ROOT' \
-      --gpus 0 --mem-budget-mb 2048"
+      --gpus 0 --mem-budget-mb 2048 \
+    && '$PY' scripts/phaseformer_L/e16_writeback.py \
+      --intervention '$E16_ROOT/intervention_table.csv' \
+      --dissection '$E16_ROOT/dissection_table.csv' \
+      --output-root '$E16_ROOT'"
 
 # E17: train, assemble, then read test ONCE for the 24 new cells.  The runner
 # refuses --evaluate-test by design and marks the column
@@ -140,7 +152,11 @@ run_step 5 "E17: §4.5 four-arm training (24 runs), assemble, single test read" 
     && '$PY' scripts/phaseformer_L/e17_conditional.py --stage assemble \
       --output-root '$E17_ROOT' \
     && '$PY' scripts/phaseformer_L/read_test_generic.py \
-      --results '$E17_ROOT/results.csv' --gpus '$GPUS'"
+      --results '$E17_ROOT/results.csv' --gpus '$GPUS' \
+    && '$PY' scripts/phaseformer_L/e17_writeback.py \
+      --results '$E17_ROOT/results.with_test.csv' \
+      --projector-audit '$E17_ROOT/projectors/projector_audit.json' \
+      --output-root '$E17_ROOT'"
 
 run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 settings)" \
   bash -c "cd '$REPO' && \
@@ -152,7 +168,12 @@ run_step 6 "E18: §4.6 rows 1+5 (78 runs), completeness audit, then row 3 (28 se
       --results '$E18_ROOT/results.csv' --gpus '$GPUS' \
     && '$PY' scripts/phaseformer_L/e18_svd_truncation.py --verify \
       --e14-root '$E14_ROOT' --output-root '$E18_ROOT' \
-      --ranks 10 --seeds 2021 2022 2023 --evaluation-split val"
+      --ranks 10 --seeds 2021 2022 2023 --evaluation-split val \
+    && '$PY' scripts/phaseformer_L/e18_writeback.py \
+      --results '$E18_ROOT/results.with_test.csv' \
+      --e14-results '$E14_ROOT/results.with_test.csv' \
+      --truncation '$E18_ROOT/svd_truncation_table_28.csv' \
+      --output-root '$E18_ROOT'"
 # NOTE on --verify semantics, which differ per script and must not be guessed:
 #   e18_negative.py     --verify = "fail if any planned cell has no matching
 #                        completed run", i.e. a stage-5 COMPLETENESS AUDIT.
