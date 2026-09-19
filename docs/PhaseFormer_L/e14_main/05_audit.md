@@ -100,3 +100,77 @@ minipaper §4.2 要求"参数量列按仓库 `metrics.csv` 的 `parameter_count`
 说明实现没有把两个定义写成同一个条件。
 
 **表注须同时给出两个计数**并注明各自的定义，否则读者无法判断"稳定超过"是按哪一个口径数的。
+
+---
+
+## 6. 复用污染事件（2026-09-19 发现并修复）——**本实验最重要的一次审校**
+
+### 6.1 现象
+
+在给 §4.2 补"门值 `g` 列"时（`e14_params.py` 从 checkpoint 读 `sigmoid(weak_period_residual_gate)`），
+发现 `ETTh2-96` 的 seed-2023 三个低秩/稠密臂的门值是 **0.000114**，而另两个 seed 是 **0.497 / 0.492**。
+逐 run 追查后在 `rank_sweep_2_multiseed_stage1_20260914_v3` 里找到一批**配置本身损坏**的运行：
+
+```text
+confirm_etth2_h96_weak_residual_p24_base_none-full_huber_lr0.5_pct100_e30_s2023_0af49db62e7c
+   gate_init = 2023        <-- 把 SEED 写进了 gate init
+   learning_rate = 0.5     <-- 审计网格的 500 倍（应为 0.001 或 0.0003）
+   val_mse = 0.2939        <-- 正常运行约 0.2040
+```
+
+`gate_init = 2023` 经 `logit` 前被 clamp 到 `1-1e-4`，`sigmoid` 后 ≈ **1e-4**，
+即**修正器被实际关闭**；再叠加 500 倍学习率，该 run 与设计完全不是同一个模型。
+
+### 6.2 影响面（已全部查清）
+
+| 项 | 结论 |
+|---|---|
+| E14 的复用清单 | **受影响**：`ETTh2-96` seed-2023 的 `l_main` / `l_q1_4` / `l_q1_8` **三个臂**都解析到了损坏 run（其余 78 个复用格干净） |
+| E14 的新训格 | **不受影响**：修复前后 `new/reused` 划分完全一致（63/21、63/21、63/21、84/0、66/18、72/0，总 492），**没有任何训练格被增减或改派** |
+| **E3 的权威审计** | **不受污染**：`audited_results.csv` 中 ETTh2-96 的 15 个 cell（3 seed × 5 臂）**全部**指向 `lr0.001` 的 run，对 `lr0.5` 批次的引用数为 **0**——即 §4.1/§3.4.2 引用的既有数字从未被污染 |
+| E16 / E17 / E18 | 三者都从 manifest 解析 checkpoint，**已随修复一并纠正**（E16 的 dry-run 先前确实列出过损坏 run） |
+
+### 6.3 根因
+
+`e14_main_matrix._protocol_ok` 只校验 `lookback / loss / max_epochs / percent / period`
+五个**结构性**字段，`_arm_match` 也只校验 `mechanism / head_type / rank / pool_factor` 与
+"无冻结投影"。**两者都没有校验冻结超参的合法性**，于是一个结构上完全匹配、
+但 `gate_init` 与 `learning_rate` 荒谬的 run 被当成合法复用格接受。
+`--verify` 也拦不住：它只断言"该格能解析出来"，不断言"解析到的东西是对的"。
+
+### 6.4 修复
+
+1. `_protocol_ok` 增加两条合法性判据：
+
+   ```text
+   gate_init ∈ (0, 1)        开区间；超出即非法（它要过 logit），并给出"疑似把 seed 写进 gate"的提示
+   learning_rate ∈ (0, 1e-2] 审计网格只用 1e-3 与 3e-4，0.5 会立刻被拒
+   ```
+
+2. 复用索引新增 `gate_init` / `learning_rate` 两个字段**逐格落盘**，供 §4.2 表注逐行披露，
+   而不是笼统声称"一种协议"。
+3. 重新解析并**替换运行中的 manifest**；替换前把原文件归档为
+   `stage_a_manifest.prelaunch_contaminated.json`，并在新 manifest 内嵌 `correction_note`
+   （列出 3 个被改的格、前后来源、以及"为何在训练进行中替换是安全的"）。
+
+### 6.5 修复的自校验（最强的一条证据）
+
+修复后 `ETTh2-96` seed-2023 的三格解析到：
+
+| 臂 | 修复后 run（尾部哈希） |
+|---|---|
+| `l_main` | `..._lr0.001_pct100_e30_s2023_d86e6a7cfcdb` |
+| `l_q1_4` | `..._lr0.001_pct100_e30_s2023_2cf889fbbff1` |
+| `l_q1_8` | `..._lr0.001_pct100_e30_s2023_503f014f0124` |
+
+而 E3 权威审计中对应的 `direct` / `q=0.25` / `q=0.125` 三行**哈希逐字相同**。
+即：修复不是"换了一个能用的 run"，而是**恢复到既有权威审计所用的那三个 run**。
+另确认运行时 manifest 的 `remaining suspicious reused cells = 0`。
+
+### 6.6 对流程的修订
+
+本轮之前，E14 的复用审计被当作"已完成"（`verify_ok`、81/81 解析）。这次事件说明
+**"能解析" ≠ "解析正确"**，因此把合法性校验补进了 `_protocol_ok`，并在 §2.4 的审计清单里
+加入"冻结超参合法性"一条。该缺陷若未被门值列顺带发现，会在 §4.2 表里表现为
+**ETTh2-96 的三 seed 均值被一个关闭了修正器的 run 拉低、std 被放大**，
+而单看指标很难察觉是数据问题而非模型问题。
