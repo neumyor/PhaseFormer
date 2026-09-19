@@ -505,6 +505,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | watcher"**恰 411 个 run 目录**"这一条件**可否满足**（前置核验） | 满足：**411 个 cell 的配置两两不同**，目录与已发布 cell 严格 1:1 | watcher 的触发条件之一是 `runs/` **恰好** 411 个目录（不是 ≥）——若两个 cell 的配置相同（run id 内嵌配置哈希 ⇒ 共用目录），总数就**永远到不了 411**，链条将永不启动。实测：411 个 new cell 的**记录命令两两不同（411/411，重复 0）**、`(arm,dataset,horizon,seed)` **重复 0**；当前 **217 个目录 = 210 已完成 + 7 在飞**，与"已发布的 cell 数"**严格 1:1**（另证 210+7=217 的账对得上）。⇒ 前置条件成立，watcher 的精确计数可达 |
 
+| 2026-09-20 | **警报**：E14 启动后训练路径上的模块被改过（已核验：**无影响**） | `e14_main_matrix.py` 在启动提交之后有改动，但它落在 stage B 的**指纹门**上——必须核 | 起因：核对"自 E14 启动（`f870b1a`，log 里的 `HEAD:` 行）以来有没有动过训练路径"。**77 个文件**变动，其中 **1 个落在训练路径上**：`scripts/phaseformer_L/e14_main_matrix.py`（**+42 行，无删改**）。该模块正是 ①E14 启动器导入的矩阵模块、②`e14_read_test.py` 的**指纹对拍对象**（`fingerprint_report()` 比它与自己的协议常量）、③第 3 步 `e14_params`/`e14_reuse_audit` 的导入对象——所以**必须**查清是否会让 stage B 拒绝启动。**diff 内容**：新增两个合法性常量（`GATE_INIT_EXCLUSIVE_RANGE=(0,1)`、`LEARNING_RATE_MAX=1e-2`）、在 `_protocol_ok` 里加两条越界检查（即"把 seed 写进 gate_init"那批污染 run 的修复）、以及在复用索引里**多记两个字段**（`gate_init`/`learning_rate`，正是 §4.2 "三种 gate 先验"披露与 E18 基线索引所依赖的那两个字段）；**没有修改任何既有协议常量**。**决定性核验（实跑，不靠推理）**：对真实 manifest 跑一次 stage B 的 dry-run ⇒ `{"fingerprint_check": {"constants_equal": true, "differences": [], "parity_cases": 20, "parity_failures": []}}`，且该格 `accepted: 1, problems: 0, wrote_outputs: false` ⇒ **指纹门通过，step 1 不会因此被拒**。对正在跑的训练亦无影响：启动器在启动时已导入其内存版本，且它写出的 manifest 本就排除了那批污染 run（E3 审计 0 引用，已核）。**结论：改动是纯增量、且正是本会话多处依赖的能力来源；警报解除** |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
