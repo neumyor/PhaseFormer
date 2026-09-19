@@ -1110,3 +1110,26 @@ input_group_label / input_group_explanation / output_group_explanation / correct
 **方法论**：修完单个判据后要再问一遍"**这些判据合起来能覆盖哪些失败态**"。
 单个判据再强，也可能被另一个判据的"容忍态"（这里是 `PENDING`）从旁边绕过去——
 而 `PENDING` 这种"善意容忍"正是为了开工前的状态设计的，收官时必须显式收紧。
+
+### 21.1 值层面的核对：检查器**不**验证取值，而人工过一遍的结果是"没有可查的"（2026-09-20）
+
+§21 修的调用检查器管的是"**flag 存不存在**"与"**实参个数**"，**不管取值**。
+取值写错（如 `--stage train` 对 `choices=(plan, assemble, a)`）会到运行期才由 argparse 报错——
+若发生在第 5/6 步，则是在 E16 那 4 小时之后才失败。故把"取值 vs 各工具的 `choices`"过了一遍：
+
+| 工具 | 接受**字面量**取值的受约束 flag | 实测 |
+|---|---|---|
+| `e17_conditional.py` | `--stage a`、`--stage assemble`（`choices=(plan, assemble, a)`） | ✅ 两者都在允许集内 |
+| `e18_negative.py` | `--stage all`（`choices=list(STAGES)`） | ✅ 在允许集内（**我的提取器漏了**，见下） |
+| `e18_svd_truncation.py` | `--evaluation-split val`（`choices=list(ALLOWED_SPLITS)` = `(val, validation)`） | ✅ 在允许集内（同上） |
+| `e16_dissection.py` / `e19_predictive_power.py` | 受约束的 flag 只收到**路径/变量**，没有字面量 | — 无从查、也无需查 |
+
+**结论**：**没有取值越界的调用**；这条核对的实际价值是"**证明没有可查的东西**"，
+而不是"证明查过的都对"——因为在流水线里，绝大多数受约束 flag 收到的是 `'$VAR'` 这类 shell 变量，
+只能在运行期求值。
+
+**顺带记下我自己这个一次性提取器的盲区**：它只认字面量 `choices=[...]` 与"名字指向字面量序列"，
+**看不懂 `choices=list(CONST)`**（上表两处因此漏报，靠人工看 `ALLOWED_SPLITS`/`STAGES` 的定义补上）。
+这与 §21 的教训同源：**检查器报"没问题"时，要先问它到底看得见什么**。
+（未把它并进 `check_pipeline_invocations.py`：那条检查的价值在于"极窄但绝不误报"，
+把一个需要解析 Python 语义的取值检查塞进去，反而会引入 §22 那种"假通过"。）
