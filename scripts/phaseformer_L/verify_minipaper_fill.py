@@ -49,6 +49,10 @@ E15 = "research_runs/phaseformer_L_e15_dimension_v1"
 E14 = "research_runs/phaseformer_L_e14_main_v1"
 E16 = "research_runs/phaseformer_L_e16_dissection_v1"
 E18 = "research_runs/phaseformer_L_e18_negative_v1"
+E19 = "research_runs/phaseformer_L_e19_predictive_v1"
+
+#: Row order of the section 4.7 table; taken from the producer, not from the paper.
+STATISTICS = ("cycle_level_std", "last_cycle_shift", "tau_hat_steps")
 E17 = "research_runs/phaseformer_L_e17_conditional_v1"
 
 #: displayed column -> (artifact column, decimal places); None dp = exact string.
@@ -517,6 +521,61 @@ def check_4_6(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> No
                            f"(allowed to differ; see the docstring)")
 
 
+def check_4_7(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> None:
+    """Section 4.7's two rho columns, from the stage-2 summary JSON.
+
+    The rows are the three candidate statistics in `STATISTICS` order (the producer's
+    order, which is also the paper's row order); the two columns come from
+    ``predictive_power.spearman[f"{stat}_vs_delta_mse_pct"]["rho"]`` and
+    ``..._vs_gate_value`` -- a key structure that was verified by observation against
+    a real emitted summary, not inferred.  The "预期符号" column is design text and is
+    not checked.  Values are compared at the paper's displayed precision.
+    """
+    path = root / E19 / "predictive_power_summary.json"
+    block = section_text(minipaper.read_text(encoding="utf-8"), "### 4.7", "## 5")
+    header, paper_rows = parse_markdown_table(block, "与 ΔMSE 的 Spearman")
+    if header is None:
+        report.add("§4.7", "-", "-", "MISMATCH", "could not find the 4.7 table header")
+        return
+    if len(header) != 4:
+        report.add("§4.7", "-", "columns", "MISMATCH",
+                   f"header has {len(header)} columns, expected 4")
+    if not path.is_file():
+        report.add("§4.7", "-", "artifact", "PENDING", f"{path.name} does not exist yet")
+        return
+
+    spearman = (json.loads(path.read_text()).get("predictive_power") or {}).get("spearman")
+    if not isinstance(spearman, dict):
+        report.add("§4.7", "-", "artifact", "MISMATCH",
+                   "summary has no predictive_power.spearman block")
+        return
+
+    for index, cells in enumerate(paper_rows):
+        if index >= len(STATISTICS):
+            report.add("§4.7", f"row {index + 1}", "-", "MISMATCH",
+                       f"unexpected extra row (only {len(STATISTICS)} statistics exist)")
+            continue
+        stat = STATISTICS[index]
+        if len(cells) < 4:
+            report.add("§4.7", stat, "-", "MISMATCH", f"row has {len(cells)} cells")
+            continue
+        for column, suffix in ((1, "_vs_delta_mse_pct"), (2, "_vs_gate_value")):
+            entry = spearman.get(f"{stat}{suffix}")
+            if not isinstance(entry, dict) or "rho" not in entry:
+                report.add("§4.7", stat, header[column], "MISMATCH",
+                           f"summary lacks {stat}{suffix}.rho")
+                continue
+            value = entry["rho"]
+            if value is None or (isinstance(value, float) and value != value):   # NaN
+                report.add("§4.7", stat, header[column], "PENDING",
+                           f"rho is not finite ({value!r}); cannot compare")
+                continue
+            state, detail = compare_number(cells[column], value, 3)
+            if state == "MISMATCH" and not cells[column]:
+                state = "blank"
+            report.add("§4.7", stat, header[column], state, detail)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -540,6 +599,7 @@ def main() -> int:
     check_4_5(report, root, minipaper)
     check_4_4_intervention(report, root, minipaper)
     check_4_6(report, root, minipaper)
+    check_4_7(report, root, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
