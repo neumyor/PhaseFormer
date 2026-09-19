@@ -729,3 +729,94 @@ C3 就是**能在 E18 那 3–5 小时之前**抓住缺陷 1 的那条判据。�
 （删掉一个被收编 run 的 `config.json` → `rejected=1`；手改一个 new 格的 overrides → `rejected=1`，
 理由为 `overrides do not implement l_main`），三类行为均符合预期。
 C4/C5 在缺 numpy/torch 时降级为 SKIP 而不是失败（E16 是唯一在导入期需要 numpy/torch 的消费者）。
+
+## 17. 第 7 步验收审计的**两个静默缺陷**：一个会**误判失败**、一个**从不写文件**
+
+§14 的教训是"四个判据**过弱**"（用"非空/存在"代替真正的计数）。本节是它的**镜像**：
+一个判据**过严**（把合法的行当成缺失），一个**参数被解析但从不使用**。两者都发生在
+**第 7 步——链条上唯一承重的把关者**，也都是靠"拿真产物喂它"才暴露的。
+
+### 17.1 缺陷 A（严重）：门值判据会在**全部 411 个 run 跑完之后**误判整链失败
+
+原判据（`audit_phase2_outputs.py`）：
+
+```python
+no_gate = [r for r in rows if not str(r.get("gate_value_from_checkpoint", "")).strip()]
+report.add(..., "PASS" if not no_gate else "FAIL", ...)
+```
+
+**门参数只存在于三个弱残差臂**（`l_main`/`l_q1_4`/`l_q1_8`，机制 `weak_residual`）；
+`phase_only`（`no_residual`）、`l_rcrf`（`rcrf_nlinear_plain`）、`a1`（`gold_combo_reliability_s2`）
+**根本没有这个参数**，所以 492 行里有 **85 行合法地没有门值**。
+
+**用真产物实测（不是推断）**：把 `e14_params.py` 在真实 partial 数据上的输出（220 行）放进
+合成根，用 `--root` 跑**旧版**审计器：
+
+```text
+FAIL gate value recovered from every checkpoint: 85 row(s) without a gate value e.g. Traffic-96/l_rcrf
+```
+
+即：**第 7 步会在 411 个 run 全部训完、所有表都填好之后，报告"链条失败"**。
+代价不是重跑（审计是纯 IO），而是**在最容易被误信的时点给出一个假警报**——
+而假警报与真结论在报告里长得一模一样。
+
+**修法**：判据按行**作用域**收窄，用表自己的 `gate_param_present` 列做判别式，并**另立一条**
+判据断言"臂 ↔ 是否有门参数"的一致（否则一整列恒为 `False` 就能让前一条判据**因为没东西可查而通过**）。
+再加一条"无门臂却带着门值 = 表被写错"（这条是**校准器**发现的，见 17.3）。修后同一份真产物：
+
+```text
+OK  gate value recovered from every gated checkpoint: 0 gated row(s) without a gate value (of 135 gated rows; 85 rows have no gate parameter)
+OK  gate presence matches the arm table: 0 row(s) whose arm and gate_param_present disagree, 0 gateless row(s) carrying a gate value
+```
+
+旁证：这 220 行的 `total_matches_metrics` **0 处不一致**、`total_params` 无一为空、
+`present but no value = 0`、`value but not present = 0`——**真产物本来是对的，错的是判据**。
+
+### 17.2 缺陷 B（轻微但真实）：`--json` 被声明、被解析，**从未被使用**
+
+`run_phase2_after_e14.sh` 的第 7 步是：
+
+```bash
+"$PY" scripts/phaseformer_L/audit_phase2_outputs.py --json "$LOGDIR/phase2_acceptance_audit.json"
+```
+
+而 `main()` 里 `args.json` **一次都没出现过** ⇒ 收尾时那个"验收报告 JSON"**静默不存在**。
+没有任何机器消费者依赖它（所以不会失败），但这正是"文档承诺了的产物没落地"：
+我在收尾清单里要读它，却会找不到文件。**修法**：`Report.to_dict()/write_json()`
+写出 `criteria / counts / failing / total_criteria / root`，并由校准器断言文件确实出现且自洽。
+
+**顺带澄清一个数字**：判据总数**不是常数**——24 条是"什么产物都没有"时的条数；
+每多一张存在的表，条件分支里就多登记若干条（如参数表存在时 +3）。故"24 条判据"只应理解为**基线**。
+
+### 17.3 把校准**固化**成脚本：`rehearse_audit_controls.py`（13 类对照）
+
+§15.1 的八类对照此前是**临时跑**的（脚本在 `/tmp`，随会话消失）。本轮把它写成仓库内脚本，
+用审计器**自己的 `--root`**（其 docstring 明写"an audit script that can only ever report
+'fine' proves nothing, and this is what lets the checks be calibrated"）对合成树断言逐条判决：
+
+| # | 对照（合成树） | 期望 | 实测 |
+|---|---|---|---|
+| 1 | 492 行、135 有门值 / 85 无门（真实混形） | 三条判据全 PASS | ✅ |
+| 2 | 一行**有门臂**的门值被清空 | 门值判据 FAIL | ✅ |
+| 3 | 一行**无门臂**却带着门值 | 一致性判据 FAIL | ✅（**此条最初漏网**，见下） |
+| 4 | 一行**有门臂**被标成 `gate_param_present=False` 且无值 | 一致性判据 FAIL | ✅（防"整列恒 False 就能通过"） |
+| 5 | 491 行 | 行数判据 FAIL | ✅ |
+| 6 | 一行 `total_matches_metrics=False` | 交叉校验判据 FAIL | ✅ |
+| 7 | **全部 492 行都是无门臂** | 门值与一致性判据均 PASS | ✅（缺陷 A 的最小复现） |
+| 8 | `--json` 到嵌套路径 | 文件写出、`total_criteria` 与 `criteria` 长度一致、含 `failing` 列表 | ✅（28 条） |
+
+**校准器当场抓出了我自己修法的漏洞**：#3 第一次跑是 `PASS`（"0 rows disagree"）——
+因为我只比较了"臂 ↔ 是否有门参数"，**没管无门臂上是否残留了一个门值**。
+补上 `stray` 检查后 #3 才按预期 FAIL。**这就是把校准写成脚本而不是靠记忆的价值**：
+它证明的不只是"判据能挡住已知的坏输入"，而是"**我这次改动自己有没有留下缝**"。
+
+### 17.4 与 §14 合起来的方法论
+
+| 类别 | 症状 | 触发它的做法 |
+|---|---|---|
+| §14 过弱（4 条） | "非空/存在"放过了半张矩阵、缺门值、交叉校验失败 | 拿**扰动过的**产物喂判据 |
+| §17 过严（1 条） | 合法缺失被当成缺失 → **链尾误报失败** | 拿**真实**产物喂判据 |
+| §17 空转（1 条） | 参数被解析却从不使用 → 承诺的产物不存在 | 核对"**文档/调用方声明的每个产物**是否真的被写出" |
+
+三条做法合起来才是完整的："**真产物**证明判据不误杀，**扰动产物**证明判据不放过，"
+**调用方声明**证明产物不空转。三者缺一，就会剩下一个只在特定输入下才现形的静默缺陷。
