@@ -118,3 +118,58 @@ python scripts/phaseformer_L/e17_conditional.py --stage plan --verify \
 ## 7. 结论
 
 投影器与训练两侧的静态检查均通过；24 个新 run 具备进入正式运行的条件（待 E14 让出 GPU）。
+
+---
+
+## 8. H1 列的来源加固与实测值（2026-09-19）
+
+### 8.1 加固：优先用机器可读的 Stage-3 产物，而不是从 markdown 里刮
+
+首版默认从 `docs/PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` 的**表 5**（markdown）
+解析 H1 证据。核对服务器后发现该证据有更好的载体：
+`research_runs/lowrank_checkpoint_information_v1/conditional_rrr_alignment.csv`——它**就是** Stage-3 的产物
+（72 行 = 6 setting × 3 seed × 4 rank），并带显式列：
+
+```text
+setting,dataset,horizon,seed,cell,rank,overlap_with_independent_rrr,
+overlap_with_conditional_rrr,overlap_difference,supports_h1,
+conditional_eigenvalue_leading_share,conditional_weighted_target_energy,
+independent_ridge,train_pairs,gate_mean,checkpoint_path
+```
+
+两项改进：
+
+1. **默认路径改为该 CSV**（markdown 表 5 退化为缺 CSV 时的回退）；
+2. **分组改用文件自己的 `seed` 列**、不再依赖"每 setting 连续 4 行"的位置约定
+   （该约定仍保留给 markdown 回退路径，并在 status 里记录用了哪一种）——
+   否则文件被重排或追加就会静默错配 seed。实测 status 回报
+   `h1_evidence_status: loaded`、`h1_seed_assignment: "explicit seed column in the evidence file"`。
+
+顺带发现该 CSV 还带 **`gate_mean` 列**，是门值的**第三个独立来源**（另两个是 `e14_params.py`
+从 checkpoint 读、以及 E17 投影器审计的前向值）。
+
+### 8.2 实测 H1（每格 3 seed，判定 = seed 内 ≥3/4 个 rank 支持）
+
+| setting | 支持的 seed 数 | mean(cond − indep) 重叠 |
+|---|---:|---:|
+| ETTh2-96 | **3/3** | +0.0403 |
+| ETTh2-720 | **3/3** | +0.0663 |
+| ETTm2-96 | **3/3** | +0.0273 |
+| ETTm2-192 | **3/3** | +0.0396 |
+| Weather-96 | **2/3** | +0.0065 |
+| Weather-192 | **0/3** | −0.0089 |
+| Electricity-336 | `evidence_missing`（该格从未进入 E10） | — |
+
+即 H1 在 **4/6** 个有证据的 setting 上 3/3 seed 成立，**Weather-192 是明确反例**（0/3，均值也是负的），
+这与 minipaper §5 第 3 条"Weather 两个 setting 的主模式指向曲率/慢趋势，是命题的边界"一致。
+Electricity-336 记 `evidence_missing` 而**不推断**。
+
+### 8.3 assemble 已在服务器跑通
+
+`--stage assemble` 在**不训练**的情况下重读 E14/E8/新 run 并重写表格，实测产出
+`results.csv`（84 行，含 4 个 `h1_*` 列）与 `e17_summary.json`，其中
+`counts` 为 `direct` 21 复用 / `joint` 21 复用 / `frozen_independent` 18 复用 + 3 新 /
+`frozen_conditional` 21 新 = **24 新训**，与 §6 的静态检查一致。
+`e17_summary.json` 的 `disclosures` 已包含五条：`direct_equals_joint`、
+`frozen_projectors_train_only`、`mixed_hyperparameters`、`no_test_read_in_stage_a`、
+`test_selected_settings`。
