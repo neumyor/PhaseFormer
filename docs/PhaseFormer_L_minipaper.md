@@ -398,6 +398,9 @@ matched `phase_only` 是 **+3.6%**（0.16768 → 0.1617，seed 2021），即**�
     （判 `s=1` 而无增益，或判 `s=0` 而有增益）须逐个列出。
   - 主张 C（相对 Golden）：按既有严格标准（三 seed 均值 + 样本 std < Golden）逐格报告"稳定超过"计数，**不设
     最低数目门槛**——Golden 来自不同硬件环境，本文对 Golden 只做披露性比较。
+    **两种定义须并列报告**：本文上述口径（**均值 + 样本 std**）与
+    `PhaseFormer_gold_standard.md` §4 的既有口径（**三 seed 均值**）并不相同，
+    故回填时**两个计数同时给出并各自注明口径**——否则同一张表里会出现两个"稳定超过"数字而无处解释其差异。
   - 主张 D（效率）：q=1/8 变体相对 direct 的三 seed 宏平均 |ΔMSE|、|ΔMAE| ≤ **0.5%**。
   - **报告规则**：上述数值一经冻结不得事后调整；若最终未达门槛，须如实报告为"未达预注册门槛"，
     不得改用其他统计口径重述。
@@ -564,6 +567,13 @@ E15 完成后改为报告**实测**值与实际文件名，数值与上文条目
 > 全部解剖与干预**只用 validation 划分**（`evaluation_split=val`、`test_split_read=false`），
 > 与 §4.2 的 test 增益列不同源。稠密 `PhaseFormer-L` 头的有效映射即其 `W`（H×720）；
 > 低秩探针为 `W_dec·W_enc`。跨 seed `leading4` 重叠按 4 维主子空间的两两重叠计。
+>
+> **`reference_parity` 的适用范围（须在表注写明）**：与既有
+> `lowrank_checkpoint_information_v1` 的逐字段比对**只对 6 个 setting 成立**——
+> 该参照不包含 **Electricity-336**（其缺席源于 E10 因 **13.9 GiB OOM** 排除了这一格）。
+> 对缺少参照的 cell，E16 **跳过而非判失败**（`e16_dissection.py:2337-2344`）。
+> 因此 Electricity-336 的解剖是**本文新算**、不是复现，表注不得把它读作 parity 通过。
+> 可比的 6 个 setting 上，`probe_cells ≈ 72` = 6 setting × 3 seed × 2 个低秩臂 × 2 个参照文件。
 
 干预表（每 cell **10 个登记臂**——`Original` / `Semantic-only` / `Semantic-drop` /
 `Semantic8-only` / `Semantic8-drop` / `Bias-off` / `PCA-only` / `PCA-drop` 共 8 个，
@@ -641,9 +651,16 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
 |---|---|---|---|---|
 | 输入平滑（boxcar / causal EMA，各 5 档） | 支路输入 | 7 setting | 14/14 组合无一改善，越平滑越差 | 在 PhaseFormer-L 上复测 2 档（见下注）：**42 runs** = 7 setting × 3 seed × 2 档 |
 | 结构化坐标（周期低秩、共享基、水平/形状、近期周期、可分离） | 支路参数化 | 4 setting | 5/5 双指标退化 1.6%–3.0%；同参数量时间轴对照仅 −0.30%/−0.52% | — |
-| SVD 截断 vs 秩约束训练 | 支路权重 | Electricity-336 r=10 | 截断 +29%，训练 +0.7% | **全 28 setting**（r=10）。**口径差异须披露**：既有 E11 为 **test** 口径、单 seed、checkpoint 取自 `rank_sweep_2_stage1`；本表补做部分为 **validation** 口径、checkpoint 取自 §4.2 的 `l_main`/`l_q1_4`/`l_q1_8`——两者只有截断代数与三段式比较结构相同 |
+| SVD 截断 vs 秩约束训练 | 支路权重 | Electricity-336 r=10 | 截断 +29%，训练 +0.7% | **全 28 setting**（r=10）；**口径差异见下注**（原写在本格的披露已移至表下注，以免 §4.6 回填整行替换时丢失） |
 | 联合低秩训练 q=1/32 | 支路容量 | 7 setting | 保留 92.4%–101.9% 可实现价值 | — |
 | **边界消融：`pooled_lowrank` rank∈{1,2}** | 支路容量（网格之外） | 6 setting × 3 seed | 无 | **预注册预期：相对 direct 退化**，幅度上界由 `1−capture(1/2)`（14%–35% / 3%–18% 的支路价值）经 `g²` 折算；用于量化残项 ε，不影响主张；**36 runs** = 6 setting × 3 seed × rank∈{1,2}（**绝对**秩，非 `H/4`、`H/8` 的相对秩） |
+
+> **§4.6 行 3 的口径差异（须披露）**：既有 E11 为 **test** 口径、单 seed、checkpoint 取自
+> `rank_sweep_2_stage1`；本表补做部分为 **validation** 口径、checkpoint 取自 §4.2 的
+> `l_main`/`l_q1_4`/`l_q1_8`——两者**只有截断代数与三段式比较结构相同**，
+> 故行 3 的"既有"与"本文补做"两列**不可直接相减**。
+> （本条原写在行 3 的"本文补做"单元格内；因 §4.6 的回填方式是**用回填工具产出的 5 行整行替换**，
+> 留在单元格里会在回填时被静默删除，故**先移到此处**。）
 
 > **§4.6 行 1 的「2 档」口径（2026-09-19 更正）**：先导实验的「两个算子」在 PhaseFormer-L 上**不可能都复现**——
 > `smooth_ratio` 的算子取决于头：PhaseFormer-L 用的稠密 `shared` 头把它实现为与 **causal EMA** 的混合
