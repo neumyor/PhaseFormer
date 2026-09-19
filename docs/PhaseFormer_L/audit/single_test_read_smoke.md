@@ -133,3 +133,77 @@ E14 查错文件、本轮 4 项）。纪律不变：**每次冒烟报警都要�
   "模型能构建但 val 复现不过 → 拒绝" 这条更细的路径。该路径由
   `--val-tol` 逻辑承载，正向 case 已证明复现校验会被计算（`val_relative_difference` 非空）；
   若要覆盖它，需要故意用一个"能构建但权重不符"的 checkpoint，本轮未做。
+
+---
+
+## 7. 补做：E14 阶段 B（步骤 1）读取路径的冒烟 —— **通过**
+
+### 7.1 为什么还要补这一条
+
+§1 的核对表里，E14 的 test 读取当时没有被列为"未执行"——因为它有一条 `--dry-run` 链路，
+而且我反复跑过它的 dry-run 对账（492 cells 恒等式）。但 dry-run **只走解析器**，
+不走"建模型 → 复现校验 → 读 test → 写产物"这条真正的读路径。
+其文档 `e14_main/04b_test_read_plan.md` 的结构是"要求 / 继承 / 指纹 / CLI / 输出 schema /
+静态检查清单"——**是一份计划，没有任何"已执行"的证据**。
+
+而它是**阶段二的第一步**：它跑不通，整条链在起点就停。故补做。
+
+### 7.2 做法（隔离式，且**不污染真实产物根**）
+
+关键约束：`--output-root` **既是**读取器定位 run 的地方，**也是**它写 `results.csv` 与
+`test_read/` 的地方。因此直接对着真实根跑会提前生成阶段 B 的产物。
+
+故：把一个**已完成的真实 run** 复制到仓库内的临时根 `<REPO>/_smoke_e14_read/runs/`，
+对**该临时根**运行读取器，跑完即删。实测确认隔离有效——真实根在冒烟前后
+**既没有 `results.csv` 也没有 `test_read/`**（只有原有的 manifest / runs / *audit* 文件）。
+
+用 `--cells-file` 把工作**限定到一个 cell**（原因见 §7.4）。
+
+### 7.3 结果：**通过**
+
+```text
+{"event": "planned", "cells_in_manifest": 492, "cells_selected": 1, "new_cells": 1}
+{"event": "launch", "cell": "a1__Electricity-192-s2021", "gpu": "0", "attempt": 1}
+{"event": "done",   "cell": "a1__Electricity-192-s2021", "status": "read"}
+{"event": "finished", "cells": 1, "accepted": 1, "problems": 0, "warnings": 0,
+ "failed_workers": [], "by_status": {"read": 1}}
+```
+
+`results.csv` 的那一行：
+
+| 列 | 值 |
+|---|---|
+| `status` | `read` |
+| `test_mse` | **0.1474873702920466** |
+| `test_mae` | **0.2392384302796768** |
+| `gate_value` | 0.35719528988447546 |
+| `nlinear_mse` | 0.6245221099559465 |
+
+即：读取器**确实** 建了模型、读了 test 分裂一次、并把四个指标（含 NLinear 对照与门值）
+落到 `results.csv`，同时写出 `test_read_summary.json` 与 per-cell artifact。
+另外启动时的 `fingerprint_check` 报 `constants_equal: true`、`parity_cases: 20`、
+`parity_failures: []`——`e14_read_test.py` 与 `e14_main_matrix.py` 对协议常量理解一致。
+
+这条 run 属 `a1` 臂（`gold_combo_reliability_s2`）。顺带确认：**`a1` 确实在被真实训练**
+（与"用户裁定 A1 全训 24×3"一致），且其门值 0.357 与 `l_*` 臂的 preset 默认不同。
+
+### 7.4 过程中确立的三条操作事实（供后续复用，避免重复踩坑）
+
+| 事实 | 后果 |
+|---|---|
+| `--cells-file` 的行格式是 **`arm:dataset:horizon:seed`**（不是日志里的 `arm__Dataset-H-sSEED`） | 用日志 token 会报 `cell token must have 4 ':'-separated fields` |
+| 解析器**只搜 `<output-root>/runs`** | 不限定 cell 时，它会把 492 个 cell 全枚举一遍，其中 491 个记 `missing_run` |
+| **每个 `missing_run` cell 约耗一个 `--poll-seconds` 周期（15 s）** | 不限定的冒烟**跑不完**（492×15 s ≈ 2 h）。本轮首次尝试因此超时，我手动终止了它——**已确认真实根未被写入**，终止是干净的 |
+
+第 3 条同时说明**阶段 1 正式运行时不会遇到这个问题**：那时 411 个新格全部已有 run、
+81 个复用格走登记证据，`missing_run` 应为 0（dry-run 对账也印证：`missing_run` 正是
+"尚未训练"的格子数）。
+
+### 7.5 本轮我自己的搭台错误（如实记录）
+
+① 先是按**目录名**去匹配 run（`*electricity_h192_l_q1_8*`），但目录名只编码 **mechanism**、
+不含臂名（`l_main`/`l_q1_4`/`l_q1_8` 都叫 `weak_residual`），匹配必失败；
+② 用日志 token 当 `--cells-file` 的行；③ 未限定 cell 导致枚举 492 格而超时。
+加上 §5 记录的 4 项，本会话同类自伤累计 **9 次**。
+结论不变：**每次报警都要先分清是"工件坏了"还是"搭台错了"**——本轮净结果是
+**0 个新缺陷**（E14 读路径本身是好的），全部报警都出在我的搭台上。
