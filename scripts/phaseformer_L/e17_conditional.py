@@ -174,9 +174,18 @@ DEFAULT_E14_ROOT = "research_runs/phaseformer_L_e14_main_v1"
 DEFAULT_E8_ROOT = "research_runs/top2_direction_retention_v1"
 DEFAULT_E8_RESULTS = "research_runs/top2_direction_retention_v1/results.csv"
 DEFAULT_PROJECTOR_DIR = f"{DEFAULT_OUTPUT_ROOT}/projectors"
-DEFAULT_H1_EVIDENCE = (
+# The registered H1 evidence exists in two forms.  Prefer the machine-readable
+# one: `conditional_rrr_alignment.csv` IS the Stage-3 product (72 rows =
+# 6 settings x 3 seeds x 4 ranks) and carries an explicit `supports_h1` column,
+# so nothing has to be scraped out of prose.  The markdown table 5 in the plan
+# document stays as the fallback, used only when the CSV is absent.
+DEFAULT_H1_CSV = (
+    "research_runs/lowrank_checkpoint_information_v1/conditional_rrr_alignment.csv"
+)
+DEFAULT_H1_MARKDOWN = (
     "docs/PhaseFormer_lowrank_checkpoint_information_analysis_plan.md"
 )
+DEFAULT_H1_EVIDENCE = DEFAULT_H1_CSV
 #: H1 majority rule (minipaper section 4.5 requires reporting a *seed count*).
 H1_RANKS_PER_SEED = 4          # q in {1/16, 1/32, 1/4, 1/8} in table 5
 H1_MAJORITY_FRACTION = 0.5     # strict majority of the rank rows within a seed
@@ -653,6 +662,7 @@ def parse_h1_markdown(path: Path) -> tuple[list, str]:
             "overlap_independent_rrr": indep_value,
             "overlap_conditional_rrr": cond_value,
             "difference": cond_value - indep_value,
+            "seed": None,
             "supports_h1": support == "是",
         })
     return rows, "markdown"
@@ -668,9 +678,18 @@ def parse_h1_csv(path: Path) -> tuple[list, str]:
             except ValueError:
                 continue
             support_raw = str(row.get("supports_h1", "")).strip().lower()
+            seed_raw = str(row.get("seed", "")).strip()
+            try:
+                seed = int(seed_raw) if seed_raw else None
+            except ValueError:
+                seed = None
             rows.append({
                 "setting": str(row.get("setting", "")).strip(),
                 "rank_label": str(row.get("rank", "")).strip(),
+                # The Stage-3 CSV carries an explicit seed, so the fragile
+                # "consecutive blocks of 4 rows" convention is not needed on this
+                # path; it is kept only for the markdown fallback.
+                "seed": seed,
                 "overlap_independent_rrr": indep,
                 "overlap_conditional_rrr": cond,
                 "difference": cond - indep,
@@ -736,13 +755,22 @@ def load_h1_evidence(path: Path) -> tuple[dict, dict]:
         by_setting[name].append(row)
 
     summary: dict = {}
+    used_explicit_seed = False
     for name in order:
         block = by_setting[name]
-        for seed_index, seed in enumerate(SEEDS):
-            chunk = block[
-                seed_index * H1_RANKS_PER_SEED:
-                (seed_index + 1) * H1_RANKS_PER_SEED
-            ]
+        if all(row.get("seed") is not None for row in block):
+            # Prefer the evidence file's own seed column when it has one: no
+            # positional convention is involved, so a reordered or extended file
+            # cannot silently reassign seeds.
+            used_explicit_seed = True
+            grouped = {seed: [r for r in block if r["seed"] == seed] for seed in SEEDS}
+        else:
+            grouped = {
+                seed: block[i * H1_RANKS_PER_SEED:(i + 1) * H1_RANKS_PER_SEED]
+                for i, seed in enumerate(SEEDS)
+            }
+        for seed in SEEDS:
+            chunk = grouped.get(seed) or []
             if not chunk:
                 continue
             supporting = sum(1 for row in chunk if row["supports_h1"])
@@ -763,6 +791,10 @@ def load_h1_evidence(path: Path) -> tuple[dict, dict]:
                 "evidence_format": fmt,
             }
     status["status"] = "loaded"
+    status["seed_assignment"] = (
+        "explicit seed column in the evidence file"
+        if used_explicit_seed else status["seed_assignment"]
+    )
     status["settings_with_evidence"] = order
     status["settings_without_evidence"] = [
         setting_name(d, h) for d, h in SETTINGS
