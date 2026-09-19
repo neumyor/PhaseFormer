@@ -1052,3 +1052,31 @@ input_group_label / input_group_explanation / output_group_explanation / correct
 
 **顺带固化**：`rehearse_minipaper_fill.py`（仓库内）同时钉住两件事——**列名契约**与**§4.4 解剖表的填写格式**
 （`组 / 解释率` 两位小数、份额三位小数、重叠 `in / out` 两位小数、判定 ✓/✗）。四类断言全成立。
+
+### 22.1 同类静默跳过：§4.3 的 `|cos|` 与 §4.4 的 overlap（本轮一并修）
+
+§22 的根因是"**artifact 侧为空 ⇒ 跳过比较 ⇒ 报 match**"。既然它是一类模式，就把同一个文件里**所有**这种形状都找出来：
+逐 checker 扫 `in (None, "")` / `continue` / `pass`，发现另外两处同型：
+
+| 位置 | 修前行为 | 后果 | 修后 |
+|---|---|---|---|
+| `check_4_3` 的 `|cos|` | `if cos_match and artifact_cos not in (None, "")` —— **两侧都在才比** | 论文格**丢掉 `(cos)`**、或 artifact 侧无该值 ⇒ **静默 match** | 三种情形分别报 MISMATCH：格有而 artifact 无 / artifact 有而格无 / 两侧都有才比较数值 |
+| `check_4_4_dissection` 的 overlap | `if value in (None, ""): continue` | artifact 缺 `leading4` 的 in 或 out ⇒ 用**另一个**撑起 match | artifact 缺任一侧 ⇒ MISMATCH，并写明缺的是 in 还是 out |
+
+**新增两条对照**（`rehearse_minipaper_fill.py`，7/7 断言成立）：
+
+```text
+[OK] an absent artifact overlap is reported: MISMATCH=1
+[OK] real section 4.3 untouched: match=168 MISMATCH=0          # 真实 E15 产物 + 真实已填论文
+[OK] a 4.3 cell that dropped its |cos| is reported: MISMATCH=1  # 复制论文、只删一个 (0.xxx)
+```
+
+第 2、3 条是**真数据对照**：直接用服务器上真实的 `dimension_table.csv` 与**已填好的** §4.3 表——
+未改动时 168 格全 match（与既有记录一致），把某一格的 `(cos)` 删掉立刻 MISMATCH。
+**意义**：§4.3 的 168 格不仅"现在是对的"，而且**将来被改坏时会被抓住**——
+这与 §21.1 的"判据必须有对照"同一纪律。
+
+**本轮的方法论补记**：§22 与 22.1 合起来说明，**"跳过"必须永远伴随一次显式报告**。
+一个 `continue`/`if … not in (None, "")` 在代码里看起来像防御性编程，实际效果却可能是"**把缺口变成通过**"。
+所以在这个文件里，凡是"artifact 侧缺值"的情形，一律改成 MISMATCH（而不是跳过或 PENDING），
+除非缺值本身是被登记的合法结果（此处没有这种情形）。
