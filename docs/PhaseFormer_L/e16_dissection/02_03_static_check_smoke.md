@@ -144,3 +144,56 @@ E16_SMOKE_EXIT=0
 阶段 2/3 **通过**。冒烟用 2 个 cell、2 个 batch 就抓出 2 个会污染整张 §4.4 表的缺陷
 （其中一个是**缓存键**导致 21 个低秩 cell 全部无法加载），并新增了一项数秒级的零成本前置检查。
 E16 具备进入正式运行（63 cell）的条件；因 8 卡正被 E14 占用，排期在 E14 之后。
+
+---
+
+## 6. 正式运行的精确验收判据（2026-09-19 追加）
+
+### 6.1 参照产物的**实际覆盖只有 6 个 setting**
+
+服务器核对 `research_runs/lowrank_checkpoint_information_v1/`：
+
+| 文件 | 行数 | 覆盖的 setting |
+|---|---:|---|
+| `canonical_modes.csv` | 501 | **6**：ETTh2-96/720、ETTm2-96/192、Weather-96/192 |
+| `semantic_alignment.csv` | 576 | 同上 **6** |
+
+**Electricity-336 不在参照产物中**——这正是 E10 因
+`Unable to allocate 13.9 GiB for shape (17344, 336, 321)` 而排除它的后果（见
+`docs/PhaseFormer_lowrank_checkpoint_information_analysis_plan.md` §11.1）。
+因此 E16 的 7 个 setting 中，**只有 6 个有可对拍的登记值**。
+
+代码行为已核对（`e16_dissection.py:2337-2344`）：parity 遍历**参照行**并回查本次算出的 payload，
+`payload is None` 时 `continue`——即缺参照的 cell 被**跳过**而不是判失败。这是正确的处理，
+但必须如实披露：
+
+> **§4.4 表注须写明**：`reference_parity` 只对 6 个 setting 成立；
+> **Electricity-336 的解剖数值没有登记对照**，属于**新算而非复现**，
+> 其可信度只由 §6.3 的两条不变量（代数证书 + 与 run 指标核对）支撑。
+
+### 6.2 全量运行的验收判据
+
+| 判据 | 期望值 | 依据 |
+|---|---|---|
+| cell 数 | **63**（3 臂 × 7 setting × 3 seed） | `--event plan` |
+| `algebra_failures` | **0** | 不变量 1（硬失败） |
+| `run_metric_failures` | **0** | 不变量 2（`--max-batches 0` 时须为 `ok` 而非 `skipped`） |
+| `run_metric_not_comparable` | **0** | 同上；冒烟时为 2 是 `--max-batches 2` 的子集效应 |
+| `reference_parity_passed` | **true** | 对 6 个可比 setting |
+| `reference_parity.probe_cells` | **≈ 72** = 6 setting × 3 seed × 2 个低秩臂（`l_q1_4`、`l_q1_8`）× 2 个参照文件 | `canonical_modes.csv` 与 `semantic_alignment.csv` 各计一次 |
+| `checkpoint_path_mismatches` | **[]** | 说明本轮的 checkpoint 与登记表的 `checkpoint_inventory.csv` 指向同一文件 |
+| `intervention_rows` | 每 cell 一行 × 11 臂（10 既有 + `RandomRRR-drop`） | §4.4 干预表 |
+| `test_split_read` | **false** | `evaluation_split` 只接受 `val/validation` |
+
+> 冒烟的 `probe_cells: 2` 正是"1 个低秩 cell × 2 个参照文件"，
+> 与上式的计数方式一致——这本身就是对判据表的一次数值验证。
+
+### 6.3 其余需在阶段 5 审校的项
+
+1. `dissection_table.csv` 的 21 行（3 模型 × 7 setting）是否齐全、`stable_semantics` 判定是否按
+   "≥2/3 seed 第一名 + 输入解释率 ≥0.5 + 输出 ≥0.8 + Semantic-drop 超出同维随机 95% 区间"四条合取；
+2. `RandomRRR-drop` 臂的 95% 零分布是否每 cell 抽出（`random_rrr_repeats=100`），
+   以及 `random_rrr_dimension_match` 是否为真（同维对照必须真正同维）；
+3. `l_main`（稠密头）与低秩探针的解剖列是否分开标注（`head_kind`）；
+4. `mapped_encoder_bias_absmax` 是否随 cell 记录（低秩头注册代数里 `W_dec @ encoder_bias`
+   重复计入的规模，用于解释 2.97e-05 的代数残差）。
