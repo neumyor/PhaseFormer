@@ -578,8 +578,19 @@ E15 完成后改为报告**实测**值与实际文件名，数值与上文条目
 干预表（每 cell **10 个登记臂**——`Original` / `Semantic-only` / `Semantic-drop` /
 `Semantic8-only` / `Semantic8-drop` / `Bias-off` / `PCA-only` / `PCA-drop` 共 8 个，
 加同维 `PCA-matched-only` / `PCA-matched-drop` 共 10 个——之上再按该 cell 的可用基向量追加
-`Independent-RRR-only`、`Conditional-RRR-only` 与**新增的 `RandomRRR-drop`**，
-故实际为 **11–12 臂（11 为下界）**；同时报告支路自身与融合误差）：
+`Independent-RRR-only`、`Conditional-RRR-only` 与**新增的 `RandomRRR-drop`**；
+同时报告支路自身与融合误差）：
+
+> **臂数是逐格而定的，不是常数：11–13 臂/格。** 其中
+> `Independent-RRR-only`（该格没有 Stage-3 子空间文件时用 train split 现拟合）与
+> 本文新增的 `RandomRRR-drop` **每格必有**；`PCA-matched-only/-drop` 只在
+> "语义子空间的潜像维数 < 该格头的秩"时追加；`Conditional-RRR-only` 只在
+> 该格存在 Stage-3 子空间文件时追加（**稠密头没有该文件**，故 `l_main` 的格子不带它）。
+> 逐格按各自 checkpoint 的 encoder 与各数据集语义张成实测（2026-09-20）：
+> **11 臂 24 格、12 臂 21 格、13 臂 18 格**，63 格共 **750 行**、**13 个不同的臂名**
+> （`l_main` 252 行、`l_q1_4` 255 行、`l_q1_8` 243 行）。
+> 故"63 × 11 = 693"是错的写法；完整性判据写成"**每格必须带全部 10 个恒在臂**"，
+> 而不是写死一个臂数（否则合法的 12/13 臂格会被误判为不完整）。
 
 | Dataset | H | q/r | Semantic-only Δfused | Semantic-drop Δfused | 随机 95% 区间 | PCA-drop | **随机 RRR 子空间 drop**（新增对照） | 支路自身 Δ | 融合 Δ |
 |---|---:|---|---:|---:|---|---:|---:|---:|---:|

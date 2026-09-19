@@ -118,6 +118,19 @@ def read_json(path: pathlib.Path):
 #: (gold_combo_reliability_s2) have no gate, so their rows carry no gate value.
 GATE_ARMS = ("l_main", "l_q1_4", "l_q1_8")
 
+#: The intervention arms every E16 cell carries.  The *count* is not fixed:
+#: ``build_arm_plan`` adds ``PCA-matched-only``/``-drop`` only when the semantic
+#: image is narrower than the head's rank, and ``Conditional-RRR-only`` only for
+#: cells whose Stage-3 subspace file exists (the dense head has none).  Measured
+#: from each cell's own checkpoint on 2026-09-20: 11 arms (24 cells), 12 (21),
+#: 13 (18) -- 750 rows over 63 cells and 13 distinct names.  A hardcoded
+#: "63 x 11 = 693" would therefore have failed step 7 after the 3-5 h run.
+E16_ALWAYS_ARMS = (
+    "Original", "Semantic-only", "Semantic-drop", "Semantic8-only",
+    "Semantic8-drop", "Bias-off", "PCA-only", "PCA-drop",
+    "Independent-RRR-only", "RandomRRR-drop",
+)
+
 
 def is_true(value) -> bool:
     """Read a boolean from a CSV cell the way ``e14_params.py`` writes it.
@@ -267,8 +280,12 @@ def audit_e14(report: Report) -> None:
 def audit_e16(report: Report) -> None:
     summary = check_exists(report, "E16 (§4.4)", f"{E16}/e16_summary.json",
                            "e16_summary.json present")
+    # Kept outside the block: the intervention-table criteria below cross-check
+    # the table against the runner's own declared counts.
+    summary_obj: dict = {}
     if summary:
         obj = read_json(summary)
+        summary_obj = obj if isinstance(obj, dict) else {}
         expected = {
             "cells": 63,
             "algebra_failures": 0,
@@ -301,11 +318,50 @@ def audit_e16(report: Report) -> None:
     if inter:
         rows = read_csv(inter)
         arms = sorted({str(r.get("intervention_arm")) for r in rows})
-        report.add("E16 (§4.4)", "intervention rows = 63 cells x 11 arms",
-                   "PASS" if len(rows) == 63 * 11 else "FAIL", f"got {len(rows)}")
-        report.add("E16 (§4.4)", "11 distinct intervention arms",
-                   "PASS" if len(arms) == 11 else "FAIL",
-                   f"got {len(arms)}: {arms}")
+        groups: dict = {}
+        for row in rows:
+            key = (str(row.get("arm")), str(row.get("setting")),
+                   str(row.get("seed")))
+            groups.setdefault(key, set()).add(str(row.get("intervention_arm")))
+        counts = sorted({len(names) for names in groups.values()})
+        report.add("E16 (§4.4)", "intervention table covers 63 cells",
+                   "PASS" if len(groups) == 63 else "FAIL",
+                   f"{len(groups)} distinct (arm, setting, seed) group(s)")
+        missing = {f"{k[0]}__{k[1]}-s{k[2]}": sorted(set(E16_ALWAYS_ARMS) - names)
+                   for k, names in groups.items()
+                   if set(E16_ALWAYS_ARMS) - names}
+        report.add("E16 (§4.4)", "every cell carries the always-present arms",
+                   "PASS" if not missing else "FAIL",
+                   f"{len(missing)} cell(s) missing an arm"
+                   + (f" e.g. {sorted(missing)[0]}: {missing[sorted(missing)[0]]}"
+                      if missing else ""))
+        # Count-agnostic cross-check against the runner's own declaration: the
+        # per-cell count varies by design, so the criterion is agreement, not a
+        # constant.
+        declared_total = (summary_obj.get("counts") or {}).get("intervention_rows")
+        if isinstance(declared_total, int):
+            report.add("E16 (§4.4)", "intervention rows match the runner's count",
+                       "PASS" if len(rows) == declared_total else "FAIL",
+                       f"table {len(rows)} vs summary intervention_rows "
+                       f"{declared_total}")
+        else:
+            report.add("E16 (§4.4)", "intervention rows match the runner's count",
+                       "INFO", "e16_summary.json carries no intervention_rows")
+        declared_counts = (summary_obj.get("counts") or {}).get(
+            "intervention_arms_per_cell")
+        if isinstance(declared_counts, list) and declared_counts:
+            want = sorted({int(value) for value in declared_counts})
+            report.add("E16 (§4.4)", "per-cell arm counts match the runner's",
+                       "PASS" if counts == want else "FAIL",
+                       f"table {counts} vs summary {want}")
+        else:
+            report.add("E16 (§4.4)", "per-cell arm counts match the runner's",
+                       "INFO", "e16_summary.json carries no per-cell arm counts")
+        report.add("E16 (§4.4)", "intervention arms per cell",
+                   "INFO",
+                   f"{len(arms)} distinct arm(s), per-cell counts {counts}, "
+                   f"{len(rows)} rows (the count is data-dependent: PCA-matched "
+                   f"and Conditional-RRR-only are per-cell)")
         rrr = [a for a in arms if "rrr" in a.lower()]
         report.add("E16 (§4.4)", "random-RRR subspace control present",
                    "PASS" if rrr else "FAIL", f"arms matching rrr: {rrr}")

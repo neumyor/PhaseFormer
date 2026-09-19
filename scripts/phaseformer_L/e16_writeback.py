@@ -49,6 +49,16 @@ if str(ROOT) not in sys.path:
 
 # The intervention arms the §4.4 table names, mapped to their output columns.
 INTERVENTION_ARMS = ("Semantic-only", "Semantic-drop", "PCA-drop", "RandomRRR-drop")
+#: Arms that every E16 cell carries, regardless of its head or rank.  The three
+#: conditional additions (`PCA-matched-only`/`-drop` when the semantic image is
+#: narrower than the head's rank, `Conditional-RRR-only` when the cell has a
+#: Stage-3 subspace file) are deliberately not listed: whether they appear is a
+#: property of the cell, not a completeness requirement.
+ALWAYS_PRESENT_ARMS = (
+    "Original", "Semantic-only", "Semantic-drop", "Semantic8-only",
+    "Semantic8-drop", "Bias-off", "PCA-only", "PCA-drop",
+    "Independent-RRR-only", "RandomRRR-drop",
+)
 ARM_DISPLAY = {
     "l_main": "PhaseFormer-L",
     "l_q1_4": "L-q1/4",
@@ -297,11 +307,19 @@ def main() -> None:
         arms_per_cell.setdefault(key, set()).add(row["intervention_arm"])
         seed_key = (row["arm"], row["setting"], str(row["seed"]))
         arms_per_seed.setdefault(seed_key, set()).add(row["intervention_arm"])
-    expected_arms = 11
+    # The arm count is NOT a constant: `build_arm_plan` appends
+    # PCA-matched-only/-drop only when the semantic image is narrower than the
+    # head's rank, and Conditional-RRR-only only for cells whose Stage-3 subspace
+    # file exists (the dense head has none).  Measured per cell from each cell's
+    # own checkpoint on 2026-09-20: 11 arms (24 cells), 12 (21), 13 (18).  So the
+    # criterion is "every cell carries the arms that are always present", which
+    # is what a real gap would violate, rather than a hardcoded count that a
+    # legitimate 12- or 13-arm cell would trip.
+    expected_arms = len(ALWAYS_PRESENT_ARMS)
     thin = [f"{arm}__{setting}" for (arm, setting), names in arms_per_cell.items()
-            if len(names) < expected_arms]
+            if set(ALWAYS_PRESENT_ARMS) - names]
     thin_seeds = [f"{arm}__{setting}-s{seed}" for (arm, setting, seed), names
-                  in arms_per_seed.items() if len(names) < expected_arms]
+                  in arms_per_seed.items() if set(ALWAYS_PRESENT_ARMS) - names]
     observed = sorted({len(names) for names in arms_per_cell.values()})
     observed_seeds = sorted({len(names) for names in arms_per_seed.values()})
     missing_named = sorted(set(INTERVENTION_ARMS)
@@ -392,11 +410,16 @@ def main() -> None:
             "expected_arms_per_cell": expected_arms,
             "named_arms_missing_entirely": missing_named,
             "named_arms_missing_from_some_seed": missing_named_seeds,
-            "note": "10 arms per cell per section 4.4, plus this paper's new "
-                    "RandomRRR-drop = 11. Both the (arm, setting) aggregate and "
-                    "the (arm, setting, seed) cells are checked, because an arm "
-                    "missing from one seed would leave the aggregate complete "
-                    "while quietly shrinking that arm's n.",
+            "always_present_arms": list(ALWAYS_PRESENT_ARMS),
+            "note": "the 10 arms that are always present (8 registered + "
+                    "Independent-RRR-only + this paper's RandomRRR-drop) must "
+                    "appear in every cell; PCA-matched-only/-drop and "
+                    "Conditional-RRR-only are per-cell additions, so a cell "
+                    "carrying 11, 12 or 13 arms is complete and only a missing "
+                    "always-present arm is a gap. Both the (arm, setting) "
+                    "aggregate and the (arm, setting, seed) cells are checked, "
+                    "because an arm missing from one seed would leave the "
+                    "aggregate complete while quietly shrinking that arm's n.",
         },
         "disclosures": [
             "the seven settings are test-set-selection-derived, not a blind sample",

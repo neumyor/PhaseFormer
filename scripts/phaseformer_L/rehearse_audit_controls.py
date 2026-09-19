@@ -37,6 +37,16 @@ PARAM_COLUMNS = ("arm", "dataset", "horizon", "seed", "setting", "status",
                  "total_params", "gate_value_from_checkpoint",
                  "gate_param_present", "total_matches_metrics")
 
+E16 = "research_runs/phaseformer_L_e16_dissection_v1"
+E16_ALWAYS_ARMS = ("Original", "Semantic-only", "Semantic-drop", "Semantic8-only",
+                   "Semantic8-drop", "Bias-off", "PCA-only", "PCA-drop",
+                   "Independent-RRR-only", "RandomRRR-drop")
+CONDITIONAL_ARM = "Conditional-RRR-only"
+E16_GROUPS_CRITERION = "intervention table covers 63 cells"
+E16_ALWAYS_CRITERION = "every cell carries the always-present arms"
+E16_TOTAL_CRITERION = "intervention rows match the runner's count"
+E16_COUNTS_CRITERION = "per-cell arm counts match the runner's"
+
 COVER_CRITERION = "parameter table covers all 492 cells"
 CROSS_CRITERION = "parameter counts agree with metrics.csv"
 GATE_CRITERION = "gate value recovered from every gated checkpoint"
@@ -110,6 +120,57 @@ def check(label: str, verdicts: dict, criterion: str, expected: str,
           f"(expected {expected})")
     if not ok:
         print(f"         detail: {verdicts.get(criterion, ('', '<absent>'))[1]}")
+
+
+def e16_cells() -> list:
+    """The real shape: 21 dense cells with 12 arms, 42 lowrank cells with 11-13."""
+    arms_cycle = ("l_main", "l_q1_4", "l_q1_8")
+    # The real 7 test-selected settings: distinct strings, or the
+    # (arm, setting, seed) triples collide and the cell count comes out low.
+    settings = ("ETTh2-96", "ETTh2-720", "ETTm2-96", "ETTm2-192",
+                "Weather-96", "Weather-192", "Electricity-336")
+    cells = []
+    index = 0
+    for arm in arms_cycle:
+        for setting_index, setting in enumerate(settings):
+            for seed in (2021, 2022, 2023):
+                # 3 arms x 7 settings x 3 seeds = 63 distinct (arm, setting, seed)
+                extra = list(E16_ALWAYS_ARMS)
+                if arm == "l_main":
+                    extra += ["PCA-matched-only", "PCA-matched-drop"]
+                else:
+                    extra.append(CONDITIONAL_ARM)
+                    if (setting_index + index) % 2 == 0:   # 11 vs 13 arms per cell
+                        extra += ["PCA-matched-only", "PCA-matched-drop"]
+                cells.append({"arm": arm, "setting": setting,
+                              "seed": seed, "arms": extra})
+                index += 1
+    return cells
+
+
+def write_e16_fixture(root: Path, cells: list, summary_counts: dict | None = None) -> None:
+    out = root / E16
+    out.mkdir(parents=True, exist_ok=True)
+    total = sum(len(c["arms"]) for c in cells)
+    with (out / "intervention_table.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["arm", "setting", "seed",
+                                                   "intervention_arm"])
+        writer.writeheader()
+        for cell in cells:
+            for name in cell["arms"]:
+                writer.writerow({"arm": cell["arm"], "setting": cell["setting"],
+                                 "seed": cell["seed"], "intervention_arm": name})
+    counts = {"intervention_rows": total,
+              "intervention_arms_per_cell": sorted({len(c["arms"]) for c in cells})}
+    if summary_counts:
+        counts.update(summary_counts)
+    summary = {
+        "cells": 63, "algebra_failures": 0, "run_metric_failures": 0,
+        "run_metric_not_comparable": 0, "reference_parity_passed": True,
+        "checkpoint_path_mismatches": [], "test_split_read": False,
+        "counts": counts,
+    }
+    (out / "e16_summary.json").write_text(json.dumps(summary), encoding="utf-8")
 
 
 def write_fixture(root: Path, rows: list) -> None:
@@ -187,7 +248,36 @@ def main() -> int:
         check("all-gateless table", verdicts, GATE_CRITERION, "PASS", results)
         check("all-gateless table", verdicts, ARM_CRITERION, "PASS", results)
 
-        # 8. --json must actually write step 7's acceptance report.
+        # 8. E16: the per-cell arm count is data-dependent (11/12/13), so the
+        #    criteria must be structural.  A healthy table passes...
+        write_e16_fixture(root, e16_cells())
+        verdicts = run_auditor(root)["verdicts"]
+        check("E16 healthy mixed arms", verdicts, E16_GROUPS_CRITERION, "PASS", results)
+        check("E16 healthy mixed arms", verdicts, E16_ALWAYS_CRITERION, "PASS", results)
+        check("E16 healthy mixed arms", verdicts, E16_TOTAL_CRITERION, "PASS", results)
+        check("E16 healthy mixed arms", verdicts, E16_COUNTS_CRITERION, "PASS", results)
+
+        # ... a cell missing an always-present arm fails ...
+        cells = e16_cells()
+        cells[0]["arms"] = [a for a in cells[0]["arms"] if a != "PCA-drop"]
+        write_e16_fixture(root, cells)
+        verdicts = run_auditor(root)["verdicts"]
+        check("E16 cell missing an always-present arm", verdicts,
+              E16_ALWAYS_CRITERION, "FAIL", results)
+
+        # ... a table truncated relative to the runner's own count fails ...
+        cells = e16_cells()
+        write_e16_fixture(root, cells, summary_counts={"intervention_rows": 9999})
+        verdicts = run_auditor(root)["verdicts"]
+        check("E16 count disagrees with the summary", verdicts,
+              E16_TOTAL_CRITERION, "FAIL", results)
+
+        # ... a missing cell fails ...
+        write_e16_fixture(root, e16_cells()[:62])
+        verdicts = run_auditor(root)["verdicts"]
+        check("E16 table with 62 cells", verdicts, E16_GROUPS_CRITERION, "FAIL", results)
+
+        # 9. --json must actually write step 7's acceptance report.
         report_path = root / "nested" / "acceptance.json"
         payload = run_auditor(root, json_path=report_path)["json"]
         results.append(bool(payload))
