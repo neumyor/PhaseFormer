@@ -381,3 +381,32 @@ dense 头的代数与模型输出只在 float32 上不同（本地实测 4.9e-16
 train 统计；63 cell 正式跑在 CPU 上不现实（数十小时量级），正式运行应显式
 `--gpus N`（等一张空闲卡）或用 6 卡退化路径；冒烟本身可以用
 `--max-batches 2 --random-repeats 10` 在 CPU 上完成。
+
+## 12. 臂数**逐格而定**（2026-09-20 实测更正，本计划的臂清单以本节为准）
+
+§3 给出的臂清单是**登记集**，但**每格实际产生的臂数是逐格而定的 11–13 个**——这一点先前被写死为"11 臂"
+（审计器判据、回填期望值、论文 §4.4 正文三处），**会在 E16 那 3–5 小时跑完之后判整链失败**。逐格实测如下。
+
+臂数由 `build_arm_plan` 的**条件**决定（逐格读该格自己的 checkpoint，并用各数据集的真实语义张成）：
+
+| 追加项 | 条件 | 实测（63 格） |
+|---|---|---|
+| `PCA-matched-only` / `-drop`（+2） | `semantic_dimension < rank_dim` | **63/63 成立**（语义张成 36–39；最小秩 42，稠密头 720） |
+| `Independent-RRR-only`（+1） | 恒成立（无 Stage-3 文件时用 train split 现拟合） | 63/63 |
+| `RandomRRR-drop`（+1） | `--random-rrr`（默认 on）且 `rrr_dimension ≥ 1` | 63/63 |
+| `Conditional-RRR-only`（+1） | 该格存在带 `conditional_basis` 的 Stage-3 文件（稠密头无） | **42/42 低秩格成立** |
+
+⇒ **稠密 12 臂、低秩 12 或 13 臂**；实测分布 **11 臂 24 格 / 12 臂 21 格 / 13 臂 18 格**，
+合计 **750 行**、**13 个不同的臂名**（按 E14 臂分行：`l_main` 252、`l_q1_4` 255、`l_q1_8` 243）。
+
+**因此本计划的验收口径是"每格必须带 10 个恒在臂"**（8 个登记臂 + `Independent-RRR-only` + `RandomRRR-drop`），
+**而不是**任何固定的臂总数：
+
+* 审计器（`audit_phase2_outputs.py`）：63 个 `(arm, setting, seed)` 组 + 恒在臂齐全 +
+  与 `e16_summary.json` 的 `counts.intervention_rows` / `intervention_arms_per_cell` **互相印证**；
+* 回填（`e16_writeback.py`）：`expected_arms = len(ALWAYS_PRESENT_ARMS) = 10`，
+  并把 `always_present_arms` 写进 `arm_coverage`；
+* 预演（`rehearse_e16_writeback.py`）：用实测的 11/12/13 臂结构造合成表，正负对照各一。
+
+**详情与证据**：`docs/PhaseFormer_L/audit/paper_code_consistency.md` §18（含我先给错的 798 与随后正确的 750 两次测量）、
+`05b_writeback_rehearsal.md`（正负对照的实测输出）。
