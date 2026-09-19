@@ -283,3 +283,49 @@ compared: 7  worst|diff|: 1.98e-08  same checkpoint: 7/7
 `gate_mean` 列，可作第三个来源，但它的 cell 是**秩约束**的 q∈{1/16,1/8,1/4} 运行（`checkpoint_path`
 指向 `rank_sweep_2_stage1` 的对应 run），与 `l_main` 稠密头**不是同一个 checkpoint**，
 因此它佐证的是**方法**而非本列的具体数值，不纳入上面的比对。
+
+---
+
+## 10. 逐格臂指纹审计（2026-09-19，53 个已完成/在跑的 cell）
+
+§1 的早期审校只覆盖前 7 个 cell 与 8 条不变量。本轮把审计扩到**全部已产出 config 的 cell**
+（53 个 = 45 已完成 + 8 在跑），并新增一条更强的判据：**每个 config 必须恰好匹配一个声明的臂**。
+
+### 10.1 结果
+
+| 检查项 | 结果 |
+|---|---|
+| 扫描的 config 数 | **53**（新训格共 411） |
+| **匹配到 ≠ 1 个臂的 config** | **0** —— 指纹无歧义 |
+| 未通过 `_protocol_ok` 的 config | **0**（含本轮新加的 `gate_init ∈ (0,1)` 与 `lr ≤ 1e-2` 判据） |
+| **在阶段 A 读了 test 的 cell** | **0** |
+
+### 10.2 逐臂实测超参（与设计逐字段一致）
+
+```text
+l_main      [('shared',        None, None, 0.2, 0.001)]
+l_q1_4      [('pooled_lowrank',  24, 1, 0.2, 0.001), ('pooled_lowrank',  48, 1, 0.2, 0.001),
+             ('pooled_lowrank',  84, 1, 0.2, 0.001), ('pooled_lowrank', 180, 1, 0.2, 0.001)]
+l_q1_8      [('pooled_lowrank',  12, 1, 0.2, 0.001), ('pooled_lowrank',  24, 1, 0.2, 0.001),
+             ('pooled_lowrank',  42, 1, 0.2, 0.001), ('pooled_lowrank',  90, 1, 0.2, 0.001)]
+l_rcrf      [('shared',        None, None, 0.5, 0.001)]
+phase_only  [(None,            None, None, None, 0.001)]
+```
+
+逐项判读：
+
+1. **秩正是 `H/4` 与 `H/8`**：`l_q1_4` 的 24/48/84/180 对应 H=96/192/336/720；`l_q1_8` 的
+   12/24/42/90 同构。`pool_factor` 恒为 1。**没有任何一格用了绝对秩**（绝对秩只属于 §4.6 行 5）。
+2. **三种 gate 先验在实测中同时出现**：`l_main`/`l_q1_4`/`l_q1_8` 为 **0.2**（D-2 新格默认），
+   `l_rcrf` 为 **0.5**（`rcrf_nlinear_plain` preset 自持），`phase_only` 无门。
+   这正是 §4.2 表注必须写明的三档，现在有**实测证据**而非仅有设计说明。
+3. `l_rcrf` 的 `head=shared` 来自 preset 自身（`rcrf_nlinear_plain` 内部定义 `shared`），
+   而非 `arm_command` 注入——与冒烟时的观察一致。
+
+### 10.3 仍未覆盖的部分
+
+- 53/411 格；`a1` 与 `phase_only` 的行尚未开始（按成本降序，它们在 Traffic 的最后）。
+- 「恰好匹配一个臂」只证明指纹不歧义；它**不**证明超参是"正确"的那一套（那由 §10.2 的
+  逐臂对照与 §6 的污染事件共同覆盖）。
+- 尚未审计 `a1`（`gold_combo_reliability_s2`）的 gate 先验是否为 preset 的 0.5——该臂
+  训练开始后须补一条同样的检查。
