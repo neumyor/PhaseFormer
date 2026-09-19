@@ -47,6 +47,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 MINIPAPER = REPO / "docs/PhaseFormer_L_minipaper.md"
 E15 = "research_runs/phaseformer_L_e15_dimension_v1"
 E14 = "research_runs/phaseformer_L_e14_main_v1"
+E17 = "research_runs/phaseformer_L_e17_conditional_v1"
 
 #: displayed column -> (artifact column, decimal places); None dp = exact string.
 SECTION_4_3_COLUMNS = {
@@ -273,6 +274,107 @@ def inventory(minipaper: pathlib.Path) -> int:
     return total_empty
 
 
+def aggregate_h1(root: pathlib.Path) -> dict:
+    """setting -> (supporting seeds, total seeds) or the string "evidence_missing".
+
+    The paper's H1 column header reads "（seed 数）", so the cell must carry a SEED
+    COUNT, not the per-seed verdict.  The write-back emits the per-seed verdict
+    (``true``/``false``/``evidence_missing``) in `conditional_table.md`, so the cell
+    has to be aggregated from `results.with_test.csv` instead -- grouping the three
+    seeds of each setting and counting the ones whose verdict is "true".  That is
+    the same aggregation that produced the independently computed H1 summary
+    ("ETTh2-96/720, ETTm2-96/192 = 3/3 seeds; Weather-96 = 2/3; Weather-192 = 0/3;
+    Electricity-336 = evidence_missing"), which is why this is the口径 to encode.
+    """
+    path = root / E17 / "results.with_test.csv"
+    if not path.is_file():
+        return {}
+    groups: dict = {}
+    for row in csv.DictReader(path.open(newline="")):
+        key = (str(row.get("dataset")), str(row.get("horizon")))
+        verdict = str(row.get("h1_cond_gt_indep_seed_majority", "")).strip().lower()
+        entry = groups.setdefault(key, {"true": 0, "total": 0, "missing": 0})
+        entry["total"] += 1
+        if verdict == "true":
+            entry["true"] += 1
+        elif verdict == "evidence_missing" or not verdict:
+            entry["missing"] += 1
+    out = {}
+    for (dataset, horizon), entry in groups.items():
+        if entry["total"] and entry["missing"] == entry["total"]:
+            out[f"{dataset}-{horizon}"] = "evidence_missing"
+        else:
+            out[f"{dataset}-{horizon}"] = (entry["true"], entry["total"])
+    return out
+
+
+def check_4_5(report: Report, root: pathlib.Path, minipaper: pathlib.Path) -> None:
+    """Section 4.5: six columns copy from `conditional_table.md`, H1 is aggregated."""
+    md = root / E17 / "conditional_table.md"
+    block = section_text(minipaper.read_text(encoding="utf-8"), "### 4.5", "### 4.6")
+    header, paper_rows = parse_markdown_table(block, "冻结独立")
+    if header is None:
+        report.add("§4.5", "-", "-", "MISMATCH", "could not find the 4.5 table header")
+        return
+    if len(header) != 7:
+        report.add("§4.5", "-", "columns", "MISMATCH",
+                   f"header has {len(header)} columns, expected 7")
+    if not md.is_file():
+        report.add("§4.5", "-", "artifact", "PENDING", f"{md.name} does not exist yet")
+        return
+
+    artifact = {}
+    for line in md.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) >= 2 and cells[0] not in ("Dataset", "") and set("".join(cells)) > set("-: "):
+            artifact[f"{cells[0]}-{cells[1]}"] = cells
+    h1 = aggregate_h1(root)
+
+    if len(paper_rows) != len(artifact):
+        report.add("§4.5", "-", "row count", "MISMATCH",
+                   f"paper has {len(paper_rows)} rows, artifact has {len(artifact)}")
+    for cells in paper_rows:
+        if len(cells) < 7:
+            report.add("§4.5", "|".join(cells[:2]), "-", "MISMATCH",
+                       f"row has {len(cells)} cells, expected 7")
+            continue
+        key = f"{cells[0]}-{cells[1]}"
+        want = artifact.get(key)
+        if want is None:
+            report.add("§4.5", key, "-", "MISMATCH", "no artifact row for this setting")
+            continue
+        for index in range(6):                      # six direct-copy columns
+            got, expect = cells[index], want[index]
+            if not got:
+                report.add("§4.5", key, header[index], "blank", "empty paper cell")
+            elif got != expect:
+                report.add("§4.5", key, header[index], "MISMATCH",
+                           f"paper={got!r} artifact={expect!r}")
+            else:
+                report.add("§4.5", key, header[index], "match", "")
+        # seventh column: seed count, compared tolerantly on the numbers so the
+        # exact suffix ("3/3" vs "3/3 seed") does not raise a false alarm.
+        cell = cells[6]
+        expected = h1.get(key)
+        if not cell:
+            report.add("§4.5", key, header[6], "blank", "empty paper cell")
+        elif expected is None:
+            report.add("§4.5", key, header[6], "PENDING",
+                       "no H1 verdicts in results.with_test.csv for this setting")
+        elif expected == "evidence_missing":
+            ok = "evidence_missing" in cell.lower()
+            report.add("§4.5", key, header[6], "match" if ok else "MISMATCH",
+                       cell if ok else f"paper={cell!r} expected evidence_missing")
+        else:
+            match = re.search(r"(\d+)\s*/\s*(\d+)", cell)
+            ok = match is not None and (int(match.group(1)), int(match.group(2))) == expected
+            report.add("§4.5", key, header[6], "match" if ok else "MISMATCH",
+                       cell if ok else f"paper={cell!r} expected {expected[0]}/{expected[1]}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(REPO),
@@ -293,6 +395,7 @@ def main() -> int:
     report = Report()
     check_4_3(report, root, minipaper)
     check_4_2(report, root, minipaper)
+    check_4_5(report, root, minipaper)
 
     for state in ("match", "MISMATCH", "blank", "PENDING"):
         n = report.count(state)
