@@ -3292,3 +3292,22 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
   （`parameter table covers all 492 cells: 220 rows`，E14 尚未跑完），门值两条判据均 OK。
 - 记录：`docs/PhaseFormer_L/audit/paper_code_consistency.md` **§18**；
   `docs/PhaseFormer_L_execution_schedule.md` 日志 4 条；`docs/PhaseFormer_L_minipaper.md` §4.4 表注。
+
+## 2026-09-20 — 回填的第三类判据：填格**碰不到**格子周围的正文
+
+- 起因：把"填表"当成"把数字写进单元"是不完整的。全文搜 `待填` 发现**两处在正文里**：
+  摘要的 `*[主结果待填。]*`（:58）与 §4 开头的填表状态段（:369，逐节声明"§4.2、§4.4、§4.5、§4.6 待填"）。
+  **填格不会碰到它们** —— 于是会出现"表已填满、却被一段自称'主结果待填'的文字包着"这种状态，
+  而逐格比对**完全看不见**这类矛盾。这正是本会话反复出现的那一类：**判据只覆盖它被写成的那个维度**。
+- **新增判据③**：`verify_minipaper_fill.py` 增加 `check_placeholders()`，把每处 `待填` 报成 `blank`
+  （**报告而不失败**，与既有 `blank` 语义一致）。回填后的 end-state 由两件事变成**三件事**：
+  `--inventory` = 0、无 `MISMATCH`、`blank` = 0。
+- **双向校准**：现稿报 `blank: 2`（:58、:369）；把两处替换成"已填"的临时副本报 0 且 exit 0；
+  服务器上（§4.3 产物齐备）实测 `match: 168, blank: 2, PENDING: 6`、exit 0。
+  两处 E731（`inventory` 里的 lambda 赋值）是**既有**告警（`git show HEAD:` 同源文件同样报），未动。
+- **另记一处无标记、必须人工改的正文**：§5 限制第 4 条（:738-740）现在写
+  "语义有效与任意同数量主方向有效**尚未分开**……随机 RRR 子空间对照是解决此项的**必要实验**"（将来时）。
+  §4.4 跑完后必须改成**该对照实际分开了什么**——它不属于 §4 的回填，而是 §4.4 结果的**解释**，
+  故留在人工清单里（`minipaper_fill_mapping.md` §5 与排期 §10.4 都已登记）。
+- 记录：`docs/PhaseFormer_L/audit/minipaper_fill_mapping.md` **§5**（三处正文的表格）；
+  `docs/PhaseFormer_L_execution_schedule.md` §10.4（判据由两件改三件）+ 日志一条。

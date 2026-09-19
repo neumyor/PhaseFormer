@@ -468,6 +468,8 @@ Traffic 曾是唯一未知量（862 通道、batch 8）。**现已实测**：其
 
 | 2026-09-20 | 三项收尾客观条件核对（磁盘 / §4.3 图 / 文件名链） | 全部通过 | ①**磁盘**：`research_runs` 现占 310 G，`/home`（并行盘）**可用 8.7 PB**（37% 已用）、`/` 可用 9.7 TB；E14 根 658 M / 159 runs ≈ **4.2 MB/run** ⇒ 411 runs 约 **1.7 G**，E16 的 750×215 表与 E17/E18 产物合计不过数 G ⇒ **容量无风险**（最大单 run 11 M = Traffic h720）。②**§4.3 的三类图确实存在**：`research_runs/phaseformer_L_e15_dimension_v1/figures/` 下 `scree_lambda_spectrum.png`(242 K)、`b1_lag_profile.png`(252 K)、`a1_horizon_profile.png`(344 K)，均为 09-19 19:43 E15 收尾时写出 ⇒ 论文 §4.3 对三张图的引用有真实文件支撑。③**文件名链**：`read_test_generic.py:377` 写 `Path(results).with_suffix(".with_test.csv")`，即 `X/results.csv` → **`X/results.with_test.csv`**——正是审计器（E17/E18 的 `results.with_test.csv` 判据）与 `e17_writeback`/`e18_writeback` 读的那个名字；第 5/6 步正是以 `--results '$E17_ROOT/results.csv'` / `'$E18_ROOT/results.csv'` 调用它 ⇒ 链条一致，不会出现"审计器读到的是 PENDING 而不是 FAIL"的静默缺口 |
 
+| 2026-09-20 | 回填的**第三类判据**被发现（正文占位） | `/tmp` 判据覆盖不到的地方：**填格碰不到格子周围的句子** | 填格只写表格单元。全文有两处 `待填` 在**正文**里：摘要 `*[主结果待填。]*`（:58）与 §4 开头填表状态段（:369，写着"§4.2、§4.4、§4.5、§4.6 待填"）。不管它们，**填满的表会被一段自称"主结果待填"的文字包着**，而逐格比对**完全看不见**。**新增判据③**：`verify_minipaper_fill.py` 的 `check_placeholders()` 把每处 `待填` 报成 `blank`（报告而不失败）⇒ end-state = **`--inventory` 0 + 无 MISMATCH + `blank` 0** 三者同时成立。**双向校准**：现稿报 2（:58、:369）、把两处替换成"已填"的临时副本报 0 且 exit 0；服务器上（产物齐备）实测 `match: 168, blank: 2, PENDING: 6`、exit 0。另记一处**无标记**、必须人工改的正文：§5 限制第 4 条（:738-740）现在把随机 RRR 对照写成"**必要实验**"（将来时），§4.4 跑完后要改成**它实际分开了什么** |
+
 ## 9. 阶段二工期投影（基于**实测**，而非外推）
 
 ### 9.1 各步的实测/推导依据
