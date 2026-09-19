@@ -164,8 +164,15 @@ def build_intervention(rows: list) -> tuple[list, list]:
 
 
 def build_dissection(rows: list) -> tuple[list, list]:
+    # NOTE: E16's dissection_table.csv has no majority_input_group_label column
+    # (verified against the real 48-column header).  It has the per-seed leading
+    # mode's group and label (`leading_input_group` / `leading_input_group_label`)
+    # plus a `majority_input_group` key with its own vote string.  Voting on the
+    # per-seed label is therefore the correct route; demanding a
+    # majority_input_group_label column would have blanked the whole column.
     needed = ["setting", "arm", "seed", "majority_input_group",
-              "majority_input_group_label", "mean_input_group_explanation",
+              "leading_input_group", "leading_input_group_label",
+              "mean_input_group_explanation",
               "leading_output_group_label", "mean_output_group_explanation",
               "leading_correction_energy_share",
               "cross_seed_leading4_input_overlap",
@@ -190,11 +197,14 @@ def build_dissection(rows: list) -> tuple[list, list]:
                  "head_kind": block[0].get("head_kind"),
                  "seeds": len(block)}
         # majority input group across seeds
+        # Vote on the per-seed leading mode's group label, which is the column
+        # E16 actually writes.  `majority_input_group` is recorded alongside as a
+        # cross-check (it is E16's own majority over ranks within a seed).
         group_votes: dict = {}
         label_by_group: dict = {}
         for row in block:
-            group = str(row.get("majority_input_group", "") or "").strip()
-            label = str(row.get("majority_input_group_label", "") or "").strip()
+            group = str(row.get("leading_input_group", "") or "").strip()
+            label = str(row.get("leading_input_group_label", "") or "").strip()
             group_votes[group] = group_votes.get(group, 0) + 1
             if label:
                 label_by_group.setdefault(group, {})
@@ -204,9 +214,17 @@ def build_dissection(rows: list) -> tuple[list, list]:
             entry["input_group"] = group
             labels = label_by_group.get(group) or {}
             entry["input_group_label"] = (
-                max(labels.items(), key=lambda kv: kv[1])[0] if labels else ""
+                max(labels.items(), key=lambda kv: kv[1])[0] if labels else group
             )
             entry["input_group_votes"] = f"{count}/{len(block)}"
+        majority = {}
+        for row in block:
+            key = str(row.get("majority_input_group", "") or "").strip()
+            majority[key] = majority.get(key, 0) + 1
+        if majority:
+            key, count = max(majority.items(), key=lambda kv: kv[1])
+            entry["e16_majority_input_group"] = key
+            entry["e16_majority_input_group_votes"] = f"{count}/{len(block)}"
         for column, target in (("mean_input_group_explanation",
                                 "input_group_explanation"),
                                ("mean_output_group_explanation",
