@@ -1004,3 +1004,51 @@ INVOCATION = re.compile(r"\$PY'?\s+(scripts/[\w/]+\.py)([^&;|]*)")
 要做成精确判据需要在元数据里记下 `action`/`type`；**现在故意不做**，因为只收紧阈值而不补元数据，
 会把每一个合法的单值 flag（`--max-epochs 30`）都误报。
 **对照 3 我最初写错了期望**（以为"单值也该报"）——查清后确认是**这个检查的边界**，不是缺陷。
+
+## 22. §4.4 解剖表校验器读的**四个列名不存在** ⇒ 63/105 格"假通过"（2026-09-20 发现并修）
+
+这是本会话**最严重**的一处静默缺陷，因为它不在产物里、也不在审计器里，而在**最后一跳的校验器**里：
+`verify_minipaper_fill.py` 的 §4.4 解剖表 checker 读的是
+
+```
+leading_input_group_label / mean_input_group_explanation /
+mean_output_group_explanation / leading_correction_energy_share
+```
+
+而 `e16_writeback.build_dissection` 在**聚合写 44 表时把它们改了名**：
+
+```
+input_group_label / input_group_explanation / output_group_explanation / correction_energy_share
+```
+
+（前一组正是**原始** `dissection_table.csv` 的列名——checker 的 docstring 还写着"read from the producer, not guessed"，
+它读到的确实是 producer 的**输入**列名，而不是 44 表的列名。）
+
+**后果比 PENDING 更坏**：`label_and_rate` 对"artifact 侧为空"的检查是**跳过**，
+于是 `label=None, rate=None` 时它报 **match** ——**从未比较却记为通过**；`修正能量份额`一列则是 PENDING。
+故 105 格里 **63 格**（col3 21 格假通过 + col4 的 rate 未比较 21 格 + col5 21 格 PENDING）**没有被真正验证**，
+而回填的三条机器判据（inventory 0 / 无 MISMATCH / blank 0）**都看不见**——PENDING 不是失败，假 match 更不是。
+
+**对照（同一个 fixture，修前/修后）** —— `rehearse_minipaper_fill.py` 用**生产者的真实列名**（AST 抽取）
+造合成 44 表，并按规定的复合格式填一份**论文临时副本**：
+
+| | 修前（服务器上的旧版） | 修后 |
+|---|---|---|
+| 填充论文 + 列名正确的产物 | `match 84 / PENDING 27 / blank 2`，**无 MISMATCH** | **`match 105` / PENDING 6 / blank 2** |
+| 故意改掉一个 rate（0.75 → 0.11） | **`MISMATCH 0`**（完全没发现） | `MISMATCH 1` ✅ |
+| 产物改回**原始列名**（缺陷的形状） | 静默通过 | **列 MISMATCH**：`lacks ['input_group_explanation']` ✅ |
+
+> **这次对照是被"忘了同步"意外成全的**：第一次跑对照时服务器上还是旧版校验器（我只改了本地），
+> 于是它**原样复现了缺陷**（84 match / 21 PENDING / 扰动无反应）；sync 之后重跑才得到右列。
+> 换句话说，这次 before/after 是**同一 fixture、同一命令**，只有校验器版本不同——
+> 这也再次印证那条纪律：**在服务器上验证任何脚本前，先确认服务器上的版本就是我改的那版**。
+
+**修法**（三处，缺一不可）：
+
+1. 四个列名改成 44 表的真名；
+2. **加"列缺失即 MISMATCH"的守卫**（按 44 表的表头检查 required 列）——
+   否则将来任何一次改名都会退化成"静默通过"；这正是本例的**根因级**修复；
+3. `label_and_rate` 在"artifact 侧既无 label 又无 rate"时**报 MISMATCH**，不再跳过。
+
+**顺带固化**：`rehearse_minipaper_fill.py`（仓库内）同时钉住两件事——**列名契约**与**§4.4 解剖表的填写格式**
+（`组 / 解释率` 两位小数、份额三位小数、重叠 `in / out` 两位小数、判定 ✓/✗）。四类断言全成立。
