@@ -78,3 +78,46 @@
 * 数值本身来自**子集评估**，**不构成任何 §4.4 科学结论**；
 * `reference_parity_passed: false` 是冒烟规模的预期结果，正式运行的验收判据仍是
   `02_03_static_check_smoke.md` §6.2 那张表（须为 `true`、`probe_cells ≈ 72`）。
+
+## 附：`rehearse_e16_writeback.py` —— 补上仓库里缺失的那个同侪（2026-09-20）
+
+仓库本来有 `rehearse_e14_writeback.py`、`rehearse_e17_writeback.py`、`rehearse_e18_writeback.py`，
+**独缺 E16**。这不是形式问题：E16 是**唯一**没有预演脚本的回填工具，而第 4 步的调用是
+`... && check_builder_outputs.py ... || true`——**回填失败不会中断链条**，
+只会让 §4.4 的两张 44 表缺失，直到回填阶段才现形。本轮改了它的臂数判据（§18），正好把这个缺口补上。
+
+脚本用**实测的逐格臂结构**（11/12/13 臂、63 格 = 3 臂 × 7 setting × 3 seed、共 762 行）合成干预表，
+解剖表 21 行（3 臂 × 7 setting），只读它实际需要的列，然后：
+
+**正对照（10 条断言全部成立）**
+
+```text
+fixture: 762 rows over 63 cells, arm counts [11, 12, 13]
+[OK  ] positive control: write-back exit 0
+      always_present_arms: 10 entries
+      expected_arms_per_cell: 10
+      observed arm counts: [11, 12, 13]
+      cells_with_fewer_arms: []
+      [OK  ] intervention_table_44.csv written
+      [OK  ] dissection_table_44.csv written
+      [OK  ] expected_arms_per_cell is the always-present count
+      [OK  ] 11/12/13-arm cells are all complete
+      [OK  ] per-seed cells are all complete
+      [OK  ] observed counts cover the measured shape
+      [OK  ] section 4.4 table = 21 rows (got 21)
+```
+
+**两个否定对照**（分别对应写回工具刻意保留的两级粒度）
+
+```text
+[OK] (a) 只删掉某一 seed 的 PCA-drop：per_seed_cells_with_fewer_arms = ['l_q1_4__ETTh2-96-s2021']，
+     cells_with_fewer_arms（按 (arm, setting) 聚合）= [] —— 聚合是"各 seed 的并集"，
+     单个 seed 的缺口**只能**在 per-seed 一级看到
+[OK] (b) 删掉该 cell **三个 seed** 的 PCA-drop：cells_with_fewer_arms = ['l_q1_4__ETTh2-96'] ✓
+```
+
+> **我第一版否定对照的断言是错的**：我断言"删一个 seed 的臂 ⇒ 聚合也应报出来"。
+> 实测聚合为空、per-seed 报出——**写回工具是对的**（它的注释恰好写明"an arm missing from one seed
+> would leave the aggregate complete while quietly shrinking that arm's n"）。
+> 这与本会话其它几次同类：**先分清是工件坏了还是我的判据错了**。
+> 现在两个粒度各有一个否定对照，把"为什么必须同时保留两级"变成可复跑的证据。
