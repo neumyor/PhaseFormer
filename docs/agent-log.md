@@ -3858,3 +3858,10 @@ blank 0 / PENDING 4`（4 个 PENDING 全是 §4.4/§4.5/§4.6 尚未产出的产
 - 由 §1b 的上界论证推得：门→0 时模型就是 `phase_only`，故"门≈0"类获胜格的成败由 `phase_only` 决定。据此核对两轮网格是否覆盖该方向：第一轮 huber 覆盖 gate∈{0.02,0.05,0.1,0.2,0.35,0.5}，**第二轮 mae 同门值全覆盖**（gate=0.02 时相位权重 98%、修正器仅 2%）。
 - 关键：**`gate=0.02 + loss=mae` = "用 MAE 目标优化的 phase_only"**，而**既有全部证据（含 E14 的 24 格 matched `phase_only`）都是 huber/mse 训的** ⇒ 该组合**从未被测量**，且是 7 个 ETT setting 唯一尚未试过的方向。
 - ⇒ 第二轮不是"把第一轮再跑一遍"：它补的是**"相位主干在 MAE 目标下能到哪"这个缺失的上界**。这让即使用户目标注定只有 1/8，第二轮仍有明确的信息价值（能区分"环境差"与"目标函数错配"）。
+
+## 2026-09-20 — 参考数审计：GOLDEN 与 E14_REFERENCE 逐格核对，零错
+
+- 搜索的**每一个判定都建立在内嵌的参考数上**（`GOLDEN` 决定"是否超 Golden"，`E14_REFERENCE` 决定"vs phase_only"），一个数字写错就会静默污染整轮结论。故做了独立核对：从权威文档 `docs/PhaseFormer_gold_standard.md` **用正则独立解析** 28 行，与脚本内嵌的 `GOLDEN` 逐格比对。
+- 结果：**24 个主 setting 零 mismatch**（Traffic 4 格不在判定域内，符合设计——Traffic 是附录）；8 个目标 setting 的 Golden 值全部与文档一致。
+- `E14_REFERENCE` 的 16 个数（8 setting × phase_only/l_main × MSE/MAE）与 `main_table.csv` 逐格比对：**0/16 mismatch**。
+- 这一步的意义：排除了"参考系写错导致达标判定整体偏移"这一类不会报错、只会让结论错向的缺陷。
