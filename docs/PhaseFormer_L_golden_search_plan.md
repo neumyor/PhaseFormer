@@ -227,4 +227,7 @@ $PY scripts/phaseformer_L/golden_search.py --stage final
 | 2026-09-20 20:40 | **Electricity-96 的 65/90 格完成**，实测出该 setting 的**结构性诊断**：**MSE 侧 8/65 已优于 Golden（最好 −0.354%），MAE 侧 0/65（最好仅差 +0.079%）**，双指标 0/65；而相对 E14 `phase_only` 是 **14/65 双优**。⇒ 卡住的是 **MAE**，且缺口只有 0.079%，**落在 seed 噪声量级**（E14 该 setting 的 MAE 样本 std ≈ 0.0004，即 ±0.18%）。这句话决定了第一轮的正确目标函数：**排序应按双指标的最差缺口（已实现），而不是只看 MSE** |
 | 2026-09-20 20:00 | **首个 setting 的前 54 格完成（Electricity-96 全 90 格中的 54）**，给出一条关键测量：**0/54 双指标超 Golden，但最接近的一格只差 MAE +0.138%**（MSE 已优于 Golden **−0.354%**）。即 Electricity-96 的**瓶颈是 MAE 不是 MSE**——这条**先于第一轮结束**测得的证据，正落在 §2b 预注册的"第二轮加 `mae` 损失"轴上，与该预注册相互独立。这 54 格已占第一轮预算的 7.5% |
 | 2026-09-20 17:01 | **正式启动**：删除冒烟 runs → `nohup ... --stage search --gpus 0..7`，HEAD `a14a8b4` 记入 `~/niuyiming/logs/golden_search_HEAD.txt`；启动后核验：进程在飞、8 卡各 ~2 GB/30–50% 利用率、stage1.log 首批 8 格全部为 Electricity-h96（按"贵者先行"调度） |
+| 2026-09-20 22:36 | **进度 169/720**（Electricity-96 90/90 完成、ETTm1-720 79/90）。按逐 setting 实测速率（Electricity 1505 s/格、ETTm1-720 378 s/格、其余 ETT 按 E14 实测 80–300 s/格）重估：剩余 27.1 GPU·h ⇒ **第一轮 ETA ≈02:08**，与先前估计一致。守护 64956 单实例、依赖项已审计（bundle 含第二轮驱动与双指标排序） |
+| 2026-09-20 22:28 | **完成部分的诊断**：两个 setting 独立复现"MSE 过、MAE 不过"（Electricity-96 最优 −0.31%/+0.08%；ETTm1-720 −0.12%/+0.28%），且两者相对 `phase_only` 在两指标上**都是改善** ⇒ MAE 缺口跨 setting 共享且非修正器所致；已排除 MAE 口径问题（`metrics.MAE` 为标准定义） |
+| 2026-09-20 22:17 | 逐 setting 算出"要达标还需在 `phase_only` 之上补多少"：2 格（ETTm1-720、Electricity-96）**只差 MAE**；6 格两指标都差 0.36%–3.83%，且需修正器在**它本就负贡献**的 setting 上转正 ⇒ 与 §1b 结构性困难判断一致 |
 | | （待补：阶段完成时间与实测墙钟、stage-1 选择结果、confirm 与 final 判定） |
