@@ -3844,3 +3844,11 @@ blank 0 / PENDING 4`（4 个 PENDING 全是 §4.4/§4.5/§4.6 尚未产出的产
 - 沙箱复测两个分支：achieved=1 → 启第二轮 ✓；achieved=5 → **不启第二轮** ✓。并在服务器上用真实解释器实测取值命令（`NA` / `3` 两条路径 rc=0 且输出正确）。
 - 修后重启守护：旧 PID 全部 kill，现仅 **64956**（21:19:36 起）单实例运行修正版脚本。驱动仍在跑（未受影响）。
 - 说明：这条与同日"重复守护""`pgrep -f` 误配"两条同源——**判活与解析都必须以真实产物验证，不能凭 `ps`/`grep`/heredoc 的表象**。
+
+## 2026-09-20 — 全链集成演练（select → confirm → final）通过
+
+- 在合成产物上跑完整链路，验证三件此前未一起验证过的事：
+  1. **loss 轴贯穿全链**：`select` 选出的 winner 字典带 `loss`，`stage2_cells` 生成的 confirm 格继承同一 loss（实测 confirm 格为 `[(2022,'mae',3e-3),(2023,'mae',3e-3)]`）——若此处丢字段，第二轮选出的 mae 组合会用 huber 去补 seed，结论全废。
+  2. **confirm 只补 2022/2023**（不含 2021），与 Q6"3 seed 取 best"的口径一致。
+  3. **final 正确聚合 3 个 seed 并取最优**：`n_seeds_with_metrics=3`，输出的 `d_mse_pct/d_mae_pct`、`beats_golden_both`、`beats_phase_only_both`、`gate_shrunk` 四个判定列齐全（Q1 的双锚点、Q7 的门标注都在）。
+- 演练同时确认 winner 字典含 `worst_gap_pct/sum_gap_pct`（排序依据可审计）。
