@@ -18,15 +18,33 @@
 `dataset_level_statistics.csv`（7 行）为其按数据集的聚合；`nu_star_diagnostic.json` 为阈值冻结依据。
 §4.7 表内两列 ρ 将由 `predictive_power.csv` / `predictive_power_summary.json` 回填。
 
-## 3. 待回填（**保持留白，不用推断值**）
+## 3. 阶段 2 的 ρ 已回填（2026-09-20；原先的"保持留白"已解除）
 
-| 表项 | 等待 |
+| 表项 | 状态 |
 |---|---|
-| `cycle_level_std` 与 ΔMSE 的 ρ | E14 阶段 B |
-| `last_cycle_shift` 与 ΔMSE 的 ρ | E14 阶段 B |
-| `τ̂` 与 ΔMSE 的 ρ | E14 阶段 B |
-| 三统计量分别与 `g` 的 ρ | E14 阶段 B |
-| 诊断 `s` 的逐格判对/判错 | E14 阶段 B |
+| `cycle_level_std` 与 ΔMSE 的 ρ | **已填 −0.039**（p=0.842） |
+| `last_cycle_shift` 与 ΔMSE 的 ρ | **已填 −0.139**（p=0.480） |
+| `τ̂` 与 ΔMSE 的 ρ | **已填 −0.750**（p=4.3e−06） |
+| 三统计量分别与 `g` 的 ρ | **已填** 0.183 / 0.303 / 0.325（n=21，全部不显著） |
+| 诊断 `s` 的逐格判对/判错 | 已进 `diagnostic_accuracy`（28 setting / 22 hits / 6 misses），论文按此叙述 |
+
+**回填方式（脚本化，不手抄）**：`scripts/phaseformer_L/fill_minipaper_47.py`
+从 `predictive_power_summary.json` 按 `STATISTICS` **下标**填两列，精度 **3 位小数**
+（与校验器 `compare_number(..., 3)` 一致）；非有限 ρ 会写成字面 `NaN`，本次 `non-finite: 0`。
+工具带一条**防漂移断言**：其 `STATISTICS` 必须与校验器逐项相等，否则拒绝运行。
+
+**回填动作与校验（实测）**：
+
+```text
+dry run:  cells filled: 6   non-finite: 0 []
+write  :  wrote docs/PhaseFormer_L_minipaper.md
+verify :  verify_minipaper_fill.py → "every filled section-4 cell matches its artifact
+          at the displayed precision", exit 0；§4.7 表 1 空格数 6 → 0
+```
+
+**与预登记不符之处如实记录**：注 4 预期前两行 ρ（vs ΔMSE）为正（"反序"），实测为 −0.039 / −0.139 且不显著
+⇒ **"反序"在 ΔMSE 相关上未复现**，更准确的读法是这两行"**对增益无预测力**"。
+三个数字**照实测写，未做任何阈值或口径迁移**（summary 的 `frozen_threshold` 亦明写未被事后重拟合）。
 
 ## 4. agent-log 追加条目（已写入）
 
