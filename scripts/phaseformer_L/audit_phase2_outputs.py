@@ -444,12 +444,31 @@ def audit_e16(report: Report) -> None:
         report.add("E16 (§4.4)", "random-RRR band columns present",
                    "PASS" if band else "FAIL", f"{len(band)} column(s)")
 
+    # 2026-09-20 FIX: this criterion is LABELLED "21 rows (3 models x 7 settings)" but
+    # used to read dissection_table.csv, which is the PER-CELL table (one row per
+    # setting, arm and seed).  On a perfect full run that table has 63 rows, so the
+    # criterion would have reported FAIL against a correct artifact -- a false-FAIL
+    # channel, the mirror image of the false-PASS ones found earlier.  The aggregate it
+    # describes lives in dissection_table_44.csv; the per-cell coverage is checked
+    # separately, mirrored on the intervention table's own coverage line.
     diss = check_exists(report, "E16 (§4.4)", f"{E16}/dissection_table.csv",
                         "dissection_table.csv present")
     if diss:
         rows = read_csv(diss)
+        groups = {(str(r.get("arm")), str(r.get("setting")), str(r.get("seed")))
+                  for r in rows}
+        report.add("E16 (§4.4)", "dissection table covers 63 cells",
+                   "PASS" if len(groups) == 63 else "FAIL",
+                   f"{len(groups)} distinct (arm, setting, seed) group(s)")
+    agg = f"{E16}/dissection_table_44.csv"
+    if pathlib.Path(REPO, agg).is_file():
+        rows = read_csv(pathlib.Path(REPO, agg))
         report.add("E16 (§4.4)", "dissection table = 21 rows (3 models x 7 settings)",
-                   "PASS" if len(rows) == 21 else "FAIL", f"got {len(rows)}")
+                   "PASS" if len(rows) == 21 else "FAIL",
+                   f"got {len(rows)} (aggregate table)")
+    else:
+        report.add("E16 (§4.4)", "dissection table = 21 rows (3 models x 7 settings)",
+                   "FAIL", f"{pathlib.Path(agg).name} absent")
 
     for rel in (f"{E16}/intervention_table_44.csv", f"{E16}/dissection_table_44.csv"):
         check_exists(report, "E16 (§4.4)", rel, f"{pathlib.Path(rel).name} present")
