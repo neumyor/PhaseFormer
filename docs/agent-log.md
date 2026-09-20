@@ -3852,3 +3852,9 @@ blank 0 / PENDING 4`（4 个 PENDING 全是 §4.4/§4.5/§4.6 尚未产出的产
   2. **confirm 只补 2022/2023**（不含 2021），与 Q6"3 seed 取 best"的口径一致。
   3. **final 正确聚合 3 个 seed 并取最优**：`n_seeds_with_metrics=3`，输出的 `d_mse_pct/d_mae_pct`、`beats_golden_both`、`beats_phase_only_both`、`gate_shrunk` 四个判定列齐全（Q1 的双锚点、Q7 的门标注都在）。
 - 演练同时确认 winner 字典含 `worst_gap_pct/sum_gap_pct`（排序依据可审计）。
+
+## 2026-09-20 — 覆盖性核对：第二轮的价值是补上"MAE 目标下的 phase_only"
+
+- 由 §1b 的上界论证推得：门→0 时模型就是 `phase_only`，故"门≈0"类获胜格的成败由 `phase_only` 决定。据此核对两轮网格是否覆盖该方向：第一轮 huber 覆盖 gate∈{0.02,0.05,0.1,0.2,0.35,0.5}，**第二轮 mae 同门值全覆盖**（gate=0.02 时相位权重 98%、修正器仅 2%）。
+- 关键：**`gate=0.02 + loss=mae` = "用 MAE 目标优化的 phase_only"**，而**既有全部证据（含 E14 的 24 格 matched `phase_only`）都是 huber/mse 训的** ⇒ 该组合**从未被测量**，且是 7 个 ETT setting 唯一尚未试过的方向。
+- ⇒ 第二轮不是"把第一轮再跑一遍"：它补的是**"相位主干在 MAE 目标下能到哪"这个缺失的上界**。这让即使用户目标注定只有 1/8，第二轮仍有明确的信息价值（能区分"环境差"与"目标函数错配"）。
