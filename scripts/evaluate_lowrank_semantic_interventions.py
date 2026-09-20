@@ -54,6 +54,21 @@ import time
 from pathlib import Path
 
 import numpy as np
+
+#: Contraction kernel switch.  ``False`` reproduces the historical path exactly
+#: (a bare ``np.einsum`` call, single-threaded, no BLAS); ``True`` lets numpy pick
+#: a pairwise contraction order and hand the heavy pairs to BLAS.  It is opt-in
+#: because the two paths are NOT bit-identical -- they differ at the level of
+#: float64 rounding -- and every number this module produces is meant to be
+#: attributable to a named kernel.  Callers that turn it on must record that they
+#: did (see ``e16_dissection.py --fast-einsum``), and must demonstrate the two
+#: paths agree at the reported precision before mixing their outputs.
+EINSUM_OPTIMIZE = False
+
+
+def einsum(spec: str, *operands):
+    """``np.einsum`` with the module's contraction-order switch applied."""
+    return np.einsum(spec, *operands, optimize=EINSUM_OPTIMIZE)
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -215,7 +230,7 @@ def arm_metrics(
     synthetic bias term.
     """
     bias_term = affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
-    transformed = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+    transformed = einsum("ncr,hr->nhc", hidden, decoder_weight)
     if mode == "bias":
         correction = transformed * sigma
     elif mode == "identity":
@@ -223,12 +238,12 @@ def arm_metrics(
     elif basis is None:
         correction = np.zeros_like(transformed)
     elif mode == "only":
-        projected = np.einsum("ncr,rk->nck", hidden, basis)
-        kept = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
+        projected = einsum("ncr,rk->nck", hidden, basis)
+        kept = einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
         correction = (kept + bias_term) * sigma
     elif mode == "drop":
-        projected = np.einsum("ncr,rk->nck", hidden, basis)
-        removed = np.einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
+        projected = einsum("ncr,rk->nck", hidden, basis)
+        removed = einsum("nck,hr,rk->nhc", projected, decoder_weight, basis)
         correction = (transformed - removed + bias_term) * sigma
     else:
         raise ValueError(f"unknown arm mode {mode!r}")
@@ -351,14 +366,14 @@ def random_drop_band(
         piece = np.ascontiguousarray(hidden[start:stop], dtype=np.float64)
         n = piece.shape[0]
         # ``full`` is the untouched correction of this block: (n, h, c)
-        full = np.einsum("ncr,hr->nhc", piece, decoder_weight) + bias_term[
+        full = einsum("ncr,hr->nhc", piece, decoder_weight) + bias_term[
             None, :, None
         ]
         # ``removed`` is the correction of the state projected onto each arm:
         # (n, r, arms) then (n, h, arms) then (n, h, c, arms).
-        coefficients = np.einsum("ncr,mrk->nckm", piece, bases)
-        back = np.einsum("nckm,mrk->ncrm", coefficients, bases)
-        decoded = np.einsum("ncrm,hr->nhcm", back, decoder_weight)
+        coefficients = einsum("ncr,mrk->nckm", piece, bases)
+        back = einsum("nckm,mrk->ncrm", coefficients, bases)
+        decoded = einsum("ncrm,hr->nhcm", back, decoder_weight)
         # ``sigma``/``last_abs``/``gate`` are already ``(n, 1, c)``; the extra
         # axis here is the arm axis, so the scale has to be re-shaped to
         # ``(n, 1, c, 1)`` rather than to a five-dimensional tensor.
@@ -485,7 +500,7 @@ def evaluate_arms(cached: dict, hidden, sigma, mu, residual_abs, residual_norm,
     # The branch correction is ``decoder(h) + bias``, i.e. everything the
     # low-rank branch writes except its persistence anchor.
     correction_reference = (
-        np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+        einsum("ncr,hr->nhc", hidden, decoder_weight)
         + affine_bias(encoder_bias, decoder_weight, decoder_bias)[None, :, None]
     ) * sigma
 
@@ -888,7 +903,7 @@ def main() -> None:
             hidden_only = cached_only["hidden"]
             sigma_only = cached_only["sigma"]
             mu_only = cached_only["mu"]
-            head_map_only = np.einsum("ncr,hr->nhc", hidden_only, decoder_weight)
+            head_map_only = einsum("ncr,hr->nhc", hidden_only, decoder_weight)
             bias_only = affine_bias(
                 encoder_bias, decoder_weight, decoder_bias
             )[None, :, None]
@@ -1136,7 +1151,7 @@ def main() -> None:
         #                                    + decoder bias)
         # rather than from a slice of ``z``: ``z`` is cached as ``(N, L, C)``, so
         # its last index is the *channel* axis and cannot be used here.
-        head_map = np.einsum("ncr,hr->nhc", hidden, decoder_weight)
+        head_map = einsum("ncr,hr->nhc", hidden, decoder_weight)
         x_last_norm = (
             residual_norm
             - head_map
@@ -1218,7 +1233,7 @@ def main() -> None:
             flush=True,
         )
         if args.debug_checks:
-            recomputed = np.einsum(
+            recomputed = einsum(
                 "ncr,hr->nhc", hidden, decoder_weight
             ) + decoder_bias[None, :, None] + last_abs
             stored = residual_abs

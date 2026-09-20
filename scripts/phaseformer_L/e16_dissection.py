@@ -105,6 +105,7 @@ from scripts.analyze_lowrank_checkpoint_information import (  # noqa: E402
     matrix_rank_tolerance,
     principal_angle_gap,
 )
+import scripts.evaluate_lowrank_semantic_interventions as _evaluator  # noqa: E402
 from scripts.evaluate_lowrank_semantic_interventions import (  # noqa: E402
     RANDOM_SEED,
     affine_bias,
@@ -330,6 +331,15 @@ def build_parser() -> argparse.ArgumentParser:
         "for the Stage 3 subspace files of the probe cells",
     )
     parser.add_argument("--skip-reference-parity", action="store_true")
+    parser.add_argument(
+        "--fast-einsum",
+        action="store_true",
+        help="let numpy choose the contraction order (BLAS) instead of the "
+        "historical bare np.einsum.  NOT bit-identical: the two paths differ at "
+        "the float64 rounding level, so the mode is recorded in e16_summary.json "
+        "and the startup line, and the two must be shown to agree at the reported "
+        "precision before their outputs are mixed",
+    )
     parser.add_argument(
         "--algebra-tolerance", type=float, default=ALGEBRA_RELATIVE_TOLERANCE,
         help="relative tolerance of the closed-form untouched arm against the "
@@ -2462,6 +2472,8 @@ def resolve_device(args) -> tuple["torch.device", dict]:
 # ---------------------------------------------------------------------------
 def main() -> None:
     args = build_parser().parse_args()
+    if args.fast_einsum:
+        _evaluator.EINSUM_OPTIMIZE = True
     if args.evaluation_split not in ("val", "validation"):
         raise SystemExit("only the validation split can be evaluated by E16")
     args.evaluation_split = "val"
@@ -2530,6 +2542,7 @@ def main() -> None:
     device, device_report = resolve_device(args)
     print(
         f"device: {device} "
+        f"[kernel] einsum_optimize={_evaluator.EINSUM_OPTIMIZE} "
         f"(CUDA_VISIBLE_DEVICES={device_report['cuda_visible_devices']!r}, "
         f"visible devices={device_report['visible_device_count']}, "
         f"requested={args.gpus!r})",
@@ -2708,6 +2721,10 @@ def main() -> None:
     summary = {
         "experiment": "E16 (minipaper 4.4 dissection + intervention table)",
         "reads_test": False,
+        # Which contraction kernel produced these numbers.  Recorded because the
+        # two paths differ at the float64 rounding level, so a reader (and any
+        # later merge of several runs) must be able to tell them apart.
+        "einsum_optimize": bool(_evaluator.EINSUM_OPTIMIZE),
         "evaluation_split": args.evaluation_split,
         "scope": {
             "settings": sorted({cell["setting"] for cell in cells}),
