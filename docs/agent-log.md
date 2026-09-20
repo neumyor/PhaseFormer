@@ -3767,3 +3767,9 @@ blank 0 / PENDING 4`（4 个 PENDING 全是 §4.4/§4.5/§4.6 尚未产出的产
 - 新增 `docs/PhaseFormer_L_golden_search_plan.md`（预注册计划 + 口径声明 + 判定规则）与 `scripts/phaseformer_L/golden_search.py`（plan/smoke/search/confirm/select/final 六阶段，幂等续跑，`--stage plan` 本地通过：720 runs、69.1 GPU·h、8 卡约 8.6 h）。
 - 该搜索为 test-set selection，产物全部带标注；已在计划 §1 写入两条预判（Electricity-96 最可能达标；ETTh1/ETTm1 七格若环境差补不上则结构性不可达），供事后对账。
 - 尚未启动训练；待服务器确认空闲后按 bundle 流程同步并跑 smoke。
+
+## 2026-09-20 — Golden-Search 启动（E-GS1）
+
+- 冒烟两轮：首轮暴露驱动的输出目录 bug（runner 在 `--output-dir` 下自建 `runs/<run_id>/`，与驱动的预期路径差两级）→ 修复为每格独立输出目录 + 双层 glob（`90a5544`、`a14a8b4`）；overrides 落地已在冒烟 config 中逐字段核实（gate_init / head_type / rank / lr 全部正确），`--evaluate-test` 全链路跑通。
+- 17:01 正式启动 stage-1（720 runs、seed 2021、8 卡）：`nohup` 脱离会话，HEAD `a14a8b4` 记入日志首行；启动后核验 8 卡负载 ~2 GB/30–50%。1-epoch 冒烟产物已删除（否则会被幂等跳过误判为已完成格）。
+- 监控入口：`~/niuyiming/logs/golden_search.log`（驱动总日志）、`research_runs/phaseformer_L_golden_search_v1/_logs/stage1.log`（逐格 launch/done/FAIL）；完成后按计划 §3 依次 `select → confirm → final`。
