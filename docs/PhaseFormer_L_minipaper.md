@@ -454,31 +454,35 @@ test-set selection 所得，**不得表述为盲测**。
 
 ### 4.2 主结果：PhaseFormer-L vs matched PhaseFormer 与 Golden（24 setting × 3 seed；Traffic 附录）
 
+`g` 均值 = 该 setting 3 seed 的 **σ(gate) 均值**；新训格取自单次测试读取，**7 个复用格取自各自 checkpoint**
+（口径与 2026-09-20 的修复见 §4.2.1"门列"一段）。`g` 为 **0.05 量级的格已全部更正**：旧值是把
+`(臂, horizon)` 上的数据集合并后取最小值所致。
+
 | Dataset | H | Golden MSE/MAE | `phase_only`（matched） | PhaseFormer-L（恒定启用） | Δ vs phase_only | `g` 均值 | 诊断 `s` | 稳定超过 Golden | 来源/披露 |
 |---|---:|---:|---|---:|---:|---|---|---|---|
 | ETTh1 | 96 | 0.359/0.382 | 0.361/0.387 | 0.369/0.397 | +1.98%/+2.78% | 0.211 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTh1 | 192 | 0.397/0.404 | 0.405/0.411 | 0.410/0.421 | +1.21%/+2.35% | 0.213 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTh1 | 336 | 0.425/0.424 | 0.442/0.435 | 0.438/0.438 | -0.91%/+0.81% | 0.219 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTh1 | 720 | 0.431/0.450 | 0.423/0.442 | 0.421/0.449 | -0.41%/+1.42% | 0.201 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
-| ETTh2 | 96 | 0.275/0.338 | 0.282/0.343 | 0.273/0.333 | -3.06%/-2.92% | 0.052 | 1 | ✗ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_multiseed_stage1_20260914_v4/rank_sweep_2_stage1）；L 属 test-selected 集合 |
+| ETTh2 | 96 | 0.275/0.338 | 0.282/0.343 | 0.273/0.333 | -3.06%/-2.92% | 0.492 | 1 | ✗ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_multiseed_stage1_20260914_v4/rank_sweep_2_stage1）；L 属 test-selected 集合 |
 | ETTh2 | 192 | 0.341/0.376 | 0.344/0.383 | 0.339/0.377 | -1.37%/-1.43% | 0.198 | 1 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTh2 | 336 | 0.369/0.405 | 0.376/0.409 | 0.371/0.405 | -1.50%/-1.14% | 0.200 | 1 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
-| ETTh2 | 720 | 0.402/0.436 | 0.416/0.449 | 0.392/0.429 | -5.68%/-4.59% | 0.047 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
+| ETTh2 | 720 | 0.402/0.436 | 0.416/0.449 | 0.392/0.429 | -5.68%/-4.59% | 0.505 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
 | ETTm1 | 96 | 0.293/0.344 | 0.302/0.351 | 0.306/0.353 | +1.14%/+0.39% | 0.196 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTm1 | 192 | 0.323/0.361 | 0.330/0.363 | 0.338/0.369 | +2.40%/+1.61% | 0.194 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTm1 | 336 | 0.358/0.381 | 0.359/0.381 | 0.369/0.387 | +2.66%/+1.50% | 0.202 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTm1 | 720 | 0.412/0.410 | 0.415/0.413 | 0.417/0.414 | +0.40%/+0.20% | 0.196 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
-| ETTm2 | 96 | 0.163/0.256 | 0.174/0.265 | 0.159/0.248 | -8.73%/-6.32% | 0.052 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
-| ETTm2 | 192 | 0.219/0.293 | 0.228/0.300 | 0.215/0.288 | -5.88%/-4.00% | 0.055 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
+| ETTm2 | 96 | 0.163/0.256 | 0.174/0.265 | 0.159/0.248 | -8.73%/-6.32% | 0.507 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
+| ETTm2 | 192 | 0.219/0.293 | 0.228/0.300 | 0.215/0.288 | -5.88%/-4.00% | 0.207 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
 | ETTm2 | 336 | 0.269/0.326 | 0.276/0.331 | 0.267/0.324 | -3.12%/-2.29% | 0.205 | 1 | ✓ | phase_only=新训 3/3；L=新训 3/3 |
 | ETTm2 | 720 | 0.351/0.379 | 0.352/0.380 | 0.347/0.376 | -1.26%/-0.93% | 0.203 | 1 | ✓ | phase_only=新训 3/3；L=新训 3/3 |
-| Weather | 96 | 0.148/0.195 | 0.150/0.197 | 0.147/0.194 | -2.42%/-1.45% | 0.052 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
-| Weather | 192 | 0.193/0.237 | 0.195/0.240 | 0.192/0.237 | -1.55%/-1.28% | 0.055 | 1 | ✗ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
+| Weather | 96 | 0.148/0.195 | 0.150/0.197 | 0.147/0.194 | -2.42%/-1.45% | 0.225 | 1 | ✓ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
+| Weather | 192 | 0.193/0.237 | 0.195/0.240 | 0.192/0.237 | -1.55%/-1.28% | 0.421 | 1 | ✗ | phase_only=复用 3/3（rank_sweep_2_stage1/top2_direction_retention_v1）；phase_only 属 test-selected 集合；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
 | Weather | 336 | 0.242/0.278 | 0.246/0.280 | 0.241/0.275 | -1.83%/-1.88% | 0.173 | 1 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | Weather | 720 | 0.309/0.332 | 0.316/0.332 | 0.314/0.328 | -0.52%/-1.36% | 0.145 | 1 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | Electricity | 96 | 0.129/0.221 | 0.130/0.223 | 0.129/0.223 | -0.96%/-0.03% | 0.197 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | Electricity | 192 | 0.148/0.238 | 0.146/0.236 | 0.146/0.237 | -0.43%/+0.29% | 0.183 | 0 | ✓ | phase_only=新训 3/3；L=新训 3/3 |
-| Electricity | 336 | 0.165/0.257 | 0.167/0.260 | 0.162/0.256 | -2.88%/-1.45% | 0.042 | 0 | ✓ | phase_only=新训 3/3；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_repair_v1/rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
+| Electricity | 336 | 0.165/0.257 | 0.167/0.260 | 0.162/0.256 | -2.88%/-1.45% | 0.334 | 0 | ✓ | phase_only=新训 3/3；L=复用 3/3（rank_sweep_2_multiseed_stage1_20260914_repair_v1/rank_sweep_2_multiseed_stage1_20260914_v3/rank_sweep_2_stage1）；L 属 test-selected 集合 |
 | Electricity | 720 | 0.201/0.285 | 0.199/0.285 | 0.197/0.285 | -1.15%/+0.08% | 0.182 | 0 | ✗ | phase_only=新训 3/3；L=新训 3/3 |
 | Traffic | 96 | 0.361/0.238 | 0.363/0.232 | 0.367/0.237 | +1.18%/+2.51% | 0.057 | 0 | ✗ | 探索性附录，不进入判定；phase_only=新训 3/3；L=新训 3/3 |
 | Traffic | 192 | 0.373/0.243 | 0.380/0.242 | 0.385/0.246 | +1.38%/+1.75% | 0.070 | 0 | ✗ | 探索性附录，不进入判定；phase_only=新训 3/3；L=新训 3/3 |
@@ -516,6 +520,20 @@ FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现�
 (b) 逐 dataset 报告门值 `g` 的均值；诊断列 `s` 是否把 ETTh1/ETTm1 判为 `s=0`，若判为 `s=1` 则如实报告其表现；
 (c) q=1/8 与 direct 的三 seed 差是否在 ±0.5% 内。
 
+**门值列的两个来源，以及为什么不能跨臂比（2026-09-20 补）**：`g` 是**可训练的每格参数**（非固定超参），
+本表报该 setting **3 seed 的 σ(g) 均值**。来源有两处——新训格取单次测试读取（`results.csv` 的 `gate_value`）、
+复用格 7 格取各自 checkpoint——**逐格**在 `main_table.csv` 的 `l_main_gate_source` 列标明。
+**L-rcrf 与 A1 的 `results.csv` 也有 `gate_value`，但那是另一个量**：这两个臂的模型**没有**
+`weak_period_residual_gate` 参数（`parameter_table.csv` 的 `gate_param_present = False`，实测 84/84 与 72/72 行），
+因此 `evaluate_once` 走到的是 `last_rcrf_alpha` 这条回退分支（`e14_read_test.py:1052-1056`），
+得到的是**逐样本融合权重的均值**，不是静态门 ⇒ **不得与本表的 `g` 列横向比较**（这也是 §4.2.1 只对
+`l_main` 做门值读数、不对 `l_rcrf`/A1 做对比的原因）。
+
+**参数量列的口径（2026-09-20 补）**：`total_params_per_horizon` 现附 `total_params_reference_dataset`
+（引用数据集）与 `total_params_per_horizon_range`（全数据集跨度），因相位主干随通道数变化；
+`residual_params_per_horizon` 与数据集无关（实测跨数据集零差异），`params_constant_across_seeds`
+的实测值为 **True**（84 个 (臂,数据集,horizon) 格在 3 seed 间完全不变）。
+
 #### 4.2.1 实测判定（2026-09-20；数字取自本表，判定取自 `claims.json`，逐格由 `verify_minipaper_fill.py` 独立复核）
 
 **必答 (a)：ETTh2 四个 horizon 全部收窄了相对 `phase_only` 的差距，但没有四档都"稳定超过 Golden"。**
@@ -529,9 +547,32 @@ FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现�
 （ETTh1-336、ETTh1-720 与 Electricity 四档，见 `claims.json.B.diagnostic_misses`）
 ⇒ `s` 是**高精确率、低召回**的诊断列，**不是双向判据**，§5 的限制里按此表述。
 
-逐 dataset 的 `g` 均值给出一个**读数**：ETTh1 ≈ 0.20–0.22、ETTm1 ≈ 0.19–0.20、Electricity ≈ 0.18–0.20，
-而"有增益"的三组多为 **0.04–0.06**（ETTh2-96 = 0.052、ETTm2-96 = 0.052、Weather-96 = 0.052）
-⇒ **门值接近 0 恰是"修正器在干活"的签名**：主干若已把电平吸收掉，门就退火到近乎关闭。
+**门列（`g`）的口径与一处已修缺陷。** 本表 `g` 列优先取单次测试读取记录在案的值（`results.csv`），
+但 **7 个复用 setting 的 Stage-0 证据里没有门值**（那批运行只写 MSE/MAE），故这 7 格改由**各自 checkpoint** 读取。
+2026-09-20 复核发现该回退路径有缺陷并已修复：它按 `(臂, horizon)` 取值、**把数据集合并掉了**，于是这 7 格
+拿到的是**该 horizon 上所有数据集门值的最小值**（即 Traffic 的门），而非本格自己的门。实测对照（checkpoint 直读为仲裁）：
+
+| setting | 修复前（错） | 修复后（本表） |   | setting | 修复前（错） | 修复后（本表） |
+|---|---|---|---|---|---|---|
+| ETTh2-96 | 0.052 | **0.492** | | Weather-96 | 0.052 | **0.225** |
+| ETTh2-720 | 0.047 | **0.505** | | Weather-192 | 0.055 | **0.421** |
+| ETTm2-96 | 0.052 | **0.507** | | Electricity-336 | 0.042 | **0.334** |
+| ETTm2-192 | 0.055 | **0.207** | | | | |
+
+另外两个同源缺陷一并修复：`total_params_per_horizon` 同样把数据集合并掉了（相位主干随通道数变化：
+h192 在 7 通道数据集上 140 191，Electricity 411 913，Traffic 412 454），现已**注明所引用的数据集并同时给出全跨度**；
+`params_constant_across_seeds` 因合并而错报 `False`，实测**所有 84 个 (臂,数据集,horizon) 格的参数量在 3 seed 间完全不变**。
+`l_q1_4`/`l_q1_8` 的同 7 格也被同一缺陷命中（旧值 0.072–0.093 / 0.079–0.115），修复后与 checkpoint 逐格一致。
+**全表 84 个有门格**（3 臂 × 28 setting）已逐格与 checkpoint 直读比对，偏差 0 格、最大相对差 < 1e-6。
+
+**门值列的正确读法（替换原先"门接近 0 是修正器在干活"的读数）。** 修复后逐 dataset 的 `g` 均值为
+ETTh1 0.211、ETTm1 0.197、ETTh2 0.349、ETTm2 0.281、Weather 0.241、Electricity 0.224；
+按"`delta_mse_pct` 是否为负"分组，**有增益的 18 格均值 0.2665，退化的 6 格均值 0.2019**——
+即**有增益的格子门值反而偏高**，与原读数相反（原读数是缺陷列的产物：错列下两组为 0.1367 vs 0.1458，看起来"有帮助的门更小"）。
+方向上这也自洽：`y = (1−σ(g))·y_phase + σ(g)·y_residual`，**门越大越走残差支路**，而残差支路正是修正器本身。
+故此处**只报数字、不作因果解释**：同一 horizon 上各数据集的门值差异（0.145–0.507）首先反映的是
+**各格自身训练轨迹**（门是**可训练**参数，非冻结超参：新训格平均移动 17.7%、复用格 9.9%，见 §5 限制），
+而非某个单一机制。
 
 `s` 对 **ETTh1/ETTm1 判为 `s=0`**（与 §4.0 预登记一致），而这两组**实测确实变差**（见下），**如实报告**。
 
@@ -539,7 +580,11 @@ FLOPs 不在本文口径内比较（原文 Table 4 口径未在本仓库复现�
 该主张的口径是**逐 setting 的 |L-q1/8 − L| 的平均值**（`e14_writeback.py:585-597`），
 实测 **|ΔMSE| 平均 0.7183%、|ΔMAE| 平均 0.5343%**，界为 0.5% ⇒ **"rank=H/8 已足够"这一效率主张未达预登记界**。
 **但它不否定参数量结论**：L-q1/8 的总参数确实只有 direct 的约 **17%**
-（h192：**23 863 vs 140 191**，见变体表 `total_params_per_horizon`），
+（h192：**23 863 vs 140 191**，两者同取 **ETTh2 这一引用数据集**；变体表 `total_params_per_horizon`
+现标注 `total_params_reference_dataset` 并附全跨度 `total_params_per_horizon_range`。
+**该比值随 horizon 与数据集变化**：main-24 上 H=96 为 16.4%–20.8%、H=192 为 17.0%–19.0%、
+H=336 为 19.1%–19.8%、H=720 为 25.2%–33.0%（宏平均 23.8%，H=720 因 rank=H/8 相对 dense 的 r=H
+压缩比下降而变差），故 **17% 是 H=192 这一档的读数，不是全表常数**），
 且它的**宏平均 ΔMSE 还略好于** direct（**−1.31% vs −1.00%**）——
 即"低秩能省参数"成立，"**逐格都能压在 0.5% 以内**"不成立。
 
@@ -845,6 +890,21 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
      第三行 ρ 为负 ⇒ 命题 1 的预测力成立**。
 5. **本表不含新训数据**：两列 ρ 由 ① §4.2 的 PhaseFormer-L 相对 `phase_only` 的增益（其复用与来源披露见
    §4.0 / §4.2 表注）与 ② E19 的**训练集**电平统计量（与 §4.3 同源、从不读 test）算出；本节不额外训练任何模型。
+6. **"与 `g` 的 ρ"列的样本量是 n = 21，不是 28；且该列不受 §4.2 门列修复影响**（2026-09-20 补）：
+   * 本表两列的口径不同：`vs ΔMSE` 列用全部 **28** 个 setting（`n=28`）；而 `vs g` 列的 `g`
+     取 E19 自己的来源——`results.csv` 的 `gate_value`（`e19_predictive_power.py:106`），
+     **只有 `status=read` 的行带该列**，7 个 `status=reused` 的 Stage-0 格子没有它、**不进入该列**，
+     故三格的 n 均为 **21**（`predictive_power_summary.json` 的 `predictive_power.scope = "all_28_settings"`，
+     `n_settings = 28`，但 `*_vs_gate_value` 三格的 `n = 21`——**块级 n 与格级 n 不同，引用时必须写格级 n**）。
+   * **§4.2 的门列修复不改变本表数字**：本表的 `g` 与 §4.2 的门列是两个独立来源，E19 只读 `results.csv`，
+     从不读 `main_table.csv`，故上表六格在修复前后**逐字不变**（已复核）。
+   * **两个来源在重叠的 21 格上逐格一致**（同一个 `gate_value`），差异只在样本量：
+     §4.2 的列对那 7 个复用格改从 checkpoint 取值，因此是完整的 **28** 格。
+   * **敏感性读数（非预登记口径，不进任何判定，仅用于让两个来源可对照）**：若把 `g` 换成 §4.2 的完整列，
+     ρ(`g`, ΔMSE) 为 **−0.593（n=28，p=0.001）** / **−0.504（main-24，n=24，p=0.012）**；
+     若仍限在"有 `results.csv` 门值"的格子内则为 **−0.190（n=21，p=0.410）** / **+0.115（main-24，n=17，p=0.660）**。
+     **"换了样本量就换符号"这件事本身要写在表里**，以免读者把两处不一致读成矛盾。
+     无论取哪一口径，**命题 1 的预测力都来自 `vs ΔMSE` 的 −0.750（n=28）**，与本列无关（本列三档均不显著）。
 
 
 若成立，则"哪些数据集需要电平通道"可由数据统计量事前预测；Weather 类弱周期数据若主模式转向曲率/慢趋势，
@@ -878,6 +938,19 @@ Semantic-drop ≡ PCA-drop，此项此前缺失）。
 7. Golden 来自不同硬件环境；本文对 Golden 只做披露性比较，主张 A/B 的配对基线是同环境 matched rerun。
 8. 结论范围：与相位主干经凸门联合训练的线性残差修正、标准长程基准；不宣称任意时序模型可压缩或任意线性模型
    等价于电平修正。
+9. **门值 `g` 是每格训练出来的、不是固定超参；它的数值本身不是机制证据**（2026-09-20 补）。融合门
+   `y = (1−σ(g))·y_phase + σ(g)·y_residual` 中的 `g` 是**可训练** `nn.Parameter`（`PhaseFormer.py:1116`，
+   Adam 正常更新），`gate_init` 只是初值：实测 init→final 的平均移动为**新训格 17.7%**（最大 73.5%，
+   Traffic-96 0.2→0.0573）、**复用格 9.9%**（最大 33.3%，Electricity-336 0.5→0.3337）。
+   因此**不得**把 `g` 读成"门开了多少"的机制量、也不得把 `gate_init` 当作可机械调节 `g²` 的旋钮；
+   §4.2.1 的门值读法按此表述：门值差异首先反映各格自身的训练轨迹，本文不对其作因果解释。
+   同一条也解释了为何 §4.2 的 `g` 列在 2026-09-20 修复后与原读数方向相反（原因之一是缺陷列，
+   见 §4.2.1"门列"一段）。
+10. **一处产出者侧缺陷的修复记录及其影响范围**（2026-09-20，§4.2 门列）：缺陷只影响 §4.2 表中
+    `g` 列的 7 个复用格（及其同源的参数量列），**不影响**主张 A–D 的判定、§4.2 的两列指标、
+    §4.4/§4.5/§4.6 的任何数字，也不影响 §4.7 的六格 ρ（E19 只读 `results.csv` 的 `gate_value`，
+    与 `main_table.csv` 无依赖）。逐格影响与修复后的复核见 §4.2.1；修复前的产物已存档于
+    `research_runs/phaseformer_L_e14_main_v1/pregate_gate_fix/`，可逐格复算。
 
 ---
 
