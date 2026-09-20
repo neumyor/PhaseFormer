@@ -294,7 +294,9 @@ def audit_e16(report: Report) -> None:
         # actually matters (`reference_parity.passed`) would never have been read.
         # The paths below come from a REAL summary, not from the plan's prose.
         expected = (
-            ("cells", ("cells",), 63),
+            # NOT `cells` -- that top-level key is the list of cell records;
+            # the count lives under counts.cells.
+            ("counts.cells", ("counts", "cells"), 63),
             ("invariants.algebra_failures", ("invariants", "algebra_failures"), []),
             ("invariants.run_metric_failures", ("invariants", "run_metric_failures"), []),
             ("invariants.run_metric_not_comparable",
