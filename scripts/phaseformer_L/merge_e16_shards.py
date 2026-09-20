@@ -211,6 +211,17 @@ def main() -> int:
         print(f"no shard directories matched {a.shard_glob}", file=sys.stderr)
         return 2
     print(f"shards found: {len(shards)} (expected {a.expect_shards})")
+    if a.allow_partial:
+        # A stopped shard leaves an empty directory (the tool writes its artifacts only
+        # at the end), which must be counted as "not run" rather than aborting the
+        # merge.  Its combo falls out of the present list and is recorded as missing.
+        usable = [shard for shard in shards
+                  if (shard / "dissection_table.csv").is_file()]
+        skipped = [shard.name for shard in shards if shard not in usable]
+        if skipped:
+            print(f"  skipping {len(skipped)} shard dir(s) with no artifacts "
+                  f"(stopped before writing): {skipped}")
+        shards = usable
     for shard in shards:
         print(f"  {shard.name}")
 
