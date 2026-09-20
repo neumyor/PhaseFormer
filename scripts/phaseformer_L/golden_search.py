@@ -148,7 +148,7 @@ def build_command(dataset, horizon, seed, gate, lr, div, root, num_workers,
                   max_epochs=MAX_EPOCHS, evaluate_test=True):
     argv = [
         PY, str(RUNNER),
-        "--output-dir", str(root / "runs"),
+        "--output-dir", str(run_dir_for(dataset, horizon, seed, gate, lr, div, root)),
         "--dataset", dataset,
         "--horizon", str(horizon),
         "--stage", "confirm",
@@ -172,23 +172,30 @@ def build_command(dataset, horizon, seed, gate, lr, div, root, num_workers,
     return argv
 
 
-def metrics_of(run_dir: Path):
-    path = run_dir / "metrics.csv"
-    if not path.is_file():
+def metrics_of(cell_dir: Path):
+    """Read the runner-written <cell_dir>/<run_id>/metrics.csv with test.
+
+    The runner writes ``<output-dir>/<run_id>/`` where run_id embeds a config
+    hash we cannot predict, so each cell owns one output directory and the
+    metrics file is found one level below it.
+    """
+    if not cell_dir.is_dir():
         return None
-    try:
-        with path.open() as handle:
-            for row in csv.DictReader(handle):
-                if row.get("test_mse", "").strip() and row.get("test_mae", "").strip():
-                    return {
-                        "test_mse": float(row["test_mse"]),
-                        "test_mae": float(row["test_mae"]),
-                        "val_mse": float(row["val_mse"]) if row.get("val_mse", "").strip() else None,
-                        "elapsed_sec": float(row["elapsed_sec"]) if row.get("elapsed_sec", "").strip() else None,
-                    }
-    except Exception:
-        return None
-    return None
+    best = None
+    for path in sorted(cell_dir.glob("*/metrics.csv")):
+        try:
+            with path.open() as handle:
+                for row in csv.DictReader(handle):
+                    if row.get("test_mse", "").strip() and row.get("test_mae", "").strip():
+                        best = {
+                            "test_mse": float(row["test_mse"]),
+                            "test_mae": float(row["test_mae"]),
+                            "val_mse": float(row["val_mse"]) if row.get("val_mse", "").strip() else None,
+                            "elapsed_sec": float(row["elapsed_sec"]) if row.get("elapsed_sec", "").strip() else None,
+                        }
+        except Exception:
+            continue
+    return best
 
 
 def stage1_cells():
