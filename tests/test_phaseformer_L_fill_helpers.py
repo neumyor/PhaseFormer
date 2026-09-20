@@ -222,3 +222,49 @@ class Section46FillerTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
             self.assertIn("refusing a positional fill", result.stderr)
             self.assertEqual(paper.read_text(encoding="utf-8"), original)
+
+
+class E16ShardMergeTests(unittest.TestCase):
+    """E16 is assembled from 21 (setting, arm) shards; the merge must be auditable.
+
+    Two properties carry the whole design: rows are concatenated (never
+    recomputed), and the aggregates move in the safe direction -- parity is ANDed
+    across shards and "did any shard read test" is ORed. A header mismatch must
+    abort rather than merge shifted columns into nonsense.
+    """
+
+    MERGE = REPO / "scripts" / "phaseformer_L" / "merge_e16_shards.py"
+
+    def test_self_test_passes(self):
+        result = run_self_test(self.MERGE)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_missing_shard_file_refuses_to_merge(self):
+        import tempfile
+        from pathlib import Path
+
+        import csv as csv_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            shard = tmp / "phaseformer_L_e16_shard_00"
+            shard.mkdir()
+            # every CSV present, but the summary is missing
+            for name in ("dissection_table.csv", "intervention_table.csv",
+                         "canonical_modes.csv", "semantic_alignment.csv",
+                         "cross_seed_alignment.csv"):
+                with (shard / name).open("w", newline="") as handle:
+                    writer = csv_mod.writer(handle)
+                    writer.writerow(["arm", "setting"])
+                    writer.writerow(["l_main", "ETTh2-96"])
+
+            result = subprocess.run(
+                [sys.executable, str(self.MERGE),
+                 "--repo-root", str(tmp),
+                 "--shard-glob", "phaseformer_L_e16_shard_*",
+                 "--output-root", "out", "--write"],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("lacks", result.stderr)
+            self.assertFalse((tmp / "out").exists())
