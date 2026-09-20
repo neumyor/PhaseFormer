@@ -231,11 +231,18 @@ def run_case(name: str, scratch: pathlib.Path, golden: dict, manifest: dict,
                 # A parameter table without a dataset column cannot identify a
                 # cell's gate.  Refusing to report one is the correct behaviour;
                 # borrowing the horizon's smallest value is not.
-                if row.get("l_main_gate_mean") is not None or source:
-                    wrong_gate.append((row["setting"],
-                                       f"gate={row.get('l_main_gate_mean')} "
-                                       f"source={source!r}",
+                #
+                # Careful with the emptiness test: a blank CSV cell reads back as
+                # "", not None, so `is not None` would call a correctly-left-blank
+                # cell wrong.  That mistake cost one rehearsal round (the "bad"
+                # report was in the assertion, not the producer).
+                got = row.get("l_main_gate_mean")
+                if got is not None and str(got).strip() != "":
+                    wrong_gate.append((row["setting"], f"gate={got!r}",
                                        "expected no gate at all"))
+                elif source:
+                    wrong_gate.append((row["setting"], f"source={source!r}",
+                                       "expected no gate source at all"))
                 continue
             if source != "checkpoint":
                 wrong_gate.append((row["setting"], source, "expected the checkpoint "
@@ -268,14 +275,22 @@ def run_case(name: str, scratch: pathlib.Path, golden: dict, manifest: dict,
 
         # The quoted per-horizon parameter count must be attributable.  In the
         # fixture every dataset has a different channel count, so a single
-        # anonymous number per horizon cannot be right for all of them.
+        # anonymous number per horizon cannot be right for all of them.  Case E
+        # deliberately omits the dataset column, so there the correct outcome is
+        # that no count is reported at all -- which the audit's schema criterion
+        # is what turns into a visible failure rather than a silently blank paper
+        # cell.  Only the well-formed schema is asserted here.
         reference = {str(r.get("arm")): r.get("total_params_reference_dataset")
                      for r in variant}
         named = [a for a, v in reference.items() if v]
         print(f"    arms naming their reference dataset: {len(named)} of {len(variant)}; "
               f"e.g. l_main -> {reference.get('l_main')!r}")
-        if not named:
+        if with_dataset_in_params and not named:
             print("      <-- FAIL: total_params_per_horizon is unattributed")
+            failures += 1
+        elif not with_dataset_in_params and named:
+            print("      <-- FAIL: a parameter table with no dataset column cannot "
+                  "attribute a count, yet one was reported")
             failures += 1
 
     return failures
