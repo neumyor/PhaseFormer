@@ -196,12 +196,22 @@ def read_stats(path: Path) -> dict:
 
 
 def read_parameters(path: Path) -> dict:
-    """(arm, horizon) -> parameter accounting, from ``e14_params.py``.
+    """(arm, dataset, horizon) -> parameter accounting, from ``e14_params.py``.
 
-    The corrector's size legitimately depends on the horizon (a rank-``H/4``
-    head at H=720 is 7.5x the size of one at H=96), but it must NOT depend on
-    the seed, so constancy is checked across seeds within a (arm, horizon)
-    rather than across the whole arm.
+    Keyed by DATASET as well as horizon, and that is not cosmetic.  The gate is a
+    learned per-cell quantity, and ``total_params`` contains the phase trunk,
+    which scales with the dataset's channel count (measured, ``l_main`` at
+    H=192: 140191 for the 7-channel datasets, 411913 for Electricity, 412454 for
+    Traffic).  Pooling the dataset away -- the original defect here -- made the
+    fallback gate the **minimum over every dataset at that horizon**, so the 7
+    reused cells silently received Traffic's near-zero gate instead of their own
+    (ETTh2-96 showed 0.052 instead of 0.492), and it made
+    ``constant_across_seeds`` report False for a quantity that never varies
+    across seeds at all.
+
+    The corrector's size legitimately depends on the horizon (a rank-``H/4`` head
+    at H=720 is 7.5x the size of one at H=96), which is why horizon stays in the
+    key; the seed must not matter, which is why constancy is still checked.
     """
     if not path or not Path(path).exists():
         return {}
@@ -209,6 +219,7 @@ def read_parameters(path: Path) -> dict:
     with Path(path).open(newline="") as handle:
         for row in csv.DictReader(handle):
             arm = str(row.get("arm", "")).strip()
+            dataset = str(row.get("dataset", "")).strip()
             try:
                 horizon = int(row["horizon"])
                 total = int(row["total_params"])
@@ -217,13 +228,12 @@ def read_parameters(path: Path) -> dict:
             except (KeyError, TypeError, ValueError):
                 continue
             gate = str(row.get("gate_value_from_checkpoint", "")).strip()
-            entry = cells.setdefault((arm, horizon), {"totals": set(),
-                                                      "residuals": set(),
-                                                      "shares": set(), "n": 0,
-                                                      "gates": set()})
+            entry = cells.setdefault((arm, dataset, horizon),
+                                     {"totals": set(), "residuals": set(),
+                                      "shares": set(), "n": 0, "gates": []})
             if gate:
                 try:
-                    entry["gates"].add(round(float(gate), 6))
+                    entry["gates"].append(float(gate))
                 except ValueError:
                     pass
             entry["totals"].add(total)
@@ -236,11 +246,22 @@ def read_parameters(path: Path) -> dict:
             continue
         out[key] = {
             "n_seeds": entry["n"],
+            # Within one (arm, dataset, horizon) the seeds agree on every one of
+            # these, so a min/max collapse is safe there; the spread is exposed
+            # as `parameter_variants_across_seeds` so that a genuine anomaly is
+            # visible instead of being hidden behind a sorted()[0].
             "total_params": sorted(entry["totals"])[0],
             "residual_params": sorted(entry["residuals"])[0],
             "residual_share": sorted(entry["shares"])[0],
-            "gate_from_checkpoint": (sorted(entry["gates"])[0]
-                                     if entry["gates"] else None),
+            "parameter_variants_across_seeds": sorted(entry["totals"]),
+            # The mean over the setting's seeds, mirroring the results.csv path
+            # (`read_results` + np.mean(bucket["gate"])).  Taking a MINIMUM here
+            # (the original code) is wrong even in principle: the three seeds of
+            # one cell have different gates, so min is not the cell's gate.
+            "gate_from_checkpoint": (
+                round(float(np.mean(entry["gates"])), 6)
+                if entry["gates"] else None),
+            "gate_seeds_read": len(entry["gates"]),
             "constant_across_seeds": len(entry["totals"]) == 1
             and len(entry["residuals"]) == 1,
         }
@@ -337,7 +358,9 @@ def main() -> None:
         # table note can say which cells came from where.
         for g_arm in (L_MAIN, "l_q1_4", "l_q1_8"):
             from_results = entry.get(f"{g_arm}_gate_mean")
-            from_ckpt = (params.get((g_arm, horizon)) or {}).get(
+            # Keyed by dataset too, so this is THIS cell's checkpoint gate and not
+            # the smallest gate of any dataset that happens to share the horizon.
+            from_ckpt = (params.get((g_arm, dataset, horizon)) or {}).get(
                 "gate_from_checkpoint")
             entry[f"{g_arm}_gate_mean"] = (
                 from_results if from_results is not None else from_ckpt)
@@ -630,22 +653,61 @@ def main() -> None:
         # §4.2 parameter columns: total (backbone + corrector + gate) and the
         # corrector alone.  Reported only when the arm resolves for every
         # horizon; otherwise the list of missing horizons is recorded instead.
-        param_rows = [params.get((arm, r["horizon"])) for r in subset]
+        #
+        # `residual_params` is dataset-independent (measured: 69216 at H=96 for
+        # every dataset), but `total_params` is NOT -- the phase trunk scales with
+        # enc_in (H=192: 140191 on the 7-channel datasets vs 411913 Electricity and
+        # 412454 Traffic).  So the per-horizon number is emitted for a NAMED
+        # reference dataset and the full spread is emitted alongside it; a single
+        # unattributed number here would let the paper quote a Traffic-sized
+        # backbone while calling it "the" PhaseFormer-L size.
+        param_rows = [params.get((arm, r["dataset"], r["horizon"])) for r in subset]
         present = [p for p in param_rows if p]
         if present and len(present) == len(subset):
+            by_dataset: dict = {}
+            residual_by_horizon: dict = {}
+            for r in subset:
+                key = (arm, r["dataset"], r["horizon"])
+                by_dataset.setdefault(r["dataset"], {})[str(r["horizon"])] = \
+                    params[key]["total_params"]
+                # The corrector's own size is dataset-independent, so this one
+                # stays a plain per-horizon map (a mismatch across datasets would
+                # show up as two distinct values appearing in the same horizon).
+                residual_by_horizon.setdefault(str(r["horizon"]), set()).add(
+                    params[key]["residual_params"])
+            # The quoted per-horizon total is the SMALLEST backbone's, i.e. the
+            # 7-channel datasets', and the dataset it belongs to is named so the
+            # number is attributable rather than anonymous.
+            ref_dataset = min(by_dataset,
+                              key=lambda d: min(by_dataset[d].values()))
             entry["total_params_per_horizon"] = json.dumps(
-                {str(r["horizon"]): params[(arm, r["horizon"])]["total_params"]
-                 for r in subset}, sort_keys=True)
+                by_dataset[ref_dataset], sort_keys=True)
+            entry["total_params_reference_dataset"] = ref_dataset
+            entry["total_params_per_horizon_by_dataset"] = json.dumps(
+                by_dataset, sort_keys=True)
+            entry["total_params_per_horizon_range"] = json.dumps(
+                {h: [min(by_dataset[d][h] for d in by_dataset),
+                     max(by_dataset[d][h] for d in by_dataset)]
+                 for h in sorted({x for d in by_dataset for x in by_dataset[d]})},
+                sort_keys=True)
             entry["residual_params_per_horizon"] = json.dumps(
-                {str(r["horizon"]): params[(arm, r["horizon"])]["residual_params"]
-                 for r in subset}, sort_keys=True)
+                {h: sorted(v)[0] for h, v in residual_by_horizon.items()},
+                sort_keys=True)
+            entry["residual_params_vary_by_dataset"] = any(
+                len(v) > 1 for v in residual_by_horizon.values())
             entry["residual_share_max"] = max(
-                params[(arm, r["horizon"])]["residual_share"] for r in subset)
+                params[(arm, r["dataset"], r["horizon"])]["residual_share"]
+                for r in subset)
             entry["params_constant_across_seeds"] = all(
-                params[(arm, r["horizon"])]["constant_across_seeds"] for r in subset)
+                params[(arm, r["dataset"], r["horizon"])]["constant_across_seeds"]
+                for r in subset)
         else:
             entry["total_params_per_horizon"] = None
+            entry["total_params_reference_dataset"] = None
+            entry["total_params_per_horizon_by_dataset"] = None
+            entry["total_params_per_horizon_range"] = None
             entry["residual_params_per_horizon"] = None
+            entry["residual_params_vary_by_dataset"] = None
             entry["residual_share_max"] = None
             entry["params_constant_across_seeds"] = None
 

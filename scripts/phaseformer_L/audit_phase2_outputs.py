@@ -205,6 +205,27 @@ def audit_e14(report: Report) -> None:
                    f"{len(crossed)} row(s) mismatched"
                    + (f" e.g. {crossed[0].get('setting')}/{crossed[0].get('arm')}"
                       if crossed else ""))
+        # 2026-09-20 FIX (see 05_audit.md section 17): section 4.2's gate fallback
+        # used to key its lookup by (arm, horizon), which pooled the dataset away
+        # and handed every reused cell the SMALLEST gate of any dataset at that
+        # horizon.  The built table carries no sign of that -- it stays complete and
+        # every cell holds a plausible number -- so the criterion has to be on the
+        # SCHEMA that makes the correct lookup possible: a parameter table without a
+        # populated dataset column cannot identify any cell's gate.
+        has_column = bool(rows) and "dataset" in rows[0]
+        blank_dataset = [r for r in rows if not str(r.get("dataset", "")).strip()]
+        report.add("E14 (§4.2)", "parameter table carries a populated dataset column",
+                   "PASS" if (has_column and not blank_dataset) else "FAIL",
+                   ("column missing from the header" if not has_column
+                    else f"{len(blank_dataset)} of {len(rows)} row(s) without a dataset"
+                         + (f" e.g. {blank_dataset[0].get('setting')}"
+                            if blank_dataset else "")))
+        # And the column must actually DISCRIMINATE: one dataset repeated on every
+        # row would satisfy the check above while being just as useless.
+        distinct = sorted({str(r.get("dataset", "")).strip() for r in rows})
+        report.add("E14 (§4.2)", "parameter table spans the 7 datasets",
+                   "PASS" if len(distinct) == 7 else "FAIL",
+                   f"{len(distinct)} distinct dataset value(s): {distinct}")
         # The gate only exists in the three weak-residual arms; `phase_only`
         # (no_residual), `l_rcrf` (rcrf_nlinear_plain) and `a1`
         # (gold_combo_reliability_s2) have no such parameter at all, so 85 of the
@@ -262,6 +283,22 @@ def audit_e14(report: Report) -> None:
         rows = read_csv(variant)
         report.add("E14 (§4.2)", "variant table = 6 arms",
                    "PASS" if len(rows) == 6 else "FAIL", f"got {len(rows)}")
+        # Same lesson as above, one level up: `total_params_per_horizon` is the
+        # number the paper quotes, and it is NOT one number -- the phase trunk
+        # scales with the dataset's channel count (H=192: 140191 on the 7-channel
+        # datasets, 411913 Electricity, 412454 Traffic).  A bare per-horizon map
+        # therefore lets a reader attribute it to any dataset, so the builder now
+        # names the dataset it quoted and publishes the full spread beside it.
+        arms_with_params = [r for r in rows
+                            if str(r.get("total_params_per_horizon", "")).strip()
+                            not in ("", "None")]
+        attributed = [r for r in arms_with_params
+                      if str(r.get("total_params_reference_dataset", "")).strip()
+                      not in ("", "None")]
+        report.add("E14 (§4.2)", "per-horizon parameter counts name their dataset",
+                   "PASS" if len(attributed) == len(arms_with_params) else "FAIL",
+                   f"{len(attributed)} of {len(arms_with_params)} parameter-bearing "
+                   f"arm row(s) attribute the quoted count")
 
     claims = check_exists(report, "E14 (§4.2)", f"{E14}/claims.json", "claims.json present")
     if claims:

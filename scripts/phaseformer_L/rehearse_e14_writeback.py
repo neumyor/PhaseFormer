@@ -67,7 +67,8 @@ def write_csv(path: pathlib.Path, fields, rows) -> None:
 
 
 def build_fixtures(scratch: pathlib.Path, golden: dict, manifest: dict,
-                   empty_metrics: bool, with_params: bool):
+                   empty_metrics: bool, with_params: bool,
+                   drop_gate_for: set = frozenset(), with_dataset_in_params: bool = True):
     results_fields = literal_constants(
         REPO / "scripts/phaseformer_L/e14_read_test.py", {"RESULTS_FIELDS"})["RESULTS_FIELDS"]
     params_fields = literal_constants(
@@ -83,6 +84,15 @@ def build_fixtures(scratch: pathlib.Path, golden: dict, manifest: dict,
 
     arms = sorted({str(cell["arm"]) for cell in manifest.get("cells", [])})
     seeds = (2021, 2022, 2023)
+    datasets = sorted({d for (d, _h) in golden})
+
+    # Per-dataset gate priors.  They must be DISTINCT and ordered so that the
+    # smallest one at a horizon belongs to the LAST dataset; a fallback that pools
+    # the dataset away then cannot coincidentally return the right number.
+    gate_prior = {d: round(0.30 + 0.05 * i, 6) for i, d in enumerate(datasets)}
+    # Channel counts differ by dataset in reality, and the phase trunk scales with
+    # them, so total_params must depend on the dataset as well.
+    channels = {d: 7 + 13 * i for i, d in enumerate(datasets)}
 
     rows = []
     for (dataset, horizon), (gmse, gmae) in sorted(golden.items()):
@@ -95,8 +105,12 @@ def build_fixtures(scratch: pathlib.Path, golden: dict, manifest: dict,
                     "arm": arm, "dataset": dataset, "horizon": horizon,
                     "seed": seed, "setting": f"{dataset}-{horizon}",
                     "status": "read", "source": "rehearsal-fixture",
-                    "gate_value": round(0.2 + 0.001 * arms.index(arm), 6),
                 }
+                # Cells in `drop_gate_for` emulate the real Stage-0 reused cells:
+                # their evidence table records no gate, so section 4.2 has to read
+                # it from the checkpoint instead.
+                if dataset not in drop_gate_for:
+                    row["gate_value"] = round(0.2 + 0.001 * arms.index(arm), 6)
                 if not empty_metrics:
                     row["test_mse"] = round(gmse * factor, 6)
                     row["test_mae"] = round(gmae * factor, 6)
@@ -106,23 +120,45 @@ def build_fixtures(scratch: pathlib.Path, golden: dict, manifest: dict,
     param_rows = []
     if with_params:
         for arm in arms:
-            for horizon in sorted({h for (_d, h) in golden}):
-                param_rows.append({
-                    "arm": arm, "horizon": horizon, "seed": 2021,
-                    "total_params": 100000 + 100 * horizon,
-                    "residual_params": 1000 + horizon,
-                    "residual_share": round((1000 + horizon) / (100000 + 100 * horizon), 6),
-                    "gate_value_from_checkpoint": round(0.2 + 0.001 * arms.index(arm), 6),
-                })
+            for dataset in datasets:
+                for horizon in sorted({h for (d, h) in golden if d == dataset}):
+                    for index, seed in enumerate(seeds):
+                        total = 100000 + 100 * horizon + 137 * channels[dataset]
+                        residual = 1000 + horizon
+                        param_rows.append({
+                            "arm": arm,
+                            "horizon": horizon,
+                            "seed": seed,
+                            "total_params": total,
+                            "residual_params": residual,
+                            "residual_share": round(residual / total, 6),
+                            # Slightly different per seed, as in reality, so the
+                            # fallback can only be right if it takes the MEAN.
+                            "gate_value_from_checkpoint": round(
+                                gate_prior[dataset] + 0.001 * index
+                                + 0.001 * arms.index(arm), 6),
+                        })
+                        if with_dataset_in_params:
+                            param_rows[-1]["dataset"] = dataset
         write_csv(scratch / "parameter_table.csv", params_fields, param_rows)
 
     return len(rows), len(param_rows)
 
 
+def expected_fallback_gate(dataset: str, arms_index: int, datasets, seeds) -> float:
+    prior = round(0.30 + 0.05 * datasets.index(dataset), 6)
+    return round(sum(prior + 0.001 * i + 0.001 * arms_index
+                     for i in range(len(seeds))) / len(seeds), 6)
+
+
 def run_case(name: str, scratch: pathlib.Path, golden: dict, manifest: dict,
-             empty_metrics: bool, with_params: bool) -> int:
+             empty_metrics: bool, with_params: bool,
+             drop_gate_for: frozenset = frozenset(),
+             with_dataset_in_params: bool = True) -> int:
     scratch.mkdir(parents=True, exist_ok=True)
-    n_res, n_par = build_fixtures(scratch, golden, manifest, empty_metrics, with_params)
+    n_res, n_par = build_fixtures(scratch, golden, manifest, empty_metrics,
+                                  with_params, drop_gate_for,
+                                  with_dataset_in_params)
     print(f"--- {name}: results rows={n_res} parameter rows={n_par}")
     result = subprocess.run(
         [sys.executable, "scripts/phaseformer_L/e14_writeback.py",
@@ -169,6 +205,73 @@ def run_case(name: str, scratch: pathlib.Path, golden: dict, manifest: dict,
           f"{' e.g. ' + str(blank_prov[:3]) if blank_prov else ''}")
     if blank_prov:
         failures += 1
+
+    # ------------------------------------------------------------------
+    # The gate fallback (defect found 2026-09-20, see 05_audit.md section 17).
+    # When a cell's results.csv row carries no gate -- exactly the 7 reused
+    # `l_main` settings in the real run -- section 4.2 reads the checkpoint value
+    # out of parameter_table.csv.  That lookup used to be keyed by
+    # (arm, horizon), pooling the dataset away, so every such cell received the
+    # SMALLEST gate any dataset had at that horizon instead of its own.
+    #
+    # The fixture makes that failure impossible to miss: each dataset gets a
+    # distinct gate prior and its own channel count, so pooling either returns a
+    # foreign dataset's number or (for the old min-collapse) the wrong statistic.
+    # ------------------------------------------------------------------
+    if with_params and drop_gate_for:
+        datasets = sorted({d for (d, _h) in golden})
+        arms = sorted({str(cell["arm"]) for cell in manifest.get("cells", [])})
+        wrong_gate = []
+        for row in main:
+            dataset = row["dataset"]
+            if dataset not in drop_gate_for:
+                continue
+            source = str(row.get("l_main_gate_source", "")).strip()
+            if not with_dataset_in_params:
+                # A parameter table without a dataset column cannot identify a
+                # cell's gate.  Refusing to report one is the correct behaviour;
+                # borrowing the horizon's smallest value is not.
+                if row.get("l_main_gate_mean") is not None or source:
+                    wrong_gate.append((row["setting"],
+                                       f"gate={row.get('l_main_gate_mean')} "
+                                       f"source={source!r}",
+                                       "expected no gate at all"))
+                continue
+            if source != "checkpoint":
+                wrong_gate.append((row["setting"], source, "expected the checkpoint "
+                                                            "fallback"))
+                continue
+            for arm_index, arm in enumerate(arms):
+                want = expected_fallback_gate(dataset, arm_index, datasets, (2021, 2022, 2023))
+                got = row.get(f"{arm}_gate_mean")
+                if got is None or abs(float(got) - want) > 1e-6:
+                    wrong_gate.append((row["setting"], f"{arm}={got}", want))
+        expectation = ("the cell's own seed-averaged gate" if with_dataset_in_params
+                       else "no gate at all (the table cannot identify the cell)")
+        print(f"    fallback-gate cells checked: "
+              f"{len([r for r in main if r['dataset'] in drop_gate_for])}; "
+              f"wrong: {len(wrong_gate)}; expecting {expectation}"
+              f"{' e.g. ' + str(wrong_gate[:3]) if wrong_gate else ''}")
+        if wrong_gate:
+            print("      <-- FAIL: the checkpoint fallback is not reading THIS "
+                  "cell's own gate")
+            failures += 1
+        else:
+            print("      OK: the fallback behaves correctly for this schema")
+
+        # The quoted per-horizon parameter count must be attributable.  In the
+        # fixture every dataset has a different channel count, so a single
+        # anonymous number per horizon cannot be right for all of them.
+        reference = {str(r.get("arm")): r.get("total_params_reference_dataset")
+                     for r in variant}
+        named = [a for a, v in reference.items() if v]
+        print(f"    arms naming their reference dataset: {len(named)} of {len(variant)}; "
+              f"e.g. l_main -> {reference.get('l_main')!r}")
+        if not named:
+            print("      <-- FAIL: total_params_per_horizon is unattributed")
+            failures += 1
+
+    return failures
 
     # claims.json carries A-D plus the two must-answer blocks; the flattened
     # verdicts are emitted on stdout as a single {"event": "finished", ...} line.
@@ -219,6 +322,18 @@ def main() -> int:
                          True, True)
     failures += run_case("case C: no parameter table", base / "C", golden, manifest,
                          False, False)
+    # Case D is the one that would have caught the gate defect: two datasets get
+    # no results.csv gate (as the real reused cells), so the checkpoint fallback
+    # is exercised and must return each dataset's OWN gate.
+    failures += run_case("case D: checkpoint-fallback gates", base / "D", golden,
+                         manifest, False, True, frozenset({"ETTh1", "Weather"}))
+    # Case E: an OLD-style parameter table with no dataset column.  The correct
+    # behaviour is to leave the gate unknown (None) rather than to borrow another
+    # dataset's; this pins that a schema regression cannot reintroduce the defect.
+    failures += run_case("case E: parameter table without a dataset column",
+                         base / "E", golden, manifest, False, True,
+                         frozenset({"ETTh1", "Weather"}),
+                         with_dataset_in_params=False)
 
     print()
     if failures:
