@@ -3760,3 +3760,10 @@ blank 0 / PENDING 4`（4 个 PENDING 全是 §4.4/§4.5/§4.6 尚未产出的产
   改成"留白待补"后归零 ✓。占位符检查是字面匹配，写文档时引用该词会自我触发。
 - **论文更新**：§4.4 两张表 + **§4.4.1 判定**；§5 **限制第 4 条从"尚未分开"改为"已分开"**（含适用范围与"必要不充分"）；
   §4.5/§4.6 **逐格标注未跑**（§4.6 只动第五列，前四列的既有结果保持原文）；§4 开头的**填表状态段**更新为终版。
+
+## 2026-09-20 — 登记 Golden-Search（test-set selection，用户指令）
+
+- 用户指令（Q1–Q7 逐条裁定）：目标为 8 个未胜过 Golden 的 setting 中 ≥4 个双指标超越；允许动 gate_init/lr/pooled_lowrank rank；**明确按 test 选择最佳组合**；基线直接用 E14 已有 phase_only/l_main；达标取 3 seed 中 best；门压小后达标算数但须标注。
+- 新增 `docs/PhaseFormer_L_golden_search_plan.md`（预注册计划 + 口径声明 + 判定规则）与 `scripts/phaseformer_L/golden_search.py`（plan/smoke/search/confirm/select/final 六阶段，幂等续跑，`--stage plan` 本地通过：720 runs、69.1 GPU·h、8 卡约 8.6 h）。
+- 该搜索为 test-set selection，产物全部带标注；已在计划 §1 写入两条预判（Electricity-96 最可能达标；ETTh1/ETTm1 七格若环境差补不上则结构性不可达），供事后对账。
+- 尚未启动训练；待服务器确认空闲后按 bundle 流程同步并跑 smoke。
