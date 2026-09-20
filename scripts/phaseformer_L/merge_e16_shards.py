@@ -188,6 +188,11 @@ def main() -> int:
                     default="research_runs/phaseformer_L_e16_dissection_v1")
     ap.add_argument("--expect-shards", type=int, default=21)
     ap.add_argument("--expect-cells", type=int, default=63)
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="accept fewer shards than the registered 21 (setting, arm) "
+                         "combos.  Requires an explicit record of what is missing: the "
+                         "merge stores the missing combos in merge_provenance and refuses "
+                         "to look complete by omission.")
     ap.add_argument("--repo-root", default="",
                     help="root the shard glob and --output-root resolve against "
                          "(default: the repository root).  Exists so the merge can be "
@@ -233,9 +238,35 @@ def main() -> int:
         parities.append(json.loads(path.read_text(encoding="utf-8")))
 
     cells = [cell for summary in summaries for cell in (summary.get("cells") or [])]
+
+    # The registered scope is 7 settings x 3 arms.  Derive which combos are present
+    # from the shard roots themselves so a partial merge can name exactly what is
+    # missing instead of quietly producing a smaller table.
+    settings = ["ETTh2:96", "ETTh2:720", "ETTm2:96", "ETTm2:192",
+                "Weather:96", "Weather:192", "Electricity:336"]
+    arms = ["l_main", "l_q1_4", "l_q1_8"]
+    registered = [(s.replace(":", "-"), arm) for s in settings for arm in arms]
+    present = []
+    for shard in shards:
+        with (shard / "dissection_table.csv").open(newline="") as handle:
+            row = next(csv.DictReader(handle), None)
+        if row:
+            present.append((row["setting"], row["arm"]))
+    missing = [combo for combo in registered if combo not in present]
+    extra = [combo for combo in present if combo not in registered]
+
     if len(cells) != a.expect_cells:
-        print(f"shards declare {len(cells)} cells, expected {a.expect_cells}",
-              file=sys.stderr)
+        if not a.allow_partial:
+            print(f"shards declare {len(cells)} cells, expected {a.expect_cells} "
+                  f"({len(missing)} registered combo(s) missing: {missing}); pass "
+                  f"--allow-partial to assemble what exists and record the gap",
+                  file=sys.stderr)
+            return 2
+        print(f"PARTIAL merge: {len(cells)} of {a.expect_cells} cells; "
+              f"missing registered combos: {missing}")
+    if extra:
+        print(f"refusing to merge: shards carry combos outside the registered scope: "
+              f"{extra}", file=sys.stderr)
         return 2
 
     modes = [summary.get("einsum_optimize") for summary in summaries]
@@ -302,6 +333,15 @@ def main() -> int:
             "shards": [shard.name for shard in shards],
             "cells_per_shard": {shard.name: len(s.get("cells") or [])
                                 for shard, s in zip(shards, summaries)},
+            "partial": {
+                "expected_cells": a.expect_cells,
+                "actual_cells": len(cells),
+                "missing_combos": missing,
+                "note": ("The registered scope is 7 settings x 3 arms.  Any combo listed "
+                         "in missing_combos has NO data: its experiments were not run (or "
+                         "were stopped), so section 4.4's tables must mark those rows as "
+                         "not run rather than leave them looking unfilled."),
+            } if missing else None,
             "rows_per_shard": per_shard_rows,
             "bools": {"reference_parity_passed": parity["passed"],
                       "reads_test": summary_out["reads_test"]},
