@@ -77,6 +77,11 @@ LOSS = "huber"
 # touching model code.  MAE loss is the natural lever for the settings whose
 # MAE gap is the larger one (ETTh1-96/192, ETTm1-96/192).
 LOSSES = ("huber", "mae")
+# Round-2 lr grid (plan §2b): round 1 used {1e-4, 3e-4, 1e-3} and its first 48
+# cells showed 1e-4 is the worst rung on every head, so the sweet spot may sit
+# at or above 1e-3.  Round 2 therefore moves the grid up; the two grids share
+# 3e-4 and 1e-3, and the ids collide harmlessly because the runs are identical.
+LRS_ROUND2 = (3e-4, 1e-3, 3e-3)
 PERCENT = 100
 
 # Search grid (frozen in the plan §2).
@@ -129,7 +134,8 @@ COST_HINT = {
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--stage", choices=["plan", "smoke", "search", "confirm",
+    p.add_argument("--stage", choices=["plan", "smoke", "search",
+                                       "search-round2", "confirm",
                                        "select", "final"],
                    default="plan")
     p.add_argument("--output-root",
@@ -139,6 +145,10 @@ def parse_args():
     p.add_argument("--poll-seconds", type=int, default=20)
     p.add_argument("--smoke-epochs", type=int, default=1)
     p.add_argument("--max-parallel", type=int, default=8)
+    p.add_argument("--losses", default="",
+                   help="comma list of losses for --stage search (default: all)")
+    p.add_argument("--lrs", default="",
+                   help="comma list of learning rates; round2 uses LRS_ROUND2")
     p.add_argument("--allow-partial", action="store_true",
                    help="select: report even if some cells are missing")
     return p.parse_args()
@@ -224,12 +234,16 @@ def metrics_of(cell_dir: Path):
     return best
 
 
-def stage1_cells(losses=None):
+def parse_list(raw):
+    return [item.strip() for item in str(raw).split(",") if item.strip()]
+
+
+def stage1_cells(losses=None, lrs=None):
     cells = []
     for loss in (losses or LOSSES):
         for dataset, horizon, g_mse, g_mae in SETTINGS:
             for gate in GATE_INITS:
-                for lr in LRS:
+                for lr in (lrs or LRS):
                     for div in HEAD_DIVS:
                         cells.append(dict(dataset=dataset, horizon=horizon,
                                           seed=SEED_STAGE1, gate=gate, lr=lr,
@@ -331,7 +345,7 @@ def drive(cells, args, log_name, max_epochs=MAX_EPOCHS, evaluate_test=True):
 # ------------------------------------------------------------------ stages
 
 def stage_plan(args):
-    cells = stage1_cells()
+    cells = stage1_cells(losses=parse_list(args.losses) if args.losses else None)
     by_setting = {}
     for c in cells:
         by_setting.setdefault((c["dataset"], c["horizon"]), []).append(c)
@@ -364,8 +378,18 @@ def stage_smoke(args):
 
 
 def stage_search(args):
-    cells = stage1_cells()
+    losses = parse_list(args.losses) if getattr(args, "losses", "") else None
+    lrs = [float(x) for x in parse_list(args.lrs)] if getattr(args, "lrs", "") else None
+    cells = stage1_cells(losses=losses, lrs=lrs)
     drive(cells, args, "stage1.log")
+
+
+def stage_search_round2(args):
+    """Round-2 grid: mae+huber x the moved-up lr grid (plan §2b)."""
+    losses = parse_list(args.losses) if getattr(args, "losses", "") else ["mae", "huber"]
+    lrs = [float(x) for x in parse_list(args.lrs)] if getattr(args, "lrs", "") else list(LRS_ROUND2)
+    cells = stage1_cells(losses=losses, lrs=lrs)
+    drive(cells, args, "stage1_round2.log")
 
 
 def stage_confirm(args):
@@ -383,7 +407,7 @@ def stage_select(args):
         rows = []
         for loss in LOSSES:
             for gate in GATE_INITS:
-                for lr in LRS:
+                for lr in sorted(set(LRS) | set(LRS_ROUND2)):
                     for div in HEAD_DIVS:
                         rd = run_dir_for(dataset, horizon, SEED_STAGE1, gate, lr,
                                          div, root, loss)
@@ -532,6 +556,8 @@ def main():
         stage_smoke(args)
     elif args.stage == "search":
         stage_search(args)
+    elif args.stage == "search-round2":
+        stage_search_round2(args)
     elif args.stage == "confirm":
         stage_confirm(args)
     elif args.stage == "select":
