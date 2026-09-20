@@ -3865,3 +3865,20 @@ blank 0 / PENDING 4`（4 个 PENDING 全是 §4.4/§4.5/§4.6 尚未产出的产
 - 结果：**24 个主 setting 零 mismatch**（Traffic 4 格不在判定域内，符合设计——Traffic 是附录）；8 个目标 setting 的 Golden 值全部与文档一致。
 - `E14_REFERENCE` 的 16 个数（8 setting × phase_only/l_main × MSE/MAE）与 `main_table.csv` 逐格比对：**0/16 mismatch**。
 - 这一步的意义：排除了"参考系写错导致达标判定整体偏移"这一类不会报错、只会让结论错向的缺陷。
+
+## 2026-09-20 — 收官链依赖项就位性审计（在触发前确认，而不是触发后才查）
+
+守护进程要在深夜自动跑完同步 → 判定 → 第二轮，故**在它触发之前**逐项确认它需要的每一件东西都在：
+
+| 依赖 | 检查 | 结果 |
+|---|---|---|
+| bundle 已刷新到当前 HEAD | 本地 `git bundle list-heads` | tip `49b5bb65` = 当前 HEAD ✓ |
+| bundle 内含第二轮驱动 | 服务器 `git show FETCH_HEAD:...golden_search.py \| grep -c search-round2` | **2**（含 `--stage search-round2` 与 `search-round2` 分支）✓ |
+| bundle 内含双指标排序 | 同上 grep `worst_gap_pct` | **3** ✓ |
+| 第二轮启动脚本 | 服务器 `~/niuyiming/run_round2.sh` 语法 | OK ✓ |
+| 守护单实例 | `ps` 按真实 argv 匹配 | 仅 **64956** ✓ |
+| 判定取值命令 | 服务器真解释器实测（`NA` 与 `3` 两条路径） | rc=0、输出正确 ✓ |
+| 参考数正确性 | 与权威文档/产物逐格比对 | 0 mismatch ✓ |
+
+- **未做 `reset --hard`**：驱动仍在跑，按 REMOTE_SERVER.md 不在任务运行中同步；服务器当前 HEAD 仍是 `a14a8b4`（旧驱动），**到守护触发时才同步**——这正是它该有的行为（旧驱动跑第一轮没问题，因为第一轮的网格与旧代码一致）。
+- 这一步把"深夜断链"的风险在**可查的时刻**关掉：若 bundle 漏了某个文件，守护会在判定前 ABORT，而那时我不一定在线。
