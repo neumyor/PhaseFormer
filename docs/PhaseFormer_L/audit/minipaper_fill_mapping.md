@@ -50,6 +50,26 @@
 **反过来说**：若"只填 8 个空格、保留 Traffic 现有的短注"，那 4 行会与产物**不一致**，
 校验器会报 4 处 MISMATCH —— 那是**填法错了**，不是校验器太严。**故规定：整行替换。**
 
+#### 1.1b `g` 均值这一格的**两个来源**（2026-09-20 补，缺陷修复后新增）
+
+`g` 这一格在产物里由两条路径取值，**逐格**记录在 `main_table.csv` 的 `l_main_gate_source` 列：
+
+| 来源 | 覆盖 | 取值方式 |
+|---|---|---|
+| `results_csv` | **21** 个新训格 | `results.csv` 的 `gate_value`（单次 test 读取时由模型自身 `learned_residual_gate()` 记录），3 seed 取均值 |
+| `checkpoint` | **7** 个复用格 | 该格**自己的** checkpoint：`metrics.csv:checkpoint` → `torch.load(mmap=True)` → `sigmoid(weak_period_residual_gate).mean()`，3 seed 取均值 |
+
+**这两个来源在重叠格上逐格一致**；差异只在"哪些格子必须走回退"。回退路径曾把
+`(臂, 数据集, horizon)` 退化成 `(臂, horizon)` 并取最小值，导致那 7 格取到**别的数据集**的门
+（详见 `e14_main/05_audit.md` §17）——**这类缺陷不可能被"论文 vs 产物"的一致性好坏发现**，
+故本节的映射纪律在此**不够用**，必须外加**独立于产出链**的取值路径（此处是 checkpoint 直读）
+作为仲裁。回填时**不要**手工改这一格、也**不要**从未经核对的中间文件抄。
+
+**另外两臂的 `gate_value` 不是这一格的口径**：`l_rcrf`/`a1` 的 `results.csv` 也带 `gate_value`，
+但那两臂**没有** `weak_period_residual_gate` 参数（`parameter_table.csv` 的 `gate_param_present=False`
+覆盖 84/84 与 72/72 行），`e14_read_test.py:1051-1056` 会回退到 `last_rcrf_alpha`（**逐样本**融合权重均值）
+⇒ **不得**当作与 `l_main` 同口径的门值来横向比较。论文 §4.2 表注已按此写明。
+
 ### 1.2 §4.2 的**臂级变体表** —— **已完整，无需填充** ✓（初版此处有误，已更正）
 
 该表的表头是 `| 行 | preset / 配置 | 作用 | 新训规模 |`——**是说明表，不是结果表**：
@@ -199,6 +219,13 @@ Electricity-336 = `evidence_missing`"——那些数正是按 seed 分组数出�
 并已五类校准（`paper_code_consistency.md` §11.2）。
 
 ### 1.8 §4.7 预测力表（3 行 × 4 列）—— **必须组合** ⚠
+
+> **格级 n 与块级 n 不同，引用时必须写格级（2026-09-20 实测）**：本表的 `vs ΔMSE` 三格
+> `n = 28`（`predictive_power.n_settings = 28`，`scope = "all_28_settings"`），
+> 但 **`vs g` 三格的 `n = 21`** —— 因为该列的 `g` 取自 `results.csv` 的 `gate_value`，
+> 而**只有 `status=read` 的行带该列**，7 个复用格没有它、不进入相关。
+> **块级 `n_settings=28` 会被误读成"六格都是 28"**，故本节与论文表注都必须写**格级** n。
+> 同一份 `spearman` 块内**两个后缀的 n 可以不同**，这是映射层必须记住的一条。
 
 论文列：`统计量 | 与 ΔMSE 的 Spearman ρ | 与 g 的 ρ | 预期符号`（最后一列**已预填**）。
 两个 ρ 列来自 `predictive_power_summary.json`（**不是** CSV）：
