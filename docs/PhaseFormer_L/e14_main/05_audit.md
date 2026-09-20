@@ -794,6 +794,118 @@ E14 单次 test 读取、E16（63 cells）、E17（24 runs）、E18 训练（78 
 例如 `--e14-results` 指向一个存在但错误的文件，它照样通过；那由 §14 的命名契约、
 §15 的列名契约与各实验阶段 5 审校负责。三者覆盖的维度不同，不能互相替代。
 
+## 17. §4.2 门值列的**产出者缺陷**：回退路径把数据集合并掉了（2026-09-20 发现并修复）
+
+### 17.1 缺陷
+
+§4.2 的 `g` 列优先取 `results.csv` 的 `gate_value`；**7 个复用格没有该值**（Stage-0 那批运行只写
+MSE/MAE），故按设计从 `parameter_table.csv` 的 `gate_value_from_checkpoint` 回退。回退的查表键是
+
+```python
+params.get((g_arm, horizon))        # read_parameters() 的键：(臂, horizon)
+```
+
+**horizon 里没有数据集**。而 `read_parameters` 是**按 `(臂, horizon)` 聚合**的，最后取
+
+```python
+"gate_from_checkpoint": sorted(entry["gates"])[0]   # 取最小值
+```
+
+于是那 7 格拿到的是**同一 horizon 上所有数据集门值的最小者**——实测那正是 **Traffic 的门**，
+而不是本格自己的门。
+
+### 17.2 实测对照（三路取证，checkpoint 直读为仲裁）
+
+修复前产物与修复后产物各读一遍，再**直读每个复用 run 的 checkpoint**（`metrics.csv:checkpoint` →
+`torch.load(..., mmap=True)` → `sigmoid(weak_period_residual_gate).mean()` → 3 seed 取均值）：
+
+| setting | 修复前（错） | 直读 checkpoint（真值） | 修复后产物 | 判 |
+|---|---|---|---|---|
+| ETTh2-96 | 0.051692 | 0.492376 | 0.492376 | ✓ |
+| ETTh2-720 | 0.047175 | 0.505187 | 0.505187 | ✓ |
+| ETTm2-96 | 0.051692 | 0.507025 | 0.507025 | ✓ |
+| ETTm2-192 | 0.055337 | 0.207138 | 0.207138 | ✓ |
+| Weather-96 | 0.051692 | 0.224901 | 0.224901 | ✓ |
+| Weather-192 | 0.055337 | 0.420847 | 0.420847 | ✓ |
+| Electricity-336 | 0.042203 | 0.333684 | 0.333684 | ✓ |
+
+**7 格全错 → 7 格全对，且与 checkpoint 逐格相等**。同一缺陷也命中 `l_q1_4`/`l_q1_8` 的同 7 格
+（旧值 0.072–0.093 / 0.079–0.115，修复后与 checkpoint 一致），共 **21 格**。
+
+**反向对照（证明缺陷被准确定位，而非"顺手改对了"）**：把**修复后的预演**（`rehearse_e14_writeback.py`
+的 case D/E）指向**修复前的 `e14_writeback.py`**，它精确报出：
+
+```text
+fallback-gate cells checked: 8; wrong: 24; e.g. [('ETTh1-96', "l_main='0.301'", 0.302), ...]
+  <-- FAIL: the checkpoint fallback is not reading THIS cell's own gate
+```
+
+即新夹具对旧实现**报错**、对新实现**通过**——修复与检测互为正负对照。
+
+**同一路径的其它量（一并核对）**：
+- `total_params_per_horizon` 也被同一聚合影响。相位主干随通道数变化（H=192：7 通道 140191、
+  Electricity 411913、Traffic 412454），故"每 horizon 一个数"本身无归属；现已**注明引用数据集**
+  并同时给出全跨度；`params_constant_across_seeds` 因此前错报 `False`，实测为 **True**
+  （84 个 (臂,数据集,horizon) 格在 3 seed 间零差异；`residual_params` 跨数据集也零差异）。
+- `l_q1_4`/`l_q1_8` 的旧值**碰巧有时正确**（例：ETTh2-96 的池化最小恰好等于该格自身值）；
+  **"部分正确"比"全错"更危险**——它不产生可见异常。
+
+### 17.3 缺陷的**影响范围**（必须写清，避免过度撤回结论）
+
+| 对象 | 是否受影响 |
+|---|---|
+| §4.2 的 `g` 列 7 格（+`l_q1_4`/`l_q1_8` 各 7 格） | **受影响，已修** |
+| §4.2 的两列指标、`Δ vs phase_only`、`s` 列、`稳定超过 Golden` 列 | **不受影响**（来自 `results.csv` 的 MSE/MAE，与该键无关） |
+| 主张 A–D 的判定（`claims.json`） | **不受影响**（不消费门值） |
+| §4.7 的六格 ρ | **不受影响**：E19 只读 `results.csv` 的 `gate_value`（`e19_predictive_power.py:106`），与 `main_table.csv` 无依赖；修复前后逐字不变（已复核） |
+| §4.4 / §4.5 / §4.6 | **不受影响**（不消费门值） |
+
+**但有一处"读法"受影响**：§4.2.1 原先据错列写"门值接近 0 是修正器在干活的签名"（举
+ETTh2-96/ETTm2-96/Weather-96 = 0.052）。用真值重算，**有增益的 18 格均值 0.2665、退化的 6 格均值 0.2019**，
+方向与原读数**相反**（错列下 0.1367 vs 0.1458，看似"有帮助的门更小"）。正文已改为只报数字、不作因果解释。
+
+### 17.4 修法
+
+1. `read_parameters()` 的键改为 **`(臂, 数据集, horizon)`**，回退不再可能取到别的数据集的值；
+2. 门值由 `sorted(...)[0]` 改为 **对 3 个 seed 取均值**——与 `results.csv` 路径（`np.mean(bucket["gate"])`）
+   一致；即便同一格内也不再取最小值（同一格 3 seed 的门本来就不同，取最小在原理上就是错的）；
+3. 参数量列加 `total_params_reference_dataset` / `total_params_per_horizon_by_dataset` /
+   `total_params_per_horizon_range` 三个归属列；
+4. **加了门（防止回归）**：
+   - 新增 `tests/test_phaseformer_L_e14_gate_column.py`（7 个用例）——**已实测对旧实现失败**（用
+     旧函数体配同一夹具跑一遍，4 条断言如实报错），故这些测试是检测器而非描述；
+   - `rehearse_e14_writeback.py` 新增 case D（两数据集无 `results.csv` 门值 ⇒ 必须回退到**本格**门）与
+     case E（参数表**没有** dataset 列 ⇒ 必须**不报**门值，而不是借用别的数据集的值）；
+   - `audit_phase2_outputs.py` 新增两条**架构级**判据（参数表带非空 `dataset` 列、且跨 **7** 个数据集）
+     与一条变体表判据（`total_params_reference_dataset` 必须填）；
+5. 复算与回填：服务器上重跑步骤 3（`e14_params.py` → `e14_reuse_audit.py` → `e14_writeback.py`），
+   再用 `fill_minipaper_table.py --write` 把 §4.2 主表重新回填；修复前产物存档于
+   `research_runs/phaseformer_L_e14_main_v1/pregate_gate_fix/`（6 个文件），可逐格复算。
+
+### 17.5 为什么既有检查**全都没抓到**——本轮要记的部分
+
+| 既有检查 | 为什么无效 |
+|---|---|
+| `verify_minipaper_fill.py` 的 §4.2 检查 | 它做的是**论文行 vs 产物行的字符串比较**。两边同源于 `main_table.md`，**同一个错数当然"相等"** ⇒ 通过 |
+| `check_column_contracts.py` | 它比的是**列名集合**。`gate_value_from_checkpoint` 这一列既在"读"集也在"写"集，被当作 pass-through 相减掉了 ⇒ 不报 |
+| `audit_phase2_outputs.py`（修前） | 它只判"有门的行是否都有门值"（252 行全有）；**值本身错不错不在其判据内** ⇒ 通过 |
+| `check_builder_outputs.py` | 只找**全空/几乎全空/恒定**的列；错值非空、非常量 ⇒ 通过 |
+| 人工复核 §4.2 表格 | 7 个错值**都是 0.04–0.06 这个量级的合法小数**；它们与表内其它 0.14–0.22 的门值并无形态差别 ⇒ 肉眼不可见 |
+
+**结论（方法论）**：这一类的缺陷**不能靠"值与产物是否一致"抓住**，因为产物本身就是错的。
+必须有一条**独立于产出链**的取值路径（本轮是 checkpoint 直读）作为仲裁，并把判据落在
+**使正确取值成为可能的架构性质**上（键里有没有数据集、样本量是多少）。这与 §16.2 的教训同型：
+"flag 存在"≠"flag 能收多个值"；此处则是**"列非空"≠"列取对了格子"**。
+
+### 17.6 边界（如实记录）
+
+- 本轮**没有**对 §4.2 的 28 行 `g` 列做**全表**的第三路（前向重算）复核，只对 84 个有门格做了
+  **checkpoint 直读 vs 产物**的逐格比对（偏差 0 格、最大相对差 < 1e-6）；§9 的两路交叉验证覆盖的是
+  7 个 setting 的 seed 2021。若要更强的保证，需补一次全表前向重算——**当前未做，不声称已做**。
+- `l_rcrf` 与 A1 的 `results.csv` 也带 `gate_value`，但那是 `last_rcrf_alpha` 的逐样本均值，
+  **不是**本列的静态门（两臂模型无 `weak_period_residual_gate` 参数）；本文**不**把这两臂的该列纳入任何比较。
+- 修复后 §4.7 的 `vs g` 列仍为 n=21（来源未变），与 §4.2 完整 28 格口径的差异已在 §4.7 表注 6 写明。
+
 ## 附：`audit_e14_stage_a.py` —— 阶段 5 的可复跑工具（2026-09-20）
 
 阶段 A 的八条不变量**最初是手工过的前 7 个 cell**（`execution_schedule.md` 2026-09-19），
