@@ -913,6 +913,43 @@ ETTh2-96/ETTm2-96/Weather-96 = 0.052）。用真值重算，**有增益的 18 �
   **不是**本列的静态门（两臂模型无 `weak_period_residual_gate` 参数）；本文**不**把这两臂的该列纳入任何比较。
 - 修复后 §4.7 的 `vs g` 列仍为 n=21（来源未变），与 §4.2 完整 28 格口径的差异已在 §4.7 表注 6 写明。
 
+### 17.7 修复后的**端到端复核**（四层链条，逐格）
+
+修复的价值在于"论文里那一格"等于"checkpoint 里那个数"。故按**四层**逐格走一遍
+（`paper cell == main_table.md == main_table.csv == checkpoint state_dict`），
+四层中**只有 checkpoint 不是产出链造出来的**，故它是仲裁：
+
+```text
+cells: paper=28  md=28  csv=28  checkpoints=28
+setting         paper   md      csv         truth      seeds  source      chain
+ETTh1-96        0.211   0.211   0.211069    0.211069   3      results_csv OK
+ETTh2-96        0.492   0.492   0.492376    0.492376   3      checkpoint  OK
+...
+Weather-720     0.145   0.145   0.144552    0.144552   3      checkpoint  OK
+chain breaks: 0
+```
+
+**结果：28 格 / 28 格四层全等、0 处断裂**；且每格的 `l_main_gate_source` 与"该格是否有
+`results.csv` 门值"**逐格相符**（21 格 `results_csv` + 7 格 `checkpoint`）。这不是抽样，是全表。
+
+**幂等性**：用同一套输入把 `e14_writeback.py` **重跑一遍**，6 个产物（`main_table.csv/.md`、
+`variant_table.csv`、`claims.json`、`audit.json`、`parameter_table.csv`）的 md5 **全部未变**，
+stdout 的判定与修复前**逐字相同**（A false / B true 12/12 / C 8 与 12 / D false / `fits` 0 /
+`must_answer_b` true / 6 个 diagnostic_misses）。即修复**只改了它要改的那一格**，
+没有连带改动任何判定。
+
+### 17.8 一处**数值巧合**，以及为何必须写出来
+
+修复前后 **all-28 的"退化组"门值均值都是 0.1458**。原因是该组 10 格
+（main-24 的 6 格退化 + Traffic 附录 4 格）**全部是 `results.csv` 有门值的格子**——
+门列修复**一格都没动它们**，被改的只有"有增益"那一组。若只对比这一个数，
+会得出"修复什么都没改"的**错误**结论；而"0.1458"这个数**又同时属于修复前后的两种口径**，
+引用时若不写明"修复前/后 + main-24/all-28"，读者无法判断看到的是哪一个。
+**两个 0.1458 同值但含义不同**，故论文 §4.2.1 与本节都把它点名写出。
+
+**这一条的普遍形式**（与本会话其它几次同类）：**"某个数没变"不等于"这条路径没被改"**；
+判定一次修复的适用范围，必须按**分组**看，不能按**单个汇总数**看。
+
 ## 附：`audit_e14_stage_a.py` —— 阶段 5 的可复跑工具（2026-09-20）
 
 阶段 A 的八条不变量**最初是手工过的前 7 个 cell**（`execution_schedule.md` 2026-09-19），
