@@ -518,7 +518,20 @@ def stage_final_select(args):
                                  test_mae=m["test_mae"]))
         if not per_seed:
             continue
-        best = min(per_seed, key=lambda r: r["test_mse"])
+        # Q6 says "best of the three seeds".  Ranking by test MSE alone can
+        # pick a seed with the best MSE and a failing MAE and miss a seed that
+        # clears both, which is exactly the failure mode the stage-1 select
+        # already guards against.  Rank by the worse of the two Golden gaps,
+        # then name the per-metric best seeds explicitly so a reader can see
+        # whether they coincide -- if they do not, no single seed clears both
+        # and the cell cannot win under this criterion.
+        for r in per_seed:
+            r["gap_mse_pct"] = 100 * (r["test_mse"] / gm - 1)
+            r["gap_mae_pct"] = 100 * (r["test_mae"] / ga - 1)
+            r["worst_gap_pct"] = max(r["gap_mse_pct"], r["gap_mae_pct"])
+        best = min(per_seed, key=lambda r: r["worst_gap_pct"])
+        best_mse_seed = min(per_seed, key=lambda r: r["test_mse"])["seed"]
+        best_mae_seed = min(per_seed, key=lambda r: r["test_mae"])["seed"]
         ref = E14_REFERENCE.get((w["dataset"], w["horizon"]), {})
         po = ref.get("phase_only")
         lm = ref.get("l_main")
@@ -528,6 +541,11 @@ def stage_final_select(args):
             loss=w.get("loss", LOSS),
             best_seed=best["seed"], best_test_mse=best["test_mse"],
             best_test_mae=best["test_mae"],
+            best_seed_gap_mse_pct=best["gap_mse_pct"],
+            best_seed_gap_mae_pct=best["gap_mae_pct"],
+            best_seed_is_mse_seed=best["seed"] == best_mse_seed,
+            best_seed_is_mae_seed=best["seed"] == best_mae_seed,
+            best_mse_seed=best_mse_seed, best_mae_seed=best_mae_seed,
             golden_mse=gm, golden_mae=ga,
             d_mse_pct=100 * (best["test_mse"] / gm - 1),
             d_mae_pct=100 * (best["test_mae"] / ga - 1),
@@ -562,6 +580,8 @@ def stage_final_select(args):
         cols = ["dataset", "horizon", "gate", "lr", "loss", "head", "best_seed",
                 "best_test_mse", "best_test_mae", "golden_mse", "golden_mae",
                 "d_mse_pct", "d_mae_pct", "beats_golden_both",
+                "best_seed_is_mse_seed", "best_seed_is_mae_seed",
+                "best_mse_seed", "best_mae_seed",
                 "phase_only_mse", "phase_only_mae", "vs_phase_only_mse_pct",
                 "vs_phase_only_mae_pct", "beats_phase_only_both",
                 "gate_shrunk", "n_seeds_with_metrics"]
@@ -575,9 +595,13 @@ def stage_final_select(args):
     print(f"       {n_po}/8 also beat the matched E14 phase_only on both "
           f"(secondary reading, Q1)")
     print("       ALL numbers are test-set selection -- not a blind estimate.")
-    for f in sorted(final, key=lambda x: x["d_mse_pct"]):
+    for f in sorted(final, key=lambda x: -max(x["d_mse_pct"], x["d_mae_pct"])):
         tag = "WIN " if f["beats_golden_both"] else "    "
         gs = " [gate-shrunk]" if f["gate_shrunk"] else ""
+        split = ""
+        if not (f["best_seed_is_mse_seed"] and f["best_seed_is_mae_seed"]):
+            split = (f" [seed-split: best-MSE seed {f['best_mse_seed']}, "
+                     f"best-MAE seed {f['best_mae_seed']}]")
         print(f"  {tag}{f['dataset']}-{f['horizon']}: {f['d_mse_pct']:+.2f}%/"
               f"{f['d_mae_pct']:+.2f}%  g={f['gate']} lr={f['lr']} "
               f"head={f['head']} seed={f['best_seed']}{gs}")
