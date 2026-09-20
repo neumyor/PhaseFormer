@@ -127,7 +127,21 @@ $PY scripts/phaseformer_L/golden_search.py --stage final
 4. **全部数字标注 test-set selection**；`stage1_all_rows.csv` 保留完整选择轨迹。
 5. 未达 4/8 时如实报告"未达目标"，并按 §1 预判归因（环境差 vs 模型差）。
 
-## 5. 服务器纪律（REMOTE_SERVER.md 摘要）
+## 4b. 无人值守收官链（2026-09-20 20:48 启动，不依赖任何本地会话）
+
+第一轮 ≈6 h、第二轮 ≈10 h，判定不能依赖笔记本上的会话是否还开着。故把收官逻辑放到服务器上常驻：
+
+| 项 | 内容 |
+|---|---|
+| 脚本 | `scripts/phaseformer_L/watch_golden_search.sh`（服务器副本 `~/niuyiming/watch_golden_search.sh`） |
+| 启动 | `setsid nohup bash ~/niuyiming/watch_golden_search.sh >> ~/niuyiming/logs/watch_gs.log 2>&1 < /dev/null &`（PID 49392，20:48:21 起） |
+| 状态文件 | `~/niuyiming/logs/golden_search_status.txt`（**单文件即可知道进展到哪一步**，无需翻日志） |
+| 行为 | ① 等第一轮驱动退出 → ② fail>0 则幂等重跑补格 → ③ `select`/`confirm`/`final` → ④ **读 `final_selection.json` 的达标计数；<4 则同步代码并启动第二轮** → ⑤ 第二轮跑完再判一次 |
+| 纪律 | **绝不在任务运行时同步代码**：`git fetch/reset` 前先显式 `pgrep` 检查，有进程在跑就 ABORT 而不是覆盖源文件（REMOTE_SERVER.md）；所有阶段幂等，中断后重跑安全 |
+
+**启动时的一次自查（值得记）**：首次用 `nohup ... &` 启动后，`pgrep` 报"已在运行"但 `ps` 查不到、状态文件也不存在——是**误判**（`pgrep -f` 匹配到了我自己的远程命令行字符串）。改用 `ps -eo ... | grep -F watch_golden_search.sh` 定位真实进程、并以 `setsid` 脱离会话后，确认 PID 49392 存活且状态文件已写入首行。教训：**判活不能只看 `pgrep -f`，它会匹配到查询命令自身**。
+
+
 
 - 同步：bundle 上行 → `git fetch origin` → `checkout` → `reset --hard FETCH_HEAD`；
   **启动前确认无运行中任务**；GPU 只用全部 8 卡时需先 `nvidia-smi` 确认空闲。
