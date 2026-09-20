@@ -402,20 +402,33 @@ def stage_select(args):
                                                and m["test_mae"] < ga),
                             gate_shrunk=(gate <= 0.05),
                         ))
-        rows.sort(key=lambda r: r["test_mse"])
+        # Objective = the user's criterion, "beat Golden on BOTH metrics".
+        # Ranking by test MSE alone can pick a combo with a great MSE and a bad
+        # MAE and miss a combo that clears both.  So rank by the WORSE of the
+        # two gaps (ascending: most-negative-is-best), then by their sum.  Both
+        # anchors are reported for every row, so the ranking rule is auditable.
+        for r in rows:
+            r["gap_mse_pct"] = 100 * (r["test_mse"] / GOLDEN[(dataset, horizon)][0] - 1)
+            r["gap_mae_pct"] = 100 * (r["test_mae"] / GOLDEN[(dataset, horizon)][1] - 1)
+            r["worst_gap_pct"] = max(r["gap_mse_pct"], r["gap_mae_pct"])
+            r["sum_gap_pct"] = r["gap_mse_pct"] + r["gap_mae_pct"]
+        rows.sort(key=lambda r: (r["worst_gap_pct"], r["sum_gap_pct"]))
         if not rows:
             print(f"[{dataset}-{horizon}] NO completed cells")
             continue
         best = rows[0]
+        n_both = sum(1 for r in rows if r["beats_golden_both"])
+        print(f"  [{dataset}-{horizon}] {len(rows)} cells ranked; "
+              f"{n_both} beat Golden on both; "
+              f"worst_gap {best['worst_gap_pct']:+.3f}%")
         gm, ga = GOLDEN[(dataset, horizon)]
         already = best["beats_golden_both"]
         winners.append(best)
         all_rows.extend(rows)
-        print(f"[{dataset}-{horizon}] best s2021: g={best['gate']} lr={best['lr']} "
-              f"loss={best['loss']} head={best['head']} "
-              f"mse={best['test_mse']:.4f} mae={best['test_mae']:.4f} "
-              f"vs Golden {100*(best['test_mse']/gm-1):+.2f}%/"
-              f"{100*(best['test_mae']/ga-1):+.2f}% "
+        print(f"  -> winner g={best['gate']} lr={best['lr']} loss={best['loss']} "
+              f"head={best['head']} mse={best['test_mse']:.4f} "
+              f"mae={best['test_mae']:.4f} "
+              f"vs Golden {best['gap_mse_pct']:+.2f}%/{best['gap_mae_pct']:+.2f}% "
               f"beats_both={already} gate_shrunk={best['gate_shrunk']}")
     (root / "stage1_winners.json").write_text(
         json.dumps(winners, indent=1, ensure_ascii=False))
