@@ -241,11 +241,18 @@ def run_case(name: str, scratch: pathlib.Path, golden: dict, manifest: dict,
                 wrong_gate.append((row["setting"], source, "expected the checkpoint "
                                                             "fallback"))
                 continue
+            # Only the three weak-residual arms carry a gate at all.  The others
+            # (`phase_only`, `l_rcrf`, `a1`) have no such parameter, so the paper
+            # leaves their gate cell blank and the fallback is never consulted for
+            # them -- asserting on them would demand a value the model cannot have.
             for arm_index, arm in enumerate(arms):
+                if arm not in ("l_main", "l_q1_4", "l_q1_8"):
+                    continue
                 want = expected_fallback_gate(dataset, arm_index, datasets, (2021, 2022, 2023))
                 got = row.get(f"{arm}_gate_mean")
-                if got is None or abs(float(got) - want) > 1e-6:
-                    wrong_gate.append((row["setting"], f"{arm}={got}", want))
+                if got is None or str(got).strip() == "" \
+                        or abs(float(got) - want) > 1e-6:
+                    wrong_gate.append((row["setting"], f"{arm}={got!r}", want))
         expectation = ("the cell's own seed-averaged gate" if with_dataset_in_params
                        else "no gate at all (the table cannot identify the cell)")
         print(f"    fallback-gate cells checked: "
