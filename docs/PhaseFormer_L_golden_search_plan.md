@@ -278,4 +278,8 @@ $PY scripts/phaseformer_L/golden_search.py --stage final
 | 2026-09-20 22:36 | **进度 169/720**（Electricity-96 90/90 完成、ETTm1-720 79/90）。按逐 setting 实测速率（Electricity 1505 s/格、ETTm1-720 378 s/格、其余 ETT 按 E14 实测 80–300 s/格）重估：剩余 27.1 GPU·h ⇒ **第一轮 ETA ≈02:08**，与先前估计一致。守护 64956 单实例、依赖项已审计（bundle 含第二轮驱动与双指标排序） |
 | 2026-09-20 22:28 | **完成部分的诊断**：两个 setting 独立复现"MSE 过、MAE 不过"（Electricity-96 最优 −0.31%/+0.08%；ETTm1-720 −0.12%/+0.28%），且两者相对 `phase_only` 在两指标上**都是改善** ⇒ MAE 缺口跨 setting 共享且非修正器所致；已排除 MAE 口径问题（`metrics.MAE` 为标准定义） |
 | 2026-09-20 22:17 | 逐 setting 算出"要达标还需在 `phase_only` 之上补多少"：2 格（ETTm1-720、Electricity-96）**只差 MAE**；6 格两指标都差 0.36%–3.83%，且需修正器在**它本就负贡献**的 setting 上转正 ⇒ 与 §1b 结构性困难判断一致 |
-| | （待补：阶段完成时间与实测墙钟、stage-1 选择结果、confirm 与 final 判定） |
+| 2026-09-21 02:35 | **第一轮 720/720 全部完成，0 失败**；实测墙钟 17:01:53 → 02:35:50 ≈ **9.6 h**（8 卡）。逐 setting 实测速率：Electricity-96 1505 s/格、ETTm1-720 378、ETTm1-96 290、ETTh1-336 116、ETTh1-96/192 ≈85 |
+| 2026-09-21 02:37 | 守护按设计自动执行：带守卫的同步（`pgrep` 检查通过，HEAD `49b5bb653`）→ `select` → `confirm` |
+| 2026-09-21 03:00:57 | **第一轮判定完成（`final_selection.json`）**：**0/8 双指标超 Golden，目标 ≥4/8 未达**；**4/8 双指标优于 matched `phase_only`**。8 格全部败在 MAE 侧；**3/8 的 MSE 侧已胜 Golden**（ETTh1-96 −0.260%、ETTm1-720 −0.327%、Electricity-96 −0.308%）；**gate-shrunk 4/8**；**8 个 winner 全部为 `pooled_lowrank`**（秩 R3–R45），无一稠密头 |
+| 2026-09-21 03:01 | 守护**按预注册自动启动第二轮**（`--stage search-round2 --losses mae`，边际 856 新增 runs ≈6.8 h）；已挂新的每小时巡检 cron |
+| | （待补：第二轮完成时间与判定） |
