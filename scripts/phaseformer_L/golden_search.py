@@ -238,6 +238,24 @@ def parse_list(raw):
     return [item.strip() for item in str(raw).split(",") if item.strip()]
 
 
+# Round-2 narrowing (estimated, corrected before launch).  Round 1 already
+# covered loss=huber x gate x lr{1e-4,3e-4,1e-3} x head for EVERY setting, so
+# round 2 only needs the two axes round 1 did not: the moved-up lr (through
+# 3e-3) and loss=mae.  For the expensive setting that lets us drop the gate and
+# head axes to their round-1 best region instead of repeating 90 cells.
+ROUND2_EXPENSIVE = {("Electricity", 96): dict(gates=(0.05, 0.2),
+                                              divs=(None, 4))}
+
+
+def round2_cells_for(dataset, horizon, loss, lrs):
+    narrow = ROUND2_EXPENSIVE.get((dataset, horizon))
+    gates = narrow["gates"] if narrow else GATE_INITS
+    divs = narrow["divs"] if narrow else HEAD_DIVS
+    return [dict(dataset=dataset, horizon=horizon, seed=SEED_STAGE1, gate=gate,
+                 lr=lr, div=div, loss=loss, cost=COST_HINT[(dataset, horizon)])
+            for gate in gates for lr in lrs for div in divs]
+
+
 def stage1_cells(losses=None, lrs=None):
     cells = []
     for loss in (losses or LOSSES):
@@ -385,10 +403,17 @@ def stage_search(args):
 
 
 def stage_search_round2(args):
-    """Round-2 grid: mae+huber x the moved-up lr grid (plan §2b)."""
+    """Round-2 grid: the moved-up lr grid, narrowed per setting (plan §2b).
+
+    Cheap settings get the full gate x head sweep; the expensive one gets only
+    the axes round 1 did not cover, keeping round 2 inside the same run budget.
+    """
     losses = parse_list(args.losses) if getattr(args, "losses", "") else ["mae", "huber"]
     lrs = [float(x) for x in parse_list(args.lrs)] if getattr(args, "lrs", "") else list(LRS_ROUND2)
-    cells = stage1_cells(losses=losses, lrs=lrs)
+    cells = []
+    for loss in losses:
+        for dataset, horizon, _, _ in SETTINGS:
+            cells.extend(round2_cells_for(dataset, horizon, loss, lrs))
     drive(cells, args, "stage1_round2.log")
 
 
