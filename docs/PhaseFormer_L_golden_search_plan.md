@@ -127,5 +127,6 @@ $PY scripts/phaseformer_L/golden_search.py --stage final
 | 2026-09-20 16:2x | 计划与脚本登记（本文件 + `golden_search.py`）；本地 `--stage plan` 通过：720 runs、69.1 GPU·h、8.6 h 墙钟预估 |
 | 2026-09-20 16:53 | 首次冒烟 **失败**：驱动把 runner 输出目录传错（runner 会在 `--output-dir` 下再建一层 `runs/<run_id>/`），metrics 找不到 → 修复为"每格一个输出目录 + 两级 glob"（`90a5544`、`a14a8b4`）；**overrides 落地已核**（冒烟 config 实测：gate 0.05/shared、gate 0.35/pooled_lowrank r=6、lr 均正确） |
 | 2026-09-20 16:59 | 二次冒烟：两个 1-epoch 格全链路（训练 + `--evaluate-test`）跑通、metrics 可读、幂等跳过生效；**但 1-epoch 产物必须清除**，否则会被当成已完成格污染正式搜索 |
+| 2026-09-20 20:00 | **首个 setting 的前 54 格完成（Electricity-96 全 90 格中的 54）**，给出一条关键测量：**0/54 双指标超 Golden，但最接近的一格只差 MAE +0.138%**（MSE 已优于 Golden **−0.354%**）。即 Electricity-96 的**瓶颈是 MAE 不是 MSE**——这条**先于第一轮结束**测得的证据，正落在 §2b 预注册的"第二轮加 `mae` 损失"轴上，与该预注册相互独立。这 54 格已占第一轮预算的 7.5% |
 | 2026-09-20 17:01 | **正式启动**：删除冒烟 runs → `nohup ... --stage search --gpus 0..7`，HEAD `a14a8b4` 记入 `~/niuyiming/logs/golden_search_HEAD.txt`；启动后核验：进程在飞、8 卡各 ~2 GB/30–50% 利用率、stage1.log 首批 8 格全部为 Electricity-h96（按"贵者先行"调度） |
 | | （待补：阶段完成时间与实测墙钟、stage-1 选择结果、confirm 与 final 判定） |
