@@ -144,6 +144,12 @@ def parse_args():
     p.add_argument("--num-workers", type=int, default=4)
     p.add_argument("--poll-seconds", type=int, default=20)
     p.add_argument("--smoke-epochs", type=int, default=1)
+    p.add_argument("--max-epochs", type=int, default=MAX_EPOCHS,
+                   help="training budget; the protocol value is 30 and round 2 "
+                        "deliberately keeps it (changing it would break "
+                        "comparability with E14). Exposed so a future round can "
+                        "test the budget axis with a frozen, recorded value "
+                        "instead of an undocumented edit.")
     p.add_argument("--max-parallel", type=int, default=8)
     p.add_argument("--losses", default="",
                    help="comma list of losses for --stage search (default: all)")
@@ -399,7 +405,7 @@ def stage_search(args):
     losses = parse_list(args.losses) if getattr(args, "losses", "") else None
     lrs = [float(x) for x in parse_list(args.lrs)] if getattr(args, "lrs", "") else None
     cells = stage1_cells(losses=losses, lrs=lrs)
-    drive(cells, args, "stage1.log")
+    drive(cells, args, "stage1.log", max_epochs=args.max_epochs)
 
 
 def stage_search_round2(args):
@@ -414,7 +420,12 @@ def stage_search_round2(args):
     for loss in losses:
         for dataset, horizon, _, _ in SETTINGS:
             cells.extend(round2_cells_for(dataset, horizon, loss, lrs))
-    drive(cells, args, "stage1_round2.log")
+    # The protocol budget is 30 and round 2 keeps it: a different value would
+    # make these cells incomparable with E14 and with round 1.
+    if args.max_epochs != MAX_EPOCHS:
+        print(f"WARNING: --max-epochs {args.max_epochs} != protocol "
+              f"{MAX_EPOCHS}; results are NOT comparable with E14/round 1")
+    drive(cells, args, "stage1_round2.log", max_epochs=args.max_epochs)
 
 
 def stage_confirm(args):
