@@ -3773,3 +3773,10 @@ blank 0 / PENDING 4`（4 个 PENDING 全是 §4.4/§4.5/§4.6 尚未产出的产
 - 冒烟两轮：首轮暴露驱动的输出目录 bug（runner 在 `--output-dir` 下自建 `runs/<run_id>/`，与驱动的预期路径差两级）→ 修复为每格独立输出目录 + 双层 glob（`90a5544`、`a14a8b4`）；overrides 落地已在冒烟 config 中逐字段核实（gate_init / head_type / rank / lr 全部正确），`--evaluate-test` 全链路跑通。
 - 17:01 正式启动 stage-1（720 runs、seed 2021、8 卡）：`nohup` 脱离会话，HEAD `a14a8b4` 记入日志首行；启动后核验 8 卡负载 ~2 GB/30–50%。1-epoch 冒烟产物已删除（否则会被幂等跳过误判为已完成格）。
 - 监控入口：`~/niuyiming/logs/golden_search.log`（驱动总日志）、`research_runs/phaseformer_L_golden_search_v1/_logs/stage1.log`（逐格 launch/done/FAIL）；完成后按计划 §3 依次 `select → confirm → final`。
+
+## 2026-09-20 — Golden-Search 第一轮运行中 + 第二轮预注册
+
+- 第一轮（720 runs，huber，seed 2021）17:01 启动，19:52 时 done 48 / fail 0，全部为 Electricity-96（贵者先行），驱动存活、8 卡利用率 27–55%。
+- **首 48 格实测给出一个可用的调参信号**：lr=1e-3 组 test MSE 0.1285–0.1292，lr=1e-4 组 0.1320–0.1328（**1e-4 在全部 5 个 head 上都最差，差约 3%**）。这说明第一轮的 lr 网格**上界偏低**——真正的甜点可能在 ≥1e-3；同时 8 格中 5 格的 **MAE 缺口大于 MSE 缺口**（ETTh1-96/192 为 4.04/4.10% vs 2.66/3.16%），而第一轮只优化 MSE（huber）。
+- 据用户授权（"预算耗尽后允许再加同样规模"）**预先登记第二轮**（`docs/PhaseFormer_L_golden_search_plan.md` §2b）：规模同为 720 runs，两处冻结改动 = ① loss 轴加 `mae`（runner 已实现 `--loss`，属训练超参、不改模型代码）② lr 网格上移到 {3e-4, 1e-3, 3e-3}。**该预注册写在第一轮结果出来之前**，避免事后凑格；两轮互补而非重复（覆盖 lr 上界与 MAE 目标两个盲区）。
+- 脚本已加入 loss 轴（`golden_search.py`，huber 的 cell_id 不变、mae 加 `_mae` 后缀 ⇒ 与在飞产物不冲突，`--stage search` 幂等续跑）；本地 `--stage plan` 显示加轴后为 1440 runs。**按 REMOTE_SERVER.md 未在任务运行中同步代码**，待第一轮结束后再上行。

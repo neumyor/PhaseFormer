@@ -72,6 +72,11 @@ LOOKBACK = 720
 PERIOD = 24
 MAX_EPOCHS = 30
 LOSS = "huber"
+# Round-2 loss axis.  All are implemented by DefaultModule._get_criterion;
+# the runner exposes them so the MSE--MAE trade-off can be searched without
+# touching model code.  MAE loss is the natural lever for the settings whose
+# MAE gap is the larger one (ETTh1-96/192, ETTm1-96/192).
+LOSSES = ("huber", "mae")
 PERCENT = 100
 
 # Search grid (frozen in the plan §2).
@@ -123,9 +128,10 @@ def parse_args():
     return p.parse_args()
 
 
-def cell_id(dataset, horizon, seed, gate, lr, div):
-    head = "shared" if div is None else f"pl_r{horizon // div}"
-    return f"{dataset}-h{horizon}_s{seed}_g{gate}_lr{lr}_{'dense' if div is None else f'r{horizon // div}'}"
+def cell_id(dataset, horizon, seed, gate, lr, div, loss=LOSS):
+    tag = "" if loss == LOSS else f"_{loss}"
+    return (f"{dataset}-h{horizon}_s{seed}_g{gate}_lr{lr}"
+            f"_{'dense' if div is None else f'r{horizon // div}'}{tag}")
 
 
 def arm_overrides(gate, lr, div, horizon):
@@ -140,15 +146,16 @@ def arm_overrides(gate, lr, div, horizon):
     return ov
 
 
-def run_dir_for(dataset, horizon, seed, gate, lr, div, root):
-    return root / "runs" / cell_id(dataset, horizon, seed, gate, lr, div)
+def run_dir_for(dataset, horizon, seed, gate, lr, div, root, loss=LOSS):
+    return root / "runs" / cell_id(dataset, horizon, seed, gate, lr, div, loss)
 
 
 def build_command(dataset, horizon, seed, gate, lr, div, root, num_workers,
-                  max_epochs=MAX_EPOCHS, evaluate_test=True):
+                  max_epochs=MAX_EPOCHS, evaluate_test=True, loss=LOSS):
     argv = [
         PY, str(RUNNER),
-        "--output-dir", str(run_dir_for(dataset, horizon, seed, gate, lr, div, root)),
+        "--output-dir", str(run_dir_for(dataset, horizon, seed, gate, lr, div,
+                                        root, loss)),
         "--dataset", dataset,
         "--horizon", str(horizon),
         "--stage", "confirm",
@@ -156,7 +163,7 @@ def build_command(dataset, horizon, seed, gate, lr, div, root, num_workers,
         "--period", str(PERIOD),
         "--max-epochs", str(max_epochs),
         "--seed", str(seed),
-        "--loss", LOSS,
+        "--loss", loss,
         "--percent", str(PERCENT),
         "--require-cuda",
         "--resume",
@@ -184,6 +191,7 @@ def metrics_of(cell_dir: Path):
     best = None
     globs = list(cell_dir.glob("*/metrics.csv"))
     globs += list(cell_dir.glob("runs/*/metrics.csv"))
+    globs += list(cell_dir.glob("*/runs/*/metrics.csv"))
     for path in sorted(globs):
         try:
             with path.open() as handle:
@@ -200,15 +208,17 @@ def metrics_of(cell_dir: Path):
     return best
 
 
-def stage1_cells():
+def stage1_cells(losses=None):
     cells = []
-    for dataset, horizon, g_mse, g_mae in SETTINGS:
-        for gate in GATE_INITS:
-            for lr in LRS:
-                for div in HEAD_DIVS:
-                    cells.append(dict(dataset=dataset, horizon=horizon,
-                                      seed=SEED_STAGE1, gate=gate, lr=lr, div=div,
-                                      cost=COST_HINT[(dataset, horizon)]))
+    for loss in (losses or LOSSES):
+        for dataset, horizon, g_mse, g_mae in SETTINGS:
+            for gate in GATE_INITS:
+                for lr in LRS:
+                    for div in HEAD_DIVS:
+                        cells.append(dict(dataset=dataset, horizon=horizon,
+                                          seed=SEED_STAGE1, gate=gate, lr=lr,
+                                          div=div, loss=loss,
+                                          cost=COST_HINT[(dataset, horizon)]))
     return cells
 
 
@@ -218,6 +228,7 @@ def stage2_cells(winners):
         for seed in SEEDS_CONFIRM:
             cells.append(dict(dataset=w["dataset"], horizon=w["horizon"],
                               seed=seed, gate=w["gate"], lr=w["lr"], div=w["div"],
+                              loss=w.get("loss", LOSS),
                               cost=COST_HINT[(w["dataset"], w["horizon"])]))
     return cells
 
@@ -238,7 +249,7 @@ def drive(cells, args, log_name, max_epochs=MAX_EPOCHS, evaluate_test=True):
     pending = []
     for c in cells:
         rd = run_dir_for(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                         c["lr"], c["div"], root)
+                         c["lr"], c["div"], root, c.get("loss", LOSS))
         if metrics_of(rd) is None:
             pending.append(c)
         else:
@@ -260,11 +271,12 @@ def drive(cells, args, log_name, max_epochs=MAX_EPOCHS, evaluate_test=True):
             slot = next(i for i in free if i not in running)
             gpu = free[slot]
             rd = run_dir_for(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                             c["lr"], c["div"], root)
+                             c["lr"], c["div"], root, c.get("loss", LOSS))
             rd.mkdir(parents=True, exist_ok=True)
             argv = build_command(c["dataset"], c["horizon"], c["seed"], c["gate"],
                                  c["lr"], c["div"], root, args.num_workers,
-                                 max_epochs=max_epochs, evaluate_test=evaluate_test)
+                                 max_epochs=max_epochs, evaluate_test=evaluate_test,
+                                 loss=c.get("loss", LOSS))
             env = dict(os.environ)
             env["CUDA_VISIBLE_DEVICES"] = gpu
             t0 = time.time()
@@ -280,7 +292,7 @@ def drive(cells, args, log_name, max_epochs=MAX_EPOCHS, evaluate_test=True):
             if rc is None:
                 continue
             rd = run_dir_for(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                             c["lr"], c["div"], root)
+                             c["lr"], c["div"], root, c.get("loss", LOSS))
             got = metrics_of(rd)
             dt = time.time() - t0
             if rc == 0 and got is not None:
@@ -353,24 +365,27 @@ def stage_select(args):
     winners = []
     for dataset, horizon, gap_mse, gap_mae in SETTINGS:
         rows = []
-        for gate in GATE_INITS:
-            for lr in LRS:
-                for div in HEAD_DIVS:
-                    rd = run_dir_for(dataset, horizon, SEED_STAGE1, gate, lr,
-                                     div, root)
-                    m = metrics_of(rd)
-                    if m is None:
-                        continue
-                    gm, ga = GOLDEN[(dataset, horizon)]
-                    rows.append(dict(
-                        dataset=dataset, horizon=horizon, gate=gate, lr=lr,
-                        div=div, seed=SEED_STAGE1,
-                        head="shared" if div is None else f"pooled_r{horizon//div}",
-                        test_mse=m["test_mse"], test_mae=m["test_mae"],
-                        val_mse=m["val_mse"],
-                        beats_golden_both=(m["test_mse"] < gm and m["test_mae"] < ga),
-                        gate_shrunk=(gate <= 0.05),
-                    ))
+        for loss in LOSSES:
+            for gate in GATE_INITS:
+                for lr in LRS:
+                    for div in HEAD_DIVS:
+                        rd = run_dir_for(dataset, horizon, SEED_STAGE1, gate, lr,
+                                         div, root, loss)
+                        m = metrics_of(rd)
+                        if m is None:
+                            continue
+                        gm, ga = GOLDEN[(dataset, horizon)]
+                        rows.append(dict(
+                            dataset=dataset, horizon=horizon, gate=gate, lr=lr,
+                            div=div, loss=loss, seed=SEED_STAGE1,
+                            head=("shared" if div is None
+                                  else f"pooled_r{horizon//div}"),
+                            test_mse=m["test_mse"], test_mae=m["test_mae"],
+                            val_mse=m["val_mse"],
+                            beats_golden_both=(m["test_mse"] < gm
+                                               and m["test_mae"] < ga),
+                            gate_shrunk=(gate <= 0.05),
+                        ))
         rows.sort(key=lambda r: r["test_mse"])
         if not rows:
             print(f"[{dataset}-{horizon}] NO completed cells")
@@ -381,7 +396,8 @@ def stage_select(args):
         winners.append(best)
         all_rows.extend(rows)
         print(f"[{dataset}-{horizon}] best s2021: g={best['gate']} lr={best['lr']} "
-              f"head={best['head']} mse={best['test_mse']:.4f} mae={best['test_mae']:.4f} "
+              f"loss={best['loss']} head={best['head']} "
+              f"mse={best['test_mse']:.4f} mae={best['test_mae']:.4f} "
               f"vs Golden {100*(best['test_mse']/gm-1):+.2f}%/"
               f"{100*(best['test_mae']/ga-1):+.2f}% "
               f"beats_both={already} gate_shrunk={best['gate_shrunk']}")
@@ -405,7 +421,7 @@ def stage_final_select(args):
         per_seed = []
         for seed in (SEED_STAGE1, *SEEDS_CONFIRM):
             rd = run_dir_for(w["dataset"], w["horizon"], seed, w["gate"],
-                             w["lr"], w["div"], root)
+                             w["lr"], w["div"], root, w.get("loss", LOSS))
             m = metrics_of(rd)
             if m is None:
                 continue
@@ -417,6 +433,7 @@ def stage_final_select(args):
         final.append(dict(
             dataset=w["dataset"], horizon=w["horizon"],
             gate=w["gate"], lr=w["lr"], head=w["head"], div=w["div"],
+            loss=w.get("loss", LOSS),
             best_seed=best["seed"], best_test_mse=best["test_mse"],
             best_test_mae=best["test_mae"],
             golden_mse=gm, golden_mae=ga,
@@ -438,7 +455,7 @@ def stage_final_select(args):
     (root / "final_selection.json").write_text(
         json.dumps(out, indent=1, ensure_ascii=False))
     with (root / "final_selection.csv").open("w", newline="") as handle:
-        cols = ["dataset", "horizon", "gate", "lr", "head", "best_seed",
+        cols = ["dataset", "horizon", "gate", "lr", "loss", "head", "best_seed",
                 "best_test_mse", "best_test_mae", "golden_mse", "golden_mae",
                 "d_mse_pct", "d_mae_pct", "beats_golden_both", "gate_shrunk",
                 "n_seeds_with_metrics"]
