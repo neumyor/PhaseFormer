@@ -286,22 +286,58 @@ def audit_e16(report: Report) -> None:
     if summary:
         obj = read_json(summary)
         summary_obj = obj if isinstance(obj, dict) else {}
-        expected = {
-            "cells": 63,
-            "algebra_failures": 0,
-            "run_metric_failures": 0,
-            "run_metric_not_comparable": 0,
-            "reference_parity_passed": True,
-            "checkpoint_path_mismatches": [],
-            "test_split_read": False,
-        }
-        for key, want in expected.items():
-            if key not in obj:
-                report.add("E16 (§4.4)", f"summary.{key}", "FAIL", "key absent")
+        # 2026-09-20 FIX: these were read as TOP-LEVEL keys (`algebra_failures`,
+        # `reference_parity_passed`, `test_split_read`, ...), but the producer does
+        # not write them there -- it nests them (`invariants.*`,
+        # `reference_parity.passed`, `reads_test`).  All six would have reported
+        # "key absent" -> FAIL against a perfectly good run, and the criterion that
+        # actually matters (`reference_parity.passed`) would never have been read.
+        # The paths below come from a REAL summary, not from the plan's prose.
+        expected = (
+            ("cells", ("cells",), 63),
+            ("invariants.algebra_failures", ("invariants", "algebra_failures"), []),
+            ("invariants.run_metric_failures", ("invariants", "run_metric_failures"), []),
+            ("invariants.run_metric_not_comparable",
+             ("invariants", "run_metric_not_comparable"), {}),
+            ("reads_test", ("reads_test",), False),
+        )
+        for label, path, want in expected:
+            value = obj
+            for step in path:
+                value = value.get(step) if isinstance(value, dict) else None
+            if value is None:
+                report.add("E16 (§4.4)", label, "FAIL",
+                           "key absent (looked at summary" +
+                           "".join("." + s for s in path) + ")")
                 continue
-            got = obj[key]
-            report.add("E16 (§4.4)", f"summary.{key}", 
-                       "PASS" if got == want else "FAIL", f"got {got!r}, want {want!r}")
+            report.add("E16 (§4.4)", label, "PASS" if value == want else "FAIL",
+                       f"got {value!r}, want {want!r}")
+        # Reference parity is a criterion of the plan of record (01_plan.md:272 and
+        # 02_03_static_check_smoke.md:133: the full run "must give true on all eight
+        # fields"), so a False here is a real contradiction to adjudicate rather
+        # than a schema detail to paper over.  It is reported separately because it
+        # lives under `reference_parity`.
+        parity_obj = obj.get("reference_parity")
+        if not isinstance(parity_obj, dict):
+            report.add("E16 (§4.4)", "summary.reference_parity", "FAIL", "key absent")
+        else:
+            passed = parity_obj.get("passed")
+            report.add("E16 (§4.4)", "reference_parity.passed",
+                       "PASS" if passed is True else "FAIL",
+                       f"got {passed!r}, want True (plan 01_plan.md:272)")
+            details = parity_obj.get("fields") or {}
+            worst = max([v.get("max_abs_diff", 0.0) for v in details.values()
+                         if isinstance(v, dict)] or [0.0])
+            # The path-mismatched cells are DOCUMENTED as expected (the manifest's
+            # reuse tie-break and the low-rank inventory pick different
+            # candidates), so their count is not a criterion -- but it must be
+            # visible, because it is also the number of cells that could not be
+            # value-compared at all.
+            report.add("E16 (§4.4)", "reference_parity coverage", "INFO",
+                       f"max_abs_diff={worst:.3e} over {len(details)} field(s); "
+                       f"value-compared={parity_obj.get('cells_value_compared')}, "
+                       f"path-mismatched="
+                       f"{len(parity_obj.get('checkpoint_path_mismatches') or [])}")
 
     parity = check_exists(report, "E16 (§4.4)", f"{E16}/reference_parity.json",
                           "reference_parity.json present")
