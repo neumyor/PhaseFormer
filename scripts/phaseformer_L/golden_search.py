@@ -182,7 +182,9 @@ def metrics_of(cell_dir: Path):
     if not cell_dir.is_dir():
         return None
     best = None
-    for path in sorted(cell_dir.glob("*/metrics.csv")):
+    globs = list(cell_dir.glob("*/metrics.csv"))
+    globs += list(cell_dir.glob("runs/*/metrics.csv"))
+    for path in sorted(globs):
         try:
             with path.open() as handle:
                 for row in csv.DictReader(handle):
