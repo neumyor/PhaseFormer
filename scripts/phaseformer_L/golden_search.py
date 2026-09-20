@@ -85,6 +85,22 @@ LRS = (1e-4, 3e-4, 1e-3)
 # head spec: "shared" dense head, or pooled_lowrank with rank = H // div.
 HEAD_DIVS = (None, 32, 16, 8, 4)
 
+# Q5: reference baselines are the EXISTING E14 runs (their test metrics were
+# already read once by E14 stage B, disclosed).  Three-seed means, frozen here
+# so the final table can report "vs Golden" and "vs phase_only/l_main" (Q1)
+# without re-reading anything.  Source: research_runs/phaseformer_L_e14_main_v1/
+# main_table.csv.
+E14_REFERENCE = {
+    ("ETTh1", 96): dict(phase_only=(0.361402, 0.386687), l_main=(0.368563, 0.397429)),
+    ("ETTh1", 192): dict(phase_only=(0.404664, 0.410919), l_main=(0.409547, 0.420570)),
+    ("ETTh1", 336): dict(phase_only=(0.441922, 0.434654), l_main=(0.437887, 0.438168)),
+    ("ETTm1", 96): dict(phase_only=(0.302441, 0.351168), l_main=(0.305886, 0.352530)),
+    ("ETTm1", 192): dict(phase_only=(0.330420, 0.363285), l_main=(0.338355, 0.369119)),
+    ("ETTm1", 336): dict(phase_only=(0.359302, 0.381157), l_main=(0.368855, 0.386882)),
+    ("ETTm1", 720): dict(phase_only=(0.415068, 0.412775), l_main=(0.416710, 0.413607)),
+    ("Electricity", 96): dict(phase_only=(0.130440, 0.222771), l_main=(0.129184, 0.222710)),
+}
+
 GOLDEN = {  # from docs/PhaseFormer_gold_standard.md
     ("ETTh1", 96): (0.359, 0.382), ("ETTh1", 192): (0.397, 0.404),
     ("ETTh1", 336): (0.425, 0.424), ("ETTh1", 720): (0.431, 0.450),
@@ -430,6 +446,9 @@ def stage_final_select(args):
         if not per_seed:
             continue
         best = min(per_seed, key=lambda r: r["test_mse"])
+        ref = E14_REFERENCE.get((w["dataset"], w["horizon"]), {})
+        po = ref.get("phase_only")
+        lm = ref.get("l_main")
         final.append(dict(
             dataset=w["dataset"], horizon=w["horizon"],
             gate=w["gate"], lr=w["lr"], head=w["head"], div=w["div"],
@@ -442,13 +461,25 @@ def stage_final_select(args):
             beats_golden_both=(best["test_mse"] < gm and best["test_mae"] < ga),
             gate_shrunk=bool(w["gate"] <= 0.05),
             n_seeds_with_metrics=len(per_seed),
+            phase_only_mse=po[0] if po else None,
+            phase_only_mae=po[1] if po else None,
+            l_main_mse=lm[0] if lm else None,
+            l_main_mae=lm[1] if lm else None,
+            vs_phase_only_mse_pct=(100 * (best["test_mse"] / po[0] - 1)) if po else None,
+            vs_phase_only_mae_pct=(100 * (best["test_mae"] / po[1] - 1)) if po else None,
+            beats_phase_only_both=bool(po and best["test_mse"] < po[0]
+                                       and best["test_mae"] < po[1]),
             per_seed=per_seed,
         ))
     n_win = sum(1 for f in final if f["beats_golden_both"])
+    n_po = sum(1 for f in final if f["beats_phase_only_both"])
     out = dict(
         verdict=dict(
             target=">=4/8 settings beat Golden on BOTH metrics (per-seed best)",
             achieved=n_win, target_count=4, met=bool(n_win >= 4),
+            # Q1: both anchors are reported; the Golden count is the criterion.
+            beat_phase_only_both=n_po,
+            n_settings=len(final),
         ),
         results=final,
     )
@@ -457,15 +488,20 @@ def stage_final_select(args):
     with (root / "final_selection.csv").open("w", newline="") as handle:
         cols = ["dataset", "horizon", "gate", "lr", "loss", "head", "best_seed",
                 "best_test_mse", "best_test_mae", "golden_mse", "golden_mae",
-                "d_mse_pct", "d_mae_pct", "beats_golden_both", "gate_shrunk",
-                "n_seeds_with_metrics"]
+                "d_mse_pct", "d_mae_pct", "beats_golden_both",
+                "phase_only_mse", "phase_only_mae", "vs_phase_only_mse_pct",
+                "vs_phase_only_mae_pct", "beats_phase_only_both",
+                "gate_shrunk", "n_seeds_with_metrics"]
         writer = csv.DictWriter(handle, fieldnames=cols)
         writer.writeheader()
         for f in final:
             row = {k: f[k] for k in cols}
             writer.writerow(row)
-    print(f"FINAL: {n_win}/8 settings beat Golden on both metrics "
+    print(f"FINAL: {n_win}/8 settings beat Golden on BOTH metrics "
           f"(target >=4) -> {'MET' if n_win >= 4 else 'NOT MET'}")
+    print(f"       {n_po}/8 also beat the matched E14 phase_only on both "
+          f"(secondary reading, Q1)")
+    print("       ALL numbers are test-set selection -- not a blind estimate.")
     for f in sorted(final, key=lambda x: x["d_mse_pct"]):
         tag = "WIN " if f["beats_golden_both"] else "    "
         gs = " [gate-shrunk]" if f["gate_shrunk"] else ""
