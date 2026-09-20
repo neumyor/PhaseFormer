@@ -8,8 +8,10 @@
 # beating Golden on BOTH metrics) is not met, launches round 2.
 #
 # It is deliberately conservative:
-#   * it never touches the repository (no fetch/reset) -- code sync stays a
-#     human step, per REMOTE_SERVER.md;
+#   * it syncs code exactly once, only after the driver has exited and only
+#     behind an explicit process check, so a live job's source files are never
+#     replaced (REMOTE_SERVER.md).  The sync is needed because the verdict must
+#     be computed by the current driver, not the older server build;
 #   * every stage is idempotent (the driver skips cells that already have
 #     metrics), so being re-run after an interruption is safe;
 #   * it writes one status file that a later session can read to learn what
@@ -51,6 +53,29 @@ if [ "$FAIL" -gt 0 ]; then
     status "retry pass exit=$?"
 fi
 
+# ---------------------------------------------------------------- sync
+# The verdict must be computed by the CURRENT driver: the older server build
+# has neither the dual-metric ranking nor the phase_only anchor, so running
+# select before syncing would report round 1 with a weaker rule.  The sync is
+# gated on a flag the running driver does not have, and behind an explicit
+# process check, so it can never replace source files under a live job
+# (REMOTE_SERVER.md).
+if ! $PY scripts/phaseformer_L/golden_search.py --help 2>/dev/null | grep -q 'search-round2'; then
+    if pgrep -f 'search_phaseformer.py|golden_search.py' >/dev/null 2>&1; then
+        status "ABORT: processes still running, refusing to sync"
+        exit 1
+    fi
+    status "driver is stale -> syncing from the uploaded bundle"
+    git fetch origin weak_residual_nlinear_bottleneck >> "$LOG" 2>&1
+    git reset --hard FETCH_HEAD >> "$LOG" 2>&1
+    status "sync exit=$? head=$(git log --oneline -1)"
+fi
+if ! $PY scripts/phaseformer_L/golden_search.py --help 2>/dev/null | grep -q 'search-round2'; then
+    status "ABORT: driver still lacks search-round2 after sync"
+    exit 1
+fi
+status "driver ready: $(git log --oneline -1)"
+
 # ---------------------------------------------------------------- r1 verdict
 status "running round-1 select / confirm / final"
 $PY scripts/phaseformer_L/golden_search.py --stage select >> "$LOG" 2>&1
@@ -74,24 +99,6 @@ status "round-1 verdict: $WINS/8 settings beat Golden on both metrics"
 
 # ---------------------------------------------------------------- round 2
 if [ "$WINS" = "NA" ] || [ "$WINS" -lt "$TARGET" ]; then
-    # Round 2 needs the loss-axis driver.  The bundle upload is a repo-external
-    # file copy, and the fetch/reset below happens only here -- after the
-    # driver has exited and after an explicit process check -- so it never
-    # replaces source files under a running job (REMOTE_SERVER.md).
-    if ! $PY scripts/phaseformer_L/golden_search.py --help 2>/dev/null | grep -q 'search-round2'; then
-        if pgrep -f 'search_phaseformer.py|golden_search.py' >/dev/null 2>&1; then
-            status "ABORT round 2: processes still running, refusing to sync"
-            exit 1
-        fi
-        status "round-2 driver missing -> syncing from the uploaded bundle"
-        git fetch origin weak_residual_nlinear_bottleneck >> "$LOG" 2>&1
-        git reset --hard FETCH_HEAD >> "$LOG" 2>&1
-        status "sync exit=$? head=$(git log --oneline -1)"
-    fi
-    if ! $PY scripts/phaseformer_L/golden_search.py --help 2>/dev/null | grep -q 'search-round2'; then
-        status "ABORT round 2: driver still lacks search-round2 after sync"
-        exit 1
-    fi
     status "target not met -> launching round 2 (pre-registered, narrowed grid)"
     bash "$HOME/niuyiming/run_round2.sh" >> "$LOG" 2>&1
     status "round-2 chain exit=$?"
