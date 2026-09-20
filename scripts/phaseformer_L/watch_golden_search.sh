@@ -86,33 +86,33 @@ status "confirm exit=$?"
 $PY scripts/phaseformer_L/golden_search.py --stage final >> "$LOG" 2>&1
 status "final exit=$?"
 
-WINS=$($PY - <<'EOF'
-import json, pathlib
-p = pathlib.Path("research_runs/phaseformer_L_golden_search_v1/final_selection.json")
-if not p.is_file():
-    print("NA")
-else:
-    print(json.loads(p.read_text())["verdict"]["achieved"])
-EOF
-)
+WINS=$($PY -c 'import json,pathlib,sys
+p = pathlib.Path(sys.argv[1])
+print("NA" if not p.is_file() else json.loads(p.read_text())["verdict"]["achieved"])' \
+    "$ROOT/final_selection.json" 2>/dev/null)
+WINS=${WINS:-NA}
 status "round-1 verdict: $WINS/8 settings beat Golden on both metrics"
 
 # ---------------------------------------------------------------- round 2
-if [ "$WINS" = "NA" ] || [ "$WINS" -lt "$TARGET" ]; then
+case "$WINS" in
+    ''|*[!0-9]*) WINS_NOT_MET=1 ;;          # unreadable -> treat as not met
+    *) [ "$WINS" -lt "$TARGET" ] && WINS_NOT_MET=1 || WINS_NOT_MET=0 ;;
+esac
+if [ "$WINS_NOT_MET" = "1" ]; then
     status "target not met -> launching round 2 (pre-registered, narrowed grid)"
     bash "$HOME/niuyiming/run_round2.sh" >> "$LOG" 2>&1
     status "round-2 chain exit=$?"
 
-    WINS2=$($PY - <<'EOF'
-import json, pathlib
-p = pathlib.Path("research_runs/phaseformer_L_golden_search_v1/final_selection.json")
+    WINS2=$($PY -c 'import json,pathlib,sys
+p = pathlib.Path(sys.argv[1])
 if not p.is_file():
     print("NA")
 else:
     v = json.loads(p.read_text())["verdict"]
-    print(f'{v["achieved"]}/{v["n_settings"]} (target {v["target_count"]}, met={v["met"]})')
-EOF
-)
+    print("%d/%d (target %d, met=%s)" % (v["achieved"], v["n_settings"],
+                                         v["target_count"], v["met"]))' \
+        "$ROOT/final_selection.json" 2>/dev/null)
+    WINS2=${WINS2:-NA}
     status "FINAL after round 2: $WINS2"
     status "ALL DONE -- verdict table at $ROOT/final_selection.csv"
 else
