@@ -1588,6 +1588,19 @@ def run_cell(
         np.abs(decoder_weight @ encoder_bias).max()
     )
 
+    # 2026-09-20 FIX (defect D1): the closed form must NOT add W_dec @ b_enc.
+    # The instrumented hidden state already contains the encoder bias
+    # (z = W_enc x + b_enc), so adding the mapped bias again double counts it.  This
+    # is not a guess: with the double count, the untouched arm sat 1.192e-03
+    # (relative fused-MSE) from the model on ETTh2-96 l_q1_4 s2022 -- just over the
+    # 1e-3 invariant tolerance -- and reference parity differed by 2.3e-04..2.3e-03;
+    # dropping the term gives 2.44e-10 (exact) AND reference_parity_passed: true,
+    # which also shows the registered reference was built with the corrected
+    # convention.  So this restores comparability instead of breaking it.
+    # The true encoder bias stays recorded above (mapped_encoder_bias_absmax) for
+    # disclosure; only the branch algebra uses the zeroed copy.
+    branch_encoder_bias = np.zeros_like(encoder_bias)
+
     set_seed(20260916)
     accumulator = CellAccumulator(rank_dim, horizon, mode_count)
     block_sizes = {"channel_block": None, "band_block_elements": None}
@@ -1659,7 +1672,7 @@ def run_cell(
                         accumulator.add_statistics_block(
                             hidden_block, sigma_block, gate_block, phase_block,
                             target_block, fused[:, :, c0:c1].double().cpu().numpy(),
-                            decoder_weight, decoder_bias, encoder_bias, dec_vt,
+                            decoder_weight, decoder_bias, branch_encoder_bias, dec_vt,
                         )
                     else:
                         model_fused_block = (
@@ -1670,14 +1683,14 @@ def run_cell(
                         accumulator.add_arm_block(
                             hidden_block, sigma_block, gate_block, phase_block,
                             target_block, last_abs_block, decoder_weight,
-                            decoder_bias, encoder_bias, cell["arms"],
+                            decoder_bias, branch_encoder_bias, cell["arms"],
                             model_fused=model_fused_block,
                         )
                         del model_fused_block
                         accumulator.add_band_block(
                             hidden_block, sigma_block, gate_block, phase_block,
                             target_block, last_abs_block, decoder_weight,
-                            decoder_bias, encoder_bias, cell["bases"]["bands"],
+                            decoder_bias, branch_encoder_bias, cell["bases"]["bands"],
                             band_block,
                         )
                     del (hidden_block, sigma_block, mu_block, gate_block,
@@ -1700,6 +1713,20 @@ def run_cell(
     accumulator.declare_arms([arm[0] for arm in cell["arms"]])
     accumulator.declare_bands(list(bases["bands"]))
     batches_second = iterate("arms")
+
+    # 2026-09-20 FIX (defect D2): re-read the statistics AFTER the arms pass.
+    # The call before the arms pass is still needed -- it carries the hidden moments
+    # the bases are built from -- but the element-wise agreement statistics
+    # (``algebra_sq`` / ``algebra_samples`` / ``algebra_absmax``) are accumulated ONLY
+    # in the arms pass, inside ``add_arm_block``.  Reusing that one early snapshot made
+    # ``algebra_fused_rmse``/``algebra_fused_max_abs`` always zero: the failure message
+    # printed "element-wise RMS 0.000e+00, max 0.000e+00" for cells whose real RMS was
+    # 9.3e-05, and the same zeros went into every cell's
+    # ``untouched_arm_fused_rmse_vs_model`` / ``..._max_abs_vs_model`` columns, so a
+    # reader asking "does the closed form reproduce the model?" was told yes.
+    # Safe because nothing the first pass accumulated (pairs, elements,
+    # recorded_fused_sq, moments) is touched by the arms pass.
+    statistics = accumulator.statistics()
 
     # Semantic attribution of the canonical modes: weights + train statistics
     # only, no validation quantity enters it.
