@@ -33,7 +33,8 @@ def is_separator(cells: list) -> bool:
     return set("".join(cells)) <= set("-: ")
 
 
-def parse_artifact(text: str, key_columns: int, skip: int = 0) -> dict:
+def parse_artifact(text: str, key_columns: int, skip: int = 0,
+                   strip_paren: bool = False) -> dict:
     """Map key tuple -> the artifact's own cell list (separators/headers excluded).
 
     ``skip`` drops that many leading artifact cells from the value AND from the key,
@@ -57,8 +58,25 @@ def parse_artifact(text: str, key_columns: int, skip: int = 0) -> dict:
             continue
         if cells[0] in ("Dataset", "模型", "统计量", "") or "Dataset" in cells[:skip + 1]:
             continue
-        out[tuple(cells[skip:skip + key_columns])] = cells[skip:]
+        out[normalize_key(cells[skip:skip + key_columns], strip_paren)] = cells[skip:]
     return out
+
+
+def normalize_key(cells: list, strip_paren: bool) -> tuple:
+    """Key components, optionally cut at the first bracket.
+
+    Section 4.4's paper table pre-fills the dense rows' q/r cell as the generic
+    ``dense（r=H）`` while the artifact writes the concrete ``dense（r=96）``.  Both
+    sides therefore have to be keyed on the part before the bracket, or those rows
+    never match and the fill leaves them empty without saying so.
+    """
+    if not strip_paren:
+        return tuple(cells)
+    out = []
+    for cell in cells:
+        cut = min([i for i in (cell.find("（"), cell.find("(")) if i >= 0] or [len(cell)])
+        out.append(cell[:cut].strip())
+    return tuple(out)
 
 
 def locate_table(lines: list, start: str, end: str, needle: str):
@@ -94,7 +112,7 @@ def locate_table(lines: list, start: str, end: str, needle: str):
 
 
 def fill(lines: list, artifact: dict, start: str, end: str, needle: str,
-         key_columns: int) -> tuple:
+         key_columns: int, strip_paren: bool = False, marker: str = "") -> tuple:
     header, first, last = locate_table(lines, start, end, needle)
     out = list(lines)
     filled, missing = 0, []
@@ -102,10 +120,17 @@ def fill(lines: list, artifact: dict, start: str, end: str, needle: str,
         cells = cells_of(out[i].strip())
         if is_separator(cells):
             continue
-        key = tuple(cells[:key_columns])
+        key = normalize_key(cells[:key_columns], strip_paren)
         want = artifact.get(key)
         if want is None:
             missing.append(key)
+            if marker:
+                # An experiment that was never run (or was stopped) must say so IN THE
+                # TABLE.  Leaving the cells empty makes them indistinguishable from
+                # "forgot to fill", and a marker keeps the registered row visible.
+                indent = out[i][:len(out[i]) - len(out[i].lstrip())]
+                out[i] = f"{indent}| " + " | ".join(cells[:key_columns]
+                                                    + [marker] * (len(cells) - key_columns)) + " |"
             continue
         if out[i].strip().endswith("|"):
             indent = out[i][:len(out[i]) - len(out[i].lstrip())]
@@ -198,6 +223,16 @@ def main() -> int:
     ap.add_argument("--key-columns", type=int, default=2)
     ap.add_argument("--skip-artifact-columns", type=int, default=0,
                     help="leading artifact columns to drop (section 4.4 intervention: 1)")
+    ap.add_argument("--strip-paren-in-key", action="store_true",
+                    help="key on the part before the first bracket, so the paper's "
+                         "generic `dense（r=H）` matches the artifact's `dense（r=96）`")
+    ap.add_argument("--allow-missing", action="store_true",
+                    help="write a marker into rows with no artifact row instead of "
+                         "refusing; default is to refuse, so a partial fill cannot "
+                         "happen silently")
+    ap.add_argument("--marker", default="未跑（按指示停止）",
+                    help="marker written into every data cell of a row with no "
+                         "artifact row (used only with --allow-missing)")
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
@@ -214,10 +249,21 @@ def main() -> int:
         return 2
 
     artifact = parse_artifact(art_path.read_text(encoding="utf-8"), a.key_columns,
-                              a.skip_artifact_columns)
+                              a.skip_artifact_columns, a.strip_paren_in_key)
     lines = paper.read_text(encoding="utf-8").splitlines()
+    if not a.allow_missing:
+        pre, _f, pre_missing, _r = fill(
+            lines, artifact, a.start, a.end, a.header_needle, a.key_columns,
+            a.strip_paren_in_key)
+        if pre_missing:
+            print(f"{len(pre_missing)} paper row(s) have no artifact row "
+                  f"(e.g. {'|'.join(pre_missing[0])}); pass --allow-missing with "
+                  f"--marker to write them as explicitly not run, or fix the artifact",
+                  file=sys.stderr)
+            return 2
     out, filled, missing, (first, last) = fill(
-        lines, artifact, a.start, a.end, a.header_needle, a.key_columns)
+        lines, artifact, a.start, a.end, a.header_needle, a.key_columns,
+        a.strip_paren_in_key, a.marker)
 
     print(f"artifact rows: {len(artifact)}")
     print(f"paper table rows: {last - first} (lines {first + 1}..{last})")

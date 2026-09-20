@@ -151,6 +151,13 @@ def main() -> int:
     ap.add_argument("--end", default="### 4.5")
     ap.add_argument("--header-needle", default="主模式输入组")
     ap.add_argument("--key-columns", type=int, default=3)
+    ap.add_argument("--allow-incomplete", action="store_true",
+                    help="write markers into rows with no artifact row instead of "
+                         "refusing.  Used when an experiment was stopped, so the table "
+                         "states the gap instead of leaving cells that look unfilled")
+    ap.add_argument("--marker", default="未跑（按指示停止）",
+                    help="marker written into the five composed cells of a row with no "
+                         "artifact row (only with --allow-incomplete)")
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
@@ -191,6 +198,10 @@ def main() -> int:
         row = artifact.get(key)
         if row is None:
             incomplete.append(("|".join(key), "no artifact row"))
+            if a.allow_incomplete:
+                out[index] = ("| " + " | ".join(cells[:a.key_columns]
+                                                + [a.marker] * (len(cells) - a.key_columns))
+                              + " |")
             continue
         gaps = [name for name in REQUIRED if str(row.get(name) or "").strip() == ""]
         if gaps:
@@ -207,8 +218,9 @@ def main() -> int:
     for key, why in incomplete:
         print(f"  INCOMPLETE {key}: {why}")
 
-    if incomplete:
-        print("refusing to write a partial dissection table", file=sys.stderr)
+    if incomplete and not a.allow_incomplete:
+        print("refusing to write a partial dissection table (pass --allow-incomplete "
+              "to mark those rows as not run instead)", file=sys.stderr)
         return 2
     if not a.write:
         print("dry run; pass --write to apply")
