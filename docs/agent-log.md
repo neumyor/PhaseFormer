@@ -3539,3 +3539,55 @@ PhaseFormer wiring), presets/runner `086f241`, GPU parallel runner + analyzer
 - **§4.7：ρ(τ̂, ΔMSE) = −0.750** ⇒ "哪里有用"可由**训练集统计量事前预测**，命题 1 成立。
   另两行 ρ = −0.039（`cycle_level_std`）与 −0.139（`last_cycle_shift`）——**不是**注 4 预期的正号，
   即"反序"在 ΔMSE 相关上未复现（这两行本就被注 1 判为不可分离）。**照实写，不调口径。**
+## 2026-09-20 — 我主动打断了阶段二第 4 步：E16 单进程实测**不可行**，改为按 (setting, arm) 分片到 8 卡
+
+**结论先说**：这不是"链条挂了"，而是**我按实测判定启动配置不可行并主动重启**；
+被打断的是**已完成 0 格的步骤**，故没有任何已产出数据损失。**代码一行未改**，故数字不可能变。
+
+**一、触发点：实测与计划差了一个数量级**
+
+- 第 4 步 07:50:02 启动，到 08:27（**37 分钟**）**仍 0/63 格完成**，日志 mtime 停在启动那一分钟。
+- 先用 **CPU 时间**判活（不是日志时间戳）：37 min 墙钟烧掉 44 min CPU、RSS 稳定 1.18 GB ⇒ 在算。
+- 再用 `py-spy dump` **测出热点**（不是猜）：`arm_metrics`(evaluate_lowrank_semantic_interventions.py:231) → `einsum`，
+  即**单线程 float64 numpy `einsum`**；这也解释了 8 核机器上 CPU% 只有 ~130（`einsum` 不走 BLAS）。
+- **再从真实 checkpoint 取到关键量纲**（这一步定死了成本模型）：dense 头 `linear.weight` = **(96, 720)** ⇒
+  **`rank_dim` = 720（= lookback）与 horizon 无关**；低秩头 `decoder.weight`=(96,24)/(96,12) ⇒ r = H/4、H/8。
+  故**稠密臂 `l_main` 是绝对大头**，且它的成本随 horizon 线性涨（H=720 时是 H=96 的 7.5 倍）。
+- **投影**：最便宜的一格（ETTh2-96 dense）已 >37 min；l_main 的 21 格按 horizon 加权相当于约 18 倍单格 ⇒
+  仅 l_main 就 ~11 h，合计 **10–40 h 量级**（计划写的是 3–5 h）。**账算不到一起，说明计划错了，不是链条坏了。**
+
+**二、为什么不打内核补丁（两条路都比过）**
+
+- 已知加速手段是把裸 `einsum` 换 `optimize=True`/`matmul`（走 BLAS，通常 10–50×）。
+  **不做**：这个数进论文，而"这批数字由一版代码一次跑完"是它的可信度来源；
+  且改内核会把数值动到 1e-15 量级——对 2–4 位小数看不见，但**"看不见"不等于"没变"**，
+  在没有正负对照时声称等价，正是本 paper 一贯拒绝的论证。
+- 选了**分片**：**代码不变、数值不变**，且**正好满足"安排到 8 卡上执行"**（原配置只用 `--gpus 0`，
+  且是 CPU 密集型 ⇒ 8 卡里 7 卡空转，这是对资源的浪费，也是计划缺陷）。
+
+**三、分片方式与"为什么必须这样分"（关键约束）**
+
+- **按 `(setting, arm)` 分，共 21 片，每片 3 格（3 个 seed 必须同片）**。
+  为什么不能按 seed 分：`cross_seed_rows` 按 `(setting, arm)` 分组，而**解剖表的行自带
+  `cross_seed_leading4_input/output_overlap`**（§4.4 要显示的那一列）——**按 seed 拆片会静默丢掉这列**。
+  我把 3 个 seed 留在同一进程里，于是每片都是**自洽的、与整跑同值的切片**。
+- 每片独立 `--output-root`（`research_runs/phaseformer_L_e16_shard_00..20`），互不写同一文件；
+  脚本 `scripts/phaseformer_L/run_e16_shards.sh` 负责发车与等待，状态写 `~/niuyiming/logs/e16_shards.status`。
+- 发车前做了**单片 dry-run 验证**：`--datasets ETTh2 --horizons 96 --arms l_main --seeds 2021,2022,2023`
+  恰好解析出 **3 格**、head 与 checkpoint 逐格核对通过 ⇒ 过滤器语义确认无误才发 21 片。
+
+**四、这样做的代价（照实记，不粉饰）**
+
+1. **多出一个合并步骤**：21 片的 `dissection_table.csv` / `intervention_table.csv` 要并成规范产物，
+   且 `e16_summary.json` 与 `reference_parity.json` 也要聚合——**审计器读的正是这两个 json**
+   （`cells=63`、`algebra_failures=0`、`reference_parity_passed=True`、
+   `counts.intervention_rows`、`probe_cells≈72`）。合并工具要**对着真实 schema 写**，
+   故我会**先等一片跑完、读它的真实 json**，再动手——不凭猜测定键名（本会话已因猜键名吃过多次亏）。
+2. **watcher 状态文件写下 `PHASE2_FAILED rc=143`**（143 = SIGTERM）——这是**如实的记录**，不是故障：
+   它记的是"链条在第 4 步被中断"。第 5–7 步尚未运行，将在合并与回写完成后用
+   `run_phase2_after_e14.sh --from 5` 显式续跑。
+3. **机器负载**：21 片并发时全机 load average 高达 320（104 核，且该机为共享机），
+   故分片收益会被争用吃掉一部分——但即使只拿到等效 5–8×，也把 10–40 h 压到小时级。
+
+**五、这一步的可复现性**：发车脚本、每片日志（`~/niuyiming/logs/e16_shard_NN.log`）与状态文件都在，
+21 片各自记录 `pid`/`gpu`/`output-root`；合并前后的产物都可逐行核对。
