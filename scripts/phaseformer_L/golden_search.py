@@ -417,8 +417,16 @@ def drive(cells, args, log_name, max_epochs=MAX_EPOCHS, evaluate_test=True):
             rc = proc.poll()
             if rc is None:
                 continue
+            # NOTE: the delta and epoch budget MUST be passed here too.  The
+            # launch branch passes them, so omitting them here made this branch
+            # read the delta-less twin directory: with a twin present the line
+            # logged the WRONG cell, and without one a successful run was
+            # recorded as FAILED (round 3 had 48 such cells).  The training
+            # artifacts were always correct because the launch branch was right.
             rd = run_dir_for(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                             c["lr"], c["div"], root, c.get("loss", LOSS))
+                             c["lr"], c["div"], root, c.get("loss", LOSS),
+                             int(c.get("max_epochs", max_epochs)),
+                             c.get("delta"))
             got = metrics_of(rd)
             dt = time.time() - t0
             if rc == 0 and got is not None:
