@@ -565,6 +565,7 @@ def stage_select(args):
                 dataset=dataset, horizon=horizon, gate=cand["gate"],
                 lr=cand["lr"], div=cand["div"], loss=cand["loss"],
                 delta=cand["delta"], max_epochs=cand["max_epochs"],
+                delta_is_default=(cand["delta"] is None),
                 seed=SEED_STAGE1,
                 head=("shared" if cand["div"] is None
                       else f"pooled_r{horizon//cand['div']}"),
