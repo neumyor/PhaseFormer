@@ -4903,3 +4903,33 @@ ETTh1-336 第三轮 132 格跑满，**出现 2 套双指标达标配置**：
   并给 trail 加了显式 `delta_is_default` 列。
 - 记账分支读 delta-less 孪生目录 ⇒ `stage2.log` 把成功的 confirm 记成 `[FAIL]`（`981d374` 已修，
   待无任务时上行；这些格训练正常，指标完好）。
+
+## 2026-09-21 17:0x — 新增最佳 setting 复现手册，并做双重独立复核
+
+**用户指令**：把主表中**所有调参得到的最佳 setting** 整理成一份文档，含**复现所需的全部参数与对应 seed**；
+口径仍为**3 seed 中取最优、在 test 上找最优**；并要求**二次复核这些 setting 是否与实验记录一致**。
+
+**新增 `docs/PhaseFormer_L_best_settings_repro.md`**（251 行）：
+- §0 复现协议（lookback 720 / period 24 / best-val / 单次 test / 融合式 / batch 出处）；
+- §1 **8 个 setting 的总表**（达标与否、最佳 seed、gate_init、lr、loss、head、rank、delta、
+  test MSE/MAE、vs Golden、vs phase_only、3-seed 达标数）；
+- §2 **逐 setting 的可直接运行命令** + 三个 seed 各自的实测值与实跑 epoch；
+- §3 口径与边界（test-set selection、单 seed vs 三 seed、Golden 环境差、delta/epoch 轴、`gate_shrunk`）。
+
+**双重独立复核（均从 run 目录读，不复用产物表）**：
+1. `verify_final.py`：按 `final_selection.json` 的每个 winner 重建 run 目录，
+   逐 seed 核对 `config.json` 的 `lr/gate/loss/head/rank/delta/epochs` 与 `metrics.csv` 的 test 值，
+   重算最优 seed 并与表中 `best_seed` 比对 ⇒ **`PROBLEMS: 0`**。
+2. `verify_doc.py`：**解析手册里的 8 条命令**，把 `--output-dir/--dataset/--horizon/--seed/--loss/
+   --learning-rate/--max-epochs/--overrides` 与该目录的 `config.json` 逐字段比对，
+   并确认每个目录都有带 test 值的 `metrics.csv` ⇒ **`PROBLEMS: 0`**。
+
+**复核中发现并排除的两处"看似的矛盾"（都不是错误）**：
+- `stage1_winners.json` 的 `seed` 字段恒为 2021（那是 stage-1 搜索的种子），
+  **不是获胜 seed**；获胜 seed 在 `final_selection.json` 的 `best_seed`。首版校验器误用前者 ⇒ 已更正。
+- **`ETTm1-192` 的 best_seed = 2023**：三个 seed 里 2021 的 MAE 最好（+0.016%）、2023 的 MSE 最好（+0.758%），
+  按"两指标最差缺口"规则 2023（+0.758%）优于 2021（+0.769%），差 0.011 pp
+  ⇒ `final_selection.json` 记 2023 是**按冻结规则的正确结果**；该格本来也未达标。
+
+**另附**：服务器 `~/niuyiming/replay_best_settings.sh` —— 由手册的命令自动生成的可重放脚本，
+8 条命令各占一卡；`--resume` 使其在已有产物时为空操作（已实测 8 个 output-dir 全部存在且带 test 值）。
