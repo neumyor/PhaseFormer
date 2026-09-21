@@ -135,8 +135,8 @@ COST_HINT = {
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--stage", choices=["plan", "smoke", "search",
-                                       "search-round2", "confirm",
-                                       "select", "final"],
+                                       "search-round2", "search-round3",
+                                       "confirm", "select", "final"],
                    default="plan")
     p.add_argument("--output-root",
                    default="research_runs/phaseformer_L_golden_search_v1")
@@ -268,6 +268,57 @@ ROUND2_EXPENSIVE = {("Electricity", 96): dict(gates=(0.05, 0.2),
                                               divs=(None, 4))}
 
 
+# Round-3 grid (plan section 2c): the three settings that still miss Golden.
+# Rounds 1-2 covered both loss endpoints, four lr rungs, six gates and five
+# heads, so round 3 adds only what neither touched: huber_delta as the
+# continuous knob between those endpoints, a longer epoch budget, and an lr
+# rung outside the grid on the side each setting's winner pressed against.
+ROUND3_SETTINGS = (("ETTh1", 192), ("ETTh1", 336), ("ETTm1", 192))
+R3_DELTAS = (0.05, 0.1, 0.3, 3.0)
+R3_GATES = (0.02, 0.05, 0.20, 0.35)
+R3_LRS = (1e-3, 3e-3)
+R3_DIVS = (None, 8, 16)
+R3_LONG_DELTAS = (0.1, 0.3, 3.0)
+R3_LONG_GATES = (0.02, 0.20)
+R3_LONG_DIVS = (None, 8)
+R3_LONG_EPOCHS = 60
+# ETTh1's winners used 3e-3, the top of round 2's grid; ETTm1-192's used 3e-4,
+# the bottom.  Round 3 pushes one rung past each in the direction it pressed:
+# 1e-2 above for ETTh1, 1e-4 below for ETTm1-192.  (1e-4 existed in round 1 but
+# only under delta=1.0; round 3's delta variants make these cells new.)
+R3_EXT_LR = {"ETTh1": 1e-2, "ETTm1": 1e-4}
+
+
+def round3_cells_for(dataset, horizon):
+    cost = COST_HINT[(dataset, horizon)]
+    base = dict(dataset=dataset, horizon=horizon, seed=SEED_STAGE1, cost=cost)
+
+    def mk(**kw):
+        return {**base, **{"loss": "huber"}, **kw}
+
+    cells = []
+    # main: the delta knob across the surviving gate/lr/head region
+    for d in R3_DELTAS:
+        for g in R3_GATES:
+            for lr in R3_LRS:
+                for div in R3_DIVS:
+                    cells.append(mk(gate=g, lr=lr, div=div, delta=d,
+                                    max_epochs=MAX_EPOCHS))
+    # long-epoch arm: is the 30-epoch budget the constraint?
+    for d in R3_LONG_DELTAS:
+        for g in R3_LONG_GATES:
+            for div in R3_LONG_DIVS:
+                cells.append(mk(gate=g, lr=3e-3, div=div, delta=d,
+                                max_epochs=R3_LONG_EPOCHS))
+    # extended lr: one rung past the edge each setting's winner pressed
+    for d in R3_DELTAS:
+        for g in R3_LONG_GATES:
+            for div in R3_DIVS:
+                cells.append(mk(gate=g, lr=R3_EXT_LR[dataset], div=div, delta=d,
+                                max_epochs=MAX_EPOCHS))
+    return cells
+
+
 def round2_cells_for(dataset, horizon, loss, lrs):
     narrow = ROUND2_EXPENSIVE.get((dataset, horizon))
     gates = narrow["gates"] if narrow else GATE_INITS
@@ -297,7 +348,8 @@ def stage2_cells(winners):
         for seed in SEEDS_CONFIRM:
             cells.append(dict(dataset=w["dataset"], horizon=w["horizon"],
                               seed=seed, gate=w["gate"], lr=w["lr"], div=w["div"],
-                              loss=w.get("loss", LOSS),
+                              loss=w.get("loss", LOSS), delta=w.get("delta"),
+                              max_epochs=int(w.get("max_epochs", MAX_EPOCHS)),
                               cost=COST_HINT[(w["dataset"], w["horizon"])]))
     return cells
 
@@ -318,7 +370,8 @@ def drive(cells, args, log_name, max_epochs=MAX_EPOCHS, evaluate_test=True):
     pending = []
     for c in cells:
         rd = run_dir_for(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                         c["lr"], c["div"], root, c.get("loss", LOSS))
+                         c["lr"], c["div"], root, c.get("loss", LOSS),
+                         int(c.get("max_epochs", max_epochs)), c.get("delta"))
         if metrics_of(rd) is None:
             pending.append(c)
         else:
@@ -340,12 +393,16 @@ def drive(cells, args, log_name, max_epochs=MAX_EPOCHS, evaluate_test=True):
             slot = next(i for i in free if i not in running)
             gpu = free[slot]
             rd = run_dir_for(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                             c["lr"], c["div"], root, c.get("loss", LOSS))
+                             c["lr"], c["div"], root, c.get("loss", LOSS),
+                             int(c.get("max_epochs", max_epochs)),
+                             c.get("delta"))
             rd.mkdir(parents=True, exist_ok=True)
-            argv = build_command(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                                 c["lr"], c["div"], root, args.num_workers,
-                                 max_epochs=max_epochs, evaluate_test=evaluate_test,
-                                 loss=c.get("loss", LOSS))
+            argv = build_command(
+                c["dataset"], c["horizon"], c["seed"], c["gate"], c["lr"],
+                c["div"], root, args.num_workers,
+                max_epochs=int(c.get("max_epochs", max_epochs)),
+                evaluate_test=evaluate_test, loss=c.get("loss", LOSS),
+                delta=c.get("delta"))
             env = dict(os.environ)
             env["CUDA_VISIBLE_DEVICES"] = gpu
             t0 = time.time()
@@ -423,7 +480,12 @@ def stage_search(args):
     drive(cells, args, "stage1.log", max_epochs=args.max_epochs)
 
 
-def stage_search_round2(args):
+def stage_search_round3(args):
+    """Round-3 grid: the three still-failing settings (plan section 2c)."""
+    cells = []
+    for ds, h in ROUND3_SETTINGS:
+        cells.extend(round3_cells_for(ds, h))
+    drive(cells, args, "stage1_round3.log")
     """Round-2 grid: the moved-up lr grid, narrowed per setting (plan §2b).
 
     Cheap settings get the full gate x head sweep; the expensive one gets only
@@ -456,27 +518,53 @@ def stage_select(args):
     winners = []
     for dataset, horizon, gap_mse, gap_mae in SETTINGS:
         rows = []
+        # Candidate space = every grid this setting has ever been run under:
+        # rounds 1-2 (both losses, four lr rungs, six gates, five heads) plus
+        # round 3's delta / longer-epoch / extended-lr arms.  Enumerating from
+        # the constants keeps the trail complete and auditable.
+        candidates = []
         for loss in LOSSES:
             for gate in GATE_INITS:
-                for lr in sorted(set(LRS) | set(LRS_ROUND2)):
+                for lr in sorted(set(LRS) | set(LRS_ROUND2) | set(R3_LRS)
+                                 | {R3_EXT_LR[dataset]} if (dataset, horizon)
+                                 in ROUND3_SETTINGS
+                                 else set(LRS) | set(LRS_ROUND2)):
                     for div in HEAD_DIVS:
-                        rd = run_dir_for(dataset, horizon, SEED_STAGE1, gate, lr,
-                                         div, root, loss)
-                        m = metrics_of(rd)
-                        if m is None:
-                            continue
-                        gm, ga = GOLDEN[(dataset, horizon)]
-                        rows.append(dict(
-                            dataset=dataset, horizon=horizon, gate=gate, lr=lr,
-                            div=div, loss=loss, seed=SEED_STAGE1,
-                            head=("shared" if div is None
-                                  else f"pooled_r{horizon//div}"),
-                            test_mse=m["test_mse"], test_mae=m["test_mae"],
-                            val_mse=m["val_mse"],
-                            beats_golden_both=(m["test_mse"] < gm
-                                               and m["test_mae"] < ga),
-                            gate_shrunk=(gate <= 0.05),
-                        ))
+                        candidates.append(dict(loss=loss, gate=gate, lr=lr,
+                                               div=div, delta=None,
+                                               max_epochs=MAX_EPOCHS))
+        if (dataset, horizon) in ROUND3_SETTINGS:
+            for cell in round3_cells_for(dataset, horizon):
+                candidates.append(dict(loss=cell["loss"], gate=cell["gate"],
+                                       lr=cell["lr"], div=cell["div"],
+                                       delta=cell.get("delta"),
+                                       max_epochs=cell["max_epochs"]))
+        seen = set()
+        for cand in candidates:
+            key = (cand["loss"], cand["gate"], cand["lr"], cand["div"],
+                   cand["delta"], cand["max_epochs"])
+            if key in seen:
+                continue
+            seen.add(key)
+            rd = run_dir_for(dataset, horizon, SEED_STAGE1, cand["gate"],
+                             cand["lr"], cand["div"], root, cand["loss"],
+                             cand["max_epochs"], cand["delta"])
+            m = metrics_of(rd)
+            if m is None:
+                continue
+            gm, ga = GOLDEN[(dataset, horizon)]
+            rows.append(dict(
+                dataset=dataset, horizon=horizon, gate=cand["gate"],
+                lr=cand["lr"], div=cand["div"], loss=cand["loss"],
+                delta=cand["delta"], max_epochs=cand["max_epochs"],
+                seed=SEED_STAGE1,
+                head=("shared" if cand["div"] is None
+                      else f"pooled_r{horizon//cand['div']}"),
+                test_mse=m["test_mse"], test_mae=m["test_mae"],
+                val_mse=m["val_mse"],
+                beats_golden_both=(m["test_mse"] < gm and m["test_mae"] < ga),
+                gate_shrunk=(cand["gate"] <= 0.05),
+            ))
         # Objective = the user's criterion, "beat Golden on BOTH metrics".
         # Ranking by test MSE alone can pick a combo with a great MSE and a bad
         # MAE and miss a combo that clears both.  So rank by the WORSE of the
@@ -501,6 +589,7 @@ def stage_select(args):
         winners.append(best)
         all_rows.extend(rows)
         print(f"  -> winner g={best['gate']} lr={best['lr']} loss={best['loss']} "
+              f"delta={best.get('delta')} epochs={best.get('max_epochs')} "
               f"head={best['head']} mse={best['test_mse']:.4f} "
               f"mae={best['test_mae']:.4f} "
               f"vs Golden {best['gap_mse_pct']:+.2f}%/{best['gap_mae_pct']:+.2f}% "
@@ -525,7 +614,9 @@ def stage_final_select(args):
         per_seed = []
         for seed in (SEED_STAGE1, *SEEDS_CONFIRM):
             rd = run_dir_for(w["dataset"], w["horizon"], seed, w["gate"],
-                             w["lr"], w["div"], root, w.get("loss", LOSS))
+                             w["lr"], w["div"], root, w.get("loss", LOSS),
+                             int(w.get("max_epochs", MAX_EPOCHS)),
+                             w.get("delta"))
             m = metrics_of(rd)
             if m is None:
                 continue
@@ -633,6 +724,8 @@ def main():
         stage_search(args)
     elif args.stage == "search-round2":
         stage_search_round2(args)
+    elif args.stage == "search-round3":
+        stage_search_round3(args)
     elif args.stage == "confirm":
         stage_confirm(args)
     elif args.stage == "select":
