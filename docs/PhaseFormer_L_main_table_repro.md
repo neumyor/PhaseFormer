@@ -1,8 +1,10 @@
 # PhaseFormer-L 主表全 setting 复现手册
 
-> **范围**：**主表全部 setting × 全部臂 × 全部 seed** 的复现参数与实测值，
-> 而不只是定向调参的那几个 setting。主表 = §4.2 的 24 个主 setting + 4 个 Traffic 附录 setting，
-> 共 6 个臂（`phase_only` / `l_main` / `l_q1_4` / `l_q1_8` / `l_rcrf` / `a1`）× 3 个 seed。
+> **范围**：**主表全部 setting × 全部臂 × 全部 seed** 的复现参数与实测值（§1、§3），
+> 外加 **8 个定向调参 setting 的 golden-search 最优组合**（§2）。主表 = §4.2 的 24 个主
+> setting + 4 个 Traffic 附录 setting，共 6 个臂
+> （`phase_only` / `l_main` / `l_q1_4` / `l_q1_8` / `l_rcrf` / `a1`）× 3 个 seed。
+> 原单独成册的《最佳 setting 复现手册》已并入本文，仓库内只保留这一份。
 >
 > **每个格子的参数都从该格自己的 `config.json` 读出，指标从同一个 run 的 `metrics.csv` 读出**
 > ——不引用任何汇总表，因此本手册与产物**按构造一致**。
@@ -54,6 +56,8 @@
 | `l_rcrf` | **2021** | 0.5 | 0.001 | shared (稠密) | — | 0.365380 | 0.395888 | +1.78% / +3.64% | 0/3 | 新训 |
 | `a1` | **2021** | 0.5 | 0.001 | — | — | 0.365571 | 0.396260 | +1.83% / +3.73% | 0/3 | 新训 |
 
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
+
 ### ETTh1-192
 
 | 臂 | 最佳 seed | gate_init | lr | head | rank | test MSE | test MAE | vs Golden | 3-seed 双指标胜 | 来源 |
@@ -65,6 +69,8 @@
 | `l_rcrf` | **2023** | 0.5 | 0.001 | shared (稠密) | — | 0.404458 | 0.417522 | +1.88% / +3.35% | 0/3 | 新训 |
 | `a1` | **2023** | 0.5 | 0.001 | — | — | 0.404649 | 0.417392 | +1.93% / +3.31% | 0/3 | 新训 |
 
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
+
 ### ETTh1-336
 
 | 臂 | 最佳 seed | gate_init | lr | head | rank | test MSE | test MAE | vs Golden | 3-seed 双指标胜 | 来源 |
@@ -75,6 +81,8 @@
 | `l_q1_8` | **2023** | 0.2 | 0.001 | pooled_lowrank | 42 | 0.436096 | 0.436842 | +2.61% / +3.03% | 0/3 | 新训 |
 | `l_rcrf` | **2022** | 0.5 | 0.001 | shared (稠密) | — | 0.430867 | 0.434684 | +1.38% / +2.52% | 0/3 | 新训 |
 | `a1` | **2023** | 0.5 | 0.001 | — | — | 0.433016 | 0.436231 | +1.89% / +2.88% | 0/3 | 新训 |
+
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
 
 ### ETTh1-720
 
@@ -142,6 +150,8 @@
 | `l_rcrf` | **2023** | 0.5 | 0.001 | shared (稠密) | — | 0.306238 | 0.351275 | +4.52% / +2.11% | 0/3 | 新训 |
 | `a1` | **2023** | 0.5 | 0.001 | — | — | 0.301475 | 0.347780 | +2.89% / +1.10% | 0/3 | 新训 |
 
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
+
 ### ETTm1-192
 
 | 臂 | 最佳 seed | gate_init | lr | head | rank | test MSE | test MAE | vs Golden | 3-seed 双指标胜 | 来源 |
@@ -152,6 +162,8 @@
 | `l_q1_8` | **2021** | 0.2 | 0.001 | pooled_lowrank | 24 | 0.336736 | 0.368716 | +4.25% / +2.14% | 0/3 | 新训 |
 | `l_rcrf` | **2023** | 0.5 | 0.001 | shared (稠密) | — | 0.334692 | 0.366841 | +3.62% / +1.62% | 0/3 | 新训 |
 | `a1` | **2023** | 0.5 | 0.001 | — | — | 0.336961 | 0.369036 | +4.32% / +2.23% | 0/3 | 新训 |
+
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
 
 ### ETTm1-336
 
@@ -164,6 +176,8 @@
 | `l_rcrf` | **2021** | 0.5 | 0.001 | shared (稠密) | — | 0.363999 | 0.384548 | +1.68% / +0.93% | 0/3 | 新训 |
 | `a1` | **2021** | 0.5 | 0.001 | — | — | 0.363042 | 0.382969 | +1.41% / +0.52% | 0/3 | 新训 |
 
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
+
 ### ETTm1-720
 
 | 臂 | 最佳 seed | gate_init | lr | head | rank | test MSE | test MAE | vs Golden | 3-seed 双指标胜 | 来源 |
@@ -174,6 +188,8 @@
 | `l_q1_8` | **2021** | 0.2 | 0.001 | pooled_lowrank | 90 | 0.418249 | 0.414060 | +1.52% / +0.99% | 0/3 | 新训 |
 | `l_rcrf` | **2021** | 0.5 | 0.001 | shared (稠密) | — | 0.417493 | 0.414915 | +1.33% / +1.20% | 0/3 | 新训 |
 | `a1` | **2022** | 0.5 | 0.001 | — | — | 0.417302 | 0.413835 | +1.29% / +0.94% | 0/3 | 新训 |
+
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
 
 ### ETTm2-96
 
@@ -274,6 +290,8 @@
 | `l_rcrf` | **2023** | 0.5 | 0.001 | shared (稠密) | — | 0.129221 | 0.222108 | +0.17% / +0.50% | 0/3 | 新训 |
 | `a1` | **2021** | 0.5 | 0.001 | — | — | 0.130403 | 0.225134 | +1.09% / +1.87% | 0/3 | 新训 |
 
+> 该 setting 的定向调参最优组合（vs Golden 判定、三 seed 明细与复现命令）见 §2。
+
 ### Electricity-192
 
 | 臂 | 最佳 seed | gate_init | lr | head | rank | test MSE | test MAE | vs Golden | 3-seed 双指标胜 | 来源 |
@@ -347,7 +365,248 @@
 | `l_q1_8` | **2023** | 0.2 | 0.001 | pooled_lowrank | 90 | 0.433528 | 0.271775 | +1.29% / +0.66% | 0/3 | 新训 |
 | `l_rcrf` | **2022** | 0.5 | 0.001 | shared (稠密) | — | 0.433429 | 0.273985 | +1.27% / +1.48% | 0/3 | 新训 |
 
-## 2. 复现命令（每行一条，取该行的最佳 seed）
+## 2. 定向调参的 8 个 setting：golden-search 最优组合
+
+> **对象**：主表中 8 个未胜过 Golden 的 setting（ETTh1-96/192/336、ETTm1-96/192/336/720、
+> Electricity-96），经三轮定向调参（共 1972 个 run）得到的最优组合。§1 中同一 setting 的
+> 6 个臂行是 **E14 协议（主表口径）** 的数字；本节的组合是 **test-set selection 搜索的赢家**，
+> 其 `loss` / `lr` / `gate` / `rank` / `huber_delta` 均偏离 §0 的默认协议。
+> **本节每一个数都从 `final_selection.json` / `final_with_delta.csv` 读取，并与 run 目录逐格核对过**
+> （校验器 `scripts/phaseformer_L/verify_best_settings.py` 报 `PROBLEMS: 0`）。
+
+- 产物根目录：`research_runs/phaseformer_L_golden_search_v1/`
+- 权威表：`final_selection.json`（判定）、`final_with_delta.csv`（含 `delta` 列的修正版）
+- 每个 setting 的 3 个 seed 各自的 run 目录、`config.json`、`metrics.csv` 均保留
+
+### 2.1 复现协议（定向调参格与 §0 的差异）
+
+| 项 | 值 |
+|---|---|
+| 输入长度 | 720 |
+| 周期 | 24 |
+| loss | 见各 setting（`huber` 或 `mae`）|
+| `max_epochs` | 30（第三轮另有 60 的档；**本表选中的 winner 全为 30**）|
+| batch | ETT 系 256、Electricity 64（preset 默认，见各格 `config.json`）|
+| 优化 | 逐 setting 的 `learning_rate`，见下表 |
+| checkpoint | 最低 validation loss（best-val，早停 patience=8）|
+| 评估 | 每 checkpoint **只读一次 test** |
+| 融合 | `y = (1-g)·y_phase + g·y_residual`，`g = sigmoid(gate_init)` 起、可训练 |
+| 种子 | 复现命令里的 `--seed` 即该格的最佳 seed（见下表）|
+
+
+### 2.2 最优组合总表（8 个 setting 全覆盖）
+
+| setting | 达标 | 最佳 seed | gate_init | lr | loss | head | rank | delta | test MSE | test MAE | vs Golden | vs phase_only | 3-seed 达标数 |
+|---|---|---:|---:|---:|---|---|---:|---|---:|---:|---|---|---:|
+| **ETTh1-96** | ✓ | **2021** | 0.2 | 0.003 | mae | pooled_lowrank (r=24) | 24 | — | 0.347045 | 0.380476 | -3.33% / -0.40% | -3.97% / -1.61% | 1/3 |
+| **ETTm1-96** | ✓ | **2021** | 0.1 | 0.001 | mae | pooled_lowrank (r=12) | 12 | — | 0.290128 | 0.337738 | -0.98% / -1.82% | -4.07% / -3.82% | 3/3 |
+| **Electricity-96** | ✓ | **2021** | 0.2 | 0.003 | huber | pooled_lowrank (r=24) | 24 | — | 0.127495 | 0.219683 | -1.17% / -0.60% | -2.26% / -1.39% | 3/3 |
+| **ETTh1-192** | ✗ | **2021** | 0.02 | 0.001 | mae | pooled_lowrank (r=6) | 6 | — | 0.387154 | 0.405789 | -2.48% / +0.44% | -4.33% / -1.25% | 0/3 |
+| **ETTm1-192** | ✗ | **2023** | 0.2 | 0.0003 | mae | pooled_lowrank (r=6) | 6 | — | 0.325449 | 0.363033 | +0.76% / +0.56% | -1.50% / -0.07% | 0/3 |
+| **ETTh1-336** | ✓ | **2021** | 0.02 | 0.01 | huber | pooled_lowrank (r=21) | 21 | 0.1 | 0.417830 | 0.423127 | -1.69% / -0.21% | -5.45% / -2.65% | 1/3 |
+| **ETTm1-336** | ✓ | **2021** | 0.2 | 0.0003 | mae | pooled_lowrank (r=10) | 10 | — | 0.354631 | 0.376313 | -0.94% / -1.23% | -1.30% / -1.27% | 3/3 |
+| **ETTm1-720** | ✓ | **2021** | 0.1 | 0.0003 | mae | pooled_lowrank (r=45) | 45 | — | 0.409963 | 0.407074 | -0.49% / -0.71% | -1.23% / -1.38% | 1/3 |
+
+**达标计数 6/8**：其中 **3 格三 seed 稳定**（Electricity-96、ETTm1-96、ETTm1-336）、
+**3 格单 seed**（ETTh1-96、ETTh1-336、ETTm1-720）。**8/8 双指标优于 matched `phase_only`。**
+
+
+### 2.3 逐 setting 复现命令与三个 seed 的实测值
+
+> 命令中的 `--overrides` 为该格全部非默认超参。复现时**只跑表中所指的 seed** 即得到最佳那一格；
+> 若要完整复核，把 `--seed` 换成 2022/2023 各跑一次（下表给出三者的实测值）。
+> `--output-dir` 必须与原始目录一致，`--resume` 会在已有产物时跳过。
+
+```bash
+PY=/home/yyk/yyk03/miniconda3/envs/time/bin/python
+cd ~/niuyiming/PhaseFormer   # 必须在仓库根目录运行
+```
+
+#### ETTh1-96　（达标）
+
+- **最佳 seed：2021**　test MSE **0.347045** / MAE **0.380476**（vs Golden -3.33% / -0.40%）
+- 配置：`gate_init=0.2`、`lr=0.003`、`loss=mae`、`head=pooled_r24`、`rank=24`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/ETTh1-h96_s2021_g0.2_lr0.003_r24_mae \
+  --dataset ETTh1 --horizon 96 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2021 --loss mae --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.003 \
+  --overrides '{"learning_rate": 0.003, "weak_period_residual_gate_init": 0.2, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 24}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 ←**最佳** | 0.347045 | 0.380476 | -3.33% | -0.40% | ✓ | 29 |
+| 2022 | 0.360326 | 0.387848 | +0.37% | +1.53% | ✗ | 30 |
+| 2023 | 0.356931 | 0.388076 | -0.58% | +1.59% | ✗ | 17 |
+
+#### ETTm1-96　（达标）
+
+- **最佳 seed：2021**　test MSE **0.290128** / MAE **0.337738**（vs Golden -0.98% / -1.82%）
+- 配置：`gate_init=0.1`、`lr=0.001`、`loss=mae`、`head=pooled_r12`、`rank=12`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/ETTm1-h96_s2021_g0.1_lr0.001_r12_mae \
+  --dataset ETTm1 --horizon 96 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2021 --loss mae --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.001 \
+  --overrides '{"learning_rate": 0.001, "weak_period_residual_gate_init": 0.1, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 12}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 ←**最佳** | 0.290128 | 0.337738 | -0.98% | -1.82% | ✓ | 30 |
+| 2022 | 0.291005 | 0.335844 | -0.68% | -2.37% | ✓ | 30 |
+| 2023 | 0.291855 | 0.340201 | -0.39% | -1.10% | ✓ | 30 |
+
+#### Electricity-96　（达标）
+
+- **最佳 seed：2021**　test MSE **0.127495** / MAE **0.219683**（vs Golden -1.17% / -0.60%）
+- 配置：`gate_init=0.2`、`lr=0.003`、`loss=huber`、`head=pooled_r24`、`rank=24`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/Electricity-h96_s2021_g0.2_lr0.003_r24 \
+  --dataset Electricity --horizon 96 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2021 --loss huber --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.003 \
+  --overrides '{"learning_rate": 0.003, "weak_period_residual_gate_init": 0.2, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 24}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 ←**最佳** | 0.127495 | 0.219683 | -1.17% | -0.60% | ✓ | 30 |
+| 2022 | 0.128142 | 0.220502 | -0.66% | -0.23% | ✓ | 30 |
+| 2023 | 0.128201 | 0.220604 | -0.62% | -0.18% | ✓ | 30 |
+
+#### ETTh1-192　（未达标，列出最优尝试）
+
+- **最佳 seed：2021**　test MSE **0.387154** / MAE **0.405789**（vs Golden -2.48% / +0.44%）
+- 配置：`gate_init=0.02`、`lr=0.001`、`loss=mae`、`head=pooled_r6`、`rank=6`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/ETTh1-h192_s2021_g0.02_lr0.001_r6_mae \
+  --dataset ETTh1 --horizon 192 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2021 --loss mae --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.001 \
+  --overrides '{"learning_rate": 0.001, "weak_period_residual_gate_init": 0.02, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 6}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 ←**最佳** | 0.387154 | 0.405789 | -2.48% | +0.44% | ✗ | 30 |
+| 2022 | 0.401362 | 0.412448 | +1.10% | +2.09% | ✗ | 30 |
+| 2023 | 0.398328 | 0.407044 | +0.33% | +0.75% | ✗ | 30 |
+
+#### ETTm1-192　（未达标，列出最优尝试）
+
+- **最佳 seed：2023**　test MSE **0.325449** / MAE **0.363033**（vs Golden +0.76% / +0.56%）
+- 配置：`gate_init=0.2`、`lr=0.0003`、`loss=mae`、`head=pooled_r6`、`rank=6`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/ETTm1-h192_s2023_g0.2_lr0.0003_r6_mae \
+  --dataset ETTm1 --horizon 192 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2023 --loss mae --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.0003 \
+  --overrides '{"learning_rate": 0.0003, "weak_period_residual_gate_init": 0.2, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 6}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 | 0.325483 | 0.361057 | +0.77% | +0.02% | ✗ | 30 |
+| 2022 | 0.326291 | 0.362049 | +1.02% | +0.29% | ✗ | 30 |
+| 2023 ←**最佳** | 0.325449 | 0.363033 | +0.76% | +0.56% | ✗ | 30 |
+
+#### ETTh1-336　（达标）
+
+- **最佳 seed：2021**　test MSE **0.417830** / MAE **0.423127**（vs Golden -1.69% / -0.21%）
+- 配置：`gate_init=0.02`、`lr=0.01`、`loss=huber`、`head=pooled_r21`、`rank=21`、`huber_delta=0.1`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/ETTh1-h336_s2021_g0.02_lr0.01_r21_d0.1 \
+  --dataset ETTh1 --horizon 336 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2021 --loss huber --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.01 \
+  --overrides '{"huber_delta": 0.1, "learning_rate": 0.01, "weak_period_residual_gate_init": 0.02, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 21}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 ←**最佳** | 0.417830 | 0.423127 | -1.69% | -0.21% | ✓ | 12 |
+| 2022 | 0.433825 | 0.439404 | +2.08% | +3.63% | ✗ | 11 |
+| 2023 | 0.425946 | 0.432803 | +0.22% | +2.08% | ✗ | 11 |
+
+#### ETTm1-336　（达标）
+
+- **最佳 seed：2021**　test MSE **0.354631** / MAE **0.376313**（vs Golden -0.94% / -1.23%）
+- 配置：`gate_init=0.2`、`lr=0.0003`、`loss=mae`、`head=pooled_r10`、`rank=10`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/ETTm1-h336_s2021_g0.2_lr0.0003_r10_mae \
+  --dataset ETTm1 --horizon 336 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2021 --loss mae --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.0003 \
+  --overrides '{"learning_rate": 0.0003, "weak_period_residual_gate_init": 0.2, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 10}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 ←**最佳** | 0.354631 | 0.376313 | -0.94% | -1.23% | ✓ | 30 |
+| 2022 | 0.354837 | 0.377608 | -0.88% | -0.89% | ✓ | 30 |
+| 2023 | 0.356078 | 0.377386 | -0.54% | -0.95% | ✓ | 30 |
+
+#### ETTm1-720　（达标）
+
+- **最佳 seed：2021**　test MSE **0.409963** / MAE **0.407074**（vs Golden -0.49% / -0.71%）
+- 配置：`gate_init=0.1`、`lr=0.0003`、`loss=mae`、`head=pooled_r45`、`rank=45`、`max_epochs=30`
+
+```bash
+$PY scripts/search_phaseformer.py \
+  --output-dir research_runs/phaseformer_L_golden_search_v1/runs/ETTm1-h720_s2021_g0.1_lr0.0003_r45_mae \
+  --dataset ETTm1 --horizon 720 --stage confirm \
+  --lookback 720 --period 24 --max-epochs 30 \
+  --seed 2021 --loss mae --percent 100 \
+  --require-cuda --resume --num-workers 4 --bad-case-limit 0 \
+  --mechanism weak_residual --learning-rate 0.0003 \
+  --overrides '{"learning_rate": 0.0003, "weak_period_residual_gate_init": 0.1, "weak_period_residual_head_type": "pooled_lowrank", "weak_period_residual_pool_factor": 1, "weak_period_residual_rank": 45}' \
+  --evaluate-test
+```
+
+| seed | test MSE | test MAE | vs Golden MSE | vs Golden MAE | 双指标胜 Golden | 实跑 epoch |
+|---:|---:|---:|---:|---:|:--:|---:|
+| 2021 ←**最佳** | 0.409963 | 0.407074 | -0.49% | -0.71% | ✓ | 30 |
+| 2022 | 0.413274 | 0.408274 | +0.31% | -0.42% | ✗ | 30 |
+| 2023 | 0.414482 | 0.408548 | +0.60% | -0.35% | ✗ | 29 |
+
+## 3. 复现命令（主表 164 条，每行一条，取该行的最佳 seed）
 
 > 每条命令的 `--output-dir` 就是原始 run 目录；已有产物时 `--resume` 会跳过训练。
 > `--overrides` 只给出**该格非默认**的超参（`gate_init` / `lr` / `head` / `rank`）。
@@ -1834,9 +2093,9 @@ $PY scripts/search_phaseformer.py \
   --mechanism rcrf_nlinear_plain --learning-rate 0.001 \
   --overrides '{"learning_rate": 0.001, "weak_period_residual_gate_init": 0.5, "weak_period_residual_head_type": "shared"}' --evaluate-test
 
-## 3. 口径与边界（引用本表时必须一并写明）
+## 4. 口径与边界（引用本表时必须一并写明）
 
-1. **test-set selection**：本表以 test 指标选 3 个 seed 中最优的一次（用户 2026-09-20 明示口径），
+1. **test-set selection**：本手册 §1 与 §2 均以 test 指标选 3 个 seed 中最优的一次（用户 2026-09-20 明示口径），
    属条件性证据，**不得表述为盲测或无偏泛化估计**。
 2. **7 个 setting 来自既有 test-set selection**（ETTh2-96/720、ETTm2-96/192、Weather-96/192、
    Electricity-336），其 cell 中有复用/新训两类来源，表中「来源」列逐行标注。
@@ -1845,5 +2104,13 @@ $PY scripts/search_phaseformer.py \
 4. **三种 gate 先验**：新格 0.2、`l_rcrf`/`a1` 由 preset 自持 0.5、复用格为其 Stage-0 冻结值；
    表中的 `gate_init` 是逐格实测值。
 5. **Traffic 为探索性附录**（4 个 setting），不进入 §4.2 的判定。
-6. **定向调参的 8 个 setting 另见** [`PhaseFormer_L_best_settings_repro.md`](PhaseFormer_L_best_settings_repro.md)，
-   其中 `ETTh1-336` 用到第三轮的 `huber_delta=0.1` 与 `lr=1e-2`。
+6. **§2 的数字属定向调参（test-set selection）**：8 个 setting 三轮共 1972 个 run，以 test
+   指标选组合、3 seed 取最优；**6 个达标格中仅 3 格三 seed 稳定**（Electricity-96、ETTm1-96、
+   ETTm1-336），ETTh1-96、ETTh1-336、ETTm1-720 只在 1/3 个 seed 上达标，须分开表述。
+7. **第三轮的 `delta` / `max_epochs` 轴**：`huber_delta` 只在第三轮出现（`ETTh1-336` 的 winner
+   用到 `delta=0.1`，配 `lr=1e-2`）；60-epoch 档与 E14 的 30-epoch 协议不可比，
+   但本手册选中的 winner 全部为 30 epoch。
+8. **`gate_shrunk` 标注**：`gate ≤ 0.05` 的获胜格须注明「胜利来自相位主干、不是电平通道」。
+   §2 中 `ETTh1-336`（gate 0.02）与 `ETTh1-192`（gate 0.02，未达标）属该情形。
+9. **完整搜索轨迹**：定向调参 1576 + 396 = 1972 个 run 的逐格记录见
+   `research_runs/phaseformer_L_golden_search_v1/stage1_all_rows.csv` 与各 `runs/*/config.json`。

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Re-run every best setting from docs/PhaseFormer_L_best_settings_repro.md.
+# Re-run every golden-search best setting from §2.3 of docs/PhaseFormer_L_main_table_repro.md.
 # --resume makes each a no-op where the artifact already exists.
 set -u
 PY=/home/yyk/yyk03/miniconda3/envs/time/bin/python

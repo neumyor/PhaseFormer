@@ -9,6 +9,13 @@ so 24 x 6 x 3 cells, plus the Traffic appendix rows.
 Every cell's parameters are read from its own run config.json (the ground
 truth), never from a summary table; the metrics come from the same run's
 metrics.csv.  This makes the handbook self-consistent by construction.
+
+NOTE (2026-09-21): the committed handbook was later merged with the (now
+deleted) PhaseFormer_L_best_settings_repro.md, so it carries an extra §2
+(golden-search winners) and the commands/caliber sections are numbered §3/§4.
+This script emits the main-table sections only — regenerating will drop §2;
+recover it from git history (`git show 9152bb2^:docs/PhaseFormer_L_best_settings_repro.md`)
+or extend this script with a final_with_delta.csv reader before overwriting.
 """
 import json, csv, glob, os, re
 

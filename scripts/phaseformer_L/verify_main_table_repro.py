@@ -6,6 +6,9 @@ Checks per row:
   * the printed gate_init / lr / head / rank equal that config's values;
   * the printed test MSE/MAE equal that run's recorded test metrics;
   * the "best seed" is indeed the row's worst-of-two-gaps optimum over the 3 seeds.
+
+Only the §1 setting tables are parsed; non-setting `###` blocks (e.g. §2's
+numbered subsections) are skipped by title pattern.
 """
 import re, json, csv, glob
 
@@ -40,6 +43,8 @@ blocks = re.split(r"^### ", text, flags=re.M)[1:]
 problems, checked = [], 0
 for b in blocks:
     title = b.split("\n", 1)[0].strip()
+    if not re.fullmatch(r"(ETTh1|ETTh2|ETTm1|ETTm2|Weather|Electricity|Traffic)-\d+", title):
+        continue  # e.g. §2's numbered subsections (2.1/2.2/2.3) hold no arm rows
     ds, h = title.rsplit("-", 1); h = int(h)
     gm, ga = GOLDEN[(ds, h)]
     for line in b.split("\n"):
