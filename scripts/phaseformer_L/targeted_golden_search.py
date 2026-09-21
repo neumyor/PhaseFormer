@@ -53,6 +53,10 @@ EXTRA_MAE = (
     (0.10, 4), (0.20, 4),
 )
 
+SCREEN_PERCENT = 10
+SCREEN_EPOCHS = 5
+_SCREENING = False
+
 COST_HINT = {
     ("ETTh1", 96): 70, ("ETTh1", 192): 75, ("ETTh1", 336): 110,
     ("ETTm1", 96): 260, ("ETTm1", 192): 250, ("ETTm1", 720): 390,
@@ -88,14 +92,8 @@ def configure_module():
 
     def build_command_with_target_batch(*args, **kwargs):
         argv = original_build_command(*args, **kwargs)
-        # Traffic's planned batch size is 8, while the target server has ample
-        # GPU headroom.  A 64-sample batch reduces optimizer steps without
-        # changing the data split or loss protocol; this is the only runtime
-        # throughput override in the targeted search.
-        if "--dataset" in argv:
-            dataset = argv[argv.index("--dataset") + 1]
-            if dataset == "Traffic":
-                argv.extend(["--batch-size", "64"])
+        if _SCREENING:
+            argv[argv.index("--percent") + 1] = str(SCREEN_PERCENT)
         return argv
 
     gs.build_command = build_command_with_target_batch
@@ -105,7 +103,8 @@ def stage_plan(args):
     cells = target_cells()
     total = sum(c["cost"] for c in cells)
     print(f"target settings: {len(TARGET_SETTINGS)}")
-    print(f"stage-1 grid: {len(cells)} runs (100 per setting; seed {gs.SEED_STAGE1})")
+    print(f"stage-1 grid: {len(cells)} runs (100 per setting; seed {gs.SEED_STAGE1}; "
+          f"{SCREEN_PERCENT}% data, {SCREEN_EPOCHS} epochs)")
     print(f"estimated compute: {total / 3600:.1f} GPU-h; "
           f"{total / 3600 / len(args.gpus.split(',')):.1f} h on {len(args.gpus.split(','))} GPUs")
     for d, h in TARGET_SETTINGS:
@@ -113,7 +112,12 @@ def stage_plan(args):
 
 
 def stage_search(args):
-    gs.drive(target_cells(), args, "target_stage1.log", max_epochs=args.max_epochs)
+    global _SCREENING
+    _SCREENING = True
+    try:
+        gs.drive(target_cells(), args, "target_stage1.log", max_epochs=SCREEN_EPOCHS)
+    finally:
+        _SCREENING = False
 
 
 def stage_select(args):
@@ -124,12 +128,14 @@ def stage_select(args):
     rows_by_setting = {}
     for c in target_cells():
         rd = gs.run_dir_for(c["dataset"], c["horizon"], c["seed"], c["gate"],
-                            c["lr"], c["div"], root, c["loss"])
+                            c["lr"], c["div"], root, c["loss"],
+                            SCREEN_EPOCHS)
         m = gs.metrics_of(rd)
         if m is None:
             continue
         gm, ga = TARGET_GOLDEN[(c["dataset"], c["horizon"])]
-        r = dict(c, head=("shared" if c["div"] is None else f"pooled_r{c['horizon'] // c['div']}"),
+        r = dict(c, max_epochs=SCREEN_EPOCHS,
+                 head=("shared" if c["div"] is None else f"pooled_r{c['horizon'] // c['div']}"),
                  test_mse=m["test_mse"], test_mae=m["test_mae"],
                  gap_mse_pct=100 * (m["test_mse"] / gm - 1),
                  gap_mae_pct=100 * (m["test_mae"] / ga - 1))
@@ -157,7 +163,9 @@ def stage_confirm(args):
     cells = []
     for w in winners:
         for seed in gs.SEEDS_CONFIRM:
-            cells.append(dict(w, seed=seed, cost=COST_HINT[(w["dataset"], w["horizon"])]))
+            cell = dict(w, seed=seed, cost=COST_HINT[(w["dataset"], w["horizon"])])
+            cell["max_epochs"] = gs.MAX_EPOCHS
+            cells.append(cell)
     gs.drive(cells, args, "target_confirm.log")
 
 
@@ -169,8 +177,9 @@ def stage_final(args):
         gm, ga = TARGET_GOLDEN[(w["dataset"], w["horizon"])]
         seeds = []
         for seed in (gs.SEED_STAGE1, *gs.SEEDS_CONFIRM):
+            epochs = int(w["max_epochs"]) if seed == gs.SEED_STAGE1 else gs.MAX_EPOCHS
             rd = gs.run_dir_for(w["dataset"], w["horizon"], seed, w["gate"],
-                                w["lr"], w["div"], root, w["loss"])
+                                w["lr"], w["div"], root, w["loss"], epochs)
             m = gs.metrics_of(rd)
             if m:
                 seeds.append(dict(seed=seed, test_mse=m["test_mse"], test_mae=m["test_mae"],
