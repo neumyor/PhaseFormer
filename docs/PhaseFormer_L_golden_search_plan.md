@@ -333,3 +333,17 @@ $PY scripts/phaseformer_L/golden_search.py --stage final
 | 2026-09-21 10:00:57 | **最终判定（3-seed，逐 seed 取最优）**：`verdict: 5/8 (target 4, met=True)`，**达到用户目标**；**8/8 双指标优于 matched `phase_only`**；**5 个获胜格全部 `gate > 0.05`（非 gate-shrunk）** ⇒ 无需"胜利来自相位主干"的标注。其中 **3 格 3/3 seed 稳定达标**（Electricity-96、ETTm1-96、ETTm1-336）、**2 格 1/3 seed 达标**（ETTh1-96、ETTm1-720）⇒ 表述为"3 稳定 + 2 单 seed"。守护链：02:37 同步 → `select`/`confirm`/`final` → 03:00 判定 0/8 → 自动启动第二轮 → 10:00 判定 5/8 → **全链自动完成，无人工干预** |
 | 2026-09-21 10:00 | **全链结束**。两轮合计 **1576 个训练 run**（第一轮 720 + 第二轮 856），**0 失败**；wall ≈ **15.9 h**（第一轮 9.6 h + 第二轮 6.3 h）|
 | | （本实验已完成；后续如需第三轮，应先在本文写清冻结网格与依据） |
+
+## 2d. 第三轮的启动状态（2026-09-21 13:40，服务器失联）
+
+- **第三轮代码与计划已全部就绪并入库**（驱动 `golden_search.py` 含 `search-round3`、`select` 候选空间已扩到三轮全网格、`run_round3.sh` 启动脚本）。
+- **服务器 `11.11.18.3` 在 13:30–13:40 期间不可达**（`ping` 100% 丢包、SSH 端口超时）。
+  失联前的最后一次成功交互：13:2x 完成代码同步（HEAD `3957a6af8`）、`--stage plan` 通过、
+  `--help` 确认含 `search-round3`。**未在失联前启动训练**，故没有"跑到一半断掉"的风险。
+- **处置**：已在本地挂一个重试器（`/tmp/retry_r3.sh`），每 60 s 探一次；一旦主机可达**且空闲**，
+  自动执行 `nohup bash ~/niuyiming/run_round3.sh`（内部依次 `search-round3 → select → confirm → final`）。
+  进度写在 `/tmp/r3_launch_retry.log`。重试器最多探 240 次（约 4 h）。
+- **本轮不受影响的部分**：第一/二轮的结论（5/8 达标）与产物已在本地留存
+  （`final_selection.csv/json`、`stage1_all_rows.csv`），服务器失联不改变已完成的判定。
+- **待办**：主机恢复后确认第三轮是否自动启动；若重试器已退出，手工跑
+  `ssh yyk03@11.11.18.3 'cd ~/niuyiming/PhaseFormer && nohup bash ~/niuyiming/run_round3.sh >> ~/niuyiming/logs/golden_search_round3.log 2>&1 &'`。

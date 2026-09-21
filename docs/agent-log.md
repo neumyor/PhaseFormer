@@ -4714,3 +4714,19 @@ ETTh1-96 开跑 17 格即出现达标：
 5. 全部为 **test-set selection**；Golden 出自另一环境，只作披露性比较。
 
 **成本**：两轮合计 **1576 个 run**（720 + 856）、**0 失败**、wall **≈15.9 h**。
+
+## 2026-09-21 13:40 — 第三轮已就绪但服务器失联；已挂自动重试
+
+- **用户指令**：在仍未达标的 3 个 setting（`ETTh1-192`、`ETTh1-336`、`ETTm1-192`）上继续搜索，**每 setting 120–150 runs**。
+- **已完成**：设计并实现第三轮（计划 §2c，驱动 `search-round3`）——
+  新增三个前两轮未覆盖的轴：**`huber_delta ∈ {0.05,0.1,0.3,3.0}`**（huber 与 mae 两端点之间的连续谱）、
+  **`max_epochs=60`**（第一轮实测 68% 的格打满 30 epoch）、**边界外 lr**（ETTh1→1e-2、ETTm1-192→1e-4，两格 winner 都压在网格边界）。
+  **每 setting 132 runs（落在 120–150 内），共 396 runs ≈ 16 GPU·h ≈ 2.0 h 墙钟**。
+  `cell_id` 已加 epoch/delta 后缀防撞名；`select` 候选空间扩到三轮全网格（每 setting 372–432 唯一候选）并做全键去重；
+  `confirm`/`final` 会重建 winner 的 delta/epochs。**已用合成产物端到端演练通过**。
+- **卡点**：`11.11.18.3` 在 13:30–13:40 **不可达**（ping 100% 丢包、SSH 超时）。失联前最后一次成功交互为
+  13:2x 的代码同步（HEAD `3957a6af8`）与 `--stage plan` 通过；**训练未启动**，故无半途中断风险。
+- **处置**：本地挂重试器 `/tmp/retry_r3.sh`，每 60 s 探测，主机可达且空闲即自动
+  `nohup bash ~/niuyiming/run_round3.sh`（内含 `search-round3 → select → confirm → final`），最多探 4 h。
+  进度日志 `/tmp/r3_launch_retry.log`。
+- **不影响已有结论**：第一/二轮的 5/8 判定与全部产物已留存本地，服务器失联不改变它们。
