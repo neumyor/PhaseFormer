@@ -4933,3 +4933,34 @@ ETTh1-336 第三轮 132 格跑满，**出现 2 套双指标达标配置**：
 
 **另附**：服务器 `~/niuyiming/replay_best_settings.sh` —— 由手册的命令自动生成的可重放脚本，
 8 条命令各占一卡；`--resume` 使其在已有产物时为空操作（已实测 8 个 output-dir 全部存在且带 test 值）。
+
+## 2026-09-21 17:2x — 新增**主表全 setting** 复现手册（不只调参的 8 个）
+
+**用户澄清**：要写入的是**主表所有 setting** 的参数与 seed，不只是重新调过参的那几个。
+
+**新增 `docs/PhaseFormer_L_main_table_repro.md`**（1848 行）：
+- **§0 公共协议** + 六个臂的结构定义（`phase_only` / `l_main` / `l_q1_4` / `l_q1_8` / `l_rcrf` / `a1`）
+  与三种 gate 先验的披露。
+- **§1 逐 setting 逐臂表**：**28 个 setting**（24 主 + 4 Traffic 附录）× 6 臂 = **164 行**，
+  每行给出**最佳 seed**（按"两指标最差缺口"取 3 seed 最优）、`gate_init`、`lr`、`head`、`rank`、
+  test MSE/MAE、vs Golden、3-seed 双指标胜出的 seed 数、以及**来源（新训/复用）**。
+- **§2 复现命令**：**164 条可直接运行的命令**（每条即该行的最佳 seed），
+  `--overrides` 只列该格非默认超参；`phase_only` 无 gate/head/rank。
+- **§3 口径与边界**：test-set selection、7 个 test-selected setting 的复用披露、
+  Golden 环境差、三种 gate 先验、Traffic 为附录、以及指向调参手册的交叉引用。
+
+**数据来源（关键）**：**参数从每格自己的 `config.json` 读，指标从该 run 的 test 记录读**
+（E14 用 stage-B 的 `test_read/<arm>__<setting>-s<seed>.json`，那 12 个复用的 `phase_only` 格
+其 `metrics.csv` 早于 test 读取，回落到 `results.csv` 的同一记录），**不引用任何汇总表**。
+
+**双重复核**：
+1. `verify_full_doc.py`：对 **164 行逐行**核对——(arm, dataset, horizon, seed) 能解析到真实 config、
+   表中 `gate_init/lr/head/rank` 等于 config 的值、表中 test MSE/MAE 等于该 run 的记录、
+   且"最佳 seed"确实是该行 3 个 seed 的最差缺口最优 ⇒ **`PROBLEMS: 0`**（164 行全过）。
+2. `verify_cmds.py`：解析 §2 的 **164 条命令**，抽样 6 个臂逐一比对
+   `lr/lookback/period/loss/mechanism/seed/max_epochs/gate_init/rank` 与对应 config ⇒ **全 OK**；
+   并**实跑一条**（`phase_only`，1 epoch，输出改到 `/tmp` 以免污染正式产物）⇒ **exit 0、metrics 正常写出**。
+
+**与调参手册的分工**：`PhaseFormer_L_best_settings_repro.md` 只讲**定向调参的 8 个 setting**
+（含第三轮的 `delta=0.1` / `lr=1e-2`），本手册覆盖**主表全部 28 个 setting**；
+两者互相交叉引用。
