@@ -4730,3 +4730,14 @@ ETTh1-96 开跑 17 格即出现达标：
   `nohup bash ~/niuyiming/run_round3.sh`（内含 `search-round3 → select → confirm → final`），最多探 4 h。
   进度日志 `/tmp/r3_launch_retry.log`。
 - **不影响已有结论**：第一/二轮的 5/8 判定与全部产物已留存本地，服务器失联不改变它们。
+
+## 2026-09-21 13:56 — 服务器恢复，第三轮已自动启动
+
+- `11.11.18.3` 于 **13:56** 恢复可达（ping 正常、SSH 通、uptime 107 天未重启）。
+  本地重试器 `/tmp/retry_r3.sh` 在探测到主机可达且空闲后**自动启动**了第三轮：
+  日志首行 `=== round3 start 2026-09-21 13:56:31 head=3957a6af8 Add the round-3 launcher`。
+- **代码版本正确**：HEAD `3957a6af8`（含 `search-round3`）。
+- **实测运行正常**：8 卡均已加载（每卡 ≈780 MiB），前 8 格正在跑，
+  cell id 形如 `ETTm1-h192_s2021_g0.02_lr0.001_dense_d0.05` —— **`_d0.05` 后缀证明 `huber_delta` 已正确落到格子命名与配置里**。
+- 规模：**3 setting × 132 runs = 396 runs ≈ 16 GPU·h ≈ 2 h 墙钟**；跑完自动 `select → confirm → final`。
+- 失联期间（13:30–13:56）无任务在跑，故**没有任何 run 被中断**。
