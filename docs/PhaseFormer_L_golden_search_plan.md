@@ -282,4 +282,9 @@ $PY scripts/phaseformer_L/golden_search.py --stage final
 | 2026-09-21 02:37 | 守护按设计自动执行：带守卫的同步（`pgrep` 检查通过，HEAD `49b5bb653`）→ `select` → `confirm` |
 | 2026-09-21 03:00:57 | **第一轮判定完成（`final_selection.json`）**：**0/8 双指标超 Golden，目标 ≥4/8 未达**；**4/8 双指标优于 matched `phase_only`**。8 格全部败在 MAE 侧；**3/8 的 MSE 侧已胜 Golden**（ETTh1-96 −0.260%、ETTm1-720 −0.327%、Electricity-96 −0.308%）；**gate-shrunk 4/8**；**8 个 winner 全部为 `pooled_lowrank`**（秩 R3–R45），无一稠密头 |
 | 2026-09-21 03:01 | 守护**按预注册自动启动第二轮**（`--stage search-round2 --losses mae`，边际 856 新增 runs ≈6.8 h）；已挂新的每小时巡检 cron |
-| | （待补：第二轮完成时间与判定） |
+| 2026-09-21 07:55–08:47 | 第二轮 `mae` 批逐 setting 补齐：**5 个 setting 出现达标格**（ETTm1-336 19、ETTm1-720 13、ETTm1-96 8、Electricity-96 3、ETTh1-96 2）；3 格判为达不成（ETTm1-192 全网格 MSE >0.769%、ETTh1-336 MAE 0/90、ETTh1-192 MAE 0/90）|
+| 2026-09-21 08:13 | **`mae` 批完成 642/642，exit=0**，守护随即启动 `huber` 批（214 新增格）|
+| 2026-09-21 08:47 | **修正一处计数错误**：此前用 `grep -c "_mae"` 区分两批，而每条 done 行都含 `test_mae=`，导致误报"huber 批 0 格"。改用 `grep -cE "_mae test_mse"` 正确计数（教训：校验串须锚定唯一标识并用真实产物反证） |
+| 2026-09-21 09:39 | **第二轮 856/856 全部完成，0 失败**（08:13 `mae` 642 + 09:39 `huber` 214）；守护跑 `select` → 进入 `confirm` |
+| 2026-09-21 09:40 | **stage-1 达标 6/8**（目标 ≥4/8 **已超过**）。8 个 winner：ETTh1-96（−3.330%/−0.399%，`huber`）、Electricity-96（−1.166%/−0.596%，`huber`）、ETTm1-96（−0.980%/−1.820%）、ETTm1-336（−0.941%/−1.230%）、ETTm1-720（−0.494%/−0.714%）达标；ETTh1-192（−2.480%/+0.443%）、ETTh1-336（+0.234%/+0.963%）、ETTm1-192（+0.769%/+0.016%）未达。**两批互补**：其中 2 个 winner 来自 `huber` 批且在 MSE 侧更强 |
+| | （待补：`confirm` 3-seed 口径的最终判定） |
