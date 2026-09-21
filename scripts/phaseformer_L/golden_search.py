@@ -160,13 +160,19 @@ def parse_args():
     return p.parse_args()
 
 
-def cell_id(dataset, horizon, seed, gate, lr, div, loss=LOSS):
+def cell_id(dataset, horizon, seed, gate, lr, div, loss=LOSS,
+            max_epochs=MAX_EPOCHS, delta=None):
     tag = "" if loss == LOSS else f"_{loss}"
+    # The epoch budget MUST appear in the id: round 3 adds 60/90-epoch arms, and
+    # without this suffix those cells would share ids with 30-epoch runs and be
+    # skipped as already-done.  Same for a non-default huber delta.
+    etag = "" if max_epochs == MAX_EPOCHS else f"_e{max_epochs}"
+    dtag = "" if delta is None else f"_d{delta}"
     return (f"{dataset}-h{horizon}_s{seed}_g{gate}_lr{lr}"
-            f"_{'dense' if div is None else f'r{horizon // div}'}{tag}")
+            f"_{'dense' if div is None else f'r{horizon // div}'}{tag}{etag}{dtag}")
 
 
-def arm_overrides(gate, lr, div, horizon):
+def arm_overrides(gate, lr, div, horizon, delta=None):
     ov = {
         "weak_period_residual_gate_init": gate,
         "learning_rate": lr,
@@ -175,19 +181,28 @@ def arm_overrides(gate, lr, div, horizon):
     if div is not None:
         ov["weak_period_residual_pool_factor"] = 1
         ov["weak_period_residual_rank"] = horizon // div
+    if delta is not None:
+        # HuberLoss(delta): quadratic below delta, linear above.  delta=1.0 is
+        # the preset default (MSE-like on normalised residuals); delta->0 tends
+        # to MAE.  Round 3 uses it as the smooth knob between the two endpoints
+        # that rounds 1 and 2 already covered.
+        ov["huber_delta"] = delta
     return ov
 
 
-def run_dir_for(dataset, horizon, seed, gate, lr, div, root, loss=LOSS):
-    return root / "runs" / cell_id(dataset, horizon, seed, gate, lr, div, loss)
+def run_dir_for(dataset, horizon, seed, gate, lr, div, root, loss=LOSS,
+                max_epochs=MAX_EPOCHS, delta=None):
+    return root / "runs" / cell_id(dataset, horizon, seed, gate, lr, div, loss,
+                                   max_epochs, delta)
 
 
 def build_command(dataset, horizon, seed, gate, lr, div, root, num_workers,
-                  max_epochs=MAX_EPOCHS, evaluate_test=True, loss=LOSS):
+                  max_epochs=MAX_EPOCHS, evaluate_test=True, loss=LOSS,
+                  delta=None):
     argv = [
         PY, str(RUNNER),
         "--output-dir", str(run_dir_for(dataset, horizon, seed, gate, lr, div,
-                                        root, loss)),
+                                        root, loss, max_epochs, delta)),
         "--dataset", dataset,
         "--horizon", str(horizon),
         "--stage", "confirm",
@@ -203,7 +218,7 @@ def build_command(dataset, horizon, seed, gate, lr, div, root, num_workers,
         "--bad-case-limit", "0",
         "--mechanism", "weak_residual",
         "--learning-rate", str(lr),
-        "--overrides", json.dumps(arm_overrides(gate, lr, div, horizon),
+        "--overrides", json.dumps(arm_overrides(gate, lr, div, horizon, delta),
                                   sort_keys=True),
     ]
     if evaluate_test:
