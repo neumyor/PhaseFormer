@@ -347,3 +347,18 @@ $PY scripts/phaseformer_L/golden_search.py --stage final
   （`final_selection.csv/json`、`stage1_all_rows.csv`），服务器失联不改变已完成的判定。
 - **待办**：主机恢复后确认第三轮是否自动启动；若重试器已退出，手工跑
   `ssh yyk03@11.11.18.3 'cd ~/niuyiming/PhaseFormer && nohup bash ~/niuyiming/run_round3.sh >> ~/niuyiming/logs/golden_search_round3.log 2>&1 &'`。
+
+## 2e. 第三轮启动记录（2026-09-21 13:56:31）
+
+服务器 `11.11.18.3` 于 **13:56 恢复**（失联约 26 min，13:30–13:56；`uptime` 107 天，非重启，属网络/路由问题）。
+本地重试器 `/tmp/retry_r3.sh` 探测到主机可达且空闲后**自动启动**第三轮：
+
+```
+=== round3 start 2026-09-21 13:56:31 head=3957a6af8 Add the round-3 launcher
+```
+
+- **代码版本**：HEAD `3957a6af8`（含 `--stage search-round3`）。
+- **实测**：8 卡全部加载（每卡 ≈780 MiB）；首批 cell id 形如
+  `ETTm1-h192_s2021_g0.02_lr0.001_dense_d0.05` ⇒ **`_d0.05` 后缀确认 `huber_delta` 已进入命名与配置**。
+- **失联期间无任务在跑**，故无任何 run 被中断；第一/二轮的 5/8 判定与产物不受影响。
+- 后续：396 runs ≈ 2 h ⇒ 自动 `select → confirm → final`；判定口径见 §4 与 §2c。
