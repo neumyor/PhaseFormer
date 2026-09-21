@@ -84,6 +84,21 @@ def configure_module():
     gs.SETTINGS = tuple((d, h, 0.0, 0.0) for d, h in TARGET_SETTINGS)
     gs.GOLDEN = dict(TARGET_GOLDEN)
     gs.COST_HINT = dict(COST_HINT)
+    original_build_command = gs.build_command
+
+    def build_command_with_target_batch(*args, **kwargs):
+        argv = original_build_command(*args, **kwargs)
+        # Traffic's planned batch size is 8, while the target server has ample
+        # GPU headroom.  A 64-sample batch reduces optimizer steps without
+        # changing the data split or loss protocol; this is the only runtime
+        # throughput override in the targeted search.
+        if "--dataset" in argv:
+            dataset = argv[argv.index("--dataset") + 1]
+            if dataset == "Traffic":
+                argv.extend(["--batch-size", "64"])
+        return argv
+
+    gs.build_command = build_command_with_target_batch
 
 
 def stage_plan(args):
