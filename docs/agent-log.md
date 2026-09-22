@@ -5044,3 +5044,9 @@ Weather-720 的 vs-`phase_only` 数字也从 +0.79% 更正为按最优 seed 实�
 - `scripts/phaseformer_L/gen_per_seed_results.py`：从 results.csv 生成 §4.2.4 与附录 A（幂等，可重跑）。
 - `scripts/phaseformer_L/verify_per_seed_results.py`：逐格对账（**1152 个数値单元**：附录 984 + §4.2.4 168），
   同时重算每个 `n/3` 与两张计数表 ⇒ **`PROBLEMS: 0`**。
+
+**2026-09-22 targeted_100_v3 参数登记**：8 个目标 setting 各完成 100 个候选筛选，随后完成
+816/816 个 full-train confirmation。最终至少一个 seed 的任一指标低于 Golden 的 setting 为
+ETTm1-96、Traffic-336、Traffic-720；三者成功 seed 均为 2022/2023，且均为 MAE-only。
+可读参数记录见 `docs/PhaseFormer_L_targeted_100_v3_params.md`，机器可读权威结果见
+`research_runs/phaseformer_L_targeted_100_v3/target_final.json`；该搜索明确属于 test-set selection。

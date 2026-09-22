@@ -1,5 +1,10 @@
 # PhaseFormer-L 主表全 setting 复现手册
 
+> **当前定向调参权威记录**：8 个 setting 的最新 100-run 搜索及 full-train 确认已迁移到
+> [`PhaseFormer_L_targeted_100_v3_params.md`](PhaseFormer_L_targeted_100_v3_params.md)，
+> 对应机器可读结果为 `research_runs/phaseformer_L_targeted_100_v3/target_final.json`。
+> 本手册下方的 golden-search v1 章节是历史记录，不能覆盖 v3 的参数、seed 或达标计数。
+
 > **范围**：**主表全部 setting × 全部臂 × 全部 seed** 的复现参数与实测值（§1、§3），
 > 外加 **8 个定向调参 setting 的 golden-search 最优组合**（§2）。主表 = §4.2 的 24 个主
 > setting + 4 个 Traffic 附录 setting，共 6 个臂
