@@ -5064,3 +5064,13 @@ ETTm1-720）相对主表 PhaseFormer-L 聚合值在 MSE 和 MAE 两侧均缩小 
 **新增记录**：`docs/PhaseFormer_L_batch_period_loss_gate_200_v1_params.md`；最终汇总同步至
 `research_runs/phaseformer_L_batch_period_loss_gate_200_v1/final.json`。`docs/minipaper_refined.md`
 新增 Appendix A.2.1，披露搜索网格、确认结果及 test-set selection 限制。
+
+## 2026-09-22 — 建立主表 28-setting confirmed data 单一口径
+
+**用户指令**：新建文档，明确 28 个主表 setting 中 23 个满足“3 seed 中至少一个 seed 的 MSE
+或 MAE 低于 Golden”的见证值、参数和 seed，并将另外 5 个 setting 替换为本轮 200-run 搜索的结果。
+
+**新增**：`docs/minipaper_main_table_confirmed_data.md`。文档把 E14 主表逐 seed 结果、历史
+golden-search/targeted-search 见证行与本轮 `batch_period_loss_gate_200_v1` 五个未满足 setting
+分开列示，并记录 Golden 来源、run/config/metrics 审计路径、test-set selection 限制及 screening
+与 full confirmation 的区别。
