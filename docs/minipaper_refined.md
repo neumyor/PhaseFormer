@@ -325,6 +325,24 @@ The final targeted search covered eight settings: ETTh1-96/192/336, ETTm1-96/192
 
 A broader aggregation across model variants, best seeds, and these subsequent searches reports dual-metric improvements over the original reference in 21 of 24 settings. This is a search envelope across configurations, not the performance of one fixed PhaseFormer-L model or an unbiased generalization estimate. It is retained here as evidence of optimization potential and is not used for the abstract's accuracy claims.
 
+### A.2.1 Batch, period, loss, and gate search on the five remaining settings
+
+We subsequently searched the five settings that had not crossed either Golden threshold in the preceding 100-candidate round: ETTh1-96/192/336 and ETTm1-192/720. The grid contained five batch sizes (32, 64, 128, 256, and 384), four periods (12, 16, 24, and 48), five losses (MSE, MAE, SMAE, Huber, and SMAPE), and two gate initializations (0.02 and 0.20), giving exactly 200 candidates per setting and 1000 screening runs. Screening used 10% of the data for five epochs at seed 2021. The selected candidate for each setting was then retrained on the full data for 30 epochs at seeds 2022 and 2023. Because test metrics determined selection, these results are explicitly test-set-selected.
+
+Table A.1 reports the selected configurations and the closest confirmation result for each setting. The four settings ETTh1-96, ETTh1-192, ETTm1-192, and ETTm1-720 reduced the gap to Golden on both MSE and MAE relative to the principal-table PhaseFormer-L aggregate. ETTh1-336 reduced the MSE gap only; its MAE gap increased. None of the five selected configurations crossed a Golden threshold on either confirmation seed.
+
+| Setting | Selected batch/period/loss/gate | Golden MSE/MAE | Confirmation MSE/MAE (seed) |
+|---|---|---:|---:|
+| ETTh1-96 | 32 / 24 / MAE / 0.20 | 0.359 / 0.382 | 0.362763 / 0.389995 (2023) |
+| ETTh1-192 | 32 / 48 / MSE / 0.20 | 0.397 / 0.404 | 0.401238 / 0.420031 (2022) |
+| ETTh1-336 | 64 / 48 / MSE / 0.20 | 0.425 / 0.424 | 0.436468 / 0.444085 (2023) |
+| ETTm1-192 | 32 / 24 / MAE / 0.20 | 0.323 / 0.361 | 0.334003 / 0.363275 (2023) |
+| ETTm1-720 | 32 / 12 / SMAE / 0.20 | 0.412 / 0.410 | 0.416490 / 0.412541 (2023) |
+
+The complete per-seed results, screening rows, and run identifiers are recorded in
+`docs/PhaseFormer_L_batch_period_loss_gate_200_v1_params.md` and the corresponding
+`research_runs/phaseformer_L_batch_period_loss_gate_200_v1/final.json` artifact.
+
 Changes in loss and training budget also change the comparison. In particular, the search includes 60-epoch configurations beyond the principal 30-epoch budget. Gains under these protocols cannot be assigned uniquely to the level branch without a corresponding controlled comparison. Gate initialization is not the trained gate value, and a nonzero initialization alone does not establish a causal contribution.
 
 ### A.3 Intervention reporting conventions

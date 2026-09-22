@@ -5050,3 +5050,17 @@ Weather-720 的 vs-`phase_only` 数字也从 +0.79% 更正为按最优 seed 实�
 ETTm1-96、Traffic-336、Traffic-720；三者成功 seed 均为 2022/2023，且均为 MAE-only。
 可读参数记录见 `docs/PhaseFormer_L_targeted_100_v3_params.md`，机器可读权威结果见
 `research_runs/phaseformer_L_targeted_100_v3/target_final.json`；该搜索明确属于 test-set selection。
+
+## 2026-09-22 — 五个 setting 的 batch/period/loss/gate 200-run 搜索
+
+**用户指令**：围绕 ETTh1-96/192/336、ETTm1-192/720，在 batch size、period、loss 和 gate
+四个轴上各搜索 200 个候选，并将两个指标 gap 均缩小的 setting 写入 minipaper 与参数记录。
+
+**实验结果**：1000/1000 个 screening runs 完成且无失败；5 个筛选冠军均完成 full-data、30-epoch
+确认（seed 2022/2023），10/10 无失败。四个 setting（ETTh1-96、ETTh1-192、ETTm1-192、
+ETTm1-720）相对主表 PhaseFormer-L 聚合值在 MSE 和 MAE 两侧均缩小 Golden gap；ETTh1-336
+仅缩小 MSE gap，MAE gap 变大。五个新配置均未在确认 seed 上低于 Golden。
+
+**新增记录**：`docs/PhaseFormer_L_batch_period_loss_gate_200_v1_params.md`；最终汇总同步至
+`research_runs/phaseformer_L_batch_period_loss_gate_200_v1/final.json`。`docs/minipaper_refined.md`
+新增 Appendix A.2.1，披露搜索网格、确认结果及 test-set selection 限制。
