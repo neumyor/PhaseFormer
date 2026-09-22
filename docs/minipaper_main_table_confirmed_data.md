@@ -4,52 +4,42 @@
 
 主表包含 24 个 principal settings 和 4 个 Traffic settings。当前整理结果为 **23 个满足、5 个未满足**。五个未满足 setting 不再混用历史搜索结果，统一采用本轮 batch/period/loss/gate 200-run 搜索的最终确认配置。
 
-## 23 个满足 setting
+## 28-setting confirmed main table
 
-`shared` 表示稠密残差头；`pooled-rk` 表示 pooled low-rank 残差头；`phase_only` 表示无残差支路。除特别注明外，E14 主表配置为 lookback=720、period=24、batch=256（Traffic 为 batch=8）、lr=1e-3、30 epochs、Huber loss。
+`shared` 表示稠密残差头；`pooled-rk` 表示 pooled low-rank 残差头；`phase_only` 表示无残差支路。除特别注明外，E14 主表配置为 lookback=720、period=24、batch=256（Traffic 为 batch=8）、lr=1e-3、30 epochs、Huber loss。每行只保留一个见证 seed；五个未满足 setting 选择本轮确认中综合 gap 最小的 seed。
 
-| setting | Golden MSE/MAE | 配置（mechanism; batch; period; loss; gate; lr; head/rank） | seed | test MSE | test MAE | 低于 Golden |
-|---|---:|---|---:|---:|---:|---|
-| ETTh1-720 | 0.431/0.450 | `phase_only`; 256; 24; Huber; —; 1e-3; — | 2023 | 0.418769 | 0.439297 | MSE, MAE |
-| ETTh2-96 | 0.275/0.338 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.272100 | 0.332843 | MSE, MAE |
-| ETTh2-192 | 0.341/0.376 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.337312 | 0.376446 | MSE |
-| ETTh2-336 | 0.369/0.405 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2023 | 0.368725 | 0.404795 | MSE, MAE |
-| ETTh2-720 | 0.402/0.436 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2023 | 0.392054 | 0.427058 | MSE, MAE |
-| ETTm1-96 | 0.293/0.344 | `weak_residual`; 256; 24; MAE; 0.1; 1e-3; pooled-rk12 | 2021 | 0.290128 | 0.337738 | MSE, MAE |
-| ETTm1-336 | 0.358/0.381 | `weak_residual`; 256; 24; MAE; 0.2; 3e-4; pooled-rk10 | 2021 | 0.354631 | 0.376313 | MSE, MAE |
-| ETTm2-96 | 0.163/0.256 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.158474 | 0.248048 | MSE, MAE |
-| ETTm2-192 | 0.219/0.293 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.215685 | 0.288061 | MSE, MAE |
-| ETTm2-336 | 0.269/0.326 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.268039 | 0.324637 | MSE, MAE |
-| ETTm2-720 | 0.351/0.379 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.344629 | 0.376928 | MSE, MAE |
-| Weather-96 | 0.148/0.195 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.146709 | 0.194005 | MSE, MAE |
-| Weather-192 | 0.193/0.237 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.191791 | 0.236277 | MSE, MAE |
-| Weather-336 | 0.242/0.278 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.239891 | 0.273774 | MSE, MAE |
-| Weather-720 | 0.309/0.332 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.315415 | 0.327790 | MAE |
-| Electricity-96 | 0.129/0.221 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.128701 | 0.222297 | MSE |
-| Electricity-192 | 0.148/0.238 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.145376 | 0.236532 | MSE, MAE |
-| Electricity-336 | 0.165/0.257 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.161729 | 0.254716 | MSE, MAE |
-| Electricity-720 | 0.201/0.285 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.197727 | 0.286489 | MSE |
-| Traffic-96 | 0.361/0.238 | `l_q1_4`; 8; 24; Huber; 0.2; 1e-3; pooled-rk24 | 2021 | 0.358840 | 0.233280 | MSE, MAE |
-| Traffic-192 | 0.373/0.243 | `phase_only`; 8; 24; Huber; —; 1e-3; — | 2022 | 0.379216 | 0.242188 | MAE |
-| Traffic-336 | 0.385/0.248 | `weak_residual`; 8; 24; MAE; 0.2; 1e-3; pooled-rk84 | 2022 | 0.396174 | 0.238683 | MAE |
-| Traffic-720 | 0.428/0.270 | `weak_residual`; 8; 24; MAE; 0.02; 1e-3; shared | 2023 | 0.436780 | 0.261168 | MAE |
+| setting | 状态 | Golden MSE/MAE | 配置（mechanism; batch; period; loss; gate; lr; head/rank） | seed | test MSE | test MAE | 低于 Golden |
+|---|---|---:|---|---:|---:|---:|---|
+| ETTh1-96 | 未满足 | 0.359/0.382 | `weak_residual`; 32; 24; MAE; 0.20; 1e-3; shared | 2023 | 0.362763 | 0.389995 | 无 |
+| ETTh1-192 | 未满足 | 0.397/0.404 | `weak_residual`; 32; 48; MSE; 0.20; 1e-3; shared | 2022 | 0.401238 | 0.420031 | 无 |
+| ETTh1-336 | 未满足 | 0.425/0.424 | `weak_residual`; 64; 48; MSE; 0.20; 1e-3; shared | 2023 | 0.436468 | 0.444085 | 无 |
+| ETTh1-720 | 满足 | 0.431/0.450 | `phase_only`; 256; 24; Huber; —; 1e-3; — | 2023 | 0.418769 | 0.439297 | MSE, MAE |
+| ETTh2-96 | 满足 | 0.275/0.338 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.272100 | 0.332843 | MSE, MAE |
+| ETTh2-192 | 满足 | 0.341/0.376 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.337312 | 0.376446 | MSE |
+| ETTh2-336 | 满足 | 0.369/0.405 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2023 | 0.368725 | 0.404795 | MSE, MAE |
+| ETTh2-720 | 满足 | 0.402/0.436 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2023 | 0.392054 | 0.427058 | MSE, MAE |
+| ETTm1-96 | 满足 | 0.293/0.344 | `weak_residual`; 256; 24; MAE; 0.1; 1e-3; pooled-rk12 | 2021 | 0.290128 | 0.337738 | MSE, MAE |
+| ETTm1-192 | 未满足 | 0.323/0.361 | `weak_residual`; 32; 24; MAE; 0.20; 1e-3; shared | 2023 | 0.334003 | 0.363753 | 无 |
+| ETTm1-336 | 满足 | 0.358/0.381 | `weak_residual`; 256; 24; MAE; 0.2; 3e-4; pooled-rk10 | 2021 | 0.354631 | 0.376313 | MSE, MAE |
+| ETTm1-720 | 未满足 | 0.412/0.410 | `weak_residual`; 32; 12; SMAE; 0.20; 1e-3; shared | 2023 | 0.416490 | 0.412541 | 无 |
+| ETTm2-96 | 满足 | 0.163/0.256 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.158474 | 0.248048 | MSE, MAE |
+| ETTm2-192 | 满足 | 0.219/0.293 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.215685 | 0.288061 | MSE, MAE |
+| ETTm2-336 | 满足 | 0.269/0.326 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.268039 | 0.324637 | MSE, MAE |
+| ETTm2-720 | 满足 | 0.351/0.379 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.344629 | 0.376928 | MSE, MAE |
+| Weather-96 | 满足 | 0.148/0.195 | `l_main`; 256; 24; Huber; 0.5; 1e-3; shared | 2021 | 0.146709 | 0.194005 | MSE, MAE |
+| Weather-192 | 满足 | 0.193/0.237 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.191791 | 0.236277 | MSE, MAE |
+| Weather-336 | 满足 | 0.242/0.278 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.239891 | 0.273774 | MSE, MAE |
+| Weather-720 | 满足 | 0.309/0.332 | `l_main`; 256; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.315415 | 0.327790 | MAE |
+| Electricity-96 | 满足 | 0.129/0.221 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.128701 | 0.222297 | MSE |
+| Electricity-192 | 满足 | 0.148/0.238 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.145376 | 0.236532 | MSE, MAE |
+| Electricity-336 | 满足 | 0.165/0.257 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.161729 | 0.254716 | MSE, MAE |
+| Electricity-720 | 满足 | 0.201/0.285 | `l_main`; 64; 24; Huber; 0.2; 1e-3; shared | 2021 | 0.197727 | 0.286489 | MSE |
+| Traffic-96 | 满足 | 0.361/0.238 | `l_q1_4`; 8; 24; Huber; 0.2; 1e-3; pooled-rk24 | 2021 | 0.358840 | 0.233280 | MSE, MAE |
+| Traffic-192 | 满足 | 0.373/0.243 | `phase_only`; 8; 24; Huber; —; 1e-3; — | 2022 | 0.379216 | 0.242188 | MAE |
+| Traffic-336 | 满足 | 0.385/0.248 | `weak_residual`; 8; 24; MAE; 0.2; 1e-3; pooled-rk84 | 2022 | 0.396174 | 0.238683 | MAE |
+| Traffic-720 | 满足 | 0.428/0.270 | `weak_residual`; 8; 24; MAE; 0.02; 1e-3; shared | 2023 | 0.436780 | 0.261168 | MAE |
 
-## 五个本轮未满足 setting
-
-这些结果来自 `batch_period_loss_gate_200_v1`：每个 setting 200 个 screening candidates，共 1000 个；筛选使用 10% 数据、5 epochs、seed 2021，随后对每个冠军使用 full data、30 epochs、seeds 2022/2023 确认。下面列出两个全量确认 seed；seed 2021 仅为 screening，不与 full confirmation 混称。
-
-| setting | Golden MSE/MAE | 选中配置（batch; period; loss; gate; lr; head） | seed | test MSE | test MAE | 低于 Golden |
-|---|---:|---|---:|---:|---:|---|
-| ETTh1-96 | 0.359/0.382 | 32; 24; MAE; 0.20; 1e-3; shared | 2022 | 0.370382 | 0.393277 | 无 |
-|  |  | same | 2023 | 0.362763 | 0.389995 | 无 |
-| ETTh1-192 | 0.397/0.404 | 32; 48; MSE; 0.20; 1e-3; shared | 2022 | 0.401238 | 0.420031 | 无 |
-|  |  | same | 2023 | 0.414793 | 0.425784 | 无 |
-| ETTh1-336 | 0.425/0.424 | 64; 48; MSE; 0.20; 1e-3; shared | 2022 | 0.437925 | 0.442793 | 无 |
-|  |  | same | 2023 | 0.436468 | 0.444085 | 无 |
-| ETTm1-192 | 0.323/0.361 | 32; 24; MAE; 0.20; 1e-3; shared | 2022 | 0.338157 | 0.363275 | 无 |
-|  |  | same | 2023 | 0.334003 | 0.363753 | 无 |
-| ETTm1-720 | 0.412/0.410 | 32; 12; SMAE; 0.20; 1e-3; shared | 2022 | 0.421822 | 0.415632 | 无 |
-|  |  | same | 2023 | 0.416490 | 0.412541 | 无 |
+其中五个“未满足”行的结果来自 `batch_period_loss_gate_200_v1`：每个 setting 200 个 screening candidates，共 1000 个；筛选使用 10% 数据、5 epochs、seed 2021，随后对每个冠军使用 full data、30 epochs、seeds 2022/2023 确认。此处按综合 gap 最小只保留一个确认 seed；seed 2021 仅为 screening，不与 full confirmation 混称。
 
 ## 注意事项与审计路径
 
