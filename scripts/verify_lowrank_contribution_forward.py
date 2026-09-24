@@ -160,7 +160,14 @@ def main() -> None:
             )
         del model, val_loader
 
-    path = repo_root / args.output_dir / "contribution_forward_check.csv"
+    # Every shard produces the same table name, so a plain write would leave only
+    # the last shard's rows.  Shards write disjoint files and the merge step
+    # concatenates them.
+    filename = (
+        f"contribution_forward_check_shard{args.shard_index}.csv"
+        if args.shard_count > 1 else "contribution_forward_check.csv"
+    )
+    path = repo_root / args.output_dir / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     if results:
         import csv as csv_module
