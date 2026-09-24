@@ -156,33 +156,51 @@ def figure_dense_alignment(alignment: list[dict], figures: Path) -> None:
     plt.close(figure)
 
 
-def figure_mode_kernels(modes_dir: Path, figures: Path) -> None:
-    """Input and output kernels of the top modes of one rich cell."""
-    setting, cell, seed = "ETTh2-720", "q=1/4", 2021
+def figure_mode_kernels(
+    modes_dir: Path, semantics: list[dict], figures: Path,
+    setting: str, cell: str, seed: int, filename: str,
+) -> None:
+    """Input and output kernels of the top modes, titled with the attribution."""
     path = modes_dir / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
     if not path.is_file():
         return
+    labels = {
+        (row["mode_index"]): row
+        for row in semantics
+        if row["setting"] == setting and row["cell"] == cell and int(row["seed"]) == seed
+    }
     payload = np.load(path)
     u = payload["u"]
     vt = payload["vt"]
     contribution = payload["contribution"]
+    positive = float(contribution[contribution > 0].sum())
     order = np.argsort(-contribution)[:5]
     horizon, lookback = u.shape[0], vt.shape[1]
-    figure, axes = plt.subplots(2, 5, figsize=(18, 6))
+    figure, axes = plt.subplots(2, 5, figsize=(19, 6.4))
     for column, index in enumerate(order):
+        row = labels.get(int(index), {})
+        share = contribution[index] / positive if positive else 0.0
         axes[0, column].plot(np.arange(-lookback + 1, 1), vt[index], linewidth=1.4)
         axes[0, column].set_title(
-            f"mode {index}: input $v_i$\n$I_i$={contribution[index] / contribution.sum():.1%} share"
+            f"mode {index}: reads {row.get('input_best_group', '?')}\n"
+            f"({row.get('input_group_explanation', float('nan')):.2f})  $I_i$={share:.1%}",
+            fontsize=9,
         )
         axes[0, column].set_xlabel("lag")
         axes[1, column].plot(np.arange(1, horizon + 1), u[:, index], linewidth=1.4, color="#c0392b")
-        axes[1, column].set_title("output $u_i$")
+        axes[1, column].set_title(
+            f"writes {row.get('output_best_group', '?')}\n"
+            f"({row.get('output_group_explanation', float('nan')):.2f})",
+            fontsize=9,
+        )
         axes[1, column].set_xlabel("horizon step")
-        for row in (0, 1):
-            axes[row, column].grid(alpha=0.25)
-    figure.suptitle(f"{setting} {cell} seed {seed}: canonical read-write modes")
+        for row_index in (0, 1):
+            axes[row_index, column].grid(alpha=0.25)
+    figure.suptitle(
+        f"{setting} {cell} seed {seed}: canonical read-write modes, by predictive contribution"
+    )
     figure.tight_layout()
-    figure.savefig(figures / "fig5_canonical_modes.png", dpi=140)
+    figure.savefig(figures / filename, dpi=140)
     plt.close(figure)
 
 
@@ -229,12 +247,17 @@ def main() -> None:
     modes = read_csv(base / "mode_contributions.csv")
     alignment = read_csv(base / "dense_alignment.csv")
     sparsity = read_csv(base / "mode_sparsity.csv")
+    semantics_path = base / "mode_semantics.csv"
+    semantics = read_csv(semantics_path) if semantics_path.is_file() else []
 
     figure_rank_curves(curves, cells, figures)
     figure_importance_mismatch(modes, figures)
     figure_negative_share(cells, figures)
     figure_dense_alignment(alignment, figures)
-    figure_mode_kernels(base / "modes", figures)
+    figure_mode_kernels(base / "modes", semantics, figures,
+                        "ETTh2-720", "q=1/8", 2021, "fig5_canonical_modes.png")
+    figure_mode_kernels(base / "modes", semantics, figures,
+                        "Weather-192", "q=1/8", 2021, "fig7_canonical_modes_weather.png")
     figure_sparsity(sparsity, figures)
     print(f"wrote {len(list(figures.glob('*.png')))} figures to {figures}")
 

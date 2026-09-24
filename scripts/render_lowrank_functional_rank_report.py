@@ -179,6 +179,23 @@ def table_seed(stability: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def table_paired_mechanism(modes: list[dict], cells: list[dict]) -> str:
+    """Best-match attribution of the leading modes by predictive contribution."""
+    from summarize_lowrank_mode_semantics import mechanism_table  # noqa: PLC0415
+    return mechanism_table(modes, cells, "q=1/8")
+
+
+def table_group_composition(modes: list[dict]) -> str:
+    """Group-by-group explanation, the plan's section 12.2 reporting form."""
+    from summarize_lowrank_mode_semantics import composition_table  # noqa: PLC0415
+    return composition_table(modes, "q=1/8")
+
+
+def cross_check_semantics(modes: list[dict], reference: list[dict]) -> str:
+    from summarize_lowrank_mode_semantics import cross_check  # noqa: PLC0415
+    return cross_check(modes, reference)
+
+
 def table_order_agreement(alignment: list[dict]) -> str:
     rows = [r for r in alignment if r["dense_reference"] == "dense_singular_vs_functional"]
     lines = [
@@ -207,6 +224,12 @@ def main() -> None:
     alignment = read_csv(base / "dense_alignment.csv")
     sparsity = read_csv(base / "mode_sparsity.csv")
     stability = read_csv(base / "seed_mode_stability.csv")
+    semantics_path = base / "mode_semantics.csv"
+    semantics = read_csv(semantics_path) if semantics_path.is_file() else []
+    reference_path = (
+        base.parent / "lowrank_checkpoint_information_v1" / "semantic_alignment.csv"
+    )
+    reference = read_csv(reference_path) if reference_path.is_file() else []
 
     verification: list[dict] = []
     for path in sorted(base.glob("contribution_forward_check*.csv")):
@@ -290,6 +313,25 @@ energetic 子空间"这个问题才可分。
 因此仍是标量运算）；`dense` 行恒等于 0 是整条链路的自洽性检查。
 
 {table_sparsity(sparsity)}
+
+## 6b. 逐 mode 语义归因："这 3–5 个 mode 分别是什么"
+
+上表回答了"需要几个 mode"，这一节回答"分别是哪个方向"。按**实测预测贡献**排序，
+把每个 mode 的输入方向匹配到输入字典、输出方向匹配到输出字典。
+
+{cross_check_semantics(semantics, reference) if semantics and reference else '_（未找到 mode_semantics.csv 或参照文件）_'}
+
+### 配对机制（`q=1/8`，三个 seed 的众数标签与均值解释率）
+
+{table_paired_mechanism(semantics, cells) if semantics else '_（无数据）_'}
+
+**解释率不是划分**：输入字典内 EMA24 / EMA48 / tail_mean_24 等模板近乎共线（计划 §4 已指出），
+各语义组对同一方向都有非零投影，因此一行内的组解释率**不要求和为 1**。要看"成分比例"
+应读下一节的逐组数值，而不是把 best match 当成唯一成分。
+
+### 逐组解释率（`q=1/8`）
+
+{table_group_composition(semantics) if semantics else '_（无数据）_'}
 
 ## 7. 表 6：跨 seed 的模式稳定性（计划 §13）
 
