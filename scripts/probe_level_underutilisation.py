@@ -89,9 +89,14 @@ def ridge_fit(s_ff: np.ndarray, s_yf: np.ndarray, penalty: float) -> np.ndarray:
 
 
 def moments(features: np.ndarray, targets: np.ndarray):
-    """Second-moment statistics summed over (sample, channel)."""
+    """Second-moment statistics summed over (sample, channel).
+
+    ``features`` is (N, C, F) and ``targets`` is (N, H, C) -- the layout the
+    metrics use -- so the target is moved to (N, C, H) before flattening; the
+    ridge problem couples one channel's features to that same channel's horizon.
+    """
     flat_f = features.reshape(-1, features.shape[-1])
-    flat_y = targets.reshape(-1, targets.shape[-1])
+    flat_y = np.moveaxis(targets, 2, 1).reshape(-1, targets.shape[1])
     return flat_f.T @ flat_f, flat_y.T @ flat_f, flat_f.shape[0]
 
 
