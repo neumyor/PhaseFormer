@@ -143,11 +143,30 @@ def rank_correlation(a: np.ndarray, b: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 
 
+def calibrate_scales(model, loader, device, max_batches: int = 8) -> np.ndarray:
+    """Per-channel error scale: the median window standard deviation on train.
+
+    Used to build a scale-free error target.  The per-window scale itself is
+    unusable because a nearly constant window has sigma ~ 3e-3 and the quotient
+    reaches 1e3; the per-channel median is a fixed, train-derived constant.
+    """
+    deviations = []
+    with torch.inference_mode():
+        for index, batch in enumerate(loader):
+            if index >= max_batches:
+                break
+            xn = batch[0].to(device).double().cpu().numpy()
+            deviations.append(xn.std(axis=1))
+    return np.median(np.concatenate(deviations, axis=0), axis=0)
+
+
 def run_split(model, loader, device, period, cycle_count,
+              scales: np.ndarray | None = None,
               projections: dict[str, np.ndarray] | None = None,
               max_batches: int = 0):
     """Per-window quantities for one split under one checkpoint."""
-    level_parts, shuffled_parts, projected_parts, error_parts = [], [], {}, []
+    level_parts, shuffled_parts, projected_parts = [], [], {}
+    error_parts, normalised_parts = [], []
     projected_parts = {name: [] for name in (projections or {})}
     window_moment = np.zeros((LOOKBACK, LOOKBACK))
     samples = 0
@@ -167,6 +186,10 @@ def run_split(model, loader, device, period, cycle_count,
             xn = x.double().cpu().numpy()
             error = (truth.double().cpu().numpy() - out.double().cpu().numpy())
             error_parts.append(np.mean(error ** 2, axis=(1, 2)))   # per window
+            if scales is not None:
+                normalised_parts.append(
+                    np.mean((error / scales) ** 2, axis=(1, 2))
+                )
 
             level_parts.append(cycle_means(xn, period, cycle_count))
             shuffled_parts.append(cycle_means(xn[:, permutation, :], period, cycle_count))
@@ -182,6 +205,8 @@ def run_split(model, loader, device, period, cycle_count,
         "level": np.concatenate(level_parts, axis=0),
         "time_shuffled": np.concatenate(shuffled_parts, axis=0),
         "per_window_error": np.concatenate(error_parts, axis=0),
+        "per_window_error_normalised": (
+            np.concatenate(normalised_parts, axis=0) if normalised_parts else None),
         "window_moment": window_moment,
         "projected": {name: np.concatenate(parts, axis=0)
                       for name, parts in projected_parts.items()},
@@ -253,13 +278,15 @@ def main() -> None:
 
         rng = np.random.default_rng(seed)
         random_projection = rng.standard_normal((LOOKBACK, cycle_count)) / np.sqrt(LOOKBACK)
+        scales = calibrate_scales(phase_model, handles["train"][1], device)
         first = {split: run_split(phase_model, handles[split][1], device, period, cycle_count,
-                                  max_batches=args.max_batches)
+                                  scales=scales, max_batches=args.max_batches)
                  for split in ("train", "val", "test")}
         principal = _principal_axes(first["train"]["window_moment"], cycle_count)
         projections = {"random_projection": random_projection, "pca_matched": principal}
         second = {split: run_split(phase_model, handles[split][1], device, period, cycle_count,
-                                   projections=projections, max_batches=args.max_batches)
+                                   projections=projections, scales=scales,
+                                   max_batches=args.max_batches)
                   for split in ("train", "val", "test")}
         for split in ("train", "val", "test"):
             for name, value in second[split]["projected"].items():
@@ -276,13 +303,18 @@ def main() -> None:
 
         variants = ["level", "shuffled_level", "time_shuffled_level",
                     "random_projection", "pca_matched"]
+        targets_by_kind = {
+            "raw": {split: first[split]["per_window_error"] for split in first},
+            "normalised": {split: first[split]["per_window_error_normalised"]
+                           for split in first},
+        }
         predictability: dict[str, dict] = {}
         for name in variants:
             source = "level" if name == "shuffled_level" else name
             flat = {split: with_intercept(design(split, source)).reshape(
                 -1, with_intercept(design(split, source)).shape[-1])
                 for split in ("train", "val", "test")}
-            targets = {split: np.repeat(first[split]["per_window_error"],
+            targets = {split: np.repeat(targets_by_kind["normalised"][split],
                                         first[split]["level"].shape[1])
                        for split in ("train", "val", "test")}
             if name == "shuffled_level":
@@ -330,7 +362,7 @@ def main() -> None:
                 load_checkpoint_into(correction_model, correction_checkpoints[0])
                 correction_model.to(device).eval()
                 corrected = run_split(correction_model, correction_handles["test"][1],
-                                      device, period, cycle_count,
+                                      device, period, cycle_count, scales=scales,
                                       max_batches=args.max_batches)
                 gain_by_window = first["test"]["per_window_error"] - corrected["per_window_error"]
                 del correction_model, correction_handles
