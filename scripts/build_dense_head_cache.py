@@ -33,6 +33,9 @@ import numpy as np
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if not (REPO_ROOT / "src").is_dir():
+    REPO_ROOT = Path.cwd().resolve()
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from lowrank_checkpoint_model import (  # noqa: E402
@@ -64,6 +67,8 @@ def main() -> None:
     parser.add_argument("--datasets", default="ETTh2,ETTm2,Weather")
     parser.add_argument("--seeds", default="2021,2022,2023")
     parser.add_argument("--max-batches", type=int, default=0)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--repo-root", default="")
     args = parser.parse_args()
@@ -76,6 +81,10 @@ def main() -> None:
     settings = {value for value in args.datasets.split(",") if value}
     seeds = {int(value) for value in args.seeds.split(",") if value}
     cells = resolve_cells(repo_root / args.summary, settings, seeds)
+    cells = [
+        cell for index, cell in enumerate(cells)
+        if index % args.shard_count == args.shard_index
+    ]
     print(f"dense cells to cache: {len(cells)}  device={device}", flush=True)
 
     output_dir = repo_root / args.output_dir
