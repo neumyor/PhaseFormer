@@ -102,13 +102,6 @@ def moments(features: np.ndarray, targets: np.ndarray):
     return flat_f.T @ flat_f, flat_y.T @ flat_f, flat_f.shape[0]
 
 
-def revin_stats(x: np.ndarray, eps: float = 1e-5):
-    """Replicates ``RevIN.normalize`` (unbiased=False variance, no affine)."""
-    mu = x.mean(axis=1, keepdims=True)
-    sigma = np.sqrt(x.var(axis=1, keepdims=True) + eps)
-    return mu, sigma
-
-
 def forward_split(model, loader, device, period, cycle_count,
                   projections: dict[str, np.ndarray] | None = None,
                   max_batches: int = 0):
@@ -119,7 +112,7 @@ def forward_split(model, loader, device, period, cycle_count,
     given, each named ``(L, cycle_count)`` matrix is also applied to every
     window, which is what the parameter-matched control needs.
     """
-    level_parts, shuffled_parts, target_parts, sigma_parts = [], [], [], []
+    level_parts, shuffled_parts, target_parts = [], [], []
     projected_parts = {name: [] for name in (projections or {})}
     window_moment = np.zeros((LOOKBACK, LOOKBACK))
     window_sum = np.zeros(LOOKBACK)
@@ -139,15 +132,19 @@ def forward_split(model, loader, device, period, cycle_count,
             truth = y.float()[:, -horizon:, :]
 
             xn = x.double().cpu().numpy()
-            _, sigma = revin_stats(xn)
-            residual_norm = (truth.double().cpu().numpy()
-                             - out.double().cpu().numpy()) / sigma
+            # The target is the frozen model's error in *value* space.  Dividing
+            # by the per-window RevIN scale would be the branch's own coordinate
+            # system, but windows that are nearly constant have sigma ~ 0.003 and
+            # the quotient reaches 1e3, which makes the regression fit noise.
+            # The features are already normalized, so a linear map from them to
+            # the value-space error is scale-free without that division.
+            residual = truth.double().cpu().numpy() - out.double().cpu().numpy()
 
             level = cycle_means(xn, period, cycle_count)
             shuffled = cycle_means(xn[:, permutation, :], period, cycle_count)
 
             for name, features in (("level", level), ("time_shuffled", shuffled)):
-                moment_f, moment_y, _ = moments(with_intercept(features), residual_norm)
+                moment_f, moment_y, _ = moments(with_intercept(features), residual)
                 statistics[name] = (
                     (moment_f, moment_y) if statistics[name] is None
                     else (statistics[name][0] + moment_f, statistics[name][1] + moment_y)
@@ -159,14 +156,13 @@ def forward_split(model, loader, device, period, cycle_count,
 
             level_parts.append(level)
             shuffled_parts.append(shuffled)
-            target_parts.append(residual_norm)
-            sigma_parts.append(sigma)
+            target_parts.append(residual)
             samples += xn.shape[0]
 
             flat_xn = xn.reshape(-1, LOOKBACK)
             window_moment += flat_xn.T @ flat_xn
             window_sum += flat_xn.sum(axis=0)
-            del xn, out, truth, residual_norm, level, shuffled, flat_xn
+            del xn, out, truth, residual, level, shuffled, flat_xn
 
     return {
         "statistics": statistics,
@@ -176,19 +172,17 @@ def forward_split(model, loader, device, period, cycle_count,
         "level": np.concatenate(level_parts, axis=0),
         "time_shuffled": np.concatenate(shuffled_parts, axis=0),
         "target": np.concatenate(target_parts, axis=0),
-        "sigma": np.concatenate(sigma_parts, axis=0),
         "projected": {name: np.concatenate(parts, axis=0)
                       for name, parts in projected_parts.items()},
     }
 
 
-def score(features: np.ndarray, target: np.ndarray, sigma: np.ndarray,
-          weight: np.ndarray) -> dict:
+def score(features: np.ndarray, target: np.ndarray, weight: np.ndarray) -> dict:
     """Fused metrics for one correction map, plus per-window squared errors."""
-    error_before = sigma * target
+    error_before = target
     # Output subscripts are (n, h, c): the correction writes a horizon shape
     # per channel, matching the (N, H, C) layout the metrics use.
-    error_after = error_before - sigma * np.einsum("ncf,hf->nhc", features, weight)
+    error_after = error_before - np.einsum("ncf,hf->nhc", features, weight)
     return {
         "mse_before": float(np.mean(error_before ** 2)),
         "mse_after": float(np.mean(error_after ** 2)),
@@ -224,7 +218,10 @@ def main() -> None:
 
     rows = [
         r for r in csv.DictReader((repo_root / args.results).open())
-        if r["arm"] == "phase_only" and r["status"] == "read"
+        # "reused" cells carry test metrics copied from an earlier run rather
+        # than re-read in E14; their checkpoints are present and usable, and
+        # they are exactly the six exploratory settings per dataset.
+        if r["arm"] == "phase_only" and r["status"] in ("read", "reused")
         and r["dataset"] in datasets and int(r["seed"]) in seeds
     ]
     rows.sort(key=lambda r: (r["dataset"], int(r["horizon"]), int(r["seed"])))
@@ -289,28 +286,28 @@ def main() -> None:
         for penalty in penalties:
             weight = ridge_fit(*first["train"]["statistics"]["level"], penalty)
             candidate = score(with_intercept(first["val"]["level"]),
-                              first["val"]["target"], first["val"]["sigma"], weight)
+                              first["val"]["target"], weight)
             if candidate["mse_after"] < best_val:
                 best_val, best_penalty, level_weight = candidate["mse_after"], penalty, weight
 
         train, test = first["train"], first["test"]
-        result = score(with_intercept(test["level"]), test["target"], test["sigma"], level_weight)
+        result = score(with_intercept(test["level"]), test["target"], level_weight)
 
         control_results: dict[str, dict] = {}
         shuffled_train = train["level"][np.random.default_rng(seed).permutation(train["level"].shape[0])]
         weight = ridge_fit(*moments(with_intercept(shuffled_train), train["target"])[:2], best_penalty)
         control_results["shuffled_level"] = score(
-            with_intercept(test["level"]), test["target"], test["sigma"], weight)
+            with_intercept(test["level"]), test["target"], weight)
 
         weight = ridge_fit(*train["statistics"]["time_shuffled"], best_penalty)
         control_results["time_shuffled_level"] = score(
-            with_intercept(test["time_shuffled"]), test["target"], test["sigma"], weight)
+            with_intercept(test["time_shuffled"]), test["target"], weight)
 
         for name in ("random_projection", "pca_matched"):
             weight = ridge_fit(*moments(with_intercept(train["projected"][name]),
                                         train["target"])[:2], best_penalty)
             control_results[name] = score(
-                with_intercept(test["projected"][name]), test["target"], test["sigma"], weight)
+                with_intercept(test["projected"][name]), test["target"], weight)
 
         entry = {
             "setting": setting, "dataset": dataset, "horizon": horizon, "seed": seed,
