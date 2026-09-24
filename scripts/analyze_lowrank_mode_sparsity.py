@@ -49,27 +49,35 @@ def group_soft_threshold(vector: np.ndarray, blocks: list[slice], threshold: flo
     return out
 
 
-def fista(
-    target: np.ndarray,
-    prox,
-    lipschitz: float,
-    iterations: int = 500,
-    tol: float = 1e-10,
+def sparse_regression(
+    dictionary: np.ndarray, target: np.ndarray, l1_ratios=(0.01, 0.05, 0.2, 0.5),
 ) -> np.ndarray:
-    """Minimize ``0.5*||x - target||^2 + g(x)`` by accelerated proximal gradient."""
-    x = target.copy()
-    y = x.copy()
-    t = 1.0
-    step = 1.0 / lipschitz
-    for _ in range(iterations):
-        previous = x
-        x = prox(y - step * (y - target), step)
-        t_next = (1.0 + np.sqrt(1.0 + 4.0 * t * t)) / 2.0
-        y = x + ((t - 1.0) / t_next) * (x - previous)
-        t = t_next
-        if np.linalg.norm(x - previous) <= tol * max(1.0, np.linalg.norm(x)):
-            break
-    return x
+    """Lasso of ``target`` on ``dictionary``, coefficients returned.
+
+    Solves ``min_a 0.5 ||D a - target||^2 + lam ||a||_1`` by FISTA in the
+    *coefficient* space.  ``D`` has orthonormal columns, so the data term has
+    Lipschitz constant 1 and the gradient step is exactly 1.  ``lam`` is swept
+    and the most accurate fit reported, because the question here is how few
+    semantic atoms can represent the mode, not which penalty is "right".
+    """
+    best = None
+    for lam in l1_ratios:
+        alpha = np.zeros(dictionary.shape[1])
+        momentum = alpha.copy()
+        accelerator = 1.0
+        for _ in range(1000):
+            previous = alpha
+            gradient = dictionary.T @ (dictionary @ momentum - target)
+            alpha = soft_threshold(momentum - gradient, float(lam))
+            next_accelerator = (1.0 + np.sqrt(1.0 + 4.0 * accelerator ** 2)) / 2.0
+            momentum = alpha + ((accelerator - 1.0) / next_accelerator) * (alpha - previous)
+            accelerator = next_accelerator
+            if np.linalg.norm(alpha - previous) <= 1e-10 * max(1.0, np.linalg.norm(alpha)):
+                break
+        residual = float(np.linalg.norm(target - dictionary @ alpha))
+        if best is None or residual < best[0]:
+            best = (residual, alpha)
+    return best[1]
 
 
 _FACTORISATION_CACHE: dict = {}
@@ -147,23 +155,6 @@ def lag_sparsifiers(seq_len: int, block_sizes: tuple[int, ...] = (24, 96)) -> di
 
     operators["fused_lasso_tv"] = tv
     return operators
-
-
-def sparse_regression(dictionary: np.ndarray, target: np.ndarray, l1_ratios=(0.01, 0.05, 0.2, 0.5)):
-    """Non-negative-free Lasso of ``target`` on ``dictionary`` by FISTA.
-
-    ``dictionary`` has orthonormal columns, so the Lipschitz constant of the data
-    term is 1 and no ``sklearn`` dependency is needed.
-    """
-    best = None
-    for ratio in l1_ratios:
-        lam = float(ratio)
-        prox = lambda value, step, lam=lam: soft_threshold(value, step * lam)  # noqa: E731
-        coefficients = fista(target, prox, lipschitz=1.0)
-        residual = float(np.linalg.norm(target - dictionary @ coefficients))
-        if best is None or residual < best[0]:
-            best = (residual, coefficients)
-    return best[1]
 
 
 def match_modes(modes_a: dict, modes_b: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
