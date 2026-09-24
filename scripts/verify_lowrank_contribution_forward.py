@@ -180,9 +180,9 @@ def measure_mse(model, loader, device, dropped, s, vt, images, horizon) -> float
     """Fused MSE with the modes in ``dropped`` deleted inside the forward pass."""
     dropped = np.asarray(dropped, dtype=int)
     scaling = torch.as_tensor(
-        (s[dropped][:, None] * vt[dropped]), dtype=torch.float64
+        (s[dropped][:, None] * vt[dropped]), dtype=torch.float64, device=device,
     )                                                # (k, L)
-    image = torch.as_tensor(images[:, dropped], dtype=torch.float64)   # (r, k)
+    image = torch.as_tensor(images[:, dropped], dtype=torch.float64, device=device)
 
     def intervention(centered, hidden):
         # centered: (B, C, L); hidden: (B, C, r)
