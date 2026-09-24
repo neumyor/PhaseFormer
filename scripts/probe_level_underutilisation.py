@@ -7,25 +7,34 @@ concentrates in windows whose cross-cycle level moves.  Neither establishes the
 stronger claim that the frozen model *underuses* level information, because the
 original model also consumes level information.
 
-This script tests it directly and cheaply:
+This script tests that claim in two parts, both on data the fit never saw.
 
-1. freeze a trained **phase-only** checkpoint (no residual branch);
-2. fit, on the **training split only**, an affine map from the window's
-   cross-cycle *level trajectory* to the frozen model's remaining error;
-3. choose the ridge penalty on the **validation split**;
-4. evaluate on the **test split**, overall and grouped by how much the level
-   moved, against controls that share the parameter count but not the level
-   semantics.
+**Part A -- is the frozen model's error level-predictable out of sample?**
+A ridge map from the window's cross-cycle level trajectory to the frozen
+model's error *magnitude* is fitted on the training split, its penalty chosen on
+validation, and its out-of-sample rank correlation reported on test.  Predicting
+the scalar error rather than the full error vector is deliberate: it is far
+better powered, and it answers the question actually asked -- whether level
+information tells you *where* the frozen model will be wrong.
 
-If level information predicts the frozen model's error and the reduction
-concentrates in the expected windows -- while the controls do not reproduce it --
-then the frozen model uses the information without fully exploiting it.  That
-statement is about these models and these datasets, not about what the
-architecture could represent in principle.
+An earlier version of this probe instead fitted a map to the whole error vector
+and applied it as a correction.  That map has only `horizon x (cycles + 1)`
+parameters and cannot beat a no-op at any penalty on these settings, so it
+measures the weakness of the correction form, not the model's use of level
+information.  It is retained only as a reported negative control.
 
-Fitting and penalty selection touch only train and validation.  The test split
-is read once per pass, for evaluation.  The *checkpoints* are not blind; the
-report's disclosure section states that limitation.
+**Part B -- does the trained correction's benefit concentrate where the level
+moves?** The paired PhaseFormer-L checkpoint for the same setting and seed is run
+on the same windows, and its per-window gain over the frozen model is grouped by
+how far the level moved.
+
+Controls share the parameter count but not the level semantics: shuffled level
+features, cycle means of a time-permuted window, a fixed random projection, and
+the principal axes of the normalized window.
+
+Fitting and penalty selection touch only train and validation; the test split is
+read only for evaluation.  The checkpoints themselves are not blind -- see the
+report's disclosure section.
 """
 
 from __future__ import annotations
@@ -58,6 +67,11 @@ DATASET_PERIOD = {"ETTh1": 24, "ETTh2": 24, "ETTm1": 96, "ETTm2": 96, "Weather":
 LOOKBACK = 720
 
 
+# ---------------------------------------------------------------------------
+# Level features
+# ---------------------------------------------------------------------------
+
+
 def cycle_means(xn: np.ndarray, period: int, count: int) -> np.ndarray:
     """Mean of each of the ``count`` most recent non-overlapping cycles.
 
@@ -66,8 +80,6 @@ def cycle_means(xn: np.ndarray, period: int, count: int) -> np.ndarray:
     left unused rather than folded into a partial cycle.
     """
     length = xn.shape[1]
-    # (N, C, count): channels stay the middle axis so a feature vector is one
-    # channel's level trajectory, which is what the per-channel ridge couples.
     features = np.empty((xn.shape[0], xn.shape[2], count), dtype=np.float64)
     features[:, :, 0] = xn[:, length - period:, :].mean(axis=1)
     for index in range(1, count):
@@ -80,72 +92,82 @@ def cycle_means(xn: np.ndarray, period: int, count: int) -> np.ndarray:
     return features
 
 
+def level_statistics(level: np.ndarray) -> dict[str, np.ndarray]:
+    """Per-window level-movement descriptors, averaged over channels."""
+    trajectory = level.mean(axis=1)                     # (N, K)
+    latest = trajectory[:, 0]
+    prior = trajectory[:, 1:].mean(axis=1) if trajectory.shape[1] > 1 else latest
+    return {
+        "level_std": trajectory.std(axis=1),
+        "last_cycle_offset": np.abs(latest - prior),
+        "level_range": np.abs(trajectory[:, 0] - trajectory[:, -1]),
+    }
+
+
 def with_intercept(features: np.ndarray) -> np.ndarray:
     return np.concatenate([features, np.ones(features.shape[:2] + (1,))], axis=2)
 
 
-def ridge_fit(s_ff: np.ndarray, s_yf: np.ndarray, penalty: float) -> np.ndarray:
-    """``W`` minimising ``sum ||y - W f||^2 + penalty ||W||^2``; ``s_yf`` is (H, F)."""
-    size = s_ff.shape[0]
-    return s_yf @ np.linalg.solve(s_ff + penalty * np.eye(size), np.eye(size))
+# ---------------------------------------------------------------------------
+# Ridge on a scalar target
+# ---------------------------------------------------------------------------
 
 
-def moments(features: np.ndarray, targets: np.ndarray):
-    """Second-moment statistics summed over (sample, channel).
+def standardise(train: np.ndarray, others: dict[str, np.ndarray]):
+    """Feature mean and standard deviation from train, applied everywhere.
 
-    ``features`` is (N, C, F) and ``targets`` is (N, H, C) -- the layout the
-    metrics use -- so the target is moved to (N, C, H) before flattening; the
-    ridge problem couples one channel's features to that same channel's horizon.
+    Without this the penalty is meaningless: the raw level features have a Gram
+    matrix whose largest eigenvalue is ~1e6, so a grid reaching only 30 applies
+    essentially no shrinkage and the fit generalises at chance.
     """
-    flat_f = features.reshape(-1, features.shape[-1])
-    flat_y = np.moveaxis(targets, 2, 1).reshape(-1, targets.shape[1])
-    return flat_f.T @ flat_f, flat_y.T @ flat_f, flat_f.shape[0]
+    mean = train.mean(axis=0)
+    scale = train.std(axis=0)
+    scale[scale <= 1e-12] = 1.0
+    return mean, scale, {name: (value - mean) / scale for name, value in others.items()}
+
+
+def ridge_scalar(x: np.ndarray, y: np.ndarray, penalty: float) -> np.ndarray:
+    gram = x.T @ x
+    return np.linalg.solve(gram + penalty * np.eye(gram.shape[0]), x.T @ y)
+
+
+def rank_correlation(a: np.ndarray, b: np.ndarray) -> float:
+    if a.size < 3 or np.std(a) == 0 or np.std(b) == 0:
+        return float("nan")
+    return float(np.corrcoef(a.argsort().argsort().astype(float),
+                             b.argsort().argsort().astype(float))[0, 1])
+
+
+# ---------------------------------------------------------------------------
+# Forward passes
+# ---------------------------------------------------------------------------
 
 
 def calibrate_scales(model, loader, device, max_batches: int = 8) -> np.ndarray:
-    """Per-channel error scale, from the median window standard deviation.
-
-    The branch's own form multiplies its map by the per-window RevIN scale, so a
-    single shared map can serve channels of very different magnitude.  Using the
-    raw per-window scale is unusable here -- a nearly constant window has
-    sigma ~ 3e-3 and the quotient reaches 1e3 -- so the per-channel *median*
-    over a handful of training batches is used instead.  It is a fixed,
-    train-derived constant, not a per-sample quantity.
-    """
+    """Per-channel error scale: the median window standard deviation on train."""
     deviations = []
     with torch.inference_mode():
         for index, batch in enumerate(loader):
             if index >= max_batches:
                 break
-            batch = [t.to(device) if torch.is_tensor(t) else t for t in batch]
-            xn = batch[0].double().cpu().numpy()
-            deviations.append(xn.std(axis=1))            # (N, C)
-    stacked = np.concatenate(deviations, axis=0)
-    return np.median(stacked, axis=0)                    # (C,)
+            xn = batch[0].to(device).double().cpu().numpy()
+            deviations.append(xn.std(axis=1))
+    return np.median(np.concatenate(deviations, axis=0), axis=0)
 
 
-def forward_split(model, loader, device, period, cycle_count,
-                  projections: dict[str, np.ndarray] | None = None,
-                  scales: np.ndarray | None = None,
-                  max_batches: int = 0):
-    """Stream one split.
-
-    Always returns the level and time-shuffled feature sets, the normalized
-    target, the RevIN scale and the window moments.  When ``projections`` is
-    given, each named ``(L, cycle_count)`` matrix is also applied to every
-    window, which is what the parameter-matched control needs.
-    """
-    level_parts, shuffled_parts, target_parts = [], [], []
+def run_split(model, loader, device, period, cycle_count,
+              projections: dict[str, np.ndarray] | None = None,
+              max_batches: int = 0):
+    """Per-window quantities for one split under one checkpoint."""
+    level_parts, shuffled_parts, projected_parts, error_parts = [], [], {}, []
     projected_parts = {name: [] for name in (projections or {})}
     window_moment = np.zeros((LOOKBACK, LOOKBACK))
-    window_sum = np.zeros(LOOKBACK)
     samples = 0
     permutation = np.random.default_rng(0).permutation(LOOKBACK)
-    statistics = {name: None for name in ("level", "time_shuffled")}
 
     with torch.inference_mode():
-        for batch_index, batch in enumerate(loader):
-            if max_batches and batch_index >= max_batches:
+        for index, batch in enumerate(loader):
+            if max_batches and index >= max_batches:
                 break
             batch = [t.to(device) if torch.is_tensor(t) else t for t in batch]
             x, y, x_mark, y_mark = batch
@@ -155,74 +177,26 @@ def forward_split(model, loader, device, period, cycle_count,
             truth = y.float()[:, -horizon:, :]
 
             xn = x.double().cpu().numpy()
-            # The target is the frozen model's error in *value* space.  Dividing
-            # by the per-window RevIN scale would be the branch's own coordinate
-            # system, but windows that are nearly constant have sigma ~ 0.003 and
-            # the quotient reaches 1e3, which makes the regression fit noise.
-            # The features are already normalized, so a linear map from them to
-            # the value-space error is scale-free without that division.
-            residual = truth.double().cpu().numpy() - out.double().cpu().numpy()
-            if scales is not None:
-                residual = residual / scales
+            error = (truth.double().cpu().numpy() - out.double().cpu().numpy())
+            error_parts.append(np.mean(error ** 2, axis=(1, 2)))   # per window
 
-            level = cycle_means(xn, period, cycle_count)
-            shuffled = cycle_means(xn[:, permutation, :], period, cycle_count)
-
-            for name, features in (("level", level), ("time_shuffled", shuffled)):
-                moment_f, moment_y, _ = moments(with_intercept(features), residual)
-                statistics[name] = (
-                    (moment_f, moment_y) if statistics[name] is None
-                    else (statistics[name][0] + moment_f, statistics[name][1] + moment_y)
-                )
+            level_parts.append(cycle_means(xn, period, cycle_count))
+            shuffled_parts.append(cycle_means(xn[:, permutation, :], period, cycle_count))
             for name, matrix in (projections or {}).items():
-                projected_parts[name].append(
-                    np.einsum("nlc,lf->ncf", xn, matrix)
-                )
-
-            level_parts.append(level)
-            shuffled_parts.append(shuffled)
-            target_parts.append(residual)
-            samples += xn.shape[0]
-
+                projected_parts[name].append(np.einsum("nlc,lf->ncf", xn, matrix))
             flat_xn = xn.reshape(-1, LOOKBACK)
             window_moment += flat_xn.T @ flat_xn
-            window_sum += flat_xn.sum(axis=0)
-            del xn, out, truth, residual, level, shuffled, flat_xn
+            samples += xn.shape[0]
+            del xn, out, truth, error, flat_xn
 
     return {
-        "statistics": statistics,
         "samples": samples,
-        "window_moment": window_moment,
-        "window_sum": window_sum,
         "level": np.concatenate(level_parts, axis=0),
         "time_shuffled": np.concatenate(shuffled_parts, axis=0),
-        "target": np.concatenate(target_parts, axis=0),
+        "per_window_error": np.concatenate(error_parts, axis=0),
+        "window_moment": window_moment,
         "projected": {name: np.concatenate(parts, axis=0)
                       for name, parts in projected_parts.items()},
-    }
-
-
-def score(features: np.ndarray, target: np.ndarray, weight: np.ndarray,
-          scales: np.ndarray | None = None) -> dict:
-    """Value-space metrics for one correction map, plus per-window squared errors.
-
-    ``target`` is the frozen model's error divided by the per-channel scale, so
-    multiplying back by ``scales`` restores value-space units and makes
-    ``mse_before`` comparable with the checkpoint's own recorded test metric.
-    """
-    unit = 1.0 if scales is None else scales
-    # Output subscripts are (n, h, c): the correction writes a horizon shape
-    # per channel, matching the (N, H, C) layout the metrics use.
-    correction = np.einsum("ncf,hf->nhc", features, weight)
-    error_before = target * unit
-    error_after = (target - correction) * unit
-    return {
-        "mse_before": float(np.mean(error_before ** 2)),
-        "mse_after": float(np.mean(error_after ** 2)),
-        "mae_before": float(np.mean(np.abs(error_before))),
-        "mae_after": float(np.mean(np.abs(error_after))),
-        "per_window_before": np.mean(error_before ** 2, axis=(1, 2)),
-        "per_window_after": np.mean(error_after ** 2, axis=(1, 2)),
     }
 
 
@@ -232,7 +206,7 @@ def main() -> None:
     parser.add_argument("--output-dir", default="research_runs/level_underutilisation_v1")
     parser.add_argument("--datasets", default="ETTh1,ETTh2,ETTm1,ETTm2,Weather")
     parser.add_argument("--seeds", default="2021,2022,2023")
-    parser.add_argument("--penalties", default="0.003,0.01,0.03,0.1,0.3,1,3,10,30")
+    parser.add_argument("--penalties", default="0.01,0.03,0.1,0.3,1,3,10,30,100,300,1000")
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--max-batches", type=int, default=0)
@@ -249,16 +223,15 @@ def main() -> None:
     seeds = {int(v) for v in args.seeds.split(",") if v}
     penalties = [float(v) for v in args.penalties.split(",") if v]
 
+    table = list(csv.DictReader((repo_root / args.results).open()))
+    index = {(r["setting"], r["seed"], r["arm"]): r for r in table}
     rows = [
-        r for r in csv.DictReader((repo_root / args.results).open())
-        # "reused" cells carry test metrics copied from an earlier run rather
-        # than re-read in E14; their checkpoints are present and usable, and
-        # they are exactly the six exploratory settings per dataset.
+        r for r in table
         if r["arm"] == "phase_only" and r["status"] in ("read", "reused")
         and r["dataset"] in datasets and int(r["seed"]) in seeds
     ]
     rows.sort(key=lambda r: (r["dataset"], int(r["horizon"]), int(r["seed"])))
-    rows = [r for index, r in enumerate(rows) if index % args.shard_count == args.shard_index]
+    rows = [r for i, r in enumerate(rows) if i % args.shard_count == args.shard_index]
     print(f"shard {args.shard_index}/{args.shard_count}: {len(rows)} cells on {device}", flush=True)
 
     output_dir = repo_root / args.output_dir
@@ -272,7 +245,7 @@ def main() -> None:
         run_dir = repo_root / row["run_dir"]
         checkpoints = sorted((run_dir / "attempts").glob("*/checkpoints/best.ckpt"))
         if not checkpoints:
-            print(f"  [skip] no checkpoint for {setting} seed={seed}", flush=True)
+            print(f"  [skip] no phase checkpoint for {setting} seed={seed}", flush=True)
             continue
 
         config = json.loads((run_dir / "config.json").read_text())
@@ -280,131 +253,154 @@ def main() -> None:
         batch_size = int(config.get("batch_size") or 256)
         period = DATASET_PERIOD[dataset]
         cycle_count = LOOKBACK // period
-
         started = time.time()
+
         exp_args, handles = build_loaders(
             dataset, LOOKBACK, horizon, hyperparams, batch_size, repo_root,
             splits=("train", "val", "test"),
         )
-        model = build_model(exp_args, LOOKBACK, horizon, hyperparams)
-        load_checkpoint_into(model, checkpoints[0])
-        model.to(device)
-        model.eval()
+        phase_model = build_model(exp_args, LOOKBACK, horizon, hyperparams)
+        load_checkpoint_into(phase_model, checkpoints[0])
+        phase_model.to(device).eval()
 
-        scales = calibrate_scales(model, handles["train"][1], device)
-        first = {split: forward_split(model, handles[split][1], device, period, cycle_count,
-                                      scales=scales, max_batches=args.max_batches)
-                 for split in ("train", "val", "test")}
-
-        # Two parameter-matched generic paths, both of dimension `cycle_count`
-        # and hence the same parameter count as the level map (plus intercept):
-        # a fixed random projection, and the principal axes of the normalized
-        # window fitted on train.
         rng = np.random.default_rng(seed)
         random_projection = rng.standard_normal((LOOKBACK, cycle_count)) / np.sqrt(LOOKBACK)
-        principal = _principal_axes(first["train"]["window_moment"],
-                                    first["train"]["window_sum"],
-                                    first["train"]["samples"], cycle_count)
+        first = {split: run_split(phase_model, handles[split][1], device, period, cycle_count,
+                                  max_batches=args.max_batches)
+                 for split in ("train", "val", "test")}
+        principal = _principal_axes(first["train"]["window_moment"], cycle_count)
         projections = {"random_projection": random_projection, "pca_matched": principal}
-        second = {split: forward_split(model, handles[split][1], device, period, cycle_count,
-                                       projections=projections, scales=scales,
-                                       max_batches=args.max_batches)
+        second = {split: run_split(phase_model, handles[split][1], device, period, cycle_count,
+                                   projections=projections, max_batches=args.max_batches)
                   for split in ("train", "val", "test")}
         for split in ("train", "val", "test"):
             for name, value in second[split]["projected"].items():
                 first[split]["projected"][name] = value
-        del model, handles, second
+        del phase_model, second
 
-        # --- penalty selection on validation, never on test -----------------
-        best_penalty, best_val, level_weight = None, np.inf, None
-        for penalty in penalties:
-            weight = ridge_fit(*first["train"]["statistics"]["level"], penalty)
-            candidate = score(with_intercept(first["val"]["level"]),
-                              first["val"]["target"], weight, scales)
-            if candidate["mse_after"] < best_val:
-                best_val, best_penalty, level_weight = candidate["mse_after"], penalty, weight
+        # --- Part A: is the frozen error level-predictable out of sample? ----
+        def design(split: str, name: str) -> np.ndarray:
+            if name == "level":
+                return first[split]["level"]
+            if name == "time_shuffled_level":
+                return first[split]["time_shuffled"]
+            return first[split]["projected"][name]
 
-        train, test = first["train"], first["test"]
-        result = score(with_intercept(test["level"]), test["target"], level_weight, scales)
+        variants = ["level", "shuffled_level", "time_shuffled_level",
+                    "random_projection", "pca_matched"]
+        predictability: dict[str, dict] = {}
+        for name in variants:
+            source = "level" if name == "shuffled_level" else name
+            flat = {split: with_intercept(design(split, source)).reshape(
+                -1, with_intercept(design(split, source)).shape[-1])
+                for split in ("train", "val", "test")}
+            targets = {split: np.repeat(first[split]["per_window_error"],
+                                        first[split]["level"].shape[1])
+                       for split in ("train", "val", "test")}
+            if name == "shuffled_level":
+                permuted = rng.permutation(flat["train"].shape[0])
+                flat["train"] = flat["train"][permuted]
+                targets["train"] = targets["train"][permuted]
 
-        control_results: dict[str, dict] = {}
-        shuffled_train = train["level"][np.random.default_rng(seed).permutation(train["level"].shape[0])]
-        weight = ridge_fit(*moments(with_intercept(shuffled_train), train["target"])[:2], best_penalty)
-        control_results["shuffled_level"] = score(
-            with_intercept(test["level"]), test["target"], weight, scales)
+            mean, scale, standardised = standardise(flat["train"], {
+                split: flat[split] for split in ("val", "test")})
+            standardised["train"] = (flat["train"] - mean) / scale
 
-        weight = ridge_fit(*train["statistics"]["time_shuffled"], best_penalty)
-        control_results["time_shuffled_level"] = score(
-            with_intercept(test["time_shuffled"]), test["target"], weight, scales)
+            best, best_val = None, np.inf
+            for penalty in penalties:
+                weight = ridge_scalar(standardised["train"], targets["train"], penalty)
+                residual = standardised["val"] @ weight - targets["val"]
+                if float(np.mean(residual ** 2)) < best_val:
+                    best_val, best = float(np.mean(residual ** 2)), weight
+            prediction = standardised["test"] @ best
+            observed = targets["test"]
+            variance = float(np.var(observed))
+            predictability[name] = {
+                "spearman": rank_correlation(prediction, observed),
+                "r2": (1.0 - float(np.mean((prediction - observed) ** 2)) / variance
+                       if variance > 0 else float("nan")),
+                "val_mse": best_val,
+            }
 
-        for name in ("random_projection", "pca_matched"):
-            weight = ridge_fit(*moments(with_intercept(train["projected"][name]),
-                                        train["target"])[:2], best_penalty)
-            control_results[name] = score(
-                with_intercept(test["projected"][name]), test["target"], weight, scales)
+        # --- Part B: does the trained correction help most where level moves? -
+        correction_row = index.get((setting, str(seed), "l_main"))
+        gain_by_window = None
+        if correction_row is not None:
+            correction_dir = repo_root / correction_row["run_dir"]
+            correction_checkpoints = sorted(
+                (correction_dir / "attempts").glob("*/checkpoints/best.ckpt"))
+            if correction_checkpoints:
+                correction_config = json.loads((correction_dir / "config.json").read_text())
+                correction_args, correction_handles = build_loaders(
+                    dataset, LOOKBACK, horizon, dict(correction_config["hyperparams"]),
+                    int(correction_config.get("batch_size") or 256), repo_root,
+                    splits=("test",),
+                )
+                correction_model = build_model(correction_args, LOOKBACK, horizon,
+                                               dict(correction_config["hyperparams"]))
+                load_checkpoint_into(correction_model, correction_checkpoints[0])
+                correction_model.to(device).eval()
+                corrected = run_split(correction_model, correction_handles["test"][1],
+                                      device, period, cycle_count,
+                                      max_batches=args.max_batches)
+                gain_by_window = first["test"]["per_window_error"] - corrected["per_window_error"]
+                del correction_model, correction_handles
+
+        statistics = level_statistics(first["test"]["level"])
+        if gain_by_window is not None:
+            for name, statistic in statistics.items():
+                for quartile, members in enumerate(np.array_split(np.argsort(statistic), 4), start=1):
+                    groups.append({
+                        "setting": setting, "dataset": dataset, "horizon": horizon,
+                        "seed": seed, "grouping": name, "quartile": quartile,
+                        "windows": int(members.size),
+                        "mean_statistic": float(statistic[members].mean()),
+                        "phase_mse": float(first["test"]["per_window_error"][members].mean()),
+                        "fused_mse": float((first["test"]["per_window_error"][members]
+                                            - gain_by_window[members]).mean()),
+                        "gain": float(gain_by_window[members].mean()),
+                    })
 
         entry = {
             "setting": setting, "dataset": dataset, "horizon": horizon, "seed": seed,
             "lookback": LOOKBACK, "period": period, "cycle_features": cycle_count,
-            "parameter_count": int(level_weight.shape[0] * level_weight.shape[1]),
-            "train_samples": train["samples"], "val_samples": first["val"]["samples"],
-            "test_samples": test["samples"],
-            "selected_penalty": best_penalty, "val_mse_after": best_val,
-            "channel_scales": ";".join(f"{v:.6g}" for v in scales),
-            "test_mse_phase_only": result["mse_before"],
-            "test_mse_level_correction": result["mse_after"],
-            "test_delta_mse": result["mse_after"] - result["mse_before"],
-            "test_mae_phase_only": result["mae_before"],
-            "test_mae_level_correction": result["mae_after"],
-            "test_delta_mae": result["mae_after"] - result["mae_before"],
+            "train_windows": int(first["train"]["samples"]),
+            "val_windows": int(first["val"]["samples"]),
+            "test_windows": int(first["test"]["samples"]),
+            "test_phase_mse": float(first["test"]["per_window_error"].mean()),
             "recorded_test_mse": float(row["test_mse"]),
-            "recorded_test_mae": float(row["test_mae"]),
         }
-        for name, value in control_results.items():
-            entry[f"control_{name}_mse"] = value["mse_after"]
-            entry[f"control_{name}_delta_mse"] = value["mse_after"] - value["mse_before"]
-
-        level = test["level"]                       # (N, C, K)
-        level_std = level.std(axis=2).mean(axis=1)
-        prior = (level[:, :, 1:].mean(axis=2) if level.shape[2] > 1
-                 else level[:, :, 0])
-        last_offset = np.abs(level[:, :, 0] - prior).mean(axis=1)
-        gain = result["per_window_before"] - result["per_window_after"]
-
-        for name, statistic in (("level_std", level_std), ("last_cycle_offset", last_offset)):
-            for quartile, index in enumerate(np.array_split(np.argsort(statistic), 4), start=1):
-                groups.append({
-                    "setting": setting, "dataset": dataset, "horizon": horizon, "seed": seed,
-                    "grouping": name, "quartile": quartile, "windows": int(index.size),
-                    "mean_statistic": float(statistic[index].mean()),
-                    "mse_before": float(result["per_window_before"][index].mean()),
-                    "mse_after": float(result["per_window_after"][index].mean()),
-                    "delta_mse": float((result["per_window_after"][index]
-                                        - result["per_window_before"][index]).mean()),
-                })
-            entry[f"spearman_{name}_vs_gain"] = float(np.corrcoef(
-                statistic.argsort().argsort().astype(float), gain)[0, 1])
+        for name, value in predictability.items():
+            entry[f"predict_{name}_spearman"] = value["spearman"]
+            entry[f"predict_{name}_r2"] = value["r2"]
+        if gain_by_window is not None:
+            entry["mean_gain_phase_to_fused"] = float(gain_by_window.mean())
+            for name, statistic in statistics.items():
+                entry[f"spearman_{name}_vs_gain"] = rank_correlation(statistic, gain_by_window)
 
         summary.append(entry)
         print(
-            f"  [{position}/{len(rows)}] {setting} seed={seed} lam={best_penalty:g} "
-            f"dMSE={entry['test_delta_mse']:+.6f} "
-            f"({entry['test_delta_mse'] / result['mse_before']:+.2%}) "
-            f"shuf={entry['control_shuffled_level_delta_mse']:+.6f} "
-            f"tshuf={entry['control_time_shuffled_level_delta_mse']:+.6f} "
-            f"pca={entry['control_pca_matched_delta_mse']:+.6f} "
+            f"  [{position}/{len(rows)}] {setting} seed={seed} "
+            f"rho(level->err)={entry['predict_level_spearman']:+.3f} "
+            f"rho(shuf)={entry['predict_shuffled_level_spearman']:+.3f} "
+            f"rho(pca)={entry['predict_pca_matched_spearman']:+.3f} "
+            f"gain={entry.get('mean_gain_phase_to_fused', float('nan')):+.5f} "
             f"({time.time() - started:.0f}s)", flush=True,
         )
 
-    write_csv(summary, output_dir / f"level_underutilisation_cells_shard{args.shard_index}.csv")
-    write_csv(groups, output_dir / f"level_underutilisation_groups_shard{args.shard_index}.csv")
+    write_csv(summary, output_dir / f"level_probe_cells_shard{args.shard_index}.csv")
+    write_csv(groups, output_dir / f"level_probe_groups_shard{args.shard_index}.csv")
     print(f"shard {args.shard_index} done", flush=True)
 
 
-def _principal_axes(moment: np.ndarray, total: np.ndarray, count: int, axes: int) -> np.ndarray:
-    centre = total / max(count, 1)
-    centred = moment / max(count, 1) - np.outer(centre, centre)
-    values, vectors = np.linalg.eigh(0.5 * (centred + centred.T))
+def _principal_axes(moment: np.ndarray, axes: int) -> np.ndarray:
+    """Top principal axes of the normalized window, from its second moment.
+
+    These are the leading temporal patterns of the input window, with no
+    level-specific construction, so projecting onto them gives a generic
+    temporal path of the same dimension and parameter count as the level map.
+    """
+    values, vectors = np.linalg.eigh(0.5 * (moment + moment.T))
     return vectors[:, np.argsort(values)[::-1][:axes]]
 
 
