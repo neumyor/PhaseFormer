@@ -286,9 +286,10 @@ def main() -> None:
                                         first[split]["level"].shape[1])
                        for split in ("train", "val", "test")}
             if name == "shuffled_level":
-                permuted = rng.permutation(flat["train"].shape[0])
-                flat["train"] = flat["train"][permuted]
-                targets["train"] = targets["train"][permuted]
+                # Permute the features only.  Permuting features and targets
+                # together is a no-op for least squares, so the control would
+                # reproduce the real fit exactly and measure nothing.
+                flat["train"] = flat["train"][rng.permutation(flat["train"].shape[0])]
 
             mean, scale, standardised = standardise(flat["train"], {
                 split: flat[split] for split in ("val", "test")})
