@@ -39,16 +39,6 @@ def soft_threshold(vector: np.ndarray, threshold: float) -> np.ndarray:
     return np.sign(vector) * np.maximum(np.abs(vector) - threshold, 0.0)
 
 
-def group_soft_threshold(vector: np.ndarray, blocks: list[slice], threshold: float) -> np.ndarray:
-    out = np.zeros_like(vector)
-    for block in blocks:
-        segment = vector[block]
-        norm = float(np.linalg.norm(segment))
-        if norm > threshold:
-            out[block] = segment * (1.0 - threshold / norm)
-    return out
-
-
 def sparse_regression(
     dictionary: np.ndarray, target: np.ndarray, l1_ratios=(0.01, 0.05, 0.2, 0.5),
 ) -> np.ndarray:
@@ -118,7 +108,14 @@ def fused_lasso(target: np.ndarray, lambda_tv: float, iterations: int = 200, rho
 
 
 def lag_sparsifiers(seq_len: int, block_sizes: tuple[int, ...] = (24, 96)) -> dict:
-    """Named sparsification operators for an input direction of length ``seq_len``."""
+    """Named sparsification operators for an input direction of length ``seq_len``.
+
+    Every operator is pinned to a *budget* rather than to its own best fit.  A
+    sweep that picks the penalty minimizing reconstruction error always returns
+    the identity, which measures nothing; the question is what a given number of
+    retained lags or windows costs, so the budget is the input and the error is
+    the output.
+    """
     operators = {}
     for fraction in (0.90, 0.95, 0.99):
         keep = max(1, int(round((1.0 - fraction) * seq_len)))
@@ -130,30 +127,24 @@ def lag_sparsifiers(seq_len: int, block_sizes: tuple[int, ...] = (24, 96)) -> di
             return out
 
         operators[f"hard_{int(fraction * 100)}"] = hard
+
     for block in block_sizes:
         blocks = [slice(start, min(start + block, seq_len)) for start in range(0, seq_len, block)]
+        for keep_fraction in (0.25, 0.10):
+            keep_count = max(1, int(round(keep_fraction * len(blocks))))
 
-        def grouped(vector: np.ndarray, blocks=blocks) -> np.ndarray:
-            best = None
-            for threshold in np.linspace(0.0, float(np.linalg.norm(vector)), 200):
-                candidate = group_soft_threshold(vector, blocks, float(threshold))
-                residual = float(np.linalg.norm(vector - candidate))
-                if best is None or residual < best[0]:
-                    best = (residual, candidate)
-            return best[1]
+            def grouped(vector: np.ndarray, blocks=blocks, keep_count=keep_count) -> np.ndarray:
+                norms = np.array([np.linalg.norm(vector[b]) for b in blocks])
+                selected = np.argsort(-norms, kind="stable")[:keep_count]
+                out = np.zeros_like(vector)
+                for position in selected:
+                    out[blocks[position]] = vector[blocks[position]]
+                return out
 
-        operators[f"group_lasso_{block}"] = grouped
-    # A monotone objective is needed to pick lambda, so TV is swept the same way.
-    def tv(vector: np.ndarray, lambdas=(0.05, 0.2, 0.5)) -> np.ndarray:
-        best = None
-        for lam in lambdas:
-            candidate = fused_lasso(vector, float(lam))
-            residual = float(np.linalg.norm(vector - candidate))
-            if best is None or residual < best[0]:
-                best = (residual, candidate)
-        return best[1]
+            operators[f"group_select_{block}_keep{int(keep_fraction * 100)}"] = grouped
 
-    operators["fused_lasso_tv"] = tv
+    for lam in (0.05, 0.2, 0.5):
+        operators[f"tv_{lam}"] = lambda vector, lam=lam: fused_lasso(vector, float(lam))
     return operators
 
 
@@ -332,11 +323,16 @@ def main() -> None:
                 else:
                     activation = np.einsum("l,nlc->nc", candidate, z)
                     scaled = s[index] * activation
+                    # Same functional as analyse_cell: both moments carry the
+                    # 1/horizon from the mean over (n, h, c). Taking the
+                    # horizon average outside only the second term inflates the
+                    # first by a factor of H and reports the identity variant as
+                    # a large improvement instead of zero.
                     contribution_sparse = (
                         2.0 * np.mean((gs2 * scaled) * np.einsum(
                             "nhc,h->nc", e0, output_direction))
-                        - np.mean((gs2 * scaled) ** 2) / horizon
-                    )
+                        - np.mean((gs2 * scaled) ** 2)
+                    ) / horizon
                     delta_mse = contribution[index] - contribution_sparse
                 sparsity_rows.append({
                     "setting": setting, "dataset": dataset, "horizon": horizon,
