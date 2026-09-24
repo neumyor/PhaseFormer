@@ -50,6 +50,14 @@ def orthonormal_basis(rows: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(q[:, :max(keep, 1)])
 
 
+def _rank_ranks(values: np.ndarray) -> np.ndarray:
+    """Average ranks with ties shared, so a rank correlation needs no scipy."""
+    order = np.argsort(values, kind="stable")
+    ranks = np.empty(values.size, dtype=np.float64)
+    ranks[order] = np.arange(values.size, dtype=np.float64)
+    return ranks
+
+
 def top_k_rows(matrix: np.ndarray, order: np.ndarray, k: int) -> np.ndarray:
     return matrix[order[:k]]
 
@@ -118,6 +126,28 @@ def main() -> None:
         singular_order = np.argsort(-s_d, kind="stable")
         functional_order = np.argsort(-I_d, kind="stable")
 
+        # The plan's section 10.4 asks whether the dense head's ordinary
+        # weight-energy order agrees with its prediction-relevant order at all.
+        # If it does, the "low-rank kept the functional rather than the energetic
+        # subspace" question is not separable on this model family, and that is
+        # itself the finding; so the agreement is measured, not assumed.
+        k_probe = int(min(16, s_d.size))
+        basis_singular = orthonormal_basis(top_k_rows(vt_d, singular_order, k_probe))
+        basis_functional = orthonormal_basis(top_k_rows(vt_d, functional_order, k_probe))
+        order_rho = float(np.corrcoef(
+            _rank_ranks(s_d), _rank_ranks(I_d)
+        )[0, 1])
+        rows.append({
+            "setting": setting, "dataset": dataset, "horizon": horizon,
+            "seed": seed, "cell": "dense", "rank": int(dense_modes["rank"]),
+            "subspace_dim": k_probe, "dense_reference": "dense_singular_vs_functional",
+            "input_overlap": projection_overlap(basis_singular, basis_functional),
+            "input_cos_mean": "", "input_cos_min": "",
+            "output_overlap": "", "output_cos_mean": "", "output_cos_min": "",
+            "dense_improvement_retained": "", "dense_mse_with_restriction": "",
+            "singular_vs_functional_rank_correlation": order_rho,
+        })
+
         for cell in wanted_cells:
             mode_path = modes_dir / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
             if not mode_path.is_file():
@@ -151,6 +181,7 @@ def main() -> None:
                         "output_cos_min": float(out_cos.min()),
                         "dense_improvement_retained": "",
                         "dense_mse_with_restriction": "",
+                        "singular_vs_functional_rank_correlation": "",
                     })
 
             # Operational retention: restrict the dense map to the low-rank
@@ -176,6 +207,7 @@ def main() -> None:
                         if abs(improvement) > 1e-15 else float("nan")
                     ),
                     "dense_mse_with_restriction": mse_restricted,
+                    "singular_vs_functional_rank_correlation": "",
                 })
         print(
             f"  {setting} seed={seed}: dense improvement={improvement:.6f} "
