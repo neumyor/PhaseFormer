@@ -5074,3 +5074,87 @@ ETTm1-720）相对主表 PhaseFormer-L 聚合值在 MSE 和 MAE 两侧均缩小 
 golden-search/targeted-search 见证行与本轮 `batch_period_loss_gate_200_v1` 五个未满足 setting
 分开列示，并记录 Golden 来源、run/config/metrics 审计路径、test-set selection 限制及 screening
 与 full confirmation 的区别。
+
+## 2026-09-24 — 执行低秩 checkpoint 的 functional rank 与 mode 可解释性分析
+
+**用户指令**：按 `low_rank_checkpoint_analysis_experiment_plan.md`（§5–§13）在远程 8 卡服务器上
+执行实验并记录结果。
+
+**生效范围**：6 个 setting（ETTh2-96/720、ETTm2-96/192、Weather-96/192）× 4 个压缩档
+（q=1/4、1/8、1/16、1/32）× 3 seed = **72 个正式 cell**。Electricity-336 不在该计划 §4.1 范围内且
+cache 不完整，排除在全部裁定之外；§4.1 的 ETTm1/Traffic 负对照需新训练，本阶段未做。
+
+**与既有分析的差集**：`lowrank_checkpoint_information_v1`（2026-09-17）已覆盖 §5–§7 与部分 §8。
+本轮新增的是 §6.4 activation energy、§8.2 解析 `I_i` 与加性恒等式、§8.3 真实前向验证、
+**§9 functional rank**、§10 dense 对齐、§11 pruning 判据对比、§12 lag/语义稀疏化、§13 Hungarian 匹配。
+
+**代码**（全部新增，均在 `scripts/`）：
+`analyze_lowrank_functional_rank.py`（§5/§6.4/§8/§9/§11/§13-mode 层）、
+`build_dense_head_cache.py`（dense `l_main` 验证集 cache）、
+`analyze_lowrank_dense_alignment.py`（§10）、
+`analyze_lowrank_mode_sparsity.py`（§12 + §13 seed 匹配）、
+`verify_lowrank_contribution_forward.py`（§8.3）、
+`render_lowrank_functional_rank_figures.py` / `render_lowrank_functional_rank_report.py`、
+两个汇总脚本；`_probe_cache_algebra.py` 与 `_probe_live_algebra.py` 是代数口径的推导证据。
+
+**关键命令**（服务器 `time` 环境，仓库根目录）：
+```bash
+for i in 0 1 2 3 4 5 6 7; do python scripts/analyze_lowrank_functional_rank.py \
+  --output-dir research_runs/lowrank_functional_rank_v1 --export-modes \
+  research_runs/lowrank_functional_rank_v1/modes --shard-index $i --shard-count 8 & done; wait
+for i in 0 1 2 3 4 5 6 7; do CUDA_VISIBLE_DEVICES=$i python scripts/build_dense_head_cache.py \
+  --output-dir research_runs/lowrank_functional_rank_v1/dense_features \
+  --shard-index $i --shard-count 8 & done; wait
+python scripts/analyze_lowrank_dense_alignment.py
+for i in 0 1 2 3 4 5 6 7; do python scripts/analyze_lowrank_mode_sparsity.py \
+  --shard-index $i --shard-count 8 & done; wait
+for i in 0 1 2 3 4 5 6 7; do CUDA_VISIBLE_DEVICES=$i python \
+  scripts/verify_lowrank_contribution_forward.py --shard-index $i --shard-count 8 & done; wait
+python scripts/render_lowrank_functional_rank_figures.py
+python scripts/render_lowrank_functional_rank_report.py
+```
+
+**产物**：`research_runs/lowrank_functional_rank_v1/`（`report.md` 759 行、`figures/` 6 张、
+`functional_rank_cells.csv` 72、`functional_rank_curves.csv` 8744、`mode_contributions.csv` 909、
+`mode_pruning.csv` 1160、`mode_sparsity.csv` 864、`seed_mode_stability.csv` 48、
+`dense_alignment.csv` 450、`contribution_forward_check_shard*.csv` 120，
+以及 `modes/` 78 个 mode 张量与 `dense_features/` 18 个 dense cache）。
+
+**验证**：
+- 加性恒等式 `|Σ I_i − (MSE(ŷ₀) − MSE(ŷ))|` 最大 **5.12e-10**（阈值 1e-6）；
+- 闭式重建 vs 模型自身 `fused` 最大 **7.4e-06**（float32 往返量级）；
+- **§8.3 真实前向验证 120 次对照，最大相对误差 3.28e-09**（含 `drop-all` 复现 `MSE(ŷ₀)`）；
+- 稀疏化表 `dense` 行恒为 **2.99e-17**，为整条链路的自洽性检查。
+
+**主要结果**：
+1. **functional rank 远低于 nominal rank 且跨 seed 稳定**：ETTh2-720 在 rank 180 时 r95 仅
+   **7.3 ± 1.7**；ETTm2-192 从 rank 6 到 48，r95 恒为 **3.0**。恢复曲线在 5–8 个 mode 内饱和。
+2. **高压缩档存在大量负贡献 mode**：ETTh2-720 rank 180 有 **62.0 ± 3.6** 个 mode 的 `I_i < 0`；
+   rank 90 为 24.7 ± 4.8。低压缩档（ETTh2-96、ETTm2-96 的 q=1/32）为 0。
+3. **四种排序在本模型家族上高度接近**（表 2）：r95 的 contrib / singular / activation 三列几乎一致，
+   与计划 H3 预期的强不一致不符——需要写成"prefix 级一致、排序级不可分"。
+4. **低秩子空间保留了 dense 模型的大部分可及改善**：dim=8 时保留 **78%–98%**（Weather 最高）。
+5. **dense 的普通能量顺序与预测顺序并不总一致**：ETTh2-720 的秩相关 **≈ 0**
+   （0.00 / −0.20 / 0.03），ETTm2 为 0.87–0.94，Weather-192 为 0.29–0.51；
+   但 top-16 子空间重叠仍有 0.63–1.00，两者需分开表述。
+6. **单 mode 的 kernel 可显著压缩**：TV(λ=0.05) 保持 R²=0.769 而逐 mode 融合代价仅 **+8.0e-05**；
+   语义 Lasso 用 **39 个 atom** 达到 R²=0.524、代价 +2.0e-03；砍到 7 个 lag 代价升到 +1.0e-02。
+7. **单个 mode 跨 seed 不稳定**：Hungarian 匹配后输入余弦均值 **0.37**（q=1/4 仅 0.18，
+   q=1/32 为 0.57），仅 27.5% 的匹配对同时 >0.7。**按 index 命名单个 mode 不成立**，
+   只能解释子空间——与计划 §13.1 的告警一致。
+
+**执行纪律**：沿用上一轮教训，长任务前先做单 cell 端到端验证（本轮据此发现并修掉了三处缺陷：
+`(N,H,C)`×`(N,1,1)` strided 广播导致单 cell 耗时 20 s、fused 贡献漏乘 `sigma`、
+sparsity 代价函数漏除 `horizon`）。另修复了分片 CSV 无文件锁导致丢行（丢 2 个 cell）、
+TV prox 用对偶投影梯度不收敛（改用 ADMM，ρ=100）、语义 Lasso 在错误维度求解、
+dense 与 sparsity 各脚本的分片覆盖写。
+
+**环境**：远程 torch 2.6.0+cu124 / Lightning 2.6.5 / Python 3.10，seed 2021/2022/2023。
+GPU 使用 0–7 号卡（与其他用户的 8 卡任务共卡，仅占其剩余显存）。服务器 HEAD：`df32f56`。
+
+**披露**：这些 checkpoint 来自既有的 test-exposed 条件性秩扫描，本阶段结论属**条件性证据**，
+不得表述为盲测或无偏泛化估计。
+
+**限制**：§8.3 前向验证覆盖 seed 2021（24 cell）而非全 3 seed；§12 的稀疏化是事后施加在冻结
+mode 上，回答"kernel 能否被压缩"而非"从头训练是否可学到稀疏 kernel"；
+§10 的 dense 对齐依赖同源的 `rank_sweep_2_stage1` dense checkpoint，不覆盖 §4.1 之外的 setting。
