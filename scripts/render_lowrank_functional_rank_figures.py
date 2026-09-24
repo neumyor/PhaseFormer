@@ -165,7 +165,7 @@ def figure_mode_kernels(
     if not path.is_file():
         return
     labels = {
-        (row["mode_index"]): row
+        int(row["mode_index"]): row
         for row in semantics
         if row["setting"] == setting and row["cell"] == cell and int(row["seed"]) == seed
     }
