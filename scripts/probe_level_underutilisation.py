@@ -143,18 +143,6 @@ def rank_correlation(a: np.ndarray, b: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 
 
-def calibrate_scales(model, loader, device, max_batches: int = 8) -> np.ndarray:
-    """Per-channel error scale: the median window standard deviation on train."""
-    deviations = []
-    with torch.inference_mode():
-        for index, batch in enumerate(loader):
-            if index >= max_batches:
-                break
-            xn = batch[0].to(device).double().cpu().numpy()
-            deviations.append(xn.std(axis=1))
-    return np.median(np.concatenate(deviations, axis=0), axis=0)
-
-
 def run_split(model, loader, device, period, cycle_count,
               projections: dict[str, np.ndarray] | None = None,
               max_batches: int = 0):
@@ -334,7 +322,7 @@ def main() -> None:
                 correction_args, correction_handles = build_loaders(
                     dataset, LOOKBACK, horizon, dict(correction_config["hyperparams"]),
                     int(correction_config.get("batch_size") or 256), repo_root,
-                    splits=("test",),
+                    splits=("val", "test"),
                 )
                 correction_model = build_model(correction_args, LOOKBACK, horizon,
                                                dict(correction_config["hyperparams"]))
