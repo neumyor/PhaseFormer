@@ -164,8 +164,19 @@ def figure_mode_kernels(
     path = modes_dir / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz"
     if not path.is_file():
         return
+    def as_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float("nan")
+
     labels = {
-        int(row["mode_index"]): row
+        int(row["mode_index"]): {
+            "input": row["input_best_group"],
+            "input_score": as_float(row["input_group_explanation"]),
+            "output": row["output_best_group"],
+            "output_score": as_float(row["output_group_explanation"]),
+        }
         for row in semantics
         if row["setting"] == setting and row["cell"] == cell and int(row["seed"]) == seed
     }
@@ -178,19 +189,20 @@ def figure_mode_kernels(
     horizon, lookback = u.shape[0], vt.shape[1]
     figure, axes = plt.subplots(2, 5, figsize=(19, 6.4))
     for column, index in enumerate(order):
-        row = labels.get(int(index), {})
+        label = labels.get(int(index), {})
         share = contribution[index] / positive if positive else 0.0
         axes[0, column].plot(np.arange(-lookback + 1, 1), vt[index], linewidth=1.4)
         axes[0, column].set_title(
-            f"mode {index}: reads {row.get('input_best_group', '?')}\n"
-            f"({row.get('input_group_explanation', float('nan')):.2f})  $I_i$={share:.1%}",
+            f"mode {index}: reads {label.get('input', '?')}\n"
+            f"(group expl. {label.get('input_score', float('nan')):.2f})  "
+            f"$I_i$={share:.1%}",
             fontsize=9,
         )
         axes[0, column].set_xlabel("lag")
         axes[1, column].plot(np.arange(1, horizon + 1), u[:, index], linewidth=1.4, color="#c0392b")
         axes[1, column].set_title(
-            f"writes {row.get('output_best_group', '?')}\n"
-            f"({row.get('output_group_explanation', float('nan')):.2f})",
+            f"writes {label.get('output', '?')}\n"
+            f"(group expl. {label.get('output_score', float('nan')):.2f})",
             fontsize=9,
         )
         axes[1, column].set_xlabel("horizon step")
