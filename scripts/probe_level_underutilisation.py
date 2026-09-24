@@ -202,12 +202,20 @@ def forward_split(model, loader, device, period, cycle_count,
     }
 
 
-def score(features: np.ndarray, target: np.ndarray, weight: np.ndarray) -> dict:
-    """Fused metrics for one correction map, plus per-window squared errors."""
-    error_before = target
+def score(features: np.ndarray, target: np.ndarray, weight: np.ndarray,
+          scales: np.ndarray | None = None) -> dict:
+    """Value-space metrics for one correction map, plus per-window squared errors.
+
+    ``target`` is the frozen model's error divided by the per-channel scale, so
+    multiplying back by ``scales`` restores value-space units and makes
+    ``mse_before`` comparable with the checkpoint's own recorded test metric.
+    """
+    unit = 1.0 if scales is None else scales
     # Output subscripts are (n, h, c): the correction writes a horizon shape
     # per channel, matching the (N, H, C) layout the metrics use.
-    error_after = error_before - np.einsum("ncf,hf->nhc", features, weight)
+    correction = np.einsum("ncf,hf->nhc", features, weight)
+    error_before = target * unit
+    error_after = (target - correction) * unit
     return {
         "mse_before": float(np.mean(error_before ** 2)),
         "mse_after": float(np.mean(error_after ** 2)),
