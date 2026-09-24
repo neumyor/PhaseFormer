@@ -102,8 +102,31 @@ def moments(features: np.ndarray, targets: np.ndarray):
     return flat_f.T @ flat_f, flat_y.T @ flat_f, flat_f.shape[0]
 
 
+def calibrate_scales(model, loader, device, max_batches: int = 8) -> np.ndarray:
+    """Per-channel error scale, from the median window standard deviation.
+
+    The branch's own form multiplies its map by the per-window RevIN scale, so a
+    single shared map can serve channels of very different magnitude.  Using the
+    raw per-window scale is unusable here -- a nearly constant window has
+    sigma ~ 3e-3 and the quotient reaches 1e3 -- so the per-channel *median*
+    over a handful of training batches is used instead.  It is a fixed,
+    train-derived constant, not a per-sample quantity.
+    """
+    deviations = []
+    with torch.inference_mode():
+        for index, batch in enumerate(loader):
+            if index >= max_batches:
+                break
+            batch = [t.to(device) if torch.is_tensor(t) else t for t in batch]
+            xn = batch[0].double().cpu().numpy()
+            deviations.append(xn.std(axis=1))            # (N, C)
+    stacked = np.concatenate(deviations, axis=0)
+    return np.median(stacked, axis=0)                    # (C,)
+
+
 def forward_split(model, loader, device, period, cycle_count,
                   projections: dict[str, np.ndarray] | None = None,
+                  scales: np.ndarray | None = None,
                   max_batches: int = 0):
     """Stream one split.
 
@@ -139,6 +162,8 @@ def forward_split(model, loader, device, period, cycle_count,
             # The features are already normalized, so a linear map from them to
             # the value-space error is scale-free without that division.
             residual = truth.double().cpu().numpy() - out.double().cpu().numpy()
+            if scales is not None:
+                residual = residual / scales
 
             level = cycle_means(xn, period, cycle_count)
             shuffled = cycle_means(xn[:, permutation, :], period, cycle_count)
@@ -258,8 +283,9 @@ def main() -> None:
         model.to(device)
         model.eval()
 
+        scales = calibrate_scales(model, handles["train"][1], device)
         first = {split: forward_split(model, handles[split][1], device, period, cycle_count,
-                                      max_batches=args.max_batches)
+                                      scales=scales, max_batches=args.max_batches)
                  for split in ("train", "val", "test")}
 
         # Two parameter-matched generic paths, both of dimension `cycle_count`
@@ -273,7 +299,7 @@ def main() -> None:
                                     first["train"]["samples"], cycle_count)
         projections = {"random_projection": random_projection, "pca_matched": principal}
         second = {split: forward_split(model, handles[split][1], device, period, cycle_count,
-                                       projections=projections,
+                                       projections=projections, scales=scales,
                                        max_batches=args.max_batches)
                   for split in ("train", "val", "test")}
         for split in ("train", "val", "test"):
@@ -286,28 +312,28 @@ def main() -> None:
         for penalty in penalties:
             weight = ridge_fit(*first["train"]["statistics"]["level"], penalty)
             candidate = score(with_intercept(first["val"]["level"]),
-                              first["val"]["target"], weight)
+                              first["val"]["target"], weight, scales)
             if candidate["mse_after"] < best_val:
                 best_val, best_penalty, level_weight = candidate["mse_after"], penalty, weight
 
         train, test = first["train"], first["test"]
-        result = score(with_intercept(test["level"]), test["target"], level_weight)
+        result = score(with_intercept(test["level"]), test["target"], level_weight, scales)
 
         control_results: dict[str, dict] = {}
         shuffled_train = train["level"][np.random.default_rng(seed).permutation(train["level"].shape[0])]
         weight = ridge_fit(*moments(with_intercept(shuffled_train), train["target"])[:2], best_penalty)
         control_results["shuffled_level"] = score(
-            with_intercept(test["level"]), test["target"], weight)
+            with_intercept(test["level"]), test["target"], weight, scales)
 
         weight = ridge_fit(*train["statistics"]["time_shuffled"], best_penalty)
         control_results["time_shuffled_level"] = score(
-            with_intercept(test["time_shuffled"]), test["target"], weight)
+            with_intercept(test["time_shuffled"]), test["target"], weight, scales)
 
         for name in ("random_projection", "pca_matched"):
             weight = ridge_fit(*moments(with_intercept(train["projected"][name]),
                                         train["target"])[:2], best_penalty)
             control_results[name] = score(
-                with_intercept(test["projected"][name]), test["target"], weight)
+                with_intercept(test["projected"][name]), test["target"], weight, scales)
 
         entry = {
             "setting": setting, "dataset": dataset, "horizon": horizon, "seed": seed,
@@ -316,6 +342,7 @@ def main() -> None:
             "train_samples": train["samples"], "val_samples": first["val"]["samples"],
             "test_samples": test["samples"],
             "selected_penalty": best_penalty, "val_mse_after": best_val,
+            "channel_scales": ";".join(f"{v:.6g}" for v in scales),
             "test_mse_phase_only": result["mse_before"],
             "test_mse_level_correction": result["mse_after"],
             "test_delta_mse": result["mse_after"] - result["mse_before"],
