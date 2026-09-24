@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import time
 from pathlib import Path
 
@@ -55,26 +56,37 @@ def scoped_write(rows: list[dict], path: Path, key: tuple[str, ...]) -> None:
     Every shard writes the same tables, so a plain overwrite would keep only the
     last shard's rows.  The merge key is explicit per table because a cell has
     many modes and many curve points.
+
+    The read-merge-write cycle is guarded by an exclusive ``flock``.  Without it
+    two shards can both read the table before either writes, and the second
+    write then drops the first shard's rows -- a race this pipeline has already
+    lost rows to once, which is why the merge is not merely "write my own rows".
     """
-    existing: dict[tuple, dict] = {}
-    if path.is_file():
-        with path.open(newline="") as handle:
-            for row in csv.DictReader(handle):
-                existing[tuple(row[column] for column in key)] = row
-    for row in rows:
-        existing[tuple(str(row[column]) for column in key)] = row
-    fieldnames = (
-        list(rows[0].keys()) if rows
-        else (list(next(iter(existing.values())).keys()) if existing else [])
-    )
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + f".tmp.{time.time_ns()}")
-    with temporary.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in existing.values():
-            writer.writerow({column: row.get(column, "") for column in fieldnames})
-    temporary.replace(path)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    with lock_path.open("w") as lock_handle:
+        fcntl.flock(lock_handle, fcntl.LOCK_EX)
+        try:
+            existing: dict[tuple, dict] = {}
+            if path.is_file():
+                with path.open(newline="") as handle:
+                    for row in csv.DictReader(handle):
+                        existing[tuple(row[column] for column in key)] = row
+            for row in rows:
+                existing[tuple(str(row[column]) for column in key)] = row
+            fieldnames = (
+                list(rows[0].keys()) if rows
+                else (list(next(iter(existing.values())).keys()) if existing else [])
+            )
+            temporary = path.with_suffix(path.suffix + f".tmp.{time.time_ns()}")
+            with temporary.open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in existing.values():
+                    writer.writerow({column: row.get(column, "") for column in fieldnames})
+            temporary.replace(path)
+        finally:
+            fcntl.flock(lock_handle, fcntl.LOCK_UN)
 
 
 def canonical_modes(W: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
