@@ -61,18 +61,20 @@ LOOKBACK = 720
 def cycle_means(xn: np.ndarray, period: int, count: int) -> np.ndarray:
     """Mean of each of the ``count`` most recent non-overlapping cycles.
 
-    ``xn`` is (N, L, C); cycle 0 is the most recent.  When ``L`` is not a
-    multiple of ``period`` the leading remainder is left unused rather than
-    folded into a partial cycle.
+    ``xn`` is (N, L, C) and the result is (N, C, count); cycle 0 is the most
+    recent.  When ``L`` is not a multiple of ``period`` the leading remainder is
+    left unused rather than folded into a partial cycle.
     """
     length = xn.shape[1]
-    features = np.empty((xn.shape[0], count, xn.shape[2]), dtype=np.float64)
-    features[:, 0, :] = xn[:, length - period:, :].mean(axis=1)
+    # (N, C, count): channels stay the middle axis so a feature vector is one
+    # channel's level trajectory, which is what the per-channel ridge couples.
+    features = np.empty((xn.shape[0], xn.shape[2], count), dtype=np.float64)
+    features[:, :, 0] = xn[:, length - period:, :].mean(axis=1)
     for index in range(1, count):
         stop = length - index * period
         start = stop - period
-        features[:, index, :] = (
-            features[:, index - 1, :] if start < 0
+        features[:, :, index] = (
+            features[:, :, index - 1] if start < 0
             else xn[:, start:stop, :].mean(axis=1)
         )
     return features
@@ -328,10 +330,11 @@ def main() -> None:
             entry[f"control_{name}_mse"] = value["mse_after"]
             entry[f"control_{name}_delta_mse"] = value["mse_after"] - value["mse_before"]
 
-        level = test["level"]
-        level_std = level.std(axis=1).mean(axis=1)
-        prior = level[:, 1:, :].mean(axis=1) if level.shape[1] > 1 else level[:, 0, :]
-        last_offset = np.abs(level[:, 0, :] - prior).mean(axis=1)
+        level = test["level"]                       # (N, C, K)
+        level_std = level.std(axis=2).mean(axis=1)
+        prior = (level[:, :, 1:].mean(axis=2) if level.shape[2] > 1
+                 else level[:, :, 0])
+        last_offset = np.abs(level[:, :, 0] - prior).mean(axis=1)
         gain = result["per_window_before"] - result["per_window_after"]
 
         for name, statistic in (("level_std", level_std), ("last_cycle_offset", last_offset)):
