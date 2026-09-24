@@ -186,7 +186,9 @@ def score(features: np.ndarray, target: np.ndarray, sigma: np.ndarray,
           weight: np.ndarray) -> dict:
     """Fused metrics for one correction map, plus per-window squared errors."""
     error_before = sigma * target
-    error_after = error_before - sigma * np.einsum("ncf,hf->nch", features, weight)
+    # Output subscripts are (n, h, c): the correction writes a horizon shape
+    # per channel, matching the (N, H, C) layout the metrics use.
+    error_after = error_before - sigma * np.einsum("ncf,hf->nhc", features, weight)
     return {
         "mse_before": float(np.mean(error_before ** 2)),
         "mse_after": float(np.mean(error_after ** 2)),
