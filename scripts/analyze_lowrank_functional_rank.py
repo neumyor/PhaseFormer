@@ -327,7 +327,12 @@ def analyse_cell(
         "singular_share_of_top1": float(weight_share[0]),
     }
     cell_row.update(functional_rank)
-    return cell_row, mode_rows, curve_rows, pruning_rows
+    modes = {
+        "u": u, "s": s, "vt": vt,
+        "contribution": I, "activation_energy": activation_energy,
+        "rank": structural_rank, "horizon": horizon, "lookback": int(z.shape[1]),
+    }
+    return cell_row, mode_rows, curve_rows, pruning_rows, modes
 
 
 def main() -> None:
@@ -341,6 +346,9 @@ def main() -> None:
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--top-modes", type=int, default=16)
+    parser.add_argument("--export-modes", default="",
+                        help="directory for the per-cell canonical mode tensors; "
+                             "consumed by the alignment and sparsity analyses")
     parser.add_argument("--random-repeats", type=int, default=200)
     parser.add_argument("--seed", type=int, default=20240924)
     parser.add_argument("--repo-root", default="")
@@ -382,10 +390,17 @@ def main() -> None:
         payload = {
             key: value.astype(np.float64) for key, value in np.load(cache).items()
         }
-        cell_row, mode_rows, curve_rows, pruning_rows = analyse_cell(
+        cell_row, mode_rows, curve_rows, pruning_rows, modes = analyse_cell(
             payload, setting, dataset, horizon, seed, cell, rank,
             random_repeats=args.random_repeats, rng=rng, top_modes=args.top_modes,
         )
+        if args.export_modes:
+            modes_dir = repo_root / args.export_modes
+            modes_dir.mkdir(parents=True, exist_ok=True)
+            np.savez(
+                modes_dir / f"{setting}_seed{seed}_{cell.replace('/', '-')}.npz",
+                **modes,
+            )
         scoped_write([cell_row], output_dir / "functional_rank_cells.csv",
                      ("setting", "seed", "cell"))
         scoped_write(mode_rows, output_dir / "mode_contributions.csv",
