@@ -671,6 +671,81 @@ energetic 子空间"这个问题才可分。
 | tv_0.2 | 72 | 0.522 | +1.07e-03 | 720 | — |
 | tv_0.5 | 72 | 0.324 | +3.47e-03 | 720 | — |
 
+## 6b. 逐 mode 语义归因："这 3–5 个 mode 分别是什么"
+
+上表回答了"需要几个 mode"，这一节回答"分别是哪个方向"。按**实测预测贡献**排序，
+把每个 mode 的输入方向匹配到输入字典、输出方向匹配到输出字典。
+
+None
+
+### 配对机制（`q=1/8`，三个 seed 的众数标签与均值解释率）
+
+| Setting | rank position | contribution share | input reads | group expl. | output writes | group expl. | paired mechanism |
+|---|---:|---:|---|---:|---|---:|---|
+| ETTh2-96 | 1 | 90.1% | recent level | 0.63 | displacement | 0.96 | recent level -> displacement |
+| ETTh2-96 | 2 | 4.5% | recent level | 0.30 | tilt | 0.80 | recent level -> tilt |
+| ETTh2-96 | 3 | 3.0% | periodic shape | 0.41 | periodic correction | 0.81 | periodic shape -> periodic correction |
+| ETTh2-96 | 4 | 1.7% | periodic shape | 0.47 | periodic correction | 0.76 | periodic shape -> periodic correction |
+| ETTh2-96 | 5 | 0.4% | recent level | 0.15 | tilt | 0.44 | recent level -> tilt |
+| **ETTh2-96** | *(r95 = 3.0 of 12)* | | | | | | |
+| ETTh2-720 | 1 | 68.7% | recent level | 0.73 | displacement | 0.95 | recent level -> displacement |
+| ETTh2-720 | 2 | 11.9% | periodic shape | 0.72 | periodic correction | 0.95 | periodic shape -> periodic correction |
+| ETTh2-720 | 3 | 10.2% | periodic shape | 0.75 | periodic correction | 0.93 | periodic shape -> periodic correction |
+| ETTh2-720 | 4 | 2.8% | level change | 0.36 | curvature | 0.52 | level change -> curvature |
+| ETTh2-720 | 5 | 1.5% | recent level | 0.41 | curvature | 0.55 | recent level -> curvature |
+| **ETTh2-720** | *(r95 = 4.7 of 90)* | | | | | | |
+| ETTm2-96 | 1 | 65.3% | recent level | 0.60 | displacement | 0.97 | recent level -> displacement |
+| ETTm2-96 | 2 | 18.8% | periodic shape | 0.61 | periodic correction | 0.96 | periodic shape -> periodic correction |
+| ETTm2-96 | 3 | 12.3% | periodic shape | 0.63 | periodic correction | 0.96 | periodic shape -> periodic correction |
+| ETTm2-96 | 4 | 2.6% | recent level | 0.26 | periodic correction | 0.71 | recent level -> tilt |
+| ETTm2-96 | 5 | 0.7% | recent level | 0.11 | periodic correction | 0.19 | recent level -> periodic correction |
+| **ETTm2-96** | *(r95 = 3.3 of 12)* | | | | | | |
+| ETTm2-192 | 1 | 72.8% | recent level | 0.63 | displacement | 0.97 | recent level -> displacement |
+| ETTm2-192 | 2 | 15.1% | periodic shape | 0.67 | periodic correction | 0.94 | periodic shape -> periodic correction |
+| ETTm2-192 | 3 | 10.2% | periodic shape | 0.70 | periodic correction | 0.96 | periodic shape -> periodic correction |
+| ETTm2-192 | 4 | 0.9% | recent level | 0.39 | curvature | 0.57 | recent level -> curvature |
+| ETTm2-192 | 5 | 0.5% | recent level | 0.30 | curvature | 0.54 | recent level -> curvature |
+| **ETTm2-192** | *(r95 = 3.0 of 24)* | | | | | | |
+| Weather-96 | 1 | 40.2% | recent level | 0.52 | curvature | 0.96 | recent level -> curvature |
+| Weather-96 | 2 | 34.6% | recent level | 0.47 | curvature | 0.95 | recent level -> curvature |
+| Weather-96 | 3 | 14.2% | recent level | 0.15 | curvature | 0.49 | recent level -> curvature |
+| Weather-96 | 4 | 5.6% | recent level | 0.22 | curvature | 0.50 | recent level -> curvature |
+| Weather-96 | 5 | 4.2% | local curvature | 0.15 | tilt | 0.46 | local curvature -> tilt |
+| **Weather-96** | *(r95 = 5.0 of 12)* | | | | | | |
+| Weather-192 | 1 | 27.9% | recent level | 0.44 | curvature | 0.52 | recent level -> curvature |
+| Weather-192 | 2 | 24.8% | recent level | 0.57 | curvature | 0.92 | recent level -> curvature |
+| Weather-192 | 3 | 22.2% | local trend | 0.24 | tilt | 0.42 | local trend -> tilt |
+| Weather-192 | 4 | 14.5% | recent level | 0.25 | tilt | 0.33 | recent level -> tilt |
+| Weather-192 | 5 | 6.9% | recent level | 0.21 | tilt | 0.10 | local curvature -> tilt |
+| **Weather-192** | *(r95 = 5.0 of 24)* | | | | | | |
+
+**解释率不是划分**：输入字典内 EMA24 / EMA48 / tail_mean_24 等模板近乎共线（计划 §4 已指出），
+各语义组对同一方向都有非零投影，因此一行内的组解释率**不要求和为 1**。要看"成分比例"
+应读下一节的逐组数值，而不是把 best match 当成唯一成分。
+
+### 逐组解释率（`q=1/8`）
+
+| Setting | position | recent level | periodic shape | fast local change | local curvature | other | output displacement | output tilt | output curvature |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| ETTh2-96 | 1 | 0.62 | 0.60 | 0.07 | 0.58 | 1.53 | 0.96 | 0.94 | 0.91 |
+| ETTh2-96 | 2 | 0.27 | 0.15 | 0.02 | 0.22 | 0.50 | 0.02 | 0.68 | 0.71 |
+| ETTh2-96 | 3 | 0.09 | 0.41 | 0.02 | 0.04 | 0.07 | 0.00 | 0.17 | 0.13 |
+| ETTh2-720 | 1 | 0.73 | 0.57 | 0.10 | 0.68 | 1.76 | 0.95 | 0.90 | 0.88 |
+| ETTh2-720 | 2 | 0.18 | 0.72 | 0.05 | 0.06 | 0.09 | 0.00 | 0.00 | 0.00 |
+| ETTh2-720 | 3 | 0.05 | 0.75 | 0.05 | 0.06 | 0.01 | 0.00 | 0.00 | 0.00 |
+| ETTm2-96 | 1 | 0.60 | 0.23 | 0.15 | 0.56 | 1.16 | 0.97 | 0.96 | 0.93 |
+| ETTm2-96 | 2 | 0.34 | 0.61 | 0.02 | 0.28 | 0.67 | 0.02 | 0.59 | 0.81 |
+| ETTm2-96 | 3 | 0.40 | 0.63 | 0.02 | 0.34 | 0.66 | 0.01 | 0.53 | 0.90 |
+| ETTm2-192 | 1 | 0.63 | 0.19 | 0.18 | 0.57 | 1.17 | 0.96 | 0.96 | 0.87 |
+| ETTm2-192 | 2 | 0.35 | 0.67 | 0.01 | 0.29 | 0.66 | 0.01 | 0.34 | 0.13 |
+| ETTm2-192 | 3 | 0.40 | 0.70 | 0.02 | 0.34 | 0.65 | 0.00 | 0.16 | 0.05 |
+| Weather-96 | 1 | 0.52 | 0.17 | 0.27 | 0.44 | 0.92 | 0.62 | 0.93 | 0.95 |
+| Weather-96 | 2 | 0.47 | 0.09 | 0.14 | 0.34 | 0.87 | 0.35 | 0.89 | 0.95 |
+| Weather-96 | 3 | 0.15 | 0.00 | 0.00 | 0.05 | 0.21 | 0.00 | 0.07 | 0.49 |
+| Weather-192 | 1 | 0.44 | 0.22 | 0.03 | 0.38 | 1.17 | 0.10 | 0.24 | 0.52 |
+| Weather-192 | 2 | 0.57 | 0.21 | 0.49 | 0.55 | 0.92 | 0.86 | 0.81 | 0.92 |
+| Weather-192 | 3 | 0.24 | 0.04 | 0.02 | 0.20 | 0.51 | 0.00 | 0.42 | 0.30 |
+
 ## 7. 表 6：跨 seed 的模式稳定性（计划 §13）
 
 按 `|v_i·v_j'|·|u_i·u_j'|` 做 Hungarian 匹配后的成对余弦。

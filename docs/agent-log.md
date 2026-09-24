@@ -5158,3 +5158,44 @@ GPU 使用 0–7 号卡（与其他用户的 8 卡任务共卡，仅占其剩余
 **限制**：§8.3 前向验证覆盖 seed 2021（24 cell）而非全 3 seed；§12 的稀疏化是事后施加在冻结
 mode 上，回答"kernel 能否被压缩"而非"从头训练是否可学到稀疏 kernel"；
 §10 的 dense 对齐依赖同源的 `rank_sweep_2_stage1` dense checkpoint，不覆盖 §4.1 之外的 setting。
+
+## 2026-09-24 — 补齐逐 mode 语义归因（回答"这 3–5 个 mode 是什么"）
+
+**背景**：用户指出上一轮报告只回答了"需要几个 mode"（r95 ≈ 3–5）与"各自贡献多少"，
+但对"分别是输入/输出窗口里的什么成分"只给了间接证据，**没有逐 mode 的数值表**。本轮补齐。
+
+**做法**：新增 `scripts/annotate_lowrank_modes.py`——按**实测预测贡献**排序，
+把每个 mode 的 `v_i` 匹配输入字典、`u_i` 匹配输出字典，输出 best template / best group /
+逐组解释率 / 字典 R²；`scripts/summarize_lowrank_mode_semantics.py` 汇总为报告用表。
+产物 `research_runs/lowrank_functional_rank_v1/mode_semantics.csv`（501 行）。
+
+**独立性验证**：先确认本轮导出的 canonical modes 与既有 `lowrank_checkpoint_information_v1`
+的 mode 是同一批对象（singular value 最大差 **1.1e-15**）；再用旧管线的
+`semantic_alignment.csv` 逐 mode 比对本轮的重新计算：**best-group 一致 475/475 (100%)**，
+组解释率最大差 **2.84e-14**。即本轮是**独立复现**既有归因，不是复述。
+
+**主要结果（q=1/8，3 seed 众数）**：
+
+| Setting | r95 | mode 1 | mode 2 | mode 3 |
+|---|---|---|---|---|
+| ETTh2-96 | 3.0 | recent level → displacement（90.1%） | recent level → tilt（4.5%） | periodic shape → periodic（3.0%） |
+| ETTh2-720 | 4.7 | recent level → displacement（68.7%） | periodic shape → periodic（11.9%） | periodic shape → periodic（10.2%） |
+| ETTm2-96 | 3.3 | recent level → displacement（65.3%） | periodic shape → periodic（18.8%） | periodic shape → periodic（12.3%） |
+| ETTm2-192 | 3.0 | recent level → displacement（72.8%） | periodic shape → periodic（15.1%） | periodic shape → periodic（10.2%） |
+| Weather-96 | 5.0 | recent level → curvature（40.2%） | recent level → curvature（34.6%） | recent level → curvature（14.2%） |
+| Weather-192 | 5.0 | recent level → curvature（27.9%） | recent level → curvature（24.8%） | local trend → tilt（22.2%） |
+
+**结论**：ETT 三族是"**recent level → displacement** 主导 + 1–2 个 periodic correction 次级 mode"，
+与计划 H2/情形 A 一致；Weather 没有单一主导 mode（首 mode 仅 28–40%），且**输出端偏向
+curvature/tilt 而非纯 displacement**，因此需要更多 mode（r95=5）——与上一轮"Weather 首 mode
+只占约 28%–49%"的判断一致，但这次是逐 mode 证据。
+
+**口径提醒（写进报告）**：字典内 EMA24/EMA48/tail_mean_24 等模板近乎共线，各语义组对同一方向
+都有非零投影，因此**组解释率不构成划分、行内不要求和为 1**；"成分比例"应读逐组数值，
+不能把 best match 当作唯一成分。
+
+**图表**：`figures/fig5_canonical_modes.png` 与 `fig7_canonical_modes_weather.png` 已改为
+按贡献排序并在标题标注 reads/writes 与组解释率；`docs/PhaseFormer_L_functional_rank_report.md`
+新增"§6b 逐 mode 语义归因"一节（含交叉验证行、配对机制表、逐组解释率表）。
+
+**未新增训练、未读 test、未改任何 checkpoint**。服务器 HEAD：`570d3f2`（其后两笔为绘图脚本修复）。
