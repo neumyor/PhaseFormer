@@ -5250,3 +5250,13 @@ test 只做最终评估。
 **口径调整**：将 gap 表述为“相位路径已解释一部分跨周期电平变化，但其 phase-conditioned residual 仍有低维可预测补空间”，避免将 PhaseFormer 描述为完全不能建模电平变化。补入六个主要 setting 上独立残差与条件残差首输入方向 `|cos| >= 0.9991` 的桥接结果，并明确 mode deletion 是拟合模型内部的 counterfactual evidence，而非数据生成过程的因果识别。
 
 **验证**：静态核对文档中的关键数字与现有 E14/E15/E16、functional-rank 和 rank-capacity 报告；未新增训练、未读取 test、未修改模型代码或既有实验产物。
+
+## 2026-09-26 — minipaper 理论与因果链 review
+
+**修订**：重写 `docs/minipaper_0926.md` 的理论段落。新增同一投影算子下的
+`ell_parallel`/`ell_perp` 分解，证明相位子空间承载前者而补空间至多增加一个方向；新增
+phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + epsilon`，并给出条件最优线性映射的 rank-one 加残项证明与风险界。
+
+**因果链**：定义理论输入/输出子空间，给出训练 mode 的读写对齐量和删除 mode 后的融合损失变化公式；把 0.9991 条件方向对齐、18 组语义 mode 解剖、72 checkpoint 干预与随机 RRR 对照串成“理论方向 → 学到的 mode → 实际贡献 → 模型内反事实”的审计链。
+
+**验证**：完成公式编号、关键数字和 Markdown 空白检查；本轮仍未新增训练、未读取 test、未修改模型代码或既有实验产物。

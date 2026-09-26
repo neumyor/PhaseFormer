@@ -91,9 +91,10 @@ can be reported in the same analysis.
 ### 2.1 Cross-cycle level perturbation
 
 Arrange a length-$L$ input into $X\in\mathbb R^{K\times P}$, where rows index
-cycles and columns index phase positions. Let $\mathcal S$ denote the column
-space used by the phase representation. A cycle-dependent level change has the
-form
+cycles and columns index phase positions. Let $\mathcal S\subseteq\mathbb R^K$
+be the cross-cycle subspace represented by the phase path, and let
+$P_{\mathcal S}$ be its orthogonal projector. A cycle-dependent level change has
+the form
 
 \[
 X_\ell = X + \ell\mathbf 1_P^\top,
@@ -101,37 +102,55 @@ X_\ell = X + \ell\mathbf 1_P^\top,
 \tag{1}
 \]
 
-Decompose the level trajectory into a component already represented by the phase
-path and a complementary component,
+The phase representation does not discard the level vector. It can represent its
+projection onto $\mathcal S$. We therefore decompose the level trajectory by the
+same projector,
 
 \[
-\ell=\ell_{\parallel}+\ell_{\perp},
+\ell_{\parallel}=P_{\mathcal S}\ell,
 \qquad
-\ell_{\perp}\perp\mathcal S .
+\ell_{\perp}=(I-P_{\mathcal S})\ell,
+\qquad
+\ell=\ell_{\parallel}+\ell_{\perp} .
 \tag{2}
 \]
 
-The phase predictor can use information in $\ell_{\parallel}$; the residual
-question concerns $\ell_{\perp}$. Window centering removes the common mean of
-$\ell$, but does not remove changes of level between cycles.
+Under the phase-consistency assumption—that the phase path is a predictor of the
+component carried by $\mathcal S$—the term $\ell_{\parallel}\mathbf 1_P^\top$
+is part of what the phase path can model. The residual question concerns
+$\ell_{\perp}$. Window centering removes the common mean of $\ell$, but does not
+remove changes of level between cycles.
 
-**Proposition 1 (conditional one-direction complement).** Let
-$P_{\mathcal S}$ be the orthogonal projector onto the phase subspace. Then
+**Proposition 1 (captured component and one-direction complement).** Let
+$\mathcal S=\operatorname{Col}(X)$ for the idealized phase representation, or
+the corresponding learned phase subspace in the approximate case. Then
 
 \[
+P_{\mathcal S}X_\ell
+  =P_{\mathcal S}X+\ell_{\parallel}\mathbf 1_P^\top,
+\qquad
 (I-P_{\mathcal S})X_\ell
-  =(I-P_{\mathcal S})X+(I-P_{\mathcal S})\ell_\perp\mathbf 1_P^\top,
+  =(I-P_{\mathcal S})X+\ell_{\perp}\mathbf 1_P^\top .
 \tag{3}
 \]
 
-and the new term has rank at most one. Hence, even when the phase path already
-models a nonzero part of the level change, the part that is geometrically outside
-the phase subspace occupies at most one additional direction. If the projected
-component is nonzero, the complement is exactly one-dimensional.
+The first equality proves that the phase subspace contains the modeled level
+component $\ell_{\parallel}\mathbf 1_P^\top$. The second shows that the
+unmodeled component is an outer product and therefore has rank at most one. If
+$\ell_{\perp}\neq0$, the conditional complement contributes exactly one new
+direction.
 
-This is a statement about the geometry of the residual representation, not a
-claim that PhaseFormer is blind to all level variation. It isolates the part
-that the phase path does not explain.
+*Proof.* Apply $P_{\mathcal S}$ and $I-P_{\mathcal S}$ to (1). Since
+$P_{\mathcal S}\ell=\ell_{\parallel}$ and
+$(I-P_{\mathcal S})\ell=\ell_{\perp}$, (3) follows. The second term in the
+residual equality is the outer product of two vectors, so its rank is at most
+one. The nonzero case gives one additional column direction. $\square$
+
+The proposition is the formal version of the paper's first distinction:
+PhaseFormer may model $\ell_{\parallel}$, while a conditional residual can still
+contain $\ell_{\perp}$. It is a subspace statement, so it does not require the
+phase path to be perfect; approximation error in the phase path is absorbed into
+the residual in the next proposition.
 
 ### 2.2 From a scalar residual state to a rank-one correction
 
@@ -142,42 +161,83 @@ D_{\mathrm{cond}}=y-\hat y_\phi .
 \tag{4}
 \]
 
-Suppose that the predictable part of this residual is driven by a scalar level
-state $\delta$,
+To connect Proposition 1 to forecasting, use the following phase-conditioned
+decomposition. The phase component is any function $F$ of the phase-subspace
+state, and the complementary state is a scalar continuation of the projected
+level trajectory:
 
 \[
-D_{\mathrm{cond}}=a\delta+\varepsilon,
+y=F(P_{\mathcal S}X_\ell)+a\,q^\top\ell_{\perp}+\eta .
 \tag{5}
 \]
 
-where $a\in\mathbb R^H$ is the future expression of that state and
-$\varepsilon$ contains the remaining residual. For a persistent level offset,
-$a$ is close to the all-ones vector; for a slowly evolving level, $a$ is a
-smooth tilt or curvature.
-
-For branch input $Z$, the least-squares linear predictor is
+Here $q$ selects the predictable current level from the complementary history,
+$a\in\mathbb R^H$ describes how that state appears in the future, and $\eta$
+contains innovations. If the phase path is phase-consistent,
+$\hat y_\phi=F(P_{\mathcal S}X_\ell)+r_\phi$, then substitution into (4) gives
 
 \[
-W^*=\mathbb E[D_{\mathrm{cond}}Z^\top]
-       \mathbb E[ZZ^\top]^{-1}
-     =ab^\top+R,
+D_{\mathrm{cond}}=a\delta+\varepsilon,
+\qquad
+\delta=q^\top\ell_{\perp},
+\qquad
+\varepsilon=\eta-r_\phi .
 \tag{6}
 \]
 
-with $b^\top=\mathbb E[\delta Z^\top]\mathbb E[ZZ^\top]^{-1}$ and
-$R=\mathbb E[\varepsilon Z^\top]\mathbb E[ZZ^\top]^{-1}$. The prediction
-error gap between the rank-one part and the full linear optimum is bounded by
+This is the precise sense in which the phase path can model part of the level
+change while a conditional low-dimensional complement remains: the first term
+is a function of the phase subspace, and the second depends on the orthogonal
+level component. The assumption is weaker than exact forecasting because
+$r_\phi$ is allowed and is absorbed into $\varepsilon$.
+
+**Proposition 2 (conditional residual factorization).** Let the branch input
+$Z$ contain a linear estimate of $\delta$, and assume
+$\mathbb E[ZZ^\top]=\Sigma$ is nonsingular on the support of $Z$. The
+least-squares linear predictor of the conditional residual in (6) is
+
+\[
+W^*=\mathbb E[D_{\mathrm{cond}}Z^\top]
+     \mathbb E[ZZ^\top]^{-1}
+     =ab^\top+R,
+\tag{7}
+\]
+
+with $b^\top=\mathbb E[\delta Z^\top]\Sigma^{-1}$ and
+$R=\mathbb E[\varepsilon Z^\top]\Sigma^{-1}$. Thus the conditional optimum is
+a rank-one map $ab^\top$ plus a remainder induced only by the residual error
+$\varepsilon$.
+
+With the per-horizon risk
+
+\[
+\mathcal R(W)=H^{-1}\mathbb E\|D_{\mathrm{cond}}-WZ\|_2^2,
+\]
+
+the prediction-error gap between the rank-one part and the full linear optimum
+is bounded by
 
 \[
 \mathcal R(ab^\top)-\mathcal R(W^*)
  =H^{-1}\|R\Sigma^{1/2}\|_F^2
  \le H^{-1}\mathbb E\|\varepsilon\|_2^2,
-\tag{7}
+\tag{8}
 \]
 
-where $\Sigma=\mathbb E[ZZ^\top]$. Thus a rank-one correction is justified when
-the predictable conditional residual is dominated by one scalar state; the
-remainder determines whether additional modes are needed.
+where $\Sigma=\mathbb E[ZZ^\top]$.
+
+*Proof.* Substitute (6) into the normal equations to obtain (7). The least-
+squares residual is orthogonal to the linear span of $Z$, so the excess risk of
+using $ab^\top$ instead of $W^*$ is the squared norm of the projection of
+$\varepsilon$ onto that span, which gives (7). Since orthogonal projection cannot
+increase expected squared norm, the final inequality follows. $\square$
+
+Proposition 2 proves the second part of the gap statement under an explicit,
+testable assumption: the phase-conditioned residual contains one predictable
+scalar continuation of the complementary level state. It also explains why the
+rank need not be exactly one in practice. The remainder $R$ contains secondary
+periodic, tilt, and curvature effects, and its spectrum determines how many
+additional modes are useful.
 
 The form of $b$ is data dependent. Under a persistent or autoregressive level,
 the best linear estimate of the current state gives a recency-weighted kernel,
@@ -209,7 +269,7 @@ $x_n=(x-\mu)/\sigma$, let $x_{n,L}$ be the last input value and define
 z=x_n-x_{n,L}\mathbf 1_L,
 \qquad
 \hat y_r=\sigma\big(Wz+x_{n,L}\mathbf 1_H+c\big)+\mu\mathbf 1_H .
-\tag{8}
+\tag{9}
 \]
 
 The phase path and the temporal branch are fused by a learned gate,
@@ -217,7 +277,7 @@ The phase path and the temporal branch are fused by a learned gate,
 \[
 \hat y=(1-g)\odot\hat y_\phi+g\odot\hat y_r,
 \qquad g=\operatorname{sigmoid}(\gamma).
-\tag{9}
+\tag{10}
 \]
 
 The backbone, branch, and gate are trained jointly. Because the normalization
@@ -233,7 +293,7 @@ hidden coordinates:
 
 \[
 W=\sum_i s_i u_i v_i^\top .
-\tag{10}
+\tag{11}
 \]
 
 Mode $i$ reads $v_i^\top z$ and writes the horizon shape $u_i$. We match input
@@ -246,6 +306,40 @@ removing a selected input subspace or a canonical mode from the temporal branch.
 We report both branch error and fused error. If removing a mode improves the
 branch but worsens the fused forecast, the mode is useful because it complements
 the phase path; its value cannot be judged from branch-only accuracy.
+
+To make the theory-to-mode link explicit, define the theoretical input and
+output spaces
+
+\[
+\mathcal T_{\mathrm{in}}=\operatorname{span}(b),
+\qquad
+\mathcal T_{\mathrm{out}}=\operatorname{span}(a).
+\tag{12}
+\]
+
+For every learned mode we measure its input and output alignments
+$\alpha_i=\|P_{\mathcal T_{\mathrm{in}}}v_i\|^2$ and
+$\beta_i=\|P_{\mathcal T_{\mathrm{out}}}u_i\|^2$ (implemented by the recent-level
+and displacement/tilt template dictionaries). A mode is therefore supported by
+the theory only when it has both a high readout alignment and a high writeout
+alignment; its importance is then measured independently by its functional
+contribution $I_i$.
+
+The fused prediction makes the intervention causal within the fitted model. If
+$d_i=g\odot s_i u_i(v_i^\top z)$ is the forecast increment of mode $i$, deleting
+that mode changes the squared error by
+
+\[
+\Delta_i=2\,\mathbb E[e^\top d_i]+\mathbb E\|d_i\|_2^2,
+\qquad e=\hat y-y .
+\tag{13}
+\]
+
+Thus a theory-aligned mode with $I_i>0$ and $\Delta_i>0$ is not merely a
+correlated feature: its read-write path is required by the fused forecast under
+a controlled counterfactual. Same-dimensional random subspaces use the same
+formula but have no alignment to $\mathcal T_{\mathrm{in}}$ or
+$\mathcal T_{\mathrm{out}}$; they provide the specificity control.
 
 ### 3.3 Functional contribution
 
@@ -328,6 +422,13 @@ expressed differently when the future level evolves within the horizon.
 | level → horizon-wide displacement | 12/18 | 0.91--0.97 |
 | level → Weather tilt/curvature | 6/18 | smooth low-frequency output |
 
+The input and output explanation scores are the empirical dictionary estimates
+of $\alpha_i$ and $\beta_i$ in (12). Hence the leading ETT mode is aligned with
+both theoretical factors $b$ and $a\approx\mathbf 1_H$, while the Weather modes
+retain the same level readout but use a different smooth output factor. This is
+the predicted distinction between a persistent complement and a slowly evolving
+complement, rather than an unrelated post-hoc label.
+
 The canonical functional-rank analysis uses 72 frozen checkpoints (six settings,
 four nominal compression levels, three seeds). Three to five modes recover at
 least 95% of each checkpoint's own fitted improvement. A representative ETTh2-
@@ -346,21 +447,26 @@ mechanisms.
 
 ### 4.4 Intervention establishes complementarity
 
-We next remove the semantic input subspace while keeping the phase path and all
-trained weights fixed. The same-dimensional random RRR subspace is the negative
-control. In all 18 analyzed groups, semantic deletion produces a fused MSE
-change outside the 95% random-control interval. Across the underlying 72
-checkpoint-level interventions, deleting the semantic subspace improves the
-branch's own MSE in 52/72 cases but worsens the fused MSE in 72/72 cases; the
-median relative fused increase is 30.43%.
+We next remove the semantic input subspace spanned by the theory-aligned
+recent-level directions while keeping the phase path and all trained weights
+fixed. The same-dimensional random RRR subspace is the negative control. In all
+18 analyzed groups, semantic deletion produces a fused MSE change outside the
+95% random-control interval. Across the underlying 72 checkpoint-level
+interventions, deleting the semantic subspace improves the branch's own MSE in
+52/72 cases but worsens the fused MSE in 72/72 cases; the median relative fused
+increase is 30.43%.
 
 This is the key causal link in the paper's narrow, model-internal sense. The
-semantic mode is not merely correlated with the residual target: changing that
-mode while holding the partner path fixed changes the fused forecast in a
-systematic, control-separated direction. At the same time, the branch-versus-
-fusion reversal shows why mode contribution must be defined relative to the
-PhaseFormer backbone. The intervention is a counterfactual of the fitted model;
-it is not a claim that the data-generating process has been causally identified.
+theory predicts a readout in $\mathcal T_{\mathrm{in}}$ and a low-frequency
+writeout in $\mathcal T_{\mathrm{out}}$; the trained heads contain those modes;
+and the intervention in (13) changes the fused loss when exactly that subspace
+is removed. The semantic mode is therefore not merely correlated with the
+residual target: changing the predicted read-write path while holding the
+partner path fixed changes the fused forecast in a systematic,
+control-separated direction. The branch-versus-fusion reversal further shows
+why mode contribution must be defined relative to the PhaseFormer backbone. The
+intervention is a counterfactual of the fitted model; it is not a claim that the
+data-generating process has been causally identified.
 
 ### 4.5 From mode evidence to a compact implementation
 
@@ -392,15 +498,18 @@ The experiments form a deliberately ordered audit chain.
 2. **Predictive value:** the closed-form spectrum measures whether that direction
    is forecastable and shows that one mode buys 64.2--86.2% of attainable linear
    value, with a horizon-wide output.
-3. **Mode identity:** trained heads read a recent weighted level in all 18
+3. **Conditional bridge:** the independent and phase-conditioned leading input
+   directions have absolute cosine at least 0.9991 on the six primary settings,
+   so the spectral direction survives conditioning on the phase path.
+4. **Mode identity:** trained heads read a recent weighted level in all 18
    groups. Their outputs are displacement on ETT data and smooth tilt/curvature
-   on Weather.
-4. **Mode contribution:** functional rank shows that three to five canonical
+   on Weather, matching the two factors in (12).
+5. **Mode contribution:** functional rank shows that three to five canonical
    modes recover at least 95% of the fitted head's own gain.
-5. **Causal relevance to fusion:** semantic deletion is more damaging than
+6. **Causal relevance to fusion:** semantic deletion is more damaging than
    matched random deletion, and it can improve the branch while degrading the
    fused model. The value is therefore conditional on the phase backbone.
-6. **Optimization:** generic low-rank factorization preserves most of the useful
+7. **Optimization:** generic low-rank factorization preserves most of the useful
    correction at a small parameter fraction.
 
 These steps also clarify three percentages that should not be conflated:
