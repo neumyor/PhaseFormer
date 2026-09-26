@@ -5241,3 +5241,12 @@ test 只做最终评估。
 
 **环境**：远程 torch 2.6.0+cu124 / Lightning 2.6.5 / Python 3.10，8 卡分片。
 服务器 HEAD：`7c68f1e`（其后两笔为该探针的修复）。
+## 2026-09-26 — 撰写期刊扩展 mini-paper 叙事稿
+
+**用户目标**：将近一个月的 PhaseFormer-L 实验压缩为一条清晰的期刊扩展叙事，依次说明条件性理论 gap、线性补偿增益、重要 mode 及其贡献、模型内干预因果性与低秩化路径。
+
+**产物**：新增 `docs/minipaper_0926.md`。正文只保留四组证据：ETTh2/ETTm2/Weather 的 12-setting 三 seed 双指标结果；28-setting 闭式预测谱；18 个训练头解剖组与 72 个冻结 checkpoint 的 functional-rank/intervention；以及两档低秩压缩结果。
+
+**口径调整**：将 gap 表述为“相位路径已解释一部分跨周期电平变化，但其 phase-conditioned residual 仍有低维可预测补空间”，避免将 PhaseFormer 描述为完全不能建模电平变化。补入六个主要 setting 上独立残差与条件残差首输入方向 `|cos| >= 0.9991` 的桥接结果，并明确 mode deletion 是拟合模型内部的 counterfactual evidence，而非数据生成过程的因果识别。
+
+**验证**：静态核对文档中的关键数字与现有 E14/E15/E16、functional-rank 和 rank-capacity 报告；未新增训练、未读取 test、未修改模型代码或既有实验产物。
