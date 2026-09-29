@@ -32,14 +32,9 @@ def read(pattern_by_dir: dict[str, set[str] | None], stem: str) -> pd.DataFrame:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", default="research_runs/level_envelope_v1")
+    parser.add_argument("--output-dir", default="research_runs/level_envelope_v2")
     args = parser.parse_args()
-    # The first launch finished the four ETT datasets before it was stopped for
-    # CPU oversubscription; the large datasets were rerun into a second dir.
-    sources = {
-        "research_runs/level_envelope_v1": {"ETTh1", "ETTh2", "ETTm1", "ETTm2"},
-        "research_runs/level_envelope_v1_large": {"Weather", "Electricity", "Traffic"},
-    }
+    sources = {args.output_dir: None}
     cells = read(sources, "envelope_cells")
     groups = read(sources, "envelope_groups")
     keys = ["dataset", "horizon", "seed", "split"]
@@ -65,6 +60,10 @@ def main() -> None:
                "abs_d_p99", "level_share", "floor_share", "phase_mse", "fused_mse", "gain",
                "level_gain", "shape_gain", "phase_level_tracking", "fused_C1",
                "fused_phase_level_tracking", "fused_level_tracking", "branch_level_energy_share",
+               "phase_level_tracking_data", "fused_phase_level_tracking_data",
+               "fused_level_tracking_data", "branch_level_tracking_data",
+               "branch_level_energy_share_data", "phase_level_spearman",
+               "fused_phase_level_spearman",
                "gate_mean", "fused_phase_frac_outside", "phase_abs_level_mean",
                "fused_phase_abs_level_mean", "frac_phase_util_gt_0.9",
                "spearman_absd_vs_gain", "spearman_phase_level_err_vs_gain"]

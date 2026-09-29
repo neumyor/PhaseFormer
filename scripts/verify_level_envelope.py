@@ -206,10 +206,16 @@ def rank_correlation(a, b) -> float:
     return float(np.corrcoef(ra, rb)[0, 1])
 
 
-def level_tracking(lev, demand) -> float:
-    """Fraction of level-demand energy the forecast level explains."""
-    energy = float(np.mean(demand ** 2))
-    return 1.0 - float(np.mean((lev - demand) ** 2)) / energy if energy > 0 else float("nan")
+def level_tracking(lev, demand, weight=None) -> float:
+    """Fraction of level-demand energy the forecast level explains.
+
+    Unweighted it is measured in RevIN units, where windows with a near-flat
+    lookback (sigma near sqrt(eps)) can carry a huge demand and dominate;
+    ``weight=sigma2`` measures it in data units, on the scale of the MSE.
+    """
+    weight = np.ones_like(demand) if weight is None else weight
+    energy = float(np.sum(weight * demand ** 2))
+    return 1.0 - float(np.sum(weight * (lev - demand) ** 2)) / energy if energy > 0 else float("nan")
 
 
 def summarise(phase, fused, envelope, fused_envelope):
@@ -242,6 +248,7 @@ def summarise(phase, fused, envelope, fused_envelope):
         "frac_phase_util_gt_0.9": float((phase["phase_util"] > 0.9).mean()),
         "phase_level_tracking": level_tracking(phase["lev"], demand),
         "phase_level_spearman": rank_correlation(phase["lev"], demand),
+        "phase_level_tracking_data": level_tracking(phase["lev"], demand, sigma2),
     }
     groups = []
     if fused is None:
@@ -273,9 +280,11 @@ def summarise(phase, fused, envelope, fused_envelope):
         "spearman_phase_util_vs_gain": rank_correlation(phase["phase_util"], gain),
         "spearman_phase_level_err_vs_gain": rank_correlation(sigma2 * level_p, gain),
         "fused_level_tracking": level_tracking(fused["lev"], demand),
+        "fused_level_tracking_data": level_tracking(fused["lev"], demand, sigma2),
         "fused_level_share": float(np.mean(sigma2 * level_l)) / float(np.mean(sigma2 * fused["err"])),
         "fused_phase_util_max": float(fused["phase_util"].max()),
         "fused_phase_level_tracking": level_tracking(fused["lev_phase"], demand),
+        "fused_phase_level_tracking_data": level_tracking(fused["lev_phase"], demand, sigma2),
         "fused_phase_level_spearman": rank_correlation(fused["lev_phase"], demand),
         "fused_phase_frac_outside": float((fused_dist > 0).mean()),
         "fused_phase_abs_level_mean": float(np.mean(np.abs(fused["lev_phase"]))),
@@ -287,6 +296,7 @@ def summarise(phase, fused, envelope, fused_envelope):
         cell.update({
             "gate_mean": float(gate.mean()),
             "branch_level_tracking": level_tracking(branch, demand),
+            "branch_level_tracking_data": level_tracking(branch, demand, sigma2),
             "branch_frac_outside_own_envelope": float(
                 (distance_to_interval(branch, fused_envelope["lower"],
                                       fused_envelope["upper"]) > 0).mean()),
@@ -296,6 +306,10 @@ def summarise(phase, fused, envelope, fused_envelope):
                 np.mean((gate * branch) ** 2) /
                 max(np.mean((gate * branch) ** 2) + np.mean(((1 - gate) * fused["lev_phase"]) ** 2),
                     1e-300)),
+            "branch_level_energy_share_data": float(
+                np.sum(sigma2 * (gate * branch) ** 2) /
+                max(np.sum(sigma2 * (gate * branch) ** 2)
+                    + np.sum(sigma2 * ((1 - gate) * fused["lev_phase"]) ** 2), 1e-300)),
         })
 
     def group_row(grouping, label, members):
