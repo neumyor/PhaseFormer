@@ -353,6 +353,15 @@ def load(row, dataset, horizon, repo_root, device, splits):
     checkpoints = sorted((run_dir / "attempts").glob("*/checkpoints/best.ckpt"))
     if not checkpoints:
         return None
+    # A retried run keeps the aborted attempt's checkpoint; use the one the
+    # run recorded, falling back to the latest attempt.
+    metrics_path = run_dir / "metrics.csv"
+    if metrics_path.exists():
+        with metrics_path.open(newline="") as handle:
+            recorded = [r.get("checkpoint") or "" for r in csv.DictReader(handle)]
+        if recorded and recorded[-1] and (repo_root / recorded[-1]).exists():
+            checkpoints = [repo_root / recorded[-1]]
+    checkpoints = checkpoints[-1:]
     config = json.loads((run_dir / "config.json").read_text())
     hyperparams = dict(config["hyperparams"])
     exp_args, handles = build_loaders(
