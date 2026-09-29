@@ -4,7 +4,8 @@
 a formal analysis of the original PhaseFormer: a capability theorem, an
 impossibility theorem, and a low-rank complement theorem (Sections 2–5). The
 empirical sections are unchanged in substance and have been re-indexed against
-the new theory.*
+the new theory. Section 7.6 (added 2026-09-29) measures the Theorem 2
+envelope on the 84 trained checkpoint pairs of the main comparison.*
 
 ## Abstract
 
@@ -51,6 +52,16 @@ all 12 settings of ETTh2, ETTm2, and Weather in a three-seed matched
 comparison, with MSE reductions of up to 8.73%. Its correction head compresses
 to 3.5--6.1% of its dense parameters while retaining 92.4--101.9% of the
 attainable branch value.
+
+Measured on the trained checkpoints, the envelope of Theorem 2 holds exactly,
+and in the 12 core settings its bound $C_\varphi$ shrinks from 2.3--2.8 at
+$H=96$ to 1.2--1.6 at $H=720$. The phase path alone explains 19--66% of the
+validation level energy, and the envelope floor alone accounts for up to 22%
+of phase-only validation MSE. On ETTh2 the gain of PhaseFormer-L concentrates on
+out-of-envelope windows. On ETTm2 and Weather it is spread over windows inside
+the envelope. In every core setting the jointly trained backbone gives up the
+level (its envelope shrinks 1.3--4.8-fold), and the branch carries 55--99% of
+the fused level energy, as Theorem 3(c) predicts.
 
 ## 1. Introduction
 
@@ -611,9 +622,9 @@ last level, $d=(\ell_L-\mu)/\sigma$ has the following distribution:
 
 The envelope binds on a *tail* of windows: recent steps, sustained trends, and
 level-dominated windows with weak seasonal content. It does not bind on the
-bulk of strongly periodic windows. This matches the empirical picture in
-Section 7: the gain is systematic but moderate, and it is largest where level
-dynamics dominate.
+bulk of strongly periodic windows. Section 7.6 measures this tail on trained
+checkpoints. It holds 0.7–48% of validation windows in the core settings and
+grows with the horizon.
 
 ### 4.3 Capability costs envelope
 
@@ -647,12 +658,19 @@ by (22) it competes with the shape the same coordinates must carry.
 
 Theorem 2 is exact, but whether it binds is a property of a checkpoint and a
 data distribution. $C_\varphi$ is finite for every trained model and can be
-read from its weights. The demand distribution of $d$ can be computed from
-validation windows. We have not yet measured $C_\varphi$ on the trained
-checkpoints; that measurement, together with the fraction of validation windows
-with $|d|>C_\varphi$ and the level share of phase-only MSE in (7), is the
-next verification step (Section 8). With `affine=True` RevIN, the envelope is
-rescaled by the affine parameters and remains bounded.
+read from its weights. The distribution of the demand $d$ can be computed from
+validation windows. Section 7.6 makes this measurement on all 84 trained
+phase-only checkpoints of the main comparison.
+
+The bound holds exactly: the largest per-phase utilisation is $0.999995$. In
+the 12 core settings $C_\varphi$ ranges from 1.20 to 3.02 and falls with the
+horizon. The share of validation windows outside $\mathcal I_\varphi$ rises
+from at most 3% at $H=96$ to 11–48% at $H=720$, and the floor (21) accounts for
+up to 22% of phase-only validation MSE. On Electricity and Traffic the
+envelope almost never binds.
+
+With `affine=True` RevIN, the envelope is rescaled by the affine parameters
+and remains bounded.
 
 ## 5. Theorem 3: the unmodeled level is a low-rank linear complement
 
@@ -858,8 +876,9 @@ remainder;
 level mode can help the branch but hurt the fusion;
 (P5) the gain concentrates on windows with $|d|$ beyond the checkpoint's
 envelope.
-Section 7 tests P1–P4. P5 requires the checkpoint measurement described in
-Section 4.4.
+Sections 7.2–7.4 test P1–P4. Section 7.6 tests P5 on the trained checkpoints.
+P5 holds on ETTh2 but not reliably on ETTm2 or Weather, where most of the gain
+lies inside the envelope.
 
 ### 5.4 Measuring the right residual
 
@@ -981,10 +1000,10 @@ mechanism analysis.
 |---|---:|---:|---:|
 | ETTh2 + ETTm2 + Weather, $H\in\{96,192,336,720\}$ | 12 | 12/12 | 8.73% |
 
-The size of the gain matches Section 4.2. Theorem 2 predicts a systematic
-improvement concentrated on a tail of level-dominated windows, not a wholesale
-failure of the phase path. That tail is the part of level dynamics the backbone
-cannot follow, and it is the part the branch is meant to supply.
+The size of the gain matches Section 4.2. The phase path is not failing
+wholesale; it is bounded on a tail of level-dominated windows. Section 7.6
+shows that the gain concentrates on that tail on ETTh2. On ETTm2 and Weather it
+is spread across windows inside the envelope.
 
 ### 7.2 The attainable correction has a concentrated spectrum (P1, P3)
 
@@ -1089,6 +1108,197 @@ filter. Theorem 3 explains why strong compression is possible: the output rank
 is the number of profiles. The shape remainder and the secondary profiles
 determine how much accuracy each additional rank retains.
 
+### 7.6 The envelope measured on trained checkpoints (Theorem 2, P5)
+
+**Protocol.** We read the envelope constants (19) from the weights of every
+checkpoint pair in the E14 main comparison: 7 datasets × 4 horizons × 3 seeds,
+giving 84 phase-only checkpoints and their 84 matched PhaseFormer-L checkpoints.
+We then evaluated each pair on the validation and test windows. Per channel and
+window we computed the demand $d$, the forecast level, each phase slot's
+boundary utilisation $\lvert\ell_p-c_0\rvert/C_1$, the level error in (7), and
+the floor $\operatorname{dist}(d,\mathcal I_\varphi)^2$. Shares are taken in
+original units, $\sigma^2\times$ the RevIN-unit quantity, so that they are
+shares of the reported MSE.
+
+Level tracking is reported as $1-\sum\sigma^2(\operatorname{lev}-d)^2/\sum\sigma^2d^2$,
+also in original units. Windows with an almost flat lookback have
+$\sigma\approx\sqrt{\epsilon_r}$, and their RevIN-unit demand can be very large.
+On Weather, the 99th percentile of $\lvert d\rvert$ reaches 26 at $H=336$ and
+216 at $H=720$. Such windows dominate an unweighted average while
+contributing almost nothing to the MSE.
+
+Validation is the primary split. The test numbers are secondary and
+conditional. The measurement itself selects nothing. However, 18 phase-only and
+21 L checkpoints are reused from earlier campaigns whose test results had been
+read, and the arm configurations were fixed after those readings.
+
+**Sanity checks.** All 168 split evaluations pass the following checks.
+
+- The architectural premises of Theorem 2 hold: a linear predictor after the
+  final $\operatorname{LN}_2$, and RevIN `affine=False`.
+- The largest per-phase utilisation on any window is $0.999995$ for the
+  phase-only models and $0.999996$ for the L model's phase path. Theorem 2(a,b)
+  therefore holds exactly on trained weights, and some windows are pushed
+  essentially onto the boundary.
+- The recorded test MSEs are reproduced within a relative $5.2\times10^{-5}$
+  (phase-only) and $2.0\times10^{-5}$ (L).
+- The hooked decomposition $(1-g)F+gR$ reproduces the fused output within
+  $2.4\times10^{-5}$.
+
+**The envelope is measurable and tightens with the horizon.** The table reports
+seed means. $C_1$ carries its across-seed standard deviation. Pairs are
+validation / test.
+
+| setting | $c_0$ | $C_1$ | $C_\varphi$ | $P(d\notin\mathcal I_\varphi)$ | level share | floor share | level tracking (val) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ETTh2-96 | -0.02 | 2.25 ± 0.06 | 2.27 | 0.030 / 0.019 | 0.50 / 0.45 | 0.018 / 0.005 | 0.66 |
+| ETTh2-192 | -0.02 | 1.83 ± 0.16 | 1.85 | 0.062 / 0.052 | 0.49 / 0.41 | 0.048 / 0.013 | 0.59 |
+| ETTh2-336 | +0.06 | 1.69 ± 0.17 | 1.75 | 0.111 / 0.055 | 0.52 / 0.35 | 0.070 / 0.017 | 0.51 |
+| ETTh2-720 | +0.16 | 1.12 ± 0.20 | 1.28 | 0.482 / 0.184 | 0.58 / 0.30 | 0.218 / 0.033 | 0.28 |
+| ETTm2-96 | +0.13 | 2.70 ± 0.12 | 2.83 | 0.007 / 0.030 | 0.43 / 0.50 | 0.007 / 0.019 | 0.64 |
+| ETTm2-192 | +0.17 | 2.85 ± 0.30 | 3.02 | 0.010 / 0.028 | 0.46 / 0.49 | 0.009 / 0.017 | 0.51 |
+| ETTm2-336 | +0.09 | 1.93 ± 0.34 | 2.02 | 0.043 / 0.069 | 0.47 / 0.47 | 0.045 / 0.043 | 0.39 |
+| ETTm2-720 | +0.00 | 1.17 ± 0.10 | 1.20 | 0.144 / 0.199 | 0.47 / 0.44 | 0.131 / 0.080 | 0.25 |
+| Weather-96 | +0.03 | 2.64 ± 0.02 | 2.67 | 0.027 / 0.033 | 0.38 / 0.42 | 0.040 / 0.019 | 0.52 |
+| Weather-192 | -0.10 | 2.31 ± 0.05 | 2.41 | 0.048 / 0.066 | 0.33 / 0.42 | 0.022 / 0.031 | 0.44 |
+| Weather-336 | -0.07 | 2.10 ± 0.14 | 2.17 | 0.064 / 0.091 | 0.32 / 0.43 | 0.030 / 0.042 | 0.33 |
+| Weather-720 | -0.09 | 1.46 ± 0.13 | 1.55 | 0.110 / 0.198 | 0.28 / 0.42 | 0.043 / 0.071 | 0.19 |
+
+Four facts follow.
+
+First, the phase path does model part of the level, as Theorem 1 allows. On
+validation it explains 19–66% of the level-demand energy, and the Spearman
+correlation between its forecast level and $d$ is 0.37–0.78.
+
+Second, the level term is a large part of the error. On validation it accounts
+for 28–58% of phase-only MSE.
+
+Third, trained envelopes are narrow. In every core setting $C_\varphi<3.1$. By
+Corollary 2.1, a large persistent step more recent than $m^*=L/(1+C_\varphi^2)$
+samples therefore demands a level that the checkpoint cannot produce. At
+ETTh2-720 this cutoff is $m^*\approx273$, about eleven days of hourly data. A
+continued trend at $H=720$ demands $d=3.46$ by (24), which exceeds $C_\varphi$
+in every core setting at that horizon.
+
+Fourth, $C_1$ shrinks as $H$ grows, and the fraction of out-of-envelope windows
+and the floor share rise with it. The floor is a hard lower bound for the given
+checkpoint. At ETTh2-720, no input to that phase-only checkpoint can remove
+21.8% of its validation MSE, because the required level lies outside
+$\mathcal I_\varphi$.
+
+The contrast datasets bracket this picture. On Electricity, at most 0.4% of
+windows fall outside the envelope, and the floor share is at most 1.4%. On
+Traffic, $C_1\approx4.2$–$4.6$, no window falls outside, and the level share is
+only 5–9%. Electricity and Traffic are also where the branch contributes least:
+its relative validation gain is at most 4.0% and 0.6%, respectively.
+
+ETTh1 and ETTm1 have tight envelopes, $C_1=1.08$–$2.44$. Their validation
+period is level-dominated: the level share is 0.40–0.52 and the floor share up
+to 0.17. Their test period is not: the level share is 0.12–0.28 and the floor
+share at most 0.004. This split difference is a property of the data periods,
+not of the models.
+
+**P5: where does the gain occur?** Let the gain of a window be
+$\sigma^2(e_\varphi-e_L)$, the drop in squared error from phase-only to
+PhaseFormer-L. We group windows by whether $d\notin\mathcal I_\varphi$ and pool
+them over seeds. Both $d$ and $\mathcal I_\varphi$ depend only on the data and on
+the phase-only weights, so the grouping does not select on either model's
+error.
+
+| setting | val: out frac | val: gain/window, inside | val: gain/window, outside | val: outside share of gain | val: top-$\lvert d\rvert$-quartile share | test: out frac | test: inside | test: outside | test: outside share | test: top-quartile share |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| ETTh2-96 | 0.030 | +0.0059 | +0.2318 | +0.55 | +0.87 | 0.019 | +0.0075 | +0.0656 | +0.15 | +0.69 |
+| ETTh2-192 | 0.062 | -0.0005 | +0.1403 | +1.05 | +1.05 | 0.052 | +0.0005 | +0.0817 | +0.91 | +0.83 |
+| ETTh2-336 | 0.111 | -0.0038 | +0.0937 | +1.48 | +1.58 | 0.055 | +0.0028 | +0.0537 | +0.52 | +0.78 |
+| ETTh2-720 | 0.482 | +0.0070 | +0.0658 | +0.90 | +0.65 | 0.184 | +0.0151 | +0.0614 | +0.48 | +0.60 |
+| ETTm2-96 | 0.007 | +0.0078 | +0.1093 | +0.09 | +0.57 | 0.030 | +0.0134 | +0.0747 | +0.15 | +0.54 |
+| ETTm2-192 | 0.010 | +0.0053 | -0.0070 | -0.01 | +0.23 | 0.028 | +0.0131 | +0.0260 | +0.05 | +0.18 |
+| ETTm2-336 | 0.043 | +0.0015 | -0.0104 | -0.47 | -1.50 | 0.069 | +0.0090 | +0.0037 | +0.03 | -0.03 |
+| ETTm2-720 | 0.144 | +0.0033 | +0.0152 | +0.43 | +0.35 | 0.199 | +0.0031 | +0.0096 | +0.43 | +0.30 |
+| Weather-96 | 0.027 | +0.0061 | -0.0120 | -0.06 | -0.47 | 0.033 | +0.0035 | +0.0080 | +0.07 | +0.34 |
+| Weather-192 | 0.048 | +0.0063 | +0.0222 | +0.15 | +0.09 | 0.066 | +0.0025 | +0.0104 | +0.23 | +0.57 |
+| Weather-336 | 0.064 | +0.0073 | +0.0166 | +0.13 | +0.38 | 0.091 | +0.0040 | +0.0098 | +0.20 | +0.29 |
+| Weather-720 | 0.110 | +0.0047 | -0.0002 | -0.00 | -0.02 | 0.198 | +0.0038 | -0.0072 | -0.86 | -0.98 |
+
+A share above 1 means the complementary group has a net loss.
+
+The result depends on the dataset, so P5 is only partly supported.
+
+- **ETTh2 supports P5 as stated.** At every horizon, on both splits, an
+  out-of-envelope window gains at least four times as much as an inside
+  window, whose gain is near zero or negative at $H=192,336$ on validation. The
+  same ordering holds in every seed: 24 of 24 seed-split evaluations. 82–111%
+  of the outside gain is level gain. The top $\lvert d\rvert$ quartile carries
+  60–158% of the total gain.
+- **ETTm2 and Weather do not show the concentration reliably.** Outside
+  windows gain more in only 13 of 24 (ETTm2) and 14 of 24 (Weather) seed-split
+  evaluations. The outside windows show a net loss on validation at ETTm2-192,
+  ETTm2-336, and Weather-96, and on both splits at Weather-720. Most of the total gain
+  comes from inside the envelope. For the whole window set, the level fraction
+  of the validation gain is 0.26–0.49 on ETTm2 (excluding ETTm2-336, where
+  the net gain is near zero) and 0.32–0.70 on Weather, against 0.77–1.34 on
+  ETTh2.
+
+The hard floor of Theorem 2(c) therefore explains the ETTh2 gain well. It does
+not explain the ETTm2 and Weather gains. Those gains are spread over the bulk of
+the windows and are half or more shape gain.
+
+We deliberately do not use one grouping that looks more favourable: the top
+decile of phase-only level error. It carries 24–178% of the gain in all 24 core
+split rows, but selecting windows by $e_\varphi$ biases $e_\varphi-e_L$ upward
+for any second model. The grouping is therefore not evidence for P5.
+
+**The L model hands the level to the branch (Theorem 3(c)).** On the L
+checkpoints, we measured the phase path's own envelope and the level carried
+by each component. Energy shares are computed in original units.
+
+| setting | $C_1$: phase-only → L phase path | level tracking: phase-only → L phase path | fused level tracking | branch share of fused level energy | gate $g$ |
+|---|---:|---:|---:|---:|---:|
+| ETTh2-96 | 2.25 → 0.83 | 0.66 → +0.02 | 0.69 | 0.99 | 0.49 |
+| ETTh2-192 | 1.83 → 0.60 | 0.59 → +0.05 | 0.61 | 0.99 | 0.20 |
+| ETTh2-336 | 1.69 → 0.47 | 0.51 → +0.07 | 0.54 | 0.98 | 0.20 |
+| ETTh2-720 | 1.12 → 0.41 | 0.28 → -0.06 | 0.34 | 0.97 | 0.51 |
+| ETTm2-96 | 2.70 → 0.65 | 0.64 → +0.05 | 0.66 | 0.99 | 0.51 |
+| ETTm2-192 | 2.85 → 0.60 | 0.51 → -0.02 | 0.52 | 0.97 | 0.21 |
+| ETTm2-336 | 1.93 → 0.54 | 0.39 → -0.08 | 0.38 | 0.95 | 0.21 |
+| ETTm2-720 | 1.17 → 0.51 | 0.25 → -0.30 | 0.26 | 0.87 | 0.20 |
+| Weather-96 | 2.64 → 1.03 | 0.52 → +0.10 | 0.53 | 0.83 | 0.22 |
+| Weather-192 | 2.31 → 1.03 | 0.44 → -0.08 | 0.46 | 0.80 | 0.42 |
+| Weather-336 | 2.10 → 0.86 | 0.33 → +0.08 | 0.35 | 0.64 | 0.17 |
+| Weather-720 | 1.46 → 1.15 | 0.19 → -0.00 | 0.20 | 0.55 | 0.14 |
+
+The joint split predicted by Theorem 3(c) is visible directly.
+
+- **The backbone gives up the level.** When trained with the branch, the phase
+  path's level envelope shrinks by a factor of 1.3–4.8. Its level tracking
+  falls to about zero, from $-0.30$ to $+0.10$.
+- **The branch carries the level.** It carries 55–99% of the fused level
+  energy. Its standalone level, before gating, tracks $d$ poorly, with
+  negative tracking in almost every setting. This matches the requirement that
+  it supply $[\mathbb E(\tilde y\mid\tilde x)-(1-g)F']/g$ rather than the level
+  itself.
+- **Aggregate level tracking barely changes.** The fused forecast tracks the
+  level only slightly better than phase-only in aggregate, for example 0.69
+  against 0.66 at ETTh2-96. The gain therefore comes from two sources:
+  following levels outside the envelope, which dominates on ETTh2, and
+  releasing the backbone's level budget. By Theorem 2(d), a backbone that
+  holds $\ell_p$ near $c_0$ keeps its full shape budget. This is consistent
+  with the shape gains on ETTm2 and Weather. It is an interpretation; we did
+  not measure the shape budget directly.
+
+On ETTh1, ETTm1, and Electricity the same handoff appears, with a branch share
+of 0.46–0.98. On Traffic, where the gate stays at 0.05–0.07 and the envelope
+never binds, the branch share is only 0.05–0.28.
+
+**Provenance.** The measurement ran on the remote server, with PyTorch 2.6.0,
+Lightning 2.6.5, and NVIDIA A800 GPUs, at code commit `d8d47507`
+(`scripts/verify_level_envelope.py` and `scripts/summarize_level_envelope.py`).
+Its outputs are in `research_runs/level_envelope_v2/`. An earlier pass loaded
+the aborted first attempt of the one retried run in scope (Electricity-336,
+seed 2023, L model) and missed that run's recorded test MSE by 6.6%. The
+verifier now loads the checkpoint recorded by each run, and all 168
+evaluations reproduce.
+
 ## 8. Discussion: the theory-to-evidence chain
 
 The paper forms an ordered chain.
@@ -1120,6 +1330,11 @@ The paper forms an ordered chain.
    model, as predicted by the joint split of Theorem 3(c).
 9. **Optimization:** generic low-rank factorization preserves most of the useful
    correction at a small parameter fraction.
+10. **Envelope on checkpoints (Theorem 2, P5; Section 7.6):** the bound holds
+    exactly on all 84 phase-only checkpoints. It tightens with the horizon and
+    carries a hard floor of up to 22% of validation MSE. The gain concentrates
+    outside the envelope on ETTh2 but not on ETTm2 or Weather. In joint
+    training, the level moves from the backbone to the branch.
 
 Three percentages should not be conflated:
 
@@ -1136,14 +1351,21 @@ the level demand exceeds a checkpoint's $C_\varphi$. Theorem 3(a) needs only
 the profile structure (26). Parts (b) and (c) add a Gaussian design and a
 linear Bayes level, respectively; they are idealizations that explain the
 observed readouts and reversal, not assumptions the data are known to satisfy.
-The following measurements have not yet been made and would close the loop
-between Theorem 2 and the observed gain:
+Section 7.6 has measured $C_\varphi$, the out-of-envelope fraction, the level
+and floor shares, and the P5 gain split on trained checkpoints. It closes the
+loop only partly.
 
-- $C_\varphi$ computed from each trained phase-only checkpoint via (19);
-- the fraction of validation windows with $|d|>C_\varphi$;
-- the level share $(\operatorname{lev}(\hat{\tilde y})-d)^2$ of phase-only MSE
-  in (7);
-- whether PhaseFormer-L's per-window gain concentrates on those windows (P5).
+- The envelope-floor mechanism fully explains the ETTh2 gain.
+- On ETTm2 and Weather most of the gain lies inside the envelope, and half or
+  more of it is shape gain. We attribute this to the released level–shape
+  budget of Theorem 2(d), because the backbone hands the level to the branch.
+  That attribution is still an interpretation.
+- A direct test would compare the shape residual
+  $\|\varsigma_\perp\|$ of the L model's phase path with that of the
+  phase-only model.
+- The ETTh1/ETTm1 validation and test periods differ strongly in level
+  dynamics (level share 0.40–0.52 against 0.12–0.28). This affects any
+  test-side reading on those datasets.
 
 The result is a conditional completion of PhaseFormer's representation. The phase
 backbone carries recurring shape and the part of level variation it can reach.
@@ -1187,12 +1409,19 @@ records already present in the repository:
   low-rank-checkpoint intervention records;
 - functional rank and per-mode contribution: the 72-checkpoint functional-rank
   analysis;
-- compression: the conditioned rank sweep and rank-capacity report.
+- compression: the conditioned rank sweep and rank-capacity report;
+- envelope measurement (Section 7.6): `scripts/verify_level_envelope.py` and
+  `scripts/summarize_level_envelope.py` applied to the E14 main-comparison
+  checkpoints. The run was on the remote server at commit `d8d47507`, and
+  the outputs are in `research_runs/level_envelope_v2/`.
 
 The 12-setting performance group is a three-seed matched comparison. The
 28-setting spectrum is a train/validation closed-form analysis. The 18-group
 semantic dissection and 72-checkpoint functional-rank results are validation
-analyses of frozen trained heads. These scopes correspond to different claims;
+analyses of frozen trained heads. The envelope measurement is a validation
+analysis of the 84 frozen checkpoint pairs. Its test-side numbers are
+conditional on checkpoints and configurations that were chosen after test
+results had been read. These scopes correspond to different claims;
 they are presented together because each closes a different link in the same
 chain. The numerical checks in Sections 3.3 and 5.2 and the table in Section
 4.2 are simulations of idealized models. They verify the derivations and

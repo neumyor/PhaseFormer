@@ -5286,3 +5286,40 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 - 核对 tag 1–39 连续。
 
 **未做**：未从训练 checkpoint 测量 $C_\varphi$，也未统计 $|d|>C_\varphi$ 的验证窗口比例（P5），文中已写明为待验证项。未运行训练、未读取 test。
+
+## 2026-09-29 — 在远程服务器上测量定理 2 包络并更新 minipaper_0930
+
+**任务**：按 `REMOTE_SERVER.md` 到远程服务器（yyk03@11.11.18.3，`~/niuyiming/PhaseFormer`）找到 E14 主对比（`phaseformer_L_e14_main_v1/results.csv`）的训练记录。在服务器上对训练好的 checkpoint 实测：定理 2 的包络常数 $c_0,C_1,C_\varphi$、$d$ 落在包络外的窗口比例、phase-only MSE 中的水平份额与下界份额，以及 P5（L 模型的增益是否集中在包络外的窗口），然后把结果写入 minipaper_0930。
+
+**代码**：
+- `scripts/verify_level_envelope.py`：从最后一个路由单元的 `norm2` 和 predictor 权重读出包络常数，逐窗口计算需求 $d$、水平误差、下界、相位边界利用率、增益的水平/形状分解，并对 L 模型用 hook 拆出主干和支路的水平。
+- `scripts/summarize_level_envelope.py`：汇总各分片结果。
+- 相关提交：a20cc68、618f2de、7b35b7f、d8d4750。
+
+**运行**：
+- 服务器环境：torch 2.6.0，Lightning 2.6.5，A800。未使用 GPU 6。
+- 共 84 对 checkpoint（7 个数据集 × 4 个 horizon × 3 个 seed），分别在 val 和 test 上评估，共 168 次评估。
+- 输出在 `research_runs/level_envelope_v2/`（不入库）。
+
+**修正过的问题**：
+- 重试过的 run 原先会加载中止 attempt 的 checkpoint，Electricity-336 s2023 L 的 test MSE 因此偏差 6.6%。现在改为读取 run 自己记录的 checkpoint；该 run 是范围内唯一一个多 attempt 的 run。
+- RevIN 单位下的水平跟踪率被平坦回看窗口主导，因此改为按 $\sigma^2$ 加权的原始单位口径，并完整重跑了一遍（v2）。
+
+**校验**：
+- 前提违例 0 次。
+- 最大相位边界利用率为 0.999995，始终 < 1，说明定理 2 在训练权重上精确成立，而且几乎被顶到边界。
+- 复现记录的 test MSE，相对误差 ≤5.2e-5。
+- hook 重构误差 ≤2.4e-5。
+
+**结论**：新增 §7.6，同时修订 §4.2、§4.4、§5.3、§7.1、§8、摘要和证据地图。
+- 包络较窄，且随 horizon 收紧：核心 12 格中 $C_\varphi$ 在 1.20–3.02 之间，包络外窗口比例从 H=96 的 ≤3% 升到 H=720 的 11–48%。
+- 下界份额最高占 phase-only 验证集 MSE 的 22%（ETTh2-720）。
+- 相位路径能跟踪 19–66% 的水平能量，印证定理 1。
+- P5 只部分成立：ETTh2 在两个 split、24/24 个 seed 上都满足“包络外窗口每窗增益更大”；ETTm2 和 Weather 上结果混杂，增益主要来自包络内窗口，且一半以上是形状增益。
+- 定理 3(c) 的水平交接得到强支持：联合训练后主干的 $C_1$ 缩小 1.3–4.8 倍，水平跟踪率降到约 0；支路承担 55–99% 的融合水平能量。
+
+**披露**：
+- val 为主口径。
+- test 结果是条件性的：21 个 L checkpoint 和 18 个 phase-only checkpoint 复用自读过 test 的早期 campaign，arm 配置也是在读过 test 之后确定的。
+- 按 phase-only 水平误差 top decile 分组存在选择偏差，未作为证据使用。
+- 本次未训练新模型，也未改动模型代码。
