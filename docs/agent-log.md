@@ -5323,3 +5323,23 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 - test 结果是条件性的：21 个 L checkpoint 和 18 个 phase-only checkpoint 复用自读过 test 的早期 campaign，arm 配置也是在读过 test 之后确定的。
 - 按 phase-only 水平误差 top decile 分组存在选择偏差，未作为证据使用。
 - 本次未训练新模型，也未改动模型代码。
+
+## 2026-09-29 — minipaper_0930 的 P5 表述收窄为 ETTh2
+
+**任务**：用户要求 minipaper 作为成果汇报，P5 部分只保留 ETTh2 上的结论。
+
+**改动**（仅 `docs/minipaper_0930.md`）：
+- 摘要、§5.3、§7.1、§7.6、§8 中的 P5 表述统一限定为"在 ETTh2 上成立"。
+- §7.6 的 P5 表只保留 ETTh2 四行。
+- 删除 ETTm2/Weather 的 P5 分析，以及 top-decile 分组的说明。
+- 交接段落改写为不依赖 ETTm2/Weather 的表述。
+
+**保留**：
+- 包络表和交接表的 12 个核心设置。
+- test 条件性披露。
+
+**完整结果仍保存在**：
+- `research_runs/level_envelope_v2/summary_p5_envelope.csv`（含 ETTm2/Weather）。
+- 上一条日志。
+
+**未做**：未重新运行实验。
