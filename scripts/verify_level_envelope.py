@@ -236,6 +236,10 @@ def summarise(phase, fused, envelope, fused_envelope):
         "floor_share": float(np.mean(sigma2 * dist ** 2)) / mse_p,
         "level_share_revin": float(np.mean(level_p) / np.mean(phase["err"])),
         "floor_share_revin": float(np.mean(dist ** 2) / np.mean(phase["err"])),
+        "demand_util_median": float(np.median(np.abs(demand - envelope["c0"]) / envelope["C1"])),
+        "frac_demand_util_gt_0.8": float((np.abs(demand - envelope["c0"]) > 0.8 * envelope["C1"]).mean()),
+        "frac_phase_util_gt_0.8": float((phase["phase_util"] > 0.8).mean()),
+        "frac_phase_util_gt_0.9": float((phase["phase_util"] > 0.9).mean()),
         "phase_level_tracking": level_tracking(phase["lev"], demand),
         "phase_level_spearman": rank_correlation(phase["lev"], demand),
     }
@@ -266,6 +270,8 @@ def summarise(phase, fused, envelope, fused_envelope):
         "inside_gain_per_window": float(gain[~outside].mean()) if (~outside).any() else float("nan"),
         "spearman_dist_vs_gain": rank_correlation(dist, gain),
         "spearman_absd_vs_gain": rank_correlation(np.abs(demand), gain),
+        "spearman_phase_util_vs_gain": rank_correlation(phase["phase_util"], gain),
+        "spearman_phase_level_err_vs_gain": rank_correlation(sigma2 * level_p, gain),
         "fused_level_tracking": level_tracking(fused["lev"], demand),
         "fused_level_share": float(np.mean(sigma2 * level_l)) / float(np.mean(sigma2 * fused["err"])),
         "fused_phase_util_max": float(fused["phase_util"].max()),
@@ -321,6 +327,19 @@ def summarise(phase, fused, envelope, fused_envelope):
     top = np.zeros(demand.size, dtype=bool)
     top[order[-max(1, demand.size // 10):]] = True
     groups.append(group_row("abs_d_top_decile", "top10", top))
+    # Theorem 2(d): near the boundary the level squeezes the shape budget, so
+    # the envelope can bind softly without any window lying outside it.
+    demand_util = np.abs(demand - envelope["c0"]) / envelope["C1"]
+    for grouping, statistic in (("demand_util", demand_util),
+                                ("phase_util", phase["phase_util"])):
+        for low, high in ((0.0, 0.5), (0.5, 0.8), (0.8, 1.0), (1.0, np.inf)):
+            members = (statistic >= low) & (statistic < high)
+            if members.any():
+                groups.append(group_row(grouping, f"[{low},{high})", members))
+    level_order = np.argsort(sigma2 * level_p, kind="stable")
+    top = np.zeros(demand.size, dtype=bool)
+    top[level_order[-max(1, demand.size // 10):]] = True
+    groups.append(group_row("phase_level_err_top_decile", "top10", top))
     return cell, groups
 
 
