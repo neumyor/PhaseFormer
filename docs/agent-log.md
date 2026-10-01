@@ -5353,3 +5353,38 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **验证**：两份生成脚本通过 Python 语法检查，两份检查脚本通过 `bash -n`；四份 PPTX ZIP 完整性检查通过，页数分别为 14、16、16、5；两份预览 PDF 文件头正确；提交前检查空白差异。未重新生成／渲染幻灯片，未运行模型实验。
 
 **同步**：SSH 443 直连获取远程状态，本地已有 8 个未推送提交，远程无独有提交；本轮整理提交与已有提交一起推送当前 `weak_residual_nlinear_bottleneck` 分支。
+
+## 2026-10-01 — 记录 learned trend token 方案一及二次可行性审查
+
+**任务**：用户要求把“从原始时间序列学习 trend token，并与现有 phase token 交互”的方案一细化，且严格保持 minipaper_0930 Theorem 3 的低秩补空间论证。
+
+**文档**：新增 docs/PhaseFormer_trend_token_scheme1_design.md。
+
+**设计结论**：
+
+- 采用单个 per-channel learned trend token；
+- trend token 从 RevIN 后的末值锚定历史中提取；
+- trend token 只读取 routing 后的 phase latent，不反向修改原 phase path；
+- 通过固定 horizon profile bank 输出 profile coefficients；
+- 主版本为 m=1、constant profile，退化到当前 PhaseFormer-L 的 rank-one anchored correction；
+- 多 profile、动态 gate 和双向 co-attention 暂不进入第一版主结论。
+
+**二次理论审查**：
+
+- learned trend encoder 是 Theorem 3 允许的历史函数输入 ζ(x)；
+- profile-constrained decoder 使趋势输出始终落在 span(A)，因此输出 rank 上界由 profile 数 m 控制；
+- 因为原 phase latent、末端 norm2 和 phase predictor 不变，Theorem 2 的 phase-only level envelope 仍可逐 checkpoint 测量；
+- 不能声称 trend token 突破了原 phase path 的 envelope，只能声称它补足了 envelope 外的 conditional residual；
+- 静态 gate 仍可使用 Theorem 3(d) 的风险表达式。
+
+**二次实践审查**：
+
+- 只需新增局部 trend encoder、phase-to-trend cross-attention 和 profile decoder；
+- 不改变数据格式、训练入口和 RevIN 协议；
+- 计算量预期小于 dense L×H NLinear 支路，精确参数量待实现后统计；
+- 必须保留 phase_only、dense PhaseFormer-L 和 g=0 控制；
+- 首轮应先做静态退化测试和合成 level/shape 数据验证，再进行 validation-only 真实数据 pilot。
+
+**验证状态**：本轮只完成设计文档和静态论证，未修改模型代码，未训练，未读取 test，未触发 experiment-and-error-analysis Skill。
+
+**下一步**：若进入实现，先做 m=1 单 token、单向 phase-to-trend attention、固定常值 profile 的最小版本，并补充形状、退化等价性、profile-rank 和无未来信息测试。
