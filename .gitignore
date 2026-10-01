@@ -16,3 +16,14 @@ docs/*.zip
 
 # Remote-server usage guide stays local only.
 /REMOTE_SERVER.md
+
+# Local copies of remote experiment logs.
+/remote_logs/
+
+# Intermediate presentation QA outputs.
+/docs/ppt_0926/qa.pptx
+/docs/ppt_0926/qa.pdf
+/docs/ppt_0926/qa0930.pptx
+/docs/ppt_0926/qa0930.pdf
+/docs/ppt_0926/slide-*.jpg
+/docs/ppt_0926/s0930-*.jpg
