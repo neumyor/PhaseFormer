@@ -5416,3 +5416,18 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 - 恢复：同一 manifest/config hash 下，`--resume` 跳过已完成 job；失败或中断 job 写入 job_status 并自动重试。
 
 **首轮 smoke**：ETTh1-H96、1 epoch、4 GPU 已完成；四个机制均能写入 best checkpoint 和 metrics。1 epoch 仅用于链路检查，不能作为效果结论。
+
+## 2026-10-02 — 停止 m=1 矩阵并启动 rank-2 单变量验证
+
+**决策**：根据第一轮结果，停止 `trend_token_validation_20261001`。保留其已落盘结果，不再继续补齐该矩阵。
+
+**唯一改动**：固定 profile 子空间从 `m=1 constant` 扩展为 `m=2 constant+slope`。不加入 auxiliary loss、dynamic gate、额外 encoder 或训练协议变化。
+
+**远程实验**：
+- experiment id：`trend_token_rank2_20261002`
+- 代码 commit：`732653f5`
+- supervisor PID：`87640`
+- GPU：0–7
+- 矩阵：ETTh1/ETTh2/ETTm2/Weather × H96/H192/H720 × seed 2021/2022/2023；phase-only、dense residual、m=1、m=2；8 epochs；validation-only。
+- 日志：`~/niuyiming/trend_token_rank2_20261002.supervisor.log`
+- 恢复：使用 `--resume` 和确定性 manifest/config hash。
