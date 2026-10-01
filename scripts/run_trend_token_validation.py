@@ -45,9 +45,22 @@ def build_jobs(args):
     arms = [
         ("phase_only", {}),
         ("dense_residual", {}),
-        ("trend_token_m1_no_interaction", {}),
-        ("trend_token_m1", {}),
+        ("trend_token_m1_no_interaction", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+        }),
     ]
+    for dim in args.trend_dims:
+        for kernel in args.trend_kernels:
+            for gate in args.trend_gates:
+                arms.append(("trend_token_m1", {
+                    "trend_token_dim": dim,
+                    "trend_encoder_kernel": kernel,
+                    "trend_gate_init": gate,
+                    "trend_use_phase_attention": True,
+                    "trend_profile_count": 1,
+                }))
     jobs = []
     for dataset in args.datasets:
         for horizon in args.horizons:
@@ -88,6 +101,8 @@ def build_jobs(args):
                         "--require-cuda",
                         "--resume",
                     ]
+                    if overrides:
+                        cmd.extend(["--overrides", json.dumps(overrides, separators=(",", ":"))])
                     if args.batch_size:
                         cmd.extend(["--batch-size", str(args.batch_size)])
                     if args.max_eval_samples:
@@ -183,11 +198,17 @@ def main():
     parser.add_argument("--max-eval-samples", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--max-retries", type=int, default=2)
+    parser.add_argument("--trend-dims", default="32", help="trend token dimensions to screen")
+    parser.add_argument("--trend-kernels", default="5", help="odd causal stem kernels to screen")
+    parser.add_argument("--trend-gates", default="0.2", help="initial fusion gates to screen")
     args = parser.parse_args()
     args.datasets = parse_csv(args.datasets)
     args.horizons = parse_csv(args.horizons, int)
     args.seeds = parse_csv(args.seeds, int)
     args.gpus = parse_csv(args.gpus, int)
+    args.trend_dims = parse_csv(args.trend_dims, int)
+    args.trend_kernels = parse_csv(args.trend_kernels, int)
+    args.trend_gates = parse_csv(args.trend_gates, float)
     if not args.gpus:
         raise SystemExit("at least one GPU is required")
 
@@ -261,4 +282,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
