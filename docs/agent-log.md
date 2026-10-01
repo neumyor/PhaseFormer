@@ -5402,3 +5402,17 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 - 新增 `tests/test_trend_token.py` 覆盖形状、per-channel pooling、profile rank 和 gate no-op。
 
 **验证状态**：当前主机没有仓库规定的 py310/torch 环境，只完成 Python 语法检查和 diff 检查；完整 pytest、GPU smoke 与多 GPU 实验待远程服务器执行。尚未产生正式效果结论。
+
+## 2026-10-01 — 启动 learned trend token 多 GPU validation screen
+
+**远程版本**：`591f17fd`，服务器工作区已对齐，数据集 ETTh1/ETTh2/ETTm2/Weather 均存在。
+
+**后台任务**：
+- experiment id：`trend_token_validation_20261001`
+- supervisor：远程 PID `95306`
+- 日志：`~/niuyiming/trend_token_validation_20261001.supervisor.log`
+- GPU：0–5，每卡一个训练子进程；GPU 6–7 保留。
+- 矩阵：4 数据集 × H96/192/720 × seed 2021/2022/2023 × phase-only、dense residual、trend-token(no interaction)、trend-token(phase-conditioned)，8 epochs，validation-only。
+- 恢复：同一 manifest/config hash 下，`--resume` 跳过已完成 job；失败或中断 job 写入 job_status 并自动重试。
+
+**首轮 smoke**：ETTh1-H96、1 epoch、4 GPU 已完成；四个机制均能写入 best checkpoint 和 metrics。1 epoch 仅用于链路检查，不能作为效果结论。
