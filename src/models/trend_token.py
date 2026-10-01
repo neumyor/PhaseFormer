@@ -10,6 +10,7 @@ complement argument in minipaper_0930 Theorem 3.
 
 from __future__ import annotations
 
+import math
 from typing import Iterable
 
 import torch
@@ -119,9 +120,11 @@ class TrendTokenBranch(nn.Module):
     def _make_profiles(pred_len: int, count: int, profile_type: str) -> torch.Tensor:
         t = torch.linspace(-1.0, 1.0, pred_len)
         profiles = [torch.ones_like(t)]
-        if count > 1:
+        if count > 1 and profile_type == "constant_slope":
             profiles.append(t)
-        if count > 2:
+        if count > 1 and profile_type == "constant":
+            profiles.extend(torch.sin(math.pi * (i + 1) * (t + 1.0) / 2.0) for i in range(count - 1))
+        if count > 2 and profile_type == "constant_slope":
             profiles.extend(t.pow(i) for i in range(2, count))
         bank = torch.stack(profiles[:count], dim=-1)
         bank = bank / bank.square().sum(dim=0, keepdim=True).clamp_min(1e-8).sqrt()
