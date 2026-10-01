@@ -5388,3 +5388,17 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **验证状态**：本轮只完成设计文档和静态论证，未修改模型代码，未训练，未读取 test，未触发 experiment-and-error-analysis Skill。
 
 **下一步**：若进入实现，先做 m=1 单 token、单向 phase-to-trend attention、固定常值 profile 的最小版本，并补充形状、退化等价性、profile-rank 和无未来信息测试。
+
+## 2026-10-01 — 实现 learned trend token 验证链路
+
+**任务**：落实方案一的最小可运行版本，并准备 validation-only 的多 GPU、可恢复实验。
+
+**改动**：
+- 新增 `src/models/trend_token.py`：逐通道共享 causal temporal encoder、learned-query pooling、单向 phase-to-trend attention、固定 horizon profile bank 和静态 gate；m=1 时输出严格位于一个 profile 的张成空间。
+- `PhaseFormer` 增加 `use_trend_token` 分支。趋势分支只读取 routing 后的 `Z`，不写回 phase path；flag off 保持原路径。
+- `search_phaseformer.py` 增加 `phase_only`、`dense_residual`、`trend_token_m1_no_interaction`、`trend_token_m1` 四个机制入口，并导出 trend diagnostics。
+- 新增 `scripts/run_trend_token_validation.py`：生成 config hash manifest，按 GPU 单进程分片，job 状态、日志、失败重试和 `--resume`。
+- 新增 `scripts/analyze_trend_token_validation.py`：汇总结果、趋势 token 诊断、bad-case 引用和 Markdown/ZIP 报告。
+- 新增 `tests/test_trend_token.py` 覆盖形状、per-channel pooling、profile rank 和 gate no-op。
+
+**验证状态**：当前主机没有仓库规定的 py310/torch 环境，只完成 Python 语法检查和 diff 检查；完整 pytest、GPU smoke 与多 GPU 实验待远程服务器执行。尚未产生正式效果结论。

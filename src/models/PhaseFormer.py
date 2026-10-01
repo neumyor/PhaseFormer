@@ -74,6 +74,7 @@ from src.models.residual_topology import (
     PhaseSlotResidualHead,
 )
 from src.models.asymmetric_trend_components import extract_trend_component
+from src.models.trend_token import TrendTokenBranch
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -529,6 +530,29 @@ class PhaseFormer(DefaultPLModule):
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
         if not self.use_residual_head:
             self.use_weak_period_residual = False
+        self.use_trend_token = bool(getattr(configs, "use_trend_token", False))
+        if self.use_trend_token and self.use_weak_period_residual:
+            raise ValueError(
+                "trend token and dense weak residual are mutually exclusive; "
+                "use an explicit ablation to compare them"
+            )
+        self.trend_token_branch = None
+        if self.use_trend_token:
+            self.trend_token_branch = TrendTokenBranch(
+                self.seq_len,
+                self.pred_len,
+                self.enc_in,
+                self.latent_dim,
+                token_dim=getattr(configs, "trend_token_dim", 32),
+                kernel_size=getattr(configs, "trend_encoder_kernel", 5),
+                dilations=getattr(configs, "trend_encoder_dilations", (1, 2)),
+                profile_count=getattr(configs, "trend_profile_count", 1),
+                profile_type=getattr(configs, "trend_profile_type", "constant"),
+                use_phase_attention=getattr(configs, "trend_use_phase_attention", True),
+                num_heads=getattr(configs, "trend_attention_heads", 1),
+                gate_init=getattr(configs, "trend_gate_init", 0.2),
+                pool_temperature=getattr(configs, "trend_pool_temperature", 1.0),
+            )
         # In the asymmetric-input study this flag changes only the input to the
         # NLinear-style residual path.  The phase path always receives X.
         self.weak_residual_asymmetric_component = getattr(
@@ -1851,6 +1875,11 @@ class PhaseFormer(DefaultPLModule):
         self.last_rcrf_reliability = None
         self.last_rcrf_alpha = None
         self.last_weak_residual_alpha = None
+        self.last_trend_forecast = None
+        self.last_trend_lambda = None
+        self.last_trend_gate = None
+        self.last_trend_pool_weights = None
+        self.last_trend_phase_attention = None
 
         # 1) RevIN normalization
         if self.use_revin:
@@ -2086,6 +2115,17 @@ class PhaseFormer(DefaultPLModule):
 
         phase_forecast_normalized = y_hat
         residual_forecast_normalized = None
+        trend_forecast_normalized = None
+        if self.use_trend_token:
+            trend_forecast_normalized, trend_gate, trend_diag = self.trend_token_branch(
+                x_in, Z
+            )
+            y_hat = (1.0 - trend_gate) * y_hat + trend_gate * trend_forecast_normalized
+            self.last_trend_forecast = trend_forecast_normalized.detach()
+            self.last_trend_lambda = trend_diag["lambda"].detach()
+            self.last_trend_gate = trend_gate.detach()
+            self.last_trend_pool_weights = trend_diag["pool_weights"]
+            self.last_trend_phase_attention = trend_diag["phase_attention"]
         if self.use_weak_period_residual:
             if self.use_dual_reliability_fusion:
                 linear_hat, periodic_hat = self.weak_period_residual.forward_components(
@@ -2219,6 +2259,13 @@ class PhaseFormer(DefaultPLModule):
                 self.last_residual_forecast = self.revin.denormalize(
                     residual_forecast_normalized, stats
                 ).detach()
+            if self.use_trend_token and trend_forecast_normalized is not None:
+                self.last_phase_forecast = self.revin.denormalize(
+                    phase_forecast_normalized, stats
+                ).detach()
+                self.last_trend_forecast = self.revin.denormalize(
+                    trend_forecast_normalized, stats
+                ).detach()
             if self.use_triaxis_fusion:
                 self.triaxis_expert_outputs = tuple(
                     self.revin.denormalize(expert, stats)
@@ -2270,6 +2317,9 @@ class PhaseFormer(DefaultPLModule):
             if not self.use_revin:
                 self.last_phase_forecast = phase_forecast_normalized.detach()
                 self.last_residual_forecast = residual_forecast_normalized.detach()
+        if self.use_trend_token and trend_forecast_normalized is not None and not self.use_revin:
+            self.last_phase_forecast = phase_forecast_normalized.detach()
+            self.last_trend_forecast = trend_forecast_normalized.detach()
         if self.use_rcrf_fusion and residual_forecast_normalized is not None:
             self.last_rcrf_reliability = self.rcrf_fusion.last_r
             self.last_rcrf_alpha = self.rcrf_fusion.last_alpha

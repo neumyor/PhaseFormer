@@ -55,6 +55,31 @@ PLANNED_BATCH_SIZE = {
 
 MECHANISMS = {
     "original": {},
+    # Scheme-1: one history-only trend token per channel.  The phase path is
+    # kept intact and the token emits a fixed-profile low-rank correction.
+    "trend_token_m1": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_profile_count": 1,
+        "trend_profile_type": "constant",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_m1_no_interaction": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_profile_count": 1,
+        "trend_profile_type": "constant",
+        "trend_use_phase_attention": False,
+        "trend_gate_init": 0.2,
+    },
+    "phase_only": {"use_residual_head": False, "use_trend_token": False},
+    "dense_residual": {
+        "use_residual_head": True,
+        "use_weak_period_residual": True,
+        "weak_period_residual_head_type": "shared",
+        "weak_period_residual_gate_init": 0.2,
+    },
     "fixed_residual_g05": {
         "use_weak_period_residual": True,
         "weak_period_residual_gate_init": 0.5,
@@ -489,6 +514,7 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
     coefficient_moments = [0.0] * 5
     heap = []
     serial = 0
+    trend_rows = []
     names = variable_names(model.args) if bad_case_limit else []
     with torch.inference_mode():
         for batch_idx, batch in enumerate(loader):
@@ -504,6 +530,40 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
             abs_sum += torch.abs(err).sum().item()
             sq_sum += torch.square(err).sum().item()
             count += err.numel()
+            if getattr(model, "use_trend_token", False):
+                phase = model.last_phase_forecast[:, -pred_len:, :]
+                trend = model.last_trend_forecast[:, -pred_len:, :]
+                gate = model.last_trend_gate.expand_as(trend)
+                lamb = model.last_trend_lambda
+                pool = model.last_trend_pool_weights
+                phase_attn = model.last_trend_phase_attention
+                pool_pos = torch.linspace(
+                    0.0, 1.0, pool.shape[-1], device=pool.device
+                )
+                recency = (pool * pool_pos).sum(dim=-1)
+                if phase_attn is None:
+                    attn_entropy = torch.zeros(
+                        phase.shape[0], phase.shape[2], device=phase.device
+                    )
+                else:
+                    attn_entropy = -(phase_attn.clamp_min(1e-8).log() * phase_attn).sum(dim=-1)
+                for b_idx in range(pred.shape[0]):
+                    for c_idx in range(pred.shape[2]):
+                        trend_rows.append({
+                            "split": split,
+                            "sample_index": batch_idx * loader.batch_size + b_idx,
+                            "channel": c_idx,
+                            "gate": float(gate[b_idx, 0, c_idx].item()),
+                            "lambda_0": float(lamb[b_idx, c_idx, 0].item()),
+                            "pool_recency": float(recency[b_idx, c_idx].item()),
+                            "phase_attention_entropy": float(attn_entropy[b_idx, c_idx].item()),
+                            "future_mean": float(true[b_idx, :, c_idx].mean().item()),
+                            "last_value": float(batch_x[b_idx, -1, c_idx].item()),
+                            "phase_mae": float((phase[b_idx, :, c_idx] - true[b_idx, :, c_idx]).abs().mean().item()),
+                            "trend_mae": float((trend[b_idx, :, c_idx] - true[b_idx, :, c_idx]).abs().mean().item()),
+                            "fused_mae": float((pred[b_idx, :, c_idx] - true[b_idx, :, c_idx]).abs().mean().item()),
+                            "level_demand": float((true[b_idx, :, c_idx].mean() - phase[b_idx, :, c_idx].mean()).item()),
+                        })
             if model.use_anchored_phase_cycle_fusion:
                 anchor = model.anchored_pctf_anchor_output[:, -pred_len:, :]
                 if model.target_var_index != -1:
@@ -616,6 +676,8 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
                 "next_action": action,
             })
         write_csv(bad_dir / "val_bad_cases.csv", rows)
+    if trend_rows:
+        write_csv(Path(run_dir) / f"{split}_trend_diagnostics.csv", trend_rows)
     return result
 
 

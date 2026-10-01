@@ -1620,6 +1620,23 @@ class PhaseFormerPresetConfig:
         self.huber_delta = exp_args.training_args.huber_delta
 
         self.use_weak_period_residual = hyperparams.get("use_weak_period_residual", False)
+        # Scheme-1 learned trend token branch.  The branch is history-only and
+        # phase-latent read-only; its output is constrained by a fixed profile
+        # bank so the complement has rank at most ``trend_profile_count``.
+        self.use_trend_token = hyperparams.get("use_trend_token", False)
+        self.trend_token_dim = hyperparams.get("trend_token_dim", 32)
+        self.trend_encoder_kernel = hyperparams.get("trend_encoder_kernel", 5)
+        self.trend_encoder_dilations = tuple(
+            hyperparams.get("trend_encoder_dilations", (1, 2))
+        )
+        self.trend_profile_count = hyperparams.get("trend_profile_count", 1)
+        self.trend_profile_type = hyperparams.get("trend_profile_type", "constant")
+        self.trend_use_phase_attention = hyperparams.get(
+            "trend_use_phase_attention", True
+        )
+        self.trend_attention_heads = hyperparams.get("trend_attention_heads", 1)
+        self.trend_gate_init = hyperparams.get("trend_gate_init", 0.2)
+        self.trend_pool_temperature = hyperparams.get("trend_pool_temperature", 1.0)
         self.weak_period_residual_gate_init = hyperparams.get(
             "weak_period_residual_gate_init", 0.2
         )
