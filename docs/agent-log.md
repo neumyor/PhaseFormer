@@ -5431,3 +5431,7 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 - 矩阵：ETTh1/ETTh2/ETTm2/Weather × H96/H192/H720 × seed 2021/2022/2023；phase-only、dense residual、m=1、m=2；8 epochs；validation-only。
 - 日志：`~/niuyiming/trend_token_rank2_20261002.supervisor.log`
 - 恢复：使用 `--resume` 和确定性 manifest/config hash。
+
+## 2026-10-02 — rank-2 实验基础设施修复
+
+首次 `trend_token_rank2_20261002` 运行中，36 个 `trend_token_m2` job 因 `search_phaseformer.py` 的 argparse mechanism 白名单遗漏而退出码 2；这不是模型训练失败，m=2 没有产生有效指标。`trend_token_m2` 已在 commit `fa515bf3` 注册，远程已同步并以原 manifest 的 `--resume` 重跑失败 job。已有 144 个 phase-only/dense/m=1 对照结果保留有效；本轮最终结论需等待 36 个 m=2 job 完成。
