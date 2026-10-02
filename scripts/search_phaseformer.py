@@ -65,6 +65,14 @@ MECHANISMS = {
         "trend_use_phase_attention": True,
         "trend_gate_init": 0.2,
     },
+    "trend_token_m2": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_profile_count": 2,
+        "trend_profile_type": "constant_slope",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+    },
     "trend_token_m1_no_interaction": {
         "use_residual_head": False,
         "use_trend_token": True,
