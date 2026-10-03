@@ -330,24 +330,27 @@ Theorem 3(a)/(c) 的结构性 rank 上界，而不是融合操作本身的可行
 训练协议、数据、seed、gate 形式和参数预算：
 
 1. `B0 phase-only`：原始 PhaseFormer，作为唯一主参照。
-2. `B1 token+m=1`：增加 history-only 的 per-channel trend token，使用
-   一个固定 constant profile；不加入 phase-token interaction。第一版 gate
-   固定，随后再单独比较 learned static gate。
-3. `B2 token+m=1+interaction`：只打开 trend token 读取 phase latent 的
-   单向 cross-attention，其他设置与 B1 完全相同。
-4. `B3 token+m=2`：只把 profile bank 从 constant 扩展为
+2. `B1 token+direct-readout`：增加 history-only 的 per-channel trend
+   token，并用同一个共享线性层直接投射到 `H` 个未来点；不加入
+   phase-token interaction。第一版使用固定 gate，随后再单独比较 learned
+   static gate。
+3. `B2 token+direct-readout+interaction`：只打开 trend token 读取 phase
+   latent 的单向 cross-attention，直接 `H` 维 readout、gate、encoder 和
+   训练协议都与 B1 完全相同。这一对照直接回答 attention 是否提供额外
+   信息。
+4. `B3 profile-m=1`：保持 B2 的 token、interaction、gate 和参数预算，
+   只把直接 `H` 维 readout 换成 constant profile 的标量系数。该步骤测量
+   固定输出形状带来的约束代价，同时进入 Theorem 3 的 rank-one 版本。
+5. `B4 profile-m=2`：只把 profile bank 从 constant 扩展为
    constant+slope，用于验证额外 profile 维度的边际价值。
-5. `B4 direct-horizon control`：复用 B2 的 encoder、interaction、gate 和
-   参数规模，将固定 profile decoder 替换为直接 `H` 维 horizon decoder。
-   该对照专门测量 profile 约束的代价和收益，不作为 Theorem 3 低秩实现的
-   主模型。
 6. 只有在上述结果可归因后，才分别研究动态 gate、多个 trend token 或
    更大的 profile 数；不得在同一轮同时引入这些机制。
 
 每个新增分支都必须同时报告 phase forecast、trend forecast、gate、profile
 coefficients（或 direct decoder 输出）的诊断，并做 branch-only 与 fused
-forecast 的对照。若 B4 只带来收益而 B2/B3 没有，结论应是“需要更大的
-输出空间”，不能把结果表述为 profile 化 trend token 已验证。
+forecast 的对照。若 B2 优于 B1，才能归因于 phase interaction；若 B2
+优于 B3，说明直接 readout 的自由形状有价值，不能把结果表述为 profile
+化 trend token 已验证。
 
 ### 3.1 Learned trend token 是合法 branch input
 

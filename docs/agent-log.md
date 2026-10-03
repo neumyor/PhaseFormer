@@ -5442,6 +5442,6 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 
 **理论澄清**：直接 horizon decoder 加 gate 在工程上完全可行。它仍是历史函数输入，因此不会破坏 Theorem 3 对 branch input 的条件；但任意 `H` 维输出不再被限制在固定 `span(A)`，其线性输出秩一般由 token 维度决定，非线性 decoder 还可能产生输入依赖的输出子空间。因此 Theorem 3(a)/(c) 的 profile 数 rank 上界不能直接沿用。Theorem 2 的 phase-only envelope 与 Theorem 3(d) 的固定 branch gate 风险公式仍可单独使用。`profile` 的作用是把“从历史估计趋势状态”和“将状态写成何种未来时域形状”分离，从而让 rank 约束成为结构属性，而不是训练后观察到的现象。`m=1` 常值 profile 与输出一个标量后广播等价。
 
-**迭代规则**：后续按单变量阶梯推进：原始 phase-only（B0）→ history-only token + `m=1`（B1）→ 只加入单向 phase interaction（B2）→ 只增加 profile 数到 `m=2`（B3）→ 使用同一 encoder/interaction/gate 的 direct-horizon decoder 对照（B4）→ 再单独评估 dynamic gate、多 token 或更大 profile 数。第一轮比较固定 gate，learned static gate 另做变量；每轮固定数据、seed、训练协议和参数预算，并报告 branch-only/fused 及相应诊断。
+**迭代规则修订**：attention 后的 token 可以直接通过共享线性层投射为 `H` 维 readout，因此更干净的阶梯是：原始 phase-only（B0）→ history-only token + direct `H`-readout（B1）→ 只加入单向 phase interaction（B2）→ 保持 token/interaction/gate 不变、仅将 direct readout 换成 constant profile（B3）→ 仅增加 slope profile 得到 `m=2`（B4）→ 再单独评估 dynamic gate、多 token 或更大 profile 数。第一轮比较固定 gate，learned static gate 另做变量；每轮固定数据、seed、训练协议和参数预算，并报告 branch-only/fused 及相应诊断。
 
-**决策**：当前 trend-token 实现包含 temporal encoder、pooling、phase cross-attention、profile decoder 和 learned static gate，不能把它作为“只增加一个机制”的严格因果证据。已有 m=1/no-interaction 与 m=1/m=2 对照仍可用于各自局部问题；下一轮优先补 B1/B2/B4 的受控对照，不再同时叠加新机制。
+**决策**：当前 trend-token 实现包含 temporal encoder、pooling、phase cross-attention、profile decoder 和 learned static gate，不能把它作为“只增加一个机制”的严格因果证据。已有 m=1/no-interaction 与 m=1/m=2 对照仍可用于各自局部问题；下一轮优先补 B1/B2/B3 的受控对照，不再同时叠加新机制。
