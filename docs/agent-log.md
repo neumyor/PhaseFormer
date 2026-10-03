@@ -5465,3 +5465,11 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **完成状态**：远程 `job_status` 显示 90/90 completed、0 failed，90 个 metrics.csv 已生成，supervisor 已正常退出。全矩阵平均验证指标为 phase-only MAE/MSE `0.46215/0.56456`，B1 `0.46023/0.55849`，B2 `0.45843/0.55546`。B1 相对 phase-only 的配对平均差为 `+0.00085 MAE / +0.00124 MSE`，B2 为 `-0.00057 MAE / -0.00073 MSE`（按 setting-seed 等权）；B1/B2 的 MSE 优于 phase-only 的配对数分别为 23/30、25/30，B2 优于 B1 的配对数为 23/30。数据集方向上，B2 在 ETTh2、ETTm1、ETTm2、Weather 的平均 MSE 差为负，在 ETTh1 为正。
 
 以上只是 validation-only 的快速证据，尚未读取 test，也未与 dense residual 做同矩阵比较；不能据此宣称泛化提升或理论成立。
+
+## 2026-10-03 — 启动 B3/B4 profile readout validation
+
+**设计**：复用 B2 的 trend encoder、per-channel token、单向 phase interaction、静态 gate、数据划分、seed 和训练协议；B3 仅将 direct horizon readout 换为 `m=1 constant profile`，B4 仅扩展为 `m=2 constant+slope`。不重新加入 dense residual 或其他机制。
+
+**Smoke**：ETTh1-H96-seed2021，B3/B4 各 1 epoch，均返回码 0，profile diagnostics 正常生成。
+
+**正式任务**：experiment id `trend_token_profile_b34_20261003`；远程 Python supervisor PID `29530`；日志 `~/niuyiming/trend_token_profile_b34_20261003.supervisor.log`；ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192/H720 × seeds 2021/2022 × `trend_token_m1`（B3）和 `trend_token_m2`（B4），8 epochs，validation-only，GPU 0–7，60 jobs，支持 `--resume`。B2/phase-only 使用上一轮 `trend_token_direct_b12_20261003` 的同协议结果进行配对比较。
