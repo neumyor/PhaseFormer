@@ -5473,3 +5473,5 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **Smoke**：ETTh1-H96-seed2021，B3/B4 各 1 epoch，均返回码 0，profile diagnostics 正常生成。
 
 **正式任务**：experiment id `trend_token_profile_b34_20261003`；远程 Python supervisor PID `29530`；日志 `~/niuyiming/trend_token_profile_b34_20261003.supervisor.log`；ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192/H720 × seeds 2021/2022 × `trend_token_m1`（B3）和 `trend_token_m2`（B4），8 epochs，validation-only，GPU 0–7，60 jobs，支持 `--resume`。B2/phase-only 使用上一轮 `trend_token_direct_b12_20261003` 的同协议结果进行配对比较。
+
+**进度检查**：远程连接重试成功；当前 51/60 jobs completed、7 running、2 pending、0 failed，8 张 GPU 均有训练进程。已完成 B3=27、B4=24，样本不平衡，暂不形成最终均值结论。已有完整配对的 B4-B3 差异在数据集和 horizon 间方向不一致，需等待全矩阵完成后再判断 `m=2` 的边际价值。
