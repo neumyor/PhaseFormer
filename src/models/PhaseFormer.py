@@ -548,6 +548,7 @@ class PhaseFormer(DefaultPLModule):
                 dilations=getattr(configs, "trend_encoder_dilations", (1, 2)),
                 profile_count=getattr(configs, "trend_profile_count", 1),
                 profile_type=getattr(configs, "trend_profile_type", "constant"),
+                readout_type=getattr(configs, "trend_readout_type", "profile"),
                 use_phase_attention=getattr(configs, "trend_use_phase_attention", True),
                 num_heads=getattr(configs, "trend_attention_heads", 1),
                 gate_init=getattr(configs, "trend_gate_init", 0.2),
@@ -1877,6 +1878,7 @@ class PhaseFormer(DefaultPLModule):
         self.last_weak_residual_alpha = None
         self.last_trend_forecast = None
         self.last_trend_lambda = None
+        self.last_trend_direct_delta = None
         self.last_trend_gate = None
         self.last_trend_pool_weights = None
         self.last_trend_phase_attention = None
@@ -2122,7 +2124,14 @@ class PhaseFormer(DefaultPLModule):
             )
             y_hat = (1.0 - trend_gate) * y_hat + trend_gate * trend_forecast_normalized
             self.last_trend_forecast = trend_forecast_normalized.detach()
-            self.last_trend_lambda = trend_diag["lambda"].detach()
+            self.last_trend_lambda = (
+                trend_diag["lambda"].detach()
+                if trend_diag.get("lambda") is not None else None
+            )
+            self.last_trend_direct_delta = (
+                trend_diag["direct_delta"].detach()
+                if trend_diag.get("direct_delta") is not None else None
+            )
             self.last_trend_gate = trend_gate.detach()
             self.last_trend_pool_weights = trend_diag["pool_weights"]
             self.last_trend_phase_attention = trend_diag["phase_attention"]

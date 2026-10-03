@@ -104,8 +104,8 @@ def main():
         "",
         f"- Experiment directory: `{root}`",
         "- Selection: validation loss only; no test loader was requested.",
-        "- Arms: phase-only, dense residual, trend token m=1 without interaction, and trend token m=1 with phase-conditioned attention.",
-        "- The trend correction is constrained to the fixed profile bank, so its output rank is structurally bounded by `trend_profile_count`.",
+        "- Arms: phase-only, dense residual, profile trend-token controls, and direct-horizon trend-token controls with and without phase interaction.",
+        "- Profile arms are constrained to the fixed profile bank; direct-horizon arms are an explicit higher-output-space control.",
         "",
         "## Results",
         "",
@@ -136,7 +136,12 @@ def main():
                 arm_rows.extend(read_csv(run_dir / "val_trend_diagnostics.csv"))
             if not arm_rows:
                 continue
-            x = np.asarray([f(r.get("lambda_0")) for r in arm_rows])
+            x = np.asarray([
+                f(r.get("lambda_0"))
+                if r.get("lambda_0", "") not in ("", None)
+                else f(r.get("direct_delta_mean"))
+                for r in arm_rows
+            ])
             y = np.asarray([f(r.get("level_demand")) for r in arm_rows])
             mask = np.isfinite(x) & np.isfinite(y)
             corr = float(np.corrcoef(x[mask], y[mask])[0, 1]) if mask.sum() > 1 else float("nan")
@@ -145,7 +150,7 @@ def main():
             )
         report_lines.extend([
             "",
-            "The correlation and branch MAE columns are measurable diagnostics. They support the proposed complement interpretation only when they repeat across seeds and settings; they are not causal proof by themselves.",
+                "The state correlation uses profile lambda for profile arms and direct-delta mean for direct arms. These diagnostics support the proposed complement interpretation only when they repeat across seeds and settings; they are not causal proof by themselves.",
         ])
 
     report_lines.extend(["", "## High-error cases", ""])
@@ -178,4 +183,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

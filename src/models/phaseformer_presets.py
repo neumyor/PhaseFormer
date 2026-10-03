@@ -1621,8 +1621,8 @@ class PhaseFormerPresetConfig:
 
         self.use_weak_period_residual = hyperparams.get("use_weak_period_residual", False)
         # Scheme-1 learned trend token branch.  The branch is history-only and
-        # phase-latent read-only; its output is constrained by a fixed profile
-        # bank so the complement has rank at most ``trend_profile_count``.
+        # phase-latent read-only.  Profile readout is the theorem path; direct
+        # horizon readout is registered separately as an attribution control.
         self.use_trend_token = hyperparams.get("use_trend_token", False)
         self.trend_token_dim = hyperparams.get("trend_token_dim", 32)
         self.trend_encoder_kernel = hyperparams.get("trend_encoder_kernel", 5)
@@ -1631,6 +1631,7 @@ class PhaseFormerPresetConfig:
         )
         self.trend_profile_count = hyperparams.get("trend_profile_count", 1)
         self.trend_profile_type = hyperparams.get("trend_profile_type", "constant")
+        self.trend_readout_type = hyperparams.get("trend_readout_type", "profile")
         self.trend_use_phase_attention = hyperparams.get(
             "trend_use_phase_attention", True
         )

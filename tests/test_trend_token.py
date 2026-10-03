@@ -62,3 +62,24 @@ def test_gate_zero_is_exact_phase_passthrough_formula():
     gate = torch.sigmoid(module.gate_logit)
     assert float(gate.max()) < 1e-40
 
+
+def test_direct_readout_projects_token_to_horizon():
+    torch.manual_seed(2)
+    module = TrendTokenBranch(
+        seq_len=16,
+        pred_len=7,
+        enc_in=2,
+        phase_dim=8,
+        token_dim=12,
+        readout_type="direct",
+        use_phase_attention=True,
+    )
+    x = torch.randn(3, 16, 2)
+    z = torch.randn(3, 2, 4, 8)
+    trend, gate, diag = module(x, z)
+    assert trend.shape == (3, 7, 2)
+    assert gate.shape == (1, 1, 2)
+    assert diag["readout_type"] == "direct"
+    assert diag["lambda"] is None
+    assert diag["direct_delta"].shape == (3, 2, 7)
+    assert module.last_lambda is None

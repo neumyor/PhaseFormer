@@ -25,7 +25,12 @@ def _causal_conv1d(x: torch.Tensor, layer: nn.Conv1d) -> torch.Tensor:
 
 
 class TrendTokenBranch(nn.Module):
-    """Single learned per-channel trend token with a rank-m profile decoder."""
+    """Single learned per-channel trend token with selectable horizon readout.
+
+    ``profile`` keeps the fixed low-rank profile decoder used by the theorem
+    path.  ``direct`` is the controlled ablation: the same token is mapped
+    directly to all future steps by a shared horizon head.
+    """
 
     def __init__(
         self,
@@ -39,6 +44,7 @@ class TrendTokenBranch(nn.Module):
         dilations: Iterable[int] = (1, 2),
         profile_count: int = 1,
         profile_type: str = "constant",
+        readout_type: str = "profile",
         use_phase_attention: bool = True,
         num_heads: int = 1,
         gate_init: float = 0.2,
@@ -49,6 +55,8 @@ class TrendTokenBranch(nn.Module):
             raise ValueError("profile_count must be positive")
         if profile_type not in {"constant", "constant_slope"}:
             raise ValueError("profile_type must be 'constant' or 'constant_slope'")
+        if readout_type not in {"profile", "direct"}:
+            raise ValueError("readout_type must be 'profile' or 'direct'")
         if phase_dim % num_heads:
             raise ValueError("phase_dim must be divisible by trend attention heads")
         if kernel_size < 1 or kernel_size % 2 == 0:
@@ -62,6 +70,7 @@ class TrendTokenBranch(nn.Module):
         self.phase_dim = int(phase_dim)
         self.token_dim = int(token_dim)
         self.profile_count = int(profile_count)
+        self.readout_type = str(readout_type)
         self.use_phase_attention = bool(use_phase_attention)
         self.pool_temperature = float(pool_temperature)
 
@@ -93,16 +102,30 @@ class TrendTokenBranch(nn.Module):
             phase_dim, num_heads=num_heads, batch_first=True
         )
 
-        self.lambda_head = nn.Sequential(
-            nn.LayerNorm(token_dim),
-            nn.Linear(token_dim, max(8, token_dim // 2)),
-            nn.GELU(),
-            nn.Linear(max(8, token_dim // 2), profile_count),
-        )
-        # Zero initialization makes the added correction an exact no-op at
-        # initialization, which is useful for controlled ablations.
-        nn.init.zeros_(self.lambda_head[-1].weight)
-        nn.init.zeros_(self.lambda_head[-1].bias)
+        readout_hidden = max(8, token_dim // 2)
+        if self.readout_type == "profile":
+            self.lambda_head = nn.Sequential(
+                nn.LayerNorm(token_dim),
+                nn.Linear(token_dim, readout_hidden),
+                nn.GELU(),
+                nn.Linear(readout_hidden, profile_count),
+            )
+            self.horizon_head = None
+            # Zero initialization makes the added correction an exact no-op at
+            # initialization, which is useful for controlled ablations.
+            nn.init.zeros_(self.lambda_head[-1].weight)
+            nn.init.zeros_(self.lambda_head[-1].bias)
+        else:
+            self.lambda_head = None
+            self.horizon_head = nn.Sequential(
+                nn.LayerNorm(token_dim),
+                nn.Linear(token_dim, readout_hidden),
+                nn.GELU(),
+                nn.Linear(readout_hidden, pred_len),
+            )
+            # Keep direct-readout arms an exact no-op at initialization too.
+            nn.init.zeros_(self.horizon_head[-1].weight)
+            nn.init.zeros_(self.horizon_head[-1].bias)
 
         gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
         self.gate_logit = nn.Parameter(
@@ -166,13 +189,28 @@ class TrendTokenBranch(nn.Module):
             self.last_phase_attention = weights.reshape(b, c, s).detach()
         else:
             self.last_phase_attention = None
-        lam = self.lambda_head(token)
         profile = self.profile_bank.to(device=x_in.device, dtype=x_in.dtype)
-        delta = torch.einsum("bcm,hm->bhc", lam, profile)
+        if self.readout_type == "profile":
+            lam = self.lambda_head(token)
+            delta = torch.einsum("bcm,hm->bhc", lam, profile)
+            direct_delta = None
+        else:
+            lam = None
+            # (B, C, D) -> (B, C, H) -> (B, H, C)
+            direct_delta = self.horizon_head(token)
+            delta = direct_delta.transpose(1, 2)
         anchor = x_in[:, -1:, :].expand(-1, self.pred_len, -1)
         trend = anchor + delta
         gate = torch.sigmoid(self.gate_logit).to(dtype=x_in.dtype)
         fused = trend * gate + (1.0 - gate) * 0.0  # caller supplies phase forecast
-        self.last_lambda = lam.detach()
+        self.last_lambda = lam.detach() if lam is not None else None
         self.last_trend_forecast = trend.detach()
-        return trend, gate, {"lambda": lam, "pool_weights": self.last_pool_weights, "phase_attention": self.last_phase_attention, "profile_bank": profile, "fused_placeholder": fused}
+        return trend, gate, {
+            "lambda": lam,
+            "direct_delta": direct_delta,
+            "readout_type": self.readout_type,
+            "pool_weights": self.last_pool_weights,
+            "phase_attention": self.last_phase_attention,
+            "profile_bank": profile,
+            "fused_placeholder": fused,
+        }

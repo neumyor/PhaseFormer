@@ -5445,3 +5445,11 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **迭代规则修订**：attention 后的 token 可以直接通过共享线性层投射为 `H` 维 readout，因此更干净的阶梯是：原始 phase-only（B0）→ history-only token + direct `H`-readout（B1）→ 只加入单向 phase interaction（B2）→ 保持 token/interaction/gate 不变、仅将 direct readout 换成 constant profile（B3）→ 仅增加 slope profile 得到 `m=2`（B4）→ 再单独评估 dynamic gate、多 token 或更大 profile 数。第一轮比较固定 gate，learned static gate 另做变量；每轮固定数据、seed、训练协议和参数预算，并报告 branch-only/fused 及相应诊断。
 
 **决策**：当前 trend-token 实现包含 temporal encoder、pooling、phase cross-attention、profile decoder 和 learned static gate，不能把它作为“只增加一个机制”的严格因果证据。已有 m=1/no-interaction 与 m=1/m=2 对照仍可用于各自局部问题；下一轮优先补 B1/B2/B3 的受控对照，不再同时叠加新机制。
+
+## 2026-10-03 — 实现 direct horizon readout 的 B1/B2 控制路径
+
+**实现**：在 `TrendTokenBranch` 中增加 `trend_readout_type=direct`。该路径复用原有 history-only temporal encoder、per-channel token pooling、可选单向 phase-to-trend attention 和 gate，仅将 token 通过共享 horizon head `Linear(..., H)` 投射到未来长度；profile 路径保持原行为不变。
+
+**实验入口**：注册 `trend_token_direct_no_interaction`（B1）和 `trend_token_direct`（B2），并加入 `run_trend_token_validation.py` 的 job matrix。搜索诊断增加 `readout_type` 和 `direct_delta_mean`，分析脚本对 profile lambda 与 direct readout 使用对应状态字段。
+
+**验证**：所有受影响 Python 文件通过 `py_compile` 与 `git diff --check`。本机默认 Python 无 PyTorch，`tests/test_trend_token.py` 未能收集（`ModuleNotFoundError: torch`）；新增 direct readout 的 shape 测试已写入测试文件，待远程 time 环境执行。

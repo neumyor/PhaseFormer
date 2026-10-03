@@ -50,6 +50,20 @@ def build_jobs(args):
             "trend_encoder_kernel": args.trend_kernels[0],
             "trend_gate_init": args.trend_gates[0],
         }),
+        ("trend_token_direct_no_interaction", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": False,
+        }),
+        ("trend_token_direct", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": True,
+        }),
     ]
     for dim in args.trend_dims:
         for kernel in args.trend_kernels:

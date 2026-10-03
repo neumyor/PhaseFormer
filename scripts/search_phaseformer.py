@@ -81,6 +81,20 @@ MECHANISMS = {
         "trend_use_phase_attention": False,
         "trend_gate_init": 0.2,
     },
+    "trend_token_direct_no_interaction": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": False,
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_direct": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+    },
     "phase_only": {"use_residual_head": False, "use_trend_token": False},
     "dense_residual": {
         "use_residual_head": True,
@@ -543,8 +557,10 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
                 trend = model.last_trend_forecast[:, -pred_len:, :]
                 gate = model.last_trend_gate.expand_as(trend)
                 lamb = model.last_trend_lambda
+                direct_delta = model.last_trend_direct_delta
                 pool = model.last_trend_pool_weights
                 phase_attn = model.last_trend_phase_attention
+                readout_type = getattr(model.trend_token_branch, "readout_type", "profile")
                 pool_pos = torch.linspace(
                     0.0, 1.0, pool.shape[-1], device=pool.device
                 )
@@ -562,7 +578,17 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
                             "sample_index": batch_idx * loader.batch_size + b_idx,
                             "channel": c_idx,
                             "gate": float(gate[b_idx, 0, c_idx].item()),
-                            "lambda_0": float(lamb[b_idx, c_idx, 0].item()),
+                            "readout_type": readout_type,
+                            "lambda_0": (
+                                float(lamb[b_idx, c_idx, 0].item())
+                                if lamb is not None
+                                else ""
+                            ),
+                            "direct_delta_mean": (
+                                float(direct_delta[b_idx, c_idx].mean().item())
+                                if direct_delta is not None
+                                else ""
+                            ),
                             "pool_recency": float(recency[b_idx, c_idx].item()),
                             "phase_attention_entropy": float(attn_entropy[b_idx, c_idx].item()),
                             "future_mean": float(true[b_idx, :, c_idx].mean().item()),
