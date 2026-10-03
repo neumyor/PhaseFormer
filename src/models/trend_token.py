@@ -119,9 +119,7 @@ class TrendTokenBranch(nn.Module):
             self.lambda_head = None
             self.horizon_head = nn.Sequential(
                 nn.LayerNorm(token_dim),
-                nn.Linear(token_dim, readout_hidden),
-                nn.GELU(),
-                nn.Linear(readout_hidden, pred_len),
+                nn.Linear(token_dim, pred_len),
             )
             # Keep direct-readout arms an exact no-op at initialization too.
             nn.init.zeros_(self.horizon_head[-1].weight)
