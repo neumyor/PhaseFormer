@@ -5453,3 +5453,11 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **实验入口**：注册 `trend_token_direct_no_interaction`（B1）和 `trend_token_direct`（B2），并加入 `run_trend_token_validation.py` 的 job matrix。搜索诊断增加 `readout_type` 和 `direct_delta_mean`，分析脚本对 profile lambda 与 direct readout 使用对应状态字段。
 
 **验证**：所有受影响 Python 文件通过 `py_compile` 与 `git diff --check`。本机默认 Python 无 PyTorch，`tests/test_trend_token.py` 未能收集（`ModuleNotFoundError: torch`）；新增 direct readout 的 shape 测试已写入测试文件，待远程 time 环境执行。
+
+## 2026-10-03 — B1/B2 受控 ETT/Weather validation 启动
+
+**二次复核**：确认 direct readout 为 `LayerNorm + Linear(token_dim, pred_len)`，B1/B2 只在 `trend_use_phase_attention` 上有意不同；attention 只更新 trend token，不写回 phase latent。profile 路径的 lambda、rank 诊断和旧 mechanism 均保持兼容。为避免通用 runner 把无关机制加入本轮，新增 `--arms` 过滤并覆盖 runner 选择测试。
+
+**远程 smoke**：服务器 `g49`、time 环境、CUDA A800；ETTh1-H96-seed2021、phase-only/B1/B2，各 1 epoch，三项均 `returncode=0`，直接 readout 形状为 `(B,C,H)`，完整验证指标和 trend diagnostics 已落盘。远程 pytest 仍发生已知原生 segmentation fault，因此以 py_compile、直接 forward 和端到端训练 smoke 验证链路。
+
+**正式任务**：experiment id `trend_token_direct_b12_20261003`；远程 supervisor PID `6182`；日志 `~/niuyiming/trend_token_direct_b12_20261003.supervisor.log`；ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192/H720 × seeds 2021/2022 × `phase_only`, `trend_token_direct_no_interaction`（B1）, `trend_token_direct`（B2），8 epochs，validation-only，GPU 0–7，`--resume`。本轮不包含 Electricity、Traffic、profile 或 dense residual。
