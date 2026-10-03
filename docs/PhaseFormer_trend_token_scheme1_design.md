@@ -289,6 +289,66 @@ g_c=\operatorname{sigmoid}(\gamma_c),
 
 ## 3. Theorem 3 一致性论证
 
+### 3.0 Profile 的必要性与直接融合对照
+
+`profile` 不是趋势分支能够与 phase path 融合的必要条件。若令趋势
+token 经过一个任意的 horizon decoder，得到
+
+\[
+R_c=\tilde x_{c,L}\mathbf 1_H+d_c(T'_c,q_{\phi,c}),
+\qquad
+\hat y_c=(1-g_c)F_c+g_cR_c,
+\]
+
+那么这条路径在工程上是合法的，也可以作为一个重要的 direct-fusion
+control。它仍然只使用历史窗口，因此 Theorem 3 中“branch input 是
+历史函数”的前提没有被破坏；但它不再保证修正输出属于固定的
+`span(A)`。若 `d_c` 是从一个 `d` 维 token 通过线性层直接产生 `H` 个
+时间点，则其线性输出秩一般只有
+
+\[
+\operatorname{rank}(D)\leq\min(H,d),
+\]
+
+而不是由 profile 数 `m` 控制。若 decoder 是非线性的，样本间的有效
+输出子空间还可以随输入变化，Theorem 3(a) 的固定低秩补空间结论就更
+不能直接使用。Theorem 2 对原始 phase-only path 的 envelope 仍可测量，
+Theorem 3(d) 对固定 branch 的 gate 风险公式也仍成立；失去的是
+Theorem 3(a)/(c) 的结构性 rank 上界，而不是融合操作本身的可行性。
+
+因此 profile 的作用是一个可检验的归纳偏置：`trend encoder` 负责从历史
+估计状态系数 `lambda`，固定 profile bank 负责规定这些状态在预测区间
+上可以写成什么形状。直接 horizon decoder 同时学习这两件事，容量更大，
+但会更接近 dense residual，也无法把收益解释为“低秩补空间被正确实现”。
+当 `m=1` 且 profile 是常数时，直接输出一个标量再广播到整个 horizon
+其实就是 profile 方案的等价写法；只有输出多个自由的 horizon 坐标时，
+才真正放弃了固定 profile 约束。
+
+### 3.0.1 单变量累积实验协议
+
+后续实验按下面的阶梯推进，每一步只引入一个结构变量，并保留前一步的
+训练协议、数据、seed、gate 形式和参数预算：
+
+1. `B0 phase-only`：原始 PhaseFormer，作为唯一主参照。
+2. `B1 token+m=1`：增加 history-only 的 per-channel trend token，使用
+   一个固定 constant profile；不加入 phase-token interaction。第一版 gate
+   固定，随后再单独比较 learned static gate。
+3. `B2 token+m=1+interaction`：只打开 trend token 读取 phase latent 的
+   单向 cross-attention，其他设置与 B1 完全相同。
+4. `B3 token+m=2`：只把 profile bank 从 constant 扩展为
+   constant+slope，用于验证额外 profile 维度的边际价值。
+5. `B4 direct-horizon control`：复用 B2 的 encoder、interaction、gate 和
+   参数规模，将固定 profile decoder 替换为直接 `H` 维 horizon decoder。
+   该对照专门测量 profile 约束的代价和收益，不作为 Theorem 3 低秩实现的
+   主模型。
+6. 只有在上述结果可归因后，才分别研究动态 gate、多个 trend token 或
+   更大的 profile 数；不得在同一轮同时引入这些机制。
+
+每个新增分支都必须同时报告 phase forecast、trend forecast、gate、profile
+coefficients（或 direct decoder 输出）的诊断，并做 branch-only 与 fused
+forecast 的对照。若 B4 只带来收益而 B2/B3 没有，结论应是“需要更大的
+输出空间”，不能把结果表述为 profile 化 trend token 已验证。
+
 ### 3.1 Learned trend token 是合法 branch input
 
 Theorem 3 将 branch input 写成任意由历史窗口计算得到的 \(\zeta(\tilde x)\)。本方案令：

@@ -5435,3 +5435,13 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 ## 2026-10-02 — rank-2 实验基础设施修复
 
 首次 `trend_token_rank2_20261002` 运行中，36 个 `trend_token_m2` job 因 `search_phaseformer.py` 的 argparse mechanism 白名单遗漏而退出码 2；这不是模型训练失败，m=2 没有产生有效指标。`trend_token_m2` 已在 commit `fa515bf3` 注册，远程已同步并以原 manifest 的 `--resume` 重跑失败 job。已有 144 个 phase-only/dense/m=1 对照结果保留有效；本轮最终结论需等待 36 个 m=2 job 完成。
+
+## 2026-10-03 — 明确 profile 与直接融合的理论边界及单变量迭代规则
+
+**用户反馈**：需要解释为什么引入 profile，而不是直接把融合后的 trend token 输出通过 gate 与 phase path 融合；后续必须从原始 PhaseFormer 逐步累积设计，避免一次性加入多个机制导致收益无法归因。
+
+**理论澄清**：直接 horizon decoder 加 gate 在工程上完全可行。它仍是历史函数输入，因此不会破坏 Theorem 3 对 branch input 的条件；但任意 `H` 维输出不再被限制在固定 `span(A)`，其线性输出秩一般由 token 维度决定，非线性 decoder 还可能产生输入依赖的输出子空间。因此 Theorem 3(a)/(c) 的 profile 数 rank 上界不能直接沿用。Theorem 2 的 phase-only envelope 与 Theorem 3(d) 的固定 branch gate 风险公式仍可单独使用。`profile` 的作用是把“从历史估计趋势状态”和“将状态写成何种未来时域形状”分离，从而让 rank 约束成为结构属性，而不是训练后观察到的现象。`m=1` 常值 profile 与输出一个标量后广播等价。
+
+**迭代规则**：后续按单变量阶梯推进：原始 phase-only（B0）→ history-only token + `m=1`（B1）→ 只加入单向 phase interaction（B2）→ 只增加 profile 数到 `m=2`（B3）→ 使用同一 encoder/interaction/gate 的 direct-horizon decoder 对照（B4）→ 再单独评估 dynamic gate、多 token 或更大 profile 数。第一轮比较固定 gate，learned static gate 另做变量；每轮固定数据、seed、训练协议和参数预算，并报告 branch-only/fused 及相应诊断。
+
+**决策**：当前 trend-token 实现包含 temporal encoder、pooling、phase cross-attention、profile decoder 和 learned static gate，不能把它作为“只增加一个机制”的严格因果证据。已有 m=1/no-interaction 与 m=1/m=2 对照仍可用于各自局部问题；下一轮优先补 B1/B2/B4 的受控对照，不再同时叠加新机制。
