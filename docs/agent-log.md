@@ -5460,4 +5460,4 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 
 **远程 smoke**：服务器 `g49`、time 环境、CUDA A800；ETTh1-H96-seed2021、phase-only/B1/B2，各 1 epoch，三项均 `returncode=0`，直接 readout 形状为 `(B,C,H)`，完整验证指标和 trend diagnostics 已落盘。远程 pytest 仍发生已知原生 segmentation fault，因此以 py_compile、直接 forward 和端到端训练 smoke 验证链路。
 
-**正式任务**：experiment id `trend_token_direct_b12_20261003`；远程 supervisor PID `6182`；日志 `~/niuyiming/trend_token_direct_b12_20261003.supervisor.log`；ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192/H720 × seeds 2021/2022 × `phase_only`, `trend_token_direct_no_interaction`（B1）, `trend_token_direct`（B2），8 epochs，validation-only，GPU 0–7，`--resume`。本轮不包含 Electricity、Traffic、profile 或 dense residual。
+**正式任务**：experiment id `trend_token_direct_b12_20261003`；远程 Python supervisor PID `6183`（SSH 包装 shell PID `6182`）；日志 `~/niuyiming/trend_token_direct_b12_20261003.supervisor.log`；ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192/H720 × seeds 2021/2022 × `phase_only`, `trend_token_direct_no_interaction`（B1）, `trend_token_direct`（B2），8 epochs，validation-only，GPU 0–7，`--resume`。本轮不包含 Electricity、Traffic、profile 或 dense residual。
