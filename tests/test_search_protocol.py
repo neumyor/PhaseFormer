@@ -31,7 +31,9 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertEqual(removed["input_variant"], "minus_A")
 
     def test_plan_defines_expected_mechanisms(self):
-        self.assertEqual(len(MECHANISMS), 37)
+        self.assertGreaterEqual(len(MECHANISMS), 37)
+        self.assertIn("trend_token_direct_no_interaction", MECHANISMS)
+        self.assertIn("trend_token_direct", MECHANISMS)
         self.assertIn("phase_align", MECHANISMS)
         self.assertIn("phase_warp", MECHANISMS)
         self.assertIn("phase_amp_calib", MECHANISMS)

@@ -42,7 +42,7 @@ def job_hash(payload: dict) -> str:
 
 
 def build_jobs(args):
-    arms = [
+    base_arms = [
         ("phase_only", {}),
         ("dense_residual", {}),
         ("trend_token_m1_no_interaction", {
@@ -65,20 +65,46 @@ def build_jobs(args):
             "trend_use_phase_attention": True,
         }),
     ]
-    for dim in args.trend_dims:
-        for kernel in args.trend_kernels:
-            for gate in args.trend_gates:
-                for profile_count in args.profile_counts:
-                    arms.append((f"trend_token_m{profile_count}", {
-                        "trend_token_dim": dim,
-                        "trend_encoder_kernel": kernel,
-                        "trend_gate_init": gate,
-                        "trend_use_phase_attention": True,
-                        "trend_profile_count": profile_count,
-                        "trend_profile_type": (
-                            "constant" if profile_count == 1 else "constant_slope"
-                        ),
-                    }))
+    if args.arms:
+        requested = set(args.arms)
+        unknown = requested - {name for name, _ in base_arms} - {
+            f"trend_token_m{count}" for count in args.profile_counts
+        }
+        if unknown:
+            raise ValueError(f"unknown arms: {sorted(unknown)}")
+        arms = [(name, overrides) for name, overrides in base_arms if name in requested]
+        for dim in args.trend_dims:
+            for kernel in args.trend_kernels:
+                for gate in args.trend_gates:
+                    for profile_count in args.profile_counts:
+                        name = f"trend_token_m{profile_count}"
+                        if name in requested:
+                            arms.append((name, {
+                                "trend_token_dim": dim,
+                                "trend_encoder_kernel": kernel,
+                                "trend_gate_init": gate,
+                                "trend_use_phase_attention": True,
+                                "trend_profile_count": profile_count,
+                                "trend_profile_type": (
+                                    "constant" if profile_count == 1 else "constant_slope"
+                                ),
+                            }))
+    else:
+        arms = base_arms
+        for dim in args.trend_dims:
+            for kernel in args.trend_kernels:
+                for gate in args.trend_gates:
+                    for profile_count in args.profile_counts:
+                        arms.append((f"trend_token_m{profile_count}", {
+                            "trend_token_dim": dim,
+                            "trend_encoder_kernel": kernel,
+                            "trend_gate_init": gate,
+                            "trend_use_phase_attention": True,
+                            "trend_profile_count": profile_count,
+                            "trend_profile_type": (
+                                "constant" if profile_count == 1 else "constant_slope"
+                            ),
+                        }))
     jobs = []
     for dataset in args.datasets:
         for horizon in args.horizons:
@@ -220,6 +246,14 @@ def main():
     parser.add_argument("--trend-kernels", default="5", help="odd causal stem kernels to screen")
     parser.add_argument("--trend-gates", default="0.2", help="initial fusion gates to screen")
     parser.add_argument("--profile-counts", default="1", help="fixed profile counts to compare")
+    parser.add_argument(
+        "--arms",
+        default="",
+        help=(
+            "comma-separated mechanism arms to run; empty preserves the full "
+            "legacy matrix. Use this to keep a controlled experiment small."
+        ),
+    )
     args = parser.parse_args()
     args.datasets = parse_csv(args.datasets)
     args.horizons = parse_csv(args.horizons, int)
@@ -229,6 +263,7 @@ def main():
     args.trend_kernels = parse_csv(args.trend_kernels, int)
     args.trend_gates = parse_csv(args.trend_gates, float)
     args.profile_counts = parse_csv(args.profile_counts, int)
+    args.arms = parse_csv(args.arms)
     if any(count < 1 for count in args.profile_counts):
         raise SystemExit("profile counts must be positive")
     if not args.gpus:
