@@ -5461,3 +5461,7 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **远程 smoke**：服务器 `g49`、time 环境、CUDA A800；ETTh1-H96-seed2021、phase-only/B1/B2，各 1 epoch，三项均 `returncode=0`，直接 readout 形状为 `(B,C,H)`，完整验证指标和 trend diagnostics 已落盘。远程 pytest 仍发生已知原生 segmentation fault，因此以 py_compile、直接 forward 和端到端训练 smoke 验证链路。
 
 **正式任务**：experiment id `trend_token_direct_b12_20261003`；远程 Python supervisor PID `6183`（SSH 包装 shell PID `6182`）；日志 `~/niuyiming/trend_token_direct_b12_20261003.supervisor.log`；ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192/H720 × seeds 2021/2022 × `phase_only`, `trend_token_direct_no_interaction`（B1）, `trend_token_direct`（B2），8 epochs，validation-only，GPU 0–7，`--resume`。本轮不包含 Electricity、Traffic、profile 或 dense residual。
+
+**完成状态**：远程 `job_status` 显示 90/90 completed、0 failed，90 个 metrics.csv 已生成，supervisor 已正常退出。全矩阵平均验证指标为 phase-only MAE/MSE `0.46215/0.56456`，B1 `0.46023/0.55849`，B2 `0.45843/0.55546`。B1 相对 phase-only 的配对平均差为 `+0.00085 MAE / +0.00124 MSE`，B2 为 `-0.00057 MAE / -0.00073 MSE`（按 setting-seed 等权）；B1/B2 的 MSE 优于 phase-only 的配对数分别为 23/30、25/30，B2 优于 B1 的配对数为 23/30。数据集方向上，B2 在 ETTh2、ETTm1、ETTm2、Weather 的平均 MSE 差为负，在 ETTh1 为正。
+
+以上只是 validation-only 的快速证据，尚未读取 test，也未与 dense residual 做同矩阵比较；不能据此宣称泛化提升或理论成立。
