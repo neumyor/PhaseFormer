@@ -5479,3 +5479,13 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 按数据集，B4 相对 B2 在 ETTh1 和 Weather 的平均 MSE 差为负（`-0.00893`、`-0.00119），在 ETTh2、ETTm1、ETTm2 为正（`+0.01326`、`+0.00670`、`+0.00239`）。结论仍限于 validation-only，未读取 test；dense residual 使用既有历史结果，不构成同一轮重训对照。
 
 **进度检查**：远程连接重试成功；当前 51/60 jobs completed、7 running、2 pending、0 failed，8 张 GPU 均有训练进程。已完成 B3=27、B4=24，样本不平衡，暂不形成最终均值结论。已有完整配对的 B4-B3 差异在数据集和 horizon 间方向不一致，需等待全矩阵完成后再判断 `m=2` 的边际价值。
+
+## 2026-10-04 — B2 validation 样本级错误分析
+
+**目标与协议**：以已完成的 `trend_token_direct_b12_20261003` 中 B2 和配对 phase-only checkpoint 为输入，仅读取 ETT/Weather validation split；不读取 test，不重新训练模型，不依据样本误差选择模型。使用 8 个 GPU worker 对 30 个 dataset × horizon × seed setting 做 paired sample×channel 推理。
+
+**证据产物**：`research_runs/b2_error_analysis_20261004/`，包含 1,775,130 个样本×通道误差行、每个 setting 的 baseline/candidate 汇总、432 个程序化选中案例、6 张代表图及 ZIP 报告。合并后的审计目录通过 setting 覆盖、指标重算、Top-K/案例对齐、图片引用和 ZIP 白名单检查。
+
+**可测量观察**：按样本×通道加权，B2 MAE `0.395611`，phase-only `0.399521`，平均差 `-0.003910`；B2 在 `50.8%` 的单位上改善、`49.2%` 上退化。B2 趋势分支在 `87.4%` 的单位上 MAE 高于 phase 分支。候选误差与 `|candidate slope - truth slope|` 的相关为 `+0.430`，与 direct correction 标准差相关为 `+0.187`；attention entropy 与误差相关较弱（`+0.050`），但 entropy 高四分位子集 MAE `0.457679`，其余为 `0.374921`。静态 gate 均值/标准差/范围为 `0.2246/0.0565/[0.0640, 0.4179]`，top-5% 高误差组均值为 `0.1962`。数据集方向上 ETTh1 平均退化 `+0.005628`，ETTh2、ETTm1、ETTm2、Weather 分别为 `-0.012661`、`-0.005214`、`-0.000623`、`-0.005545`。
+
+**架构归因与后续单变量建议**：报告将观察和归因假设分开，提出六个可证伪方向：依据 phase reliability 的动态 gate；对 direct correction 加低频/二阶平滑约束；多 token 或多 expert 趋势分支；带 null/稀疏选择的 phase-to-trend attention；level/slope 分离 readout；双尺度 history encoder。每条建议均绑定了本轮观测证据和只改变一个机制的后续实验，避免一次引入多种机制导致无法归因。本轮结果只支持错误模式定位，不支持 test 泛化或因果提升声明。
