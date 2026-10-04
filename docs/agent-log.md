@@ -5474,4 +5474,8 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 
 **正式任务**：experiment id `trend_token_profile_b34_20261003`；远程 Python supervisor PID `29530`；日志 `~/niuyiming/trend_token_profile_b34_20261003.supervisor.log`；ETTh1/ETTh2/ETTm1/ETTm2/Weather × H96/H192/H720 × seeds 2021/2022 × `trend_token_m1`（B3）和 `trend_token_m2`（B4），8 epochs，validation-only，GPU 0–7，60 jobs，支持 `--resume`。B2/phase-only 使用上一轮 `trend_token_direct_b12_20261003` 的同协议结果进行配对比较。
 
+**完成状态**：60/60 completed，0 failed。B3 平均验证 MAE/MSE 为 `0.46116/0.55952`，B4 为 `0.46053/0.55791`；相对 phase-only，B3 平均差为 `-0.00099/-0.00503`，B4 为 `-0.00162/-0.00665`，MSE 胜出配对数分别为 21/30 和 22/30。相对 B2 direct readout，B3 平均差为 `+0.00286/+0.00306`，仅 9/30 个配对 MSE 更好；B4 平均差为 `+0.00210/+0.00289`，11/30 个配对 MSE 更好。B4 相比 B3 的整体 MAE/MSE 分别改善约 `0.00063/0.00161`，说明 slope profile 有小幅边际价值，但尚未恢复 direct readout 的自由形状能力。
+
+按数据集，B4 相对 B2 在 ETTh1 和 Weather 的平均 MSE 差为负（`-0.00893`、`-0.00119），在 ETTh2、ETTm1、ETTm2 为正（`+0.01326`、`+0.00670`、`+0.00239`）。结论仍限于 validation-only，未读取 test；dense residual 使用既有历史结果，不构成同一轮重训对照。
+
 **进度检查**：远程连接重试成功；当前 51/60 jobs completed、7 running、2 pending、0 failed，8 张 GPU 均有训练进程。已完成 B3=27、B4=24，样本不平衡，暂不形成最终均值结论。已有完整配对的 B4-B3 差异在数据集和 horizon 间方向不一致，需等待全矩阵完成后再判断 `m=2` 的边际价值。
