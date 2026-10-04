@@ -286,17 +286,111 @@ def merge(args):
         fig,ax=plt.subplots(figsize=(9,4)); h=case["history"]; n=min(240,len(h)); x0=np.arange(-n,0); xf=np.arange(len(case["truth"]))
         ax.plot(x0,h[-n:],label="history",color="0.45"); ax.plot(xf,case["truth"],label="truth",lw=2,color="black"); ax.plot(xf,case["baseline"],label="phase-only",color="tab:orange"); ax.plot(xf,case["candidate"],label="B2",color="tab:blue");
         ax.axvline(0,color="0.7",lw=0.8); ax.set_title(f"{r['setting']} sample={r['sample_id']} channel={r['channel']} B2 MAE={r['candidate_mae']:.4f} gate={r['gate']:.3f}"); ax.legend(ncol=4,fontsize=8); fig.tight_layout(); fig.savefig(out/"figures"/name,dpi=130); plt.close(fig)
+    # Derive cross-case diagnostics from the same rows written to the audit CSV.
+    # These are descriptive statistics only; they do not establish causality.
+    def value(row, key):
+        return float(row[key])
+
+    def corr(xs, ys):
+        xs, ys = np.asarray(xs, dtype=float), np.asarray(ys, dtype=float)
+        if xs.size < 2 or np.std(xs) < 1e-12 or np.std(ys) < 1e-12:
+            return float("nan")
+        return float(np.corrcoef(xs, ys)[0, 1])
+
+    candidate_errors = np.asarray([value(r, "candidate_mae") for r in rows])
+    baseline_errors = np.asarray([value(r, "baseline_mae") for r in rows])
+    deltas = np.asarray([value(r, "delta_mae") for r in rows])
+    entropy = np.asarray([value(r, "attention_entropy") for r in rows])
+    gates = np.asarray([value(r, "gate") for r in rows])
+    correction_std = np.asarray([value(r, "direct_delta_std") for r in rows])
+    trend_gap = np.asarray([value(r, "trend_mae") - value(r, "phase_mae") for r in rows])
+    slope_gap = np.asarray([
+        abs(value(r, "candidate_slope") - value(r, "truth_slope")) for r in rows
+    ])
+    slope_follow_gap = np.asarray([
+        abs(value(r, "direct_delta_slope") - (value(r, "truth_slope") - value(r, "history_slope")))
+        for r in rows
+    ])
+    high_cut = float(np.quantile(candidate_errors, 0.95))
+    high = candidate_errors >= high_cut
+    high_or_reg = deltas > 0
+    dataset_groups = defaultdict(list)
+    horizon_groups = defaultdict(list)
+    for r in rows:
+        dataset_groups[r["dataset"]].append(r)
+        horizon_groups[int(r["horizon"])].append(r)
+
     report=[]
     report += ["# Experiment and Objective Error Analysis","","## 1. Experiment Setup","",f"- Candidate: B2 direct horizon readout with one-way phase-to-trend attention.",f"- Baseline: phase-only checkpoint from the matched validation matrix.",f"- Settings: {setting_count} ETT/Weather validation settings; no test data was read.","- Selection: top 5 per setting for baseline high error, candidate regression, and candidate improvement; exact sample×channel de-duplication.","","## 2. Experiment Results",""]
-    report += [f"- Candidate rows: {len(rows)} sample×channel validation units.",f"- Candidate mean MAE over units: {np.mean([r['candidate_mae'] for r in rows]):.6f}.",f"- Baseline mean MAE over units: {np.mean([r['baseline_mae'] for r in rows]):.6f}.","","## 3. Parameter / Configuration Search","","No configuration was selected using test results. All settings use the already trained B2 and matched phase-only checkpoints.","","## 4. Error Distribution",""]
+    report += [
+        f"- Candidate rows: {len(rows)} sample×channel validation units.",
+        f"- Candidate mean MAE over units: {candidate_errors.mean():.6f}; baseline: {baseline_errors.mean():.6f}; mean delta: {deltas.mean():+.6f}.",
+        f"- Candidate improves MAE on {int((deltas < 0).sum())}/{len(rows)} units ({100 * (deltas < 0).mean():.1f}%) and regresses on {int((deltas > 0).sum())}/{len(rows)} ({100 * (deltas > 0).mean():.1f}%).",
+        f"- Candidate MSE wins are reported in `results.csv`; this sample analysis ranks by MAE as predeclared.",
+        "", "## 3. Parameter / Configuration Search", "",
+        "No configuration was selected using test results. All settings use the already trained B2 and matched phase-only checkpoints.",
+        "", "## 4. Error Distribution", "",
+        f"- The B2 top 5% error threshold is MAE={high_cut:.6f}; it contains {int(high.sum())} units.",
+        f"- Gate mean/std/range: {gates.mean():.4f}/{gates.std():.4f}/[{gates.min():.4f}, {gates.max():.4f}].",
+        f"- Attention entropy mean/std: {entropy.mean():.4f}/{entropy.std():.4f}; corr(error, entropy)={corr(candidate_errors, entropy):+.3f}.",
+        f"- Corr(error, direct correction std)={corr(candidate_errors, correction_std):+.3f}; corr(error, |candidate slope - truth slope|)={corr(candidate_errors, slope_gap):+.3f}.",
+        f"- Trend branch is worse than phase branch on {int((trend_gap > 0).sum())}/{len(rows)} units ({100 * (trend_gap > 0).mean():.1f}%).",
+    ]
     for setting,items in sorted(grouped.items()): report.append(f"- `{setting}`: B2 MAE mean={np.mean([r['candidate_mae'] for r in items]):.6f}, p95={np.quantile([r['candidate_mae'] for r in items],.95):.6f}, mean gate={np.mean([r['gate'] for r in items]):.4f}.")
-    report += ["","## 5. Horizon-wise Error","","Horizon-specific observations are retained in `sample_errors.csv`; cases are selected separately within each setting.","","## 6. High-Error Selection","",f"Selected unique cases: {len(selected)}.","","## 7. Case Analysis",""]
+    report += ["", "### Dataset and Horizon Concentration", ""]
+    for name, items in sorted(dataset_groups.items()):
+        ds_delta = np.asarray([value(r, "delta_mae") for r in items])
+        report.append(f"- `{name}`: mean delta={ds_delta.mean():+.6f}, regression fraction={100 * (ds_delta > 0).mean():.1f}% ({len(items)} units).")
+    for horizon, items in sorted(horizon_groups.items()):
+        h_delta = np.asarray([value(r, "delta_mae") for r in items])
+        report.append(f"- H{horizon}: mean delta={h_delta.mean():+.6f}, regression fraction={100 * (h_delta > 0).mean():.1f}% ({len(items)} units).")
+    report += ["", "## 5. Horizon-wise Error", "", "Horizon-specific observations are retained in `sample_errors.csv`; cases are selected separately within each setting.", "", "## 6. High-Error Selection", "", f"Selected unique cases: {len(selected)}.", "", "## 7. Case Analysis", ""]
     for name in figure_names: report.append(f"![{name}](figures/{name})")
-    report += ["","## 8. Repeated Observable Patterns",""]
+    report += ["", "## 8. Repeated Observable Patterns", ""]
     for label, key in (("candidate high-error","candidate_mae"),("baseline high-error","baseline_mae")):
         top=sorted(rows,key=lambda r:r[key],reverse=True)[:max(1,min(100,len(rows)//20))]
         report.append(f"- {label}: mean gate={np.mean([r['gate'] for r in top]):.4f}, attention entropy={np.mean([r['attention_entropy'] for r in top]):.4f}, direct correction std={np.mean([r['direct_delta_std'] for r in top]):.4f}, history slope={np.mean([r['history_slope'] for r in top]):.6f}, truth slope={np.mean([r['truth_slope'] for r in top]):.6f}.")
-    report += ["","## 9. Objective Defect Summary","","The measurements support hypotheses about limited horizon-shape control, fixed scalar gate behavior, phase interaction selectivity, and trend/shape confusion. These are architecture hypotheses rather than causal proof; each proposed change requires a one-variable follow-up experiment.","","## 10. Experiment Scope","","Validation-only analysis. No test split was loaded and no configuration was selected from test results. Full per-unit rankings and selected arrays are in the canonical audit files."]
+    high_entropy = entropy >= np.quantile(entropy, 0.75)
+    high_correction = correction_std >= np.quantile(correction_std, 0.75)
+    high_slope = slope_gap >= np.quantile(slope_gap, 0.75)
+    report += ["", "## 9. Architecture Modification Suggestions", "",
+        "The following are falsifiable architecture hypotheses. Each suggestion is intentionally a single-variable follow-up so its effect can be attributed.",
+        "", "1. **Reliability-conditioned dynamic gate.** Observation: the scalar B2 gate has mean/std/range "
+        f"{gates.mean():.4f}/{gates.std():.4f}/[{gates.min():.4f}, {gates.max():.4f}], while the top-error group has mean gate "
+        f"{gates[high].mean() if high.any() else float('nan'):.4f}; error-entropy correlation is {corr(candidate_errors, entropy):+.3f}. "
+        "Defect hypothesis: one static per-channel blend cannot suppress the trend branch when phase evidence is unreliable. "
+        "Modification: predict a bounded gate from phase-attention entropy, phase/trend disagreement, and recent volatility, with the existing gate as the only baseline input. "
+        "Evidence test: keep every other B2 setting fixed and replace only the static gate; report gate-error calibration and paired validation deltas.",
+        "", "2. **Smooth low-frequency direct correction.** Observation: direct correction slope-following gap has mean "
+        f"{slope_follow_gap.mean():.6f}; among top-error units it is {slope_follow_gap[high].mean() if high.any() else float('nan'):.6f}, "
+        f"and correction std correlates with error at {corr(candidate_errors, correction_std):+.3f}. "
+        "Defect hypothesis: the unconstrained H-dimensional readout can spend capacity on high-frequency shape errors while being used as a trend branch. "
+        "Modification: add a fixed second-difference penalty or low-pass parameterization to the direct correction only. "
+        "Evidence test: one loss/parameterization change, with branch-only and fused metrics plus correction roughness.",
+        "", "3. **Multi-token or multi-expert trend branch.** Observation: the trend branch is worse than the phase branch on "
+        f"{100 * (trend_gap > 0).mean():.1f}% of units and the top-error group has mean trend-minus-phase MAE "
+        f"{trend_gap[high].mean() if high.any() else float('nan'):+.6f}. "
+        "Defect hypothesis: a single pooled token compresses level, slope, and curvature into one representation before the H readout. "
+        "Modification: use two independently pooled trend tokens (level/shape experts) with shared dimensional budget and a single learned mixture. "
+        "Evidence test: only change token count/expert split; compare branch error and parameter-matched B2.",
+        "", "4. **Selective phase-to-trend interaction.** Observation: attention entropy has mean/std "
+        f"{entropy.mean():.4f}/{entropy.std():.4f}; the top-error group entropy is {entropy[high].mean() if high.any() else float('nan'):.4f}, "
+        f"and the entropy-high subset has mean MAE {candidate_errors[high_entropy].mean():.6f} versus {candidate_errors[~high_entropy].mean():.6f}. "
+        "Defect hypothesis: dense one-way attention can mix phase features even when no phase position is relevant to the trend state. "
+        "Modification: add temperature/Top-k sparsity or a learned null key so the trend token can abstain from phase interaction. "
+        "Evidence test: change only the attention selectivity mechanism and measure entropy, null usage, and paired error.",
+        "", "5. **Separate level and slope heads.** Observation: the top-error group has mean |candidate slope - truth slope| "
+        f"{slope_gap[high].mean() if high.any() else float('nan'):.6f} versus {slope_gap[~high].mean() if (~high).any() else float('nan'):.6f} in the remaining units; "
+        f"the high-slope subset has mean MAE {candidate_errors[high_slope].mean():.6f}. "
+        "Defect hypothesis: one direct H-vector head must estimate both forecast level and temporal shape, so level bias can distort slope and vice versa. "
+        "Modification: factor the readout into a scalar level head plus a zero-mean slope/shape head, then combine them with a fixed identifiability constraint. "
+        "Evidence test: replace only the direct head and report level error, slope error, and fused MAE.",
+        "", "6. **Two-scale history encoder.** Observation: history volatility and slope mismatch are elevated in selected high-error cases; the full per-unit diagnostics are in `sample_errors.csv` and the selected windows in `selected_cases.npz`. "
+        "Defect hypothesis: the short-kernel encoder sees local fluctuations but lacks a separate long-context summary for regime shifts. "
+        "Modification: add one dilated/long-window pooling path while keeping token count, attention, gate, and readout unchanged. "
+        "Evidence test: one additional history scale, with errors stratified by history_std and slope-following gap.",
+        "", "These suggestions are architectural hypotheses, not causal claims. The validation evidence identifies where B2 fails and specifies the one-variable experiment needed to test each explanation.",
+        "", "## 10. Objective Defect Summary", "", "The dominant measurable risks are limited sample-adaptive blending, unconstrained direct horizon shape, and a single token's representational bottleneck. The proposed experiments preserve the B2 protocol and vary one mechanism at a time.", "", "## 11. Experiment Scope", "", "Validation-only analysis. No test split was loaded and no configuration was selected from test results. Full per-unit rankings and selected arrays are in the canonical audit files."]
     (out/"objective_error_analysis.md").write_text("\n".join(report)+"\n",encoding="utf-8")
     with zipfile.ZipFile(out/"objective_error_analysis.zip","w",zipfile.ZIP_DEFLATED) as z:
         z.write(out/"objective_error_analysis.md","objective_error_analysis.md")
