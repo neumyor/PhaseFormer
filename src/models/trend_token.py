@@ -24,6 +24,16 @@ def _causal_conv1d(x: torch.Tensor, layer: nn.Conv1d) -> torch.Tensor:
     return layer(F.pad(x, (left, 0)))
 
 
+def _deterministic_median(x: torch.Tensor, dim: int, keepdim: bool = True) -> torch.Tensor:
+    """Median using values-only sorting for deterministic CUDA training."""
+    values = torch.sort(x, dim=dim).values
+    n = values.shape[dim]
+    lower = values.select(dim, (n - 1) // 2)
+    upper = values.select(dim, n // 2)
+    median = 0.5 * (lower + upper)
+    return median.unsqueeze(dim) if keepdim else median
+
+
 class TrendTokenBranch(nn.Module):
     """Single learned per-channel trend token with selectable horizon readout.
 
@@ -236,8 +246,10 @@ class TrendTokenBranch(nn.Module):
         # (B,L,C) -> (B*C,1,L); one shared encoder is used for all channels.
         b, l, c = x_in.shape
         if self.history_robust:
-            center = x_in.median(dim=1, keepdim=True).values
-            mad = (x_in - center).abs().median(dim=1, keepdim=True).values
+            center = _deterministic_median(x_in, dim=1, keepdim=True)
+            mad = _deterministic_median(
+                (x_in - center).abs(), dim=1, keepdim=True
+            )
             limit = (4.0 * mad).clamp_min(1e-3)
             x_in = center + (x_in - center).clamp(-limit, limit)
         h = x_in.permute(0, 2, 1).reshape(b * c, 1, l)
