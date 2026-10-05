@@ -550,9 +550,21 @@ class PhaseFormer(DefaultPLModule):
                 profile_type=getattr(configs, "trend_profile_type", "constant"),
                 readout_type=getattr(configs, "trend_readout_type", "profile"),
                 use_phase_attention=getattr(configs, "trend_use_phase_attention", True),
+                phase_attention_mode=getattr(
+                    configs, "trend_phase_attention_mode", "dense"
+                ),
                 num_heads=getattr(configs, "trend_attention_heads", 1),
                 gate_init=getattr(configs, "trend_gate_init", 0.2),
+                gate_mode=getattr(configs, "trend_gate_mode", "static"),
                 pool_temperature=getattr(configs, "trend_pool_temperature", 1.0),
+                token_count=getattr(configs, "trend_token_count", 1),
+                direct_smooth_window=getattr(
+                    configs, "trend_direct_smooth_window", 0
+                ),
+                history_multiscale=getattr(
+                    configs, "trend_history_multiscale", False
+                ),
+                history_robust=getattr(configs, "trend_history_robust", False),
             )
         # In the asymmetric-input study this flag changes only the input to the
         # NLinear-style residual path.  The phase path always receives X.

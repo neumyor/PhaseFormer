@@ -27,6 +27,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SEARCH = ROOT / "scripts" / "search_phaseformer.py"
 
+HYPOTHESIS_FIELDS = {
+    "trend_token_dynamic_gate": "trend_gate_mode",
+    "trend_token_smooth": "trend_direct_smooth_window",
+    "trend_token_multi_token": "trend_token_count",
+    "trend_token_selective_attention": "trend_phase_attention_mode",
+    "trend_token_factorized": "trend_readout_type",
+    "trend_token_multiscale": "trend_history_multiscale",
+    "trend_token_robust": "trend_history_robust",
+}
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -63,6 +73,61 @@ def build_jobs(args):
             "trend_gate_init": args.trend_gates[0],
             "trend_readout_type": "direct",
             "trend_use_phase_attention": True,
+        }),
+        ("trend_token_dynamic_gate", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": True,
+            "trend_gate_mode": "reliability",
+        }),
+        ("trend_token_smooth", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": True,
+            "trend_direct_smooth_window": 9,
+        }),
+        ("trend_token_multi_token", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": True,
+            "trend_token_count": 2,
+        }),
+        ("trend_token_selective_attention", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": True,
+            "trend_phase_attention_mode": "null",
+        }),
+        ("trend_token_factorized", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "factorized",
+            "trend_use_phase_attention": True,
+        }),
+        ("trend_token_multiscale", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": True,
+            "trend_history_multiscale": True,
+        }),
+        ("trend_token_robust", {
+            "trend_token_dim": args.trend_dims[0],
+            "trend_encoder_kernel": args.trend_kernels[0],
+            "trend_gate_init": args.trend_gates[0],
+            "trend_readout_type": "direct",
+            "trend_use_phase_attention": True,
+            "trend_history_robust": True,
         }),
     ]
     if args.arms:
@@ -105,6 +170,29 @@ def build_jobs(args):
                                 "constant" if profile_count == 1 else "constant_slope"
                             ),
                         }))
+    # Fail closed if an experiment arm accidentally changes more than one
+    # mechanism relative to B2.  This check is independent of the training
+    # runner and is recorded in the deterministic manifest below.
+    b2 = {
+        "trend_token_dim": args.trend_dims[0],
+        "trend_encoder_kernel": args.trend_kernels[0],
+        "trend_gate_init": args.trend_gates[0],
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+    }
+    for arm, overrides in arms:
+        field = HYPOTHESIS_FIELDS.get(arm)
+        if field is None:
+            continue
+        keys = set(b2) | set(overrides)
+        changed = {
+            key for key in keys
+            if overrides.get(key, b2.get(key)) != b2.get(key)
+        }
+        if changed != {field}:
+            raise ValueError(
+                f"{arm} is not a one-mechanism B2 ablation: changed={sorted(changed)}"
+            )
     jobs = []
     for dataset in args.datasets:
         for horizon in args.horizons:
@@ -123,6 +211,7 @@ def build_jobs(args):
                         "percent": args.percent,
                         "loss": args.loss,
                         "overrides": overrides,
+                        "hypothesis_field": HYPOTHESIS_FIELDS.get(arm, ""),
                     }
                     config_hash = job_hash(payload)
                     job_id = f"{dataset.lower()}_h{horizon}_s{seed}_{arm}_{config_hash}"

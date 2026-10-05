@@ -95,6 +95,62 @@ MECHANISMS = {
         "trend_use_phase_attention": True,
         "trend_gate_init": 0.2,
     },
+    # Each hypothesis below is a one-field change from trend_token_direct.
+    "trend_token_dynamic_gate": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+        "trend_gate_mode": "reliability",
+    },
+    "trend_token_smooth": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+        "trend_direct_smooth_window": 9,
+    },
+    "trend_token_multi_token": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+        "trend_token_count": 2,
+    },
+    "trend_token_selective_attention": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+        "trend_phase_attention_mode": "null",
+    },
+    "trend_token_factorized": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "factorized",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_multiscale": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+        "trend_history_multiscale": True,
+    },
+    "trend_token_robust": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_gate_init": 0.2,
+        "trend_history_robust": True,
+    },
     "phase_only": {"use_residual_head": False, "use_trend_token": False},
     "dense_residual": {
         "use_residual_head": True,
@@ -561,6 +617,10 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
                 pool = model.last_trend_pool_weights
                 phase_attn = model.last_trend_phase_attention
                 readout_type = getattr(model.trend_token_branch, "readout_type", "profile")
+                if pool.ndim == 4:
+                    # Multi-token candidates retain per-token weights in the
+                    # branch; aggregate only for the legacy scalar diagnostic.
+                    pool = pool.mean(dim=2)
                 pool_pos = torch.linspace(
                     0.0, 1.0, pool.shape[-1], device=pool.device
                 )

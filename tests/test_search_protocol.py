@@ -34,6 +34,16 @@ class SearchProtocolTests(unittest.TestCase):
         self.assertGreaterEqual(len(MECHANISMS), 37)
         self.assertIn("trend_token_direct_no_interaction", MECHANISMS)
         self.assertIn("trend_token_direct", MECHANISMS)
+        for mechanism in (
+            "trend_token_dynamic_gate",
+            "trend_token_smooth",
+            "trend_token_multi_token",
+            "trend_token_selective_attention",
+            "trend_token_factorized",
+            "trend_token_multiscale",
+            "trend_token_robust",
+        ):
+            self.assertIn(mechanism, MECHANISMS)
         self.assertIn("phase_align", MECHANISMS)
         self.assertIn("phase_warp", MECHANISMS)
         self.assertIn("phase_amp_calib", MECHANISMS)

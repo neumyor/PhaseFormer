@@ -1635,9 +1635,21 @@ class PhaseFormerPresetConfig:
         self.trend_use_phase_attention = hyperparams.get(
             "trend_use_phase_attention", True
         )
+        self.trend_phase_attention_mode = hyperparams.get(
+            "trend_phase_attention_mode", "dense"
+        )
         self.trend_attention_heads = hyperparams.get("trend_attention_heads", 1)
         self.trend_gate_init = hyperparams.get("trend_gate_init", 0.2)
+        self.trend_gate_mode = hyperparams.get("trend_gate_mode", "static")
         self.trend_pool_temperature = hyperparams.get("trend_pool_temperature", 1.0)
+        self.trend_token_count = hyperparams.get("trend_token_count", 1)
+        self.trend_direct_smooth_window = hyperparams.get(
+            "trend_direct_smooth_window", 0
+        )
+        self.trend_history_multiscale = hyperparams.get(
+            "trend_history_multiscale", False
+        )
+        self.trend_history_robust = hyperparams.get("trend_history_robust", False)
         self.weak_period_residual_gate_init = hyperparams.get(
             "weak_period_residual_gate_init", 0.2
         )

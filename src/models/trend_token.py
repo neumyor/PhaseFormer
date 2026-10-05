@@ -29,7 +29,9 @@ class TrendTokenBranch(nn.Module):
 
     ``profile`` keeps the fixed low-rank profile decoder used by the theorem
     path.  ``direct`` is the controlled ablation: the same token is mapped
-    directly to all future steps by a shared horizon head.
+    directly to all future steps by a shared horizon head.  The additional
+    mechanisms are opt-in and are deliberately orthogonal so each hypothesis
+    can be trained against the same B2 configuration.
     """
 
     def __init__(
@@ -46,9 +48,15 @@ class TrendTokenBranch(nn.Module):
         profile_type: str = "constant",
         readout_type: str = "profile",
         use_phase_attention: bool = True,
+        phase_attention_mode: str = "dense",
         num_heads: int = 1,
         gate_init: float = 0.2,
+        gate_mode: str = "static",
         pool_temperature: float = 1.0,
+        token_count: int = 1,
+        direct_smooth_window: int = 0,
+        history_multiscale: bool = False,
+        history_robust: bool = False,
     ) -> None:
         super().__init__()
         if profile_count < 1:
@@ -56,7 +64,18 @@ class TrendTokenBranch(nn.Module):
         if profile_type not in {"constant", "constant_slope"}:
             raise ValueError("profile_type must be 'constant' or 'constant_slope'")
         if readout_type not in {"profile", "direct"}:
-            raise ValueError("readout_type must be 'profile' or 'direct'")
+            if readout_type != "factorized":
+                raise ValueError(
+                    "readout_type must be 'profile', 'direct', or 'factorized'"
+                )
+        if phase_attention_mode not in {"dense", "null"}:
+            raise ValueError("phase_attention_mode must be 'dense' or 'null'")
+        if gate_mode not in {"static", "reliability"}:
+            raise ValueError("gate_mode must be 'static' or 'reliability'")
+        if token_count < 1 or token_dim % token_count:
+            raise ValueError("token_count must divide token_dim")
+        if direct_smooth_window < 0 or direct_smooth_window % 2 == 0:
+            raise ValueError("direct_smooth_window must be zero or a positive odd integer")
         if phase_dim % num_heads:
             raise ValueError("phase_dim must be divisible by trend attention heads")
         if kernel_size < 1 or kernel_size % 2 == 0:
@@ -72,6 +91,13 @@ class TrendTokenBranch(nn.Module):
         self.profile_count = int(profile_count)
         self.readout_type = str(readout_type)
         self.use_phase_attention = bool(use_phase_attention)
+        self.phase_attention_mode = str(phase_attention_mode)
+        self.gate_mode = str(gate_mode)
+        self.token_count = int(token_count)
+        self.token_part_dim = self.token_dim // self.token_count
+        self.direct_smooth_window = int(direct_smooth_window)
+        self.history_multiscale = bool(history_multiscale)
+        self.history_robust = bool(history_robust)
         self.pool_temperature = float(pool_temperature)
 
         hidden = max(8, min(token_dim, 64))
@@ -89,8 +115,21 @@ class TrendTokenBranch(nn.Module):
         if not layers:
             layers = [nn.Conv1d(1, hidden, kernel_size=kernel_size), nn.GELU()]
         self.temporal_stem = nn.ModuleList(layers)
-        self.to_token = nn.Linear(hidden, token_dim)
-        self.pool_query = nn.Parameter(torch.zeros(1, 1, hidden))
+        self.pool_hidden = hidden
+        if self.history_multiscale:
+            # A separate long-receptive-field path is the only change in the
+            # multiscale candidate; the B2 default does not instantiate it.
+            self.long_temporal_stem = nn.ModuleList([
+                nn.Conv1d(1, hidden, kernel_size=kernel_size, dilation=8),
+                nn.GELU(),
+            ])
+            self.pool_hidden *= 2
+        else:
+            self.long_temporal_stem = None
+        self.to_token = nn.Linear(self.pool_hidden, self.token_part_dim)
+        self.pool_query = nn.Parameter(
+            torch.zeros(self.token_count, 1, self.pool_hidden)
+        )
         nn.init.normal_(self.pool_query, std=0.02)
 
         self.phase_query = nn.Linear(token_dim, phase_dim)
@@ -101,9 +140,16 @@ class TrendTokenBranch(nn.Module):
         self.phase_attention = nn.MultiheadAttention(
             phase_dim, num_heads=num_heads, batch_first=True
         )
+        if self.phase_attention_mode == "null":
+            self.phase_null = nn.Parameter(torch.zeros(1, 1, phase_dim))
+            nn.init.normal_(self.phase_null, std=0.02)
+        else:
+            self.phase_null = None
 
         readout_hidden = max(8, token_dim // 2)
         if self.readout_type == "profile":
+            self.level_head = None
+            self.shape_head = None
             self.lambda_head = nn.Sequential(
                 nn.LayerNorm(token_dim),
                 nn.Linear(token_dim, readout_hidden),
@@ -115,8 +161,10 @@ class TrendTokenBranch(nn.Module):
             # initialization, which is useful for controlled ablations.
             nn.init.zeros_(self.lambda_head[-1].weight)
             nn.init.zeros_(self.lambda_head[-1].bias)
-        else:
+        elif self.readout_type == "direct":
             self.lambda_head = None
+            self.level_head = None
+            self.shape_head = None
             self.horizon_head = nn.Sequential(
                 nn.LayerNorm(token_dim),
                 nn.Linear(token_dim, pred_len),
@@ -124,11 +172,42 @@ class TrendTokenBranch(nn.Module):
             # Keep direct-readout arms an exact no-op at initialization too.
             nn.init.zeros_(self.horizon_head[-1].weight)
             nn.init.zeros_(self.horizon_head[-1].bias)
+        else:
+            self.lambda_head = None
+            self.horizon_head = None
+            readout_norm = nn.LayerNorm(token_dim)
+            self.level_head = nn.Sequential(
+                readout_norm,
+                nn.Linear(token_dim, readout_hidden),
+                nn.GELU(),
+                nn.Linear(readout_hidden, 1),
+            )
+            self.shape_head = nn.Sequential(
+                nn.LayerNorm(token_dim),
+                nn.Linear(token_dim, readout_hidden),
+                nn.GELU(),
+                nn.Linear(readout_hidden, pred_len),
+            )
+            nn.init.zeros_(self.level_head[-1].weight)
+            nn.init.zeros_(self.level_head[-1].bias)
+            nn.init.zeros_(self.shape_head[-1].weight)
+            nn.init.zeros_(self.shape_head[-1].bias)
 
         gate_init = min(max(float(gate_init), 1e-4), 1.0 - 1e-4)
-        self.gate_logit = nn.Parameter(
-            torch.full((1, 1, self.enc_in), float(torch.logit(torch.tensor(gate_init))))
-        )
+        if self.gate_mode == "static":
+            self.gate_logit = nn.Parameter(
+                torch.full((1, 1, self.enc_in), float(torch.logit(torch.tensor(gate_init))))
+            )
+            self.gate_head = None
+        else:
+            self.gate_logit = None
+            self.gate_head = nn.Sequential(
+                nn.Linear(self.token_dim + 2, max(8, self.token_dim // 2)),
+                nn.GELU(),
+                nn.Linear(max(8, self.token_dim // 2), 1),
+            )
+            nn.init.zeros_(self.gate_head[-1].weight)
+            nn.init.constant_(self.gate_head[-1].bias, float(torch.logit(torch.tensor(gate_init))))
 
         profiles = self._make_profiles(self.pred_len, self.profile_count, profile_type)
         self.register_buffer("profile_bank", profiles, persistent=True)
@@ -154,19 +233,36 @@ class TrendTokenBranch(nn.Module):
     def _encode(self, x_in: torch.Tensor) -> torch.Tensor:
         # (B,L,C) -> (B*C,1,L); one shared encoder is used for all channels.
         b, l, c = x_in.shape
+        if self.history_robust:
+            center = x_in.median(dim=1, keepdim=True).values
+            mad = (x_in - center).abs().median(dim=1, keepdim=True).values
+            limit = (4.0 * mad).clamp_min(1e-3)
+            x_in = center + (x_in - center).clamp(-limit, limit)
         h = x_in.permute(0, 2, 1).reshape(b * c, 1, l)
         for layer in self.temporal_stem:
             if isinstance(layer, nn.Conv1d):
                 h = _causal_conv1d(h, layer)
             else:
                 h = layer(h)
+        if self.long_temporal_stem is not None:
+            h_long = x_in.permute(0, 2, 1).reshape(b * c, 1, l)
+            for layer in self.long_temporal_stem:
+                if isinstance(layer, nn.Conv1d):
+                    h_long = _causal_conv1d(h_long, layer)
+                else:
+                    h_long = layer(h_long)
+            h = torch.cat([h, h_long], dim=-1)
         h = h.transpose(1, 2)  # (B*C,L,H)
-        scores = torch.einsum("blh,bqh->blq", h, self.pool_query.expand(b * c, -1, -1))
-        scores = scores.squeeze(-1) / self.pool_temperature
+        query = self.pool_query.expand(b * c, -1, -1)
+        scores = torch.einsum("blh,bmh->bml", h, query) / self.pool_temperature
         weights = scores.softmax(dim=-1)
-        token = torch.bmm(weights.unsqueeze(1), h).squeeze(1)
-        token = self.to_token(token).reshape(b, c, self.token_dim)
-        self.last_pool_weights = weights.reshape(b, c, l).detach()
+        pooled = torch.einsum("bml,blh->bmh", weights, h)
+        token = self.to_token(pooled).reshape(b, c, self.token_count, self.token_part_dim)
+        token = token.reshape(b, c, self.token_dim)
+        if self.token_count == 1:
+            self.last_pool_weights = weights.reshape(b, c, l).detach()
+        else:
+            self.last_pool_weights = weights.reshape(b, c, self.token_count, l).detach()
         return token
 
     def forward(self, x_in: torch.Tensor, phase_latent: torch.Tensor):
@@ -176,15 +272,22 @@ class TrendTokenBranch(nn.Module):
         if c != self.enc_in or phase_latent.shape[:2] != (b, c):
             raise ValueError("trend token input channel/batch dimensions do not match")
         token = self._encode(x_in)
+        phase_attention_for_gate = None
         if self.use_phase_attention:
             s = phase_latent.shape[2]
             q = self.phase_query(token.reshape(b * c, 1, self.token_dim))
             phase = phase_latent.reshape(b * c, s, self.phase_dim)
+            if self.phase_null is not None:
+                phase = torch.cat([
+                    phase,
+                    self.phase_null.expand(b * c, -1, -1).to(dtype=phase.dtype),
+                ], dim=1)
             k = self.phase_key(phase)
             v = self.phase_value(phase)
             attended, weights = self.phase_attention(q, k, v, need_weights=True)
             token = self.phase_norm(token + self.phase_out(attended.squeeze(1)).reshape(b, c, self.token_dim))
-            self.last_phase_attention = weights.reshape(b, c, s).detach()
+            phase_attention_for_gate = weights.reshape(b, c, phase.shape[1])
+            self.last_phase_attention = phase_attention_for_gate.detach()
         else:
             self.last_phase_attention = None
         profile = self.profile_bank.to(device=x_in.device, dtype=x_in.dtype)
@@ -192,14 +295,39 @@ class TrendTokenBranch(nn.Module):
             lam = self.lambda_head(token)
             delta = torch.einsum("bcm,hm->bhc", lam, profile)
             direct_delta = None
-        else:
+        elif self.readout_type == "direct":
             lam = None
             # (B, C, D) -> (B, C, H) -> (B, H, C)
             direct_delta = self.horizon_head(token)
+            if self.direct_smooth_window > 1:
+                direct_delta = F.avg_pool1d(
+                    direct_delta,
+                    kernel_size=self.direct_smooth_window,
+                    stride=1,
+                    padding=self.direct_smooth_window // 2,
+                    count_include_pad=False,
+                )
+            delta = direct_delta.transpose(1, 2)
+        else:
+            lam = None
+            level = self.level_head(token)
+            shape = self.shape_head(token)
+            shape = shape - shape.mean(dim=-1, keepdim=True)
+            direct_delta = level + shape
             delta = direct_delta.transpose(1, 2)
         anchor = x_in[:, -1:, :].expand(-1, self.pred_len, -1)
         trend = anchor + delta
-        gate = torch.sigmoid(self.gate_logit).to(dtype=x_in.dtype)
+        if self.gate_mode == "static":
+            gate = torch.sigmoid(self.gate_logit).to(dtype=x_in.dtype)
+        else:
+            if phase_attention_for_gate is None:
+                entropy = torch.zeros((b, c, 1), device=x_in.device, dtype=x_in.dtype)
+            else:
+                weights = phase_attention_for_gate.to(dtype=x_in.dtype)
+                entropy = -(weights.clamp_min(1e-8).log() * weights).sum(-1, keepdim=True)
+            volatility = x_in.diff(dim=1).std(dim=1, keepdim=True).transpose(1, 2)
+            features = torch.cat([token, entropy, volatility], dim=-1)
+            gate = torch.sigmoid(self.gate_head(features)).transpose(1, 2)
         fused = trend * gate + (1.0 - gate) * 0.0  # caller supplies phase forecast
         self.last_lambda = lam.detach() if lam is not None else None
         self.last_trend_forecast = trend.detach()
@@ -207,6 +335,9 @@ class TrendTokenBranch(nn.Module):
             "lambda": lam,
             "direct_delta": direct_delta,
             "readout_type": self.readout_type,
+            "gate_mode": self.gate_mode,
+            "phase_attention_mode": self.phase_attention_mode,
+            "token_count": self.token_count,
             "pool_weights": self.last_pool_weights,
             "phase_attention": self.last_phase_attention,
             "profile_bank": profile,
