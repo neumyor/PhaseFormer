@@ -5489,3 +5489,11 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **可测量观察**：按样本×通道加权，B2 MAE `0.395611`，phase-only `0.399521`，平均差 `-0.003910`；B2 在 `50.8%` 的单位上改善、`49.2%` 上退化。B2 趋势分支在 `87.4%` 的单位上 MAE 高于 phase 分支。候选误差与 `|candidate slope - truth slope|` 的相关为 `+0.430`，与 direct correction 标准差相关为 `+0.187`；attention entropy 与误差相关较弱（`+0.050`），但 entropy 高四分位子集 MAE `0.457679`，其余为 `0.374921`。静态 gate 均值/标准差/范围为 `0.2246/0.0565/[0.0640, 0.4179]`，top-5% 高误差组均值为 `0.1962`。数据集方向上 ETTh1 平均退化 `+0.005628`，ETTh2、ETTm1、ETTm2、Weather 分别为 `-0.012661`、`-0.005214`、`-0.000623`、`-0.005545`。
 
 **架构归因与后续单变量建议**：报告将观察和归因假设分开，提出六个可证伪方向：依据 phase reliability 的动态 gate；对 direct correction 加低频/二阶平滑约束；多 token 或多 expert 趋势分支；带 null/稀疏选择的 phase-to-trend attention；level/slope 分离 readout；双尺度 history encoder。每条建议均绑定了本轮观测证据和只改变一个机制的后续实验，避免一次引入多种机制导致无法归因。本轮结果只支持错误模式定位，不支持 test 泛化或因果提升声明。
+
+## 2026-10-05 — 启动 B2 单机制架构假设验证
+
+**实现**：在 `TrendTokenBranch` 中加入 7 个相互独立的可关闭机制：reliability-conditioned gate、direct correction smoothing、two-token pooling、null-key selective attention、factorized level/shape readout、parallel long-history encoder 和 deterministic robust history clipping。B2 默认路径不创建这些额外模块；runner 在 manifest 生成时验证每个候选只改变一个声明字段。
+
+**验证**：远程 `time` 环境完成 py_compile；7 个候选全部通过独立 forward、反向传播和输出 shape smoke。1 epoch ETTh1-H96-seed2021 集成 smoke 中 phase-only、B2 和 7 个候选均产生 validation metrics 与 checkpoint；robust arm 首次触发 CUDA median deterministic 限制，改为 values-only sort 后单独补跑成功。
+
+**正式任务**：专项计划见 `docs/PhaseFormer_trend_token_hypothesis_validation_plan.md`。远程后台 experiment id 为 `trend_token_hypotheses_20261005`，矩阵为 ETT/Weather × H96/H192/H720 × seed 2021/2022 × phase-only、B2、7 个单机制候选，共 270 jobs；8×A800，8 epochs，validation-only，支持 `--resume`。汇总脚本为 `scripts/summarize_trend_hypothesis_matrix.py`，完成后输出每个候选相对 B2 的 paired MAE/MSE、胜负计数和控制字段审计。
