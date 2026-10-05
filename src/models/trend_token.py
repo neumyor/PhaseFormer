@@ -74,7 +74,9 @@ class TrendTokenBranch(nn.Module):
             raise ValueError("gate_mode must be 'static' or 'reliability'")
         if token_count < 1 or token_dim % token_count:
             raise ValueError("token_count must divide token_dim")
-        if direct_smooth_window < 0 or direct_smooth_window % 2 == 0:
+        if direct_smooth_window < 0 or (
+            direct_smooth_window > 0 and direct_smooth_window % 2 == 0
+        ):
             raise ValueError("direct_smooth_window must be zero or a positive odd integer")
         if phase_dim % num_heads:
             raise ValueError("phase_dim must be divisible by trend attention heads")
