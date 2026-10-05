@@ -5497,3 +5497,13 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **验证**：远程 `time` 环境完成 py_compile；7 个候选全部通过独立 forward、反向传播和输出 shape smoke。1 epoch ETTh1-H96-seed2021 集成 smoke 中 phase-only、B2 和 7 个候选均产生 validation metrics 与 checkpoint；robust arm 首次触发 CUDA median deterministic 限制，改为 values-only sort 后单独补跑成功。
 
 **正式任务**：专项计划见 `docs/PhaseFormer_trend_token_hypothesis_validation_plan.md`。远程后台 experiment id 为 `trend_token_hypotheses_20261005`，矩阵为 ETT/Weather × H96/H192/H720 × seed 2021/2022 × phase-only、B2、7 个单机制候选，共 270 jobs；8×A800，8 epochs，validation-only，支持 `--resume`。汇总脚本为 `scripts/summarize_trend_hypothesis_matrix.py`，完成后输出每个候选相对 B2 的 paired MAE/MSE、胜负计数和控制字段审计。
+
+## 2026-10-05 21:46 — B2 单机制验证中期快照
+
+**进度**：`trend_token_hypotheses_20261005` 已完成 145/270（53.7%），8 running、117 pending、0 failed；后台 supervisor 存活，8 张 GPU 有任务。全部机制共同完成的 setting 有 16 个：ETTh1/ETTh2 的 H96/H192/H720 各两个 seed，以及 ETTm1 的 H96/H192 各两个 seed。Weather、ETTm2 尚无本快照的完整比较。
+
+**统一配对口径**：只使用上述共同 setting，按 setting 等权计算 candidate-minus-B2；负数更好。B2 MAE/MSE 为 `0.545297/0.675641`。动态 gate 差值 `-0.000267/-0.004707`（MAE/MSE 胜出 9/16、10/16）；平滑 `+0.000621/+0.001591`（3/16、2/16）；双 token `+0.003286/+0.007749`（8/16、4/16）；null attention `+0.004608/+0.008556`（5/16、6/16）；factorized head `+0.008648/+0.020393`（6/16、3/16）；双尺度 `+0.003058/+0.005916`（5/16、6/16）；robust encoder `+0.003093/+0.004550`（6/16、6/16）。动态 gate 是当前唯一 MAE/MSE 均改善的候选，但 MAE 差很小，尚无显著性或完整矩阵结论。
+
+**数据集与成本**：动态 gate 在 ETTh1 和 ETTm1 的平均 MSE 差为 `-0.006799/-0.009666`，ETTh2 为 `+0.000691`。双 token 在 ETTh2 的 MAE/MSE 差为 `-0.001853/-0.001818`，在 ETTh1 和 ETTm1 退化。双尺度在 ETTm1 MSE 改善 `-0.003093`，平均耗时为 B2 的约 1.60 倍；其他候选的配对平均耗时比约 0.99–1.02，仅作并发环境描述。
+
+**控制审计与归因边界**：读取当前落盘 hyperparams，排除用于命名的 `scheme_name` 并补齐 B2 默认字段后，112 个 candidate-setting 比较均只改变一个声明字段。字段控制并不等于参数量、初始化或表示容量完全匹配：双 token 实际为两个半维表示拼接后共用一次 phase attention；factorized head 同时更换了 readout 的深度/瓶颈；null 为可学习 latent 而非强制零贡献；robust 只裁剪 encoder 输入，末值 anchor 仍使用原值。因此目前只能判断这些具体实现的优劣，不能据此否定完整的多 token interaction、纯线性分离 readout或鲁棒 anchor 假设。汇总脚本的通用 hyperparam 比较还包含 `scheme_name`，正式审计前需修正该元数据误报。本次检查不修改正在训练的模型、配置或进程。
