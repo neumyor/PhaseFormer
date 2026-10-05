@@ -255,7 +255,8 @@ class TrendTokenBranch(nn.Module):
                     h_long = layer(h_long)
             h = torch.cat([h, h_long], dim=-1)
         h = h.transpose(1, 2)  # (B*C,L,H)
-        query = self.pool_query.expand(b * c, -1, -1)
+        query = self.pool_query.unsqueeze(0).expand(b * c, -1, -1, -1)
+        query = query.reshape(b * c, self.token_count, self.pool_hidden)
         scores = torch.einsum("blh,bmh->bml", h, query) / self.pool_temperature
         weights = scores.softmax(dim=-1)
         pooled = torch.einsum("bml,blh->bmh", weights, h)
