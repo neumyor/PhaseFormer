@@ -95,6 +95,57 @@ MECHANISMS = {
         "trend_use_phase_attention": True,
         "trend_gate_init": 0.2,
     },
+    # Controlled trend-token interaction matrix.  All six arms below share the
+    # validated B2 direct-readout capacity (token_dim=32, causal kernel=5,
+    # static gate=0.2); only the token interaction graph changes.
+    "trend_token_i0_late_fusion": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": False,
+        "trend_interaction_mode": "none",
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_i1_phase_to_trend": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_interaction_mode": "phase_to_trend",
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_i2_trend_to_phase": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_interaction_mode": "trend_to_phase",
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_i3_parallel_bidir": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_interaction_mode": "parallel_bidirectional",
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_i6_alternating": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_interaction_mode": "alternating",
+        "trend_gate_init": 0.2,
+    },
+    "trend_token_i7_joint": {
+        "use_residual_head": False,
+        "use_trend_token": True,
+        "trend_readout_type": "direct",
+        "trend_use_phase_attention": True,
+        "trend_interaction_mode": "joint",
+        "trend_gate_init": 0.2,
+    },
     # Each hypothesis below is a one-field change from trend_token_direct.
     "trend_token_dynamic_gate": {
         "use_residual_head": False,
@@ -617,6 +668,9 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
                 pool = model.last_trend_pool_weights
                 phase_attn = model.last_trend_phase_attention
                 readout_type = getattr(model.trend_token_branch, "readout_type", "profile")
+                interaction_mode = getattr(
+                    model.trend_token_branch, "interaction_mode", "phase_to_trend"
+                )
                 if pool.ndim == 4:
                     # Multi-token candidates retain per-token weights in the
                     # branch; aggregate only for the legacy scalar diagnostic.
@@ -639,6 +693,7 @@ def evaluate(model, loader, dataset, split, pred_len, run_dir, bad_case_limit=0)
                             "channel": c_idx,
                             "gate": float(gate[b_idx, 0, c_idx].item()),
                             "readout_type": readout_type,
+                            "interaction_mode": interaction_mode,
                             "lambda_0": (
                                 float(lamb[b_idx, c_idx, 0].item())
                                 if lamb is not None

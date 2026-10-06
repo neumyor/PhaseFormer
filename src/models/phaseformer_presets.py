@@ -1638,6 +1638,9 @@ class PhaseFormerPresetConfig:
         self.trend_phase_attention_mode = hyperparams.get(
             "trend_phase_attention_mode", "dense"
         )
+        self.trend_interaction_mode = hyperparams.get(
+            "trend_interaction_mode", None
+        )
         self.trend_attention_heads = hyperparams.get("trend_attention_heads", 1)
         self.trend_gate_init = hyperparams.get("trend_gate_init", 0.2)
         self.trend_gate_mode = hyperparams.get("trend_gate_mode", "static")

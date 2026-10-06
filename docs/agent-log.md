@@ -5507,3 +5507,21 @@ phase-consistent forecasting decomposition，直接推出 `D_cond = a delta + ep
 **数据集与成本**：动态 gate 在 ETTh1 和 ETTm1 的平均 MSE 差为 `-0.006799/-0.009666`，ETTh2 为 `+0.000691`。双 token 在 ETTh2 的 MAE/MSE 差为 `-0.001853/-0.001818`，在 ETTh1 和 ETTm1 退化。双尺度在 ETTm1 MSE 改善 `-0.003093`，平均耗时为 B2 的约 1.60 倍；其他候选的配对平均耗时比约 0.99–1.02，仅作并发环境描述。
 
 **控制审计与归因边界**：读取当前落盘 hyperparams，排除用于命名的 `scheme_name` 并补齐 B2 默认字段后，112 个 candidate-setting 比较均只改变一个声明字段。字段控制并不等于参数量、初始化或表示容量完全匹配：双 token 实际为两个半维表示拼接后共用一次 phase attention；factorized head 同时更换了 readout 的深度/瓶颈；null 为可学习 latent 而非强制零贡献；robust 只裁剪 encoder 输入，末值 anchor 仍使用原值。因此目前只能判断这些具体实现的优劣，不能据此否定完整的多 token interaction、纯线性分离 readout或鲁棒 anchor 假设。汇总脚本的通用 hyperparam 比较还包含 `scheme_name`，正式审计前需修正该元数据误报。本次检查不修改正在训练的模型、配置或进程。
+
+## 2026-10-06 — 实现 trend-token 交互矩阵
+
+**任务**：在独立开发分支 `codex/trend-token-cross-attention` 上测试用户指定的
+0/1/2/3/6/7 六类 trend-token 与 phase-token 交互机制。
+
+**实现**：`TrendTokenBranch` 新增 `trend_interaction_mode`，支持无交互、
+`phase_to_trend`、`trend_to_phase`、并行双向、两轮交替和联合 token
+self-attention。T→P 类机制在最终 phase predictor 之前更新 phase latent，因此会
+实际影响 phase forecast；单 trend token 的 T→P 保留为广播控制。新增对应 search
+mechanism、runner arm、shape/反向传播测试和专项实验计划
+`docs/PhaseFormer_trend_token_interaction_experiment_plan.md`。
+
+**协议**：复用已有 trend-token B2 的已验证容量与超参数（token_dim=32、causal
+kernel=5、dilation=(1,2)、direct readout、gate_init=0.2），固定 lookback=720、
+period=24、Huber、8 epochs、best-validation checkpoint；ETT 四个数据集与 Weather，
+horizon 96/192/720，seed 2021/2022，验证集优先，另保留 phase-only 对照，共 210 jobs。
+本地已完成 Python 语法和 diff 检查；本机无 PyTorch，tensor smoke 待远程 time 环境。

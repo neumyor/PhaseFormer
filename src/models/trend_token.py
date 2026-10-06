@@ -11,7 +11,7 @@ complement argument in minipaper_0930 Theorem 3.
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from typing import Iterable, Optional
 
 import torch
 from torch import nn
@@ -67,6 +67,7 @@ class TrendTokenBranch(nn.Module):
         direct_smooth_window: int = 0,
         history_multiscale: bool = False,
         history_robust: bool = False,
+        interaction_mode: Optional[str] = None,
     ) -> None:
         super().__init__()
         if profile_count < 1:
@@ -80,6 +81,20 @@ class TrendTokenBranch(nn.Module):
                 )
         if phase_attention_mode not in {"dense", "null"}:
             raise ValueError("phase_attention_mode must be 'dense' or 'null'")
+        if interaction_mode is None:
+            interaction_mode = "phase_to_trend" if use_phase_attention else "none"
+        if interaction_mode not in {
+            "none",
+            "phase_to_trend",
+            "trend_to_phase",
+            "parallel_bidirectional",
+            "alternating",
+            "joint",
+        }:
+            raise ValueError(
+                "interaction_mode must be one of none, phase_to_trend, "
+                "trend_to_phase, parallel_bidirectional, alternating, joint"
+            )
         if gate_mode not in {"static", "reliability"}:
             raise ValueError("gate_mode must be 'static' or 'reliability'")
         if token_count < 1 or token_dim % token_count:
@@ -104,6 +119,7 @@ class TrendTokenBranch(nn.Module):
         self.readout_type = str(readout_type)
         self.use_phase_attention = bool(use_phase_attention)
         self.phase_attention_mode = str(phase_attention_mode)
+        self.interaction_mode = str(interaction_mode)
         self.gate_mode = str(gate_mode)
         self.token_count = int(token_count)
         self.token_part_dim = self.token_dim // self.token_count
@@ -152,6 +168,30 @@ class TrendTokenBranch(nn.Module):
         self.phase_attention = nn.MultiheadAttention(
             phase_dim, num_heads=num_heads, batch_first=True
         )
+        # The reverse direction uses phase slots as queries and the trend
+        # state as a key/value.  With one trend token this is intentionally a
+        # broadcast control: the single key cannot produce token-specific
+        # softmax weights, but it still measures whether trend conditioning of
+        # the phase path is useful.
+        self.phase_update_query = nn.Linear(phase_dim, phase_dim)
+        self.trend_update_key = nn.Linear(token_dim, phase_dim)
+        self.trend_update_value = nn.Linear(token_dim, phase_dim)
+        self.phase_update_out = nn.Linear(phase_dim, phase_dim)
+        self.phase_update_norm = nn.LayerNorm(phase_dim)
+        self.trend_to_phase_attention = nn.MultiheadAttention(
+            phase_dim, num_heads=num_heads, batch_first=True
+        )
+
+        # Joint attention is a full self-attention control over one trend token
+        # and all phase slots.  Its output is split back into the two streams.
+        self.joint_trend_in = nn.Linear(token_dim, phase_dim)
+        self.joint_trend_out = nn.Linear(phase_dim, token_dim)
+        self.joint_phase_out = nn.Linear(phase_dim, phase_dim)
+        self.joint_attention = nn.MultiheadAttention(
+            phase_dim, num_heads=num_heads, batch_first=True
+        )
+        self.joint_trend_norm = nn.LayerNorm(token_dim)
+        self.joint_phase_norm = nn.LayerNorm(phase_dim)
         if self.phase_attention_mode == "null":
             self.phase_null = nn.Parameter(torch.zeros(1, 1, phase_dim))
             nn.init.normal_(self.phase_null, std=0.02)
@@ -228,6 +268,69 @@ class TrendTokenBranch(nn.Module):
         self.last_lambda = None
         self.last_trend_forecast = None
 
+    def _phase_to_trend(
+        self, token: torch.Tensor, phase_latent: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Read phase slots into the trend token (P -> T)."""
+        b, c, slots, _ = phase_latent.shape
+        q = self.phase_query(token.reshape(b * c, 1, self.token_dim))
+        phase = phase_latent.reshape(b * c, slots, self.phase_dim)
+        if self.phase_attention_mode == "null":
+            phase = torch.cat(
+                [
+                    phase,
+                    self.phase_null.expand(b * c, -1, -1).to(dtype=phase.dtype),
+                ],
+                dim=1,
+            )
+        k = self.phase_key(phase)
+        v = self.phase_value(phase)
+        attended, weights = self.phase_attention(q, k, v, need_weights=True)
+        token = self.phase_norm(
+            token
+            + self.phase_out(attended.squeeze(1).reshape(b, c, self.phase_dim))
+        )
+        return token, weights.reshape(b, c, phase.shape[1])
+
+    def _trend_to_phase(
+        self, token: torch.Tensor, phase_latent: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Write the trend state back to phase slots (T -> P)."""
+        b, c, slots, _ = phase_latent.shape
+        phase = phase_latent.reshape(b * c, slots, self.phase_dim)
+        q = self.phase_update_query(phase)
+        trend = token.reshape(b * c, 1, self.token_dim)
+        k = self.trend_update_key(trend)
+        v = self.trend_update_value(trend)
+        attended, weights = self.trend_to_phase_attention(
+            q, k, v, need_weights=True
+        )
+        phase = self.phase_update_norm(phase + self.phase_update_out(attended))
+        return phase.reshape(b, c, slots, self.phase_dim), weights.reshape(
+            b, c, slots
+        )
+
+    def _joint_attention(
+        self, token: torch.Tensor, phase_latent: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Run self-attention over ``[trend, phase_1, ..., phase_M]``."""
+        b, c, slots, _ = phase_latent.shape
+        trend = self.joint_trend_in(token).reshape(b * c, 1, self.phase_dim)
+        phase = phase_latent.reshape(b * c, slots, self.phase_dim)
+        joint = torch.cat([trend, phase], dim=1)
+        attended, weights = self.joint_attention(joint, joint, joint, need_weights=True)
+        token = self.joint_trend_norm(
+            token + self.joint_trend_out(attended[:, 0]).reshape(b, c, self.token_dim)
+        )
+        phase = self.joint_phase_norm(
+            phase + self.joint_phase_out(attended[:, 1:])
+        )
+        return (
+            token,
+            phase.reshape(b, c, slots, self.phase_dim),
+            weights.reshape(b, c, slots + 1, slots + 1),
+        )
+
     @staticmethod
     def _make_profiles(pred_len: int, count: int, profile_type: str) -> torch.Tensor:
         t = torch.linspace(-1.0, 1.0, pred_len)
@@ -287,24 +390,44 @@ class TrendTokenBranch(nn.Module):
         if c != self.enc_in or phase_latent.shape[:2] != (b, c):
             raise ValueError("trend token input channel/batch dimensions do not match")
         token = self._encode(x_in)
+        phase_updated = phase_latent
         phase_attention_for_gate = None
-        if self.use_phase_attention:
-            s = phase_latent.shape[2]
-            q = self.phase_query(token.reshape(b * c, 1, self.token_dim))
-            phase = phase_latent.reshape(b * c, s, self.phase_dim)
-            if self.phase_null is not None:
-                phase = torch.cat([
-                    phase,
-                    self.phase_null.expand(b * c, -1, -1).to(dtype=phase.dtype),
-                ], dim=1)
-            k = self.phase_key(phase)
-            v = self.phase_value(phase)
-            attended, weights = self.phase_attention(q, k, v, need_weights=True)
-            token = self.phase_norm(token + self.phase_out(attended.squeeze(1)).reshape(b, c, self.token_dim))
-            phase_attention_for_gate = weights.reshape(b, c, phase.shape[1])
-            self.last_phase_attention = phase_attention_for_gate.detach()
-        else:
-            self.last_phase_attention = None
+        joint_attention = None
+        mode = self.interaction_mode
+        if mode == "phase_to_trend":
+            token, phase_attention_for_gate = self._phase_to_trend(
+                token, phase_latent
+            )
+        elif mode == "trend_to_phase":
+            phase_updated, phase_attention_for_gate = self._trend_to_phase(
+                token, phase_latent
+            )
+        elif mode == "parallel_bidirectional":
+            original_token = token
+            original_phase = phase_latent
+            token, phase_attention_for_gate = self._phase_to_trend(
+                original_token, original_phase
+            )
+            phase_updated, _ = self._trend_to_phase(original_token, original_phase)
+        elif mode == "alternating":
+            # Two complete P -> T -> P rounds.  Each round consumes the state
+            # produced by the preceding direction, so order is explicit.
+            for _ in range(2):
+                token, phase_attention_for_gate = self._phase_to_trend(
+                    token, phase_updated
+                )
+                phase_updated, _ = self._trend_to_phase(token, phase_updated)
+        elif mode == "joint":
+            token, phase_updated, joint_attention = self._joint_attention(
+                token, phase_latent
+            )
+        elif mode != "none":
+            raise RuntimeError(f"unsupported trend interaction mode: {mode}")
+        self.last_phase_attention = (
+            phase_attention_for_gate.detach()
+            if phase_attention_for_gate is not None
+            else None
+        )
         profile = self.profile_bank.to(device=x_in.device, dtype=x_in.dtype)
         if self.readout_type == "profile":
             lam = self.lambda_head(token)
@@ -352,9 +475,14 @@ class TrendTokenBranch(nn.Module):
             "readout_type": self.readout_type,
             "gate_mode": self.gate_mode,
             "phase_attention_mode": self.phase_attention_mode,
+            "interaction_mode": mode,
             "token_count": self.token_count,
             "pool_weights": self.last_pool_weights,
             "phase_attention": self.last_phase_attention,
+            "updated_phase_latent": phase_updated,
+            "joint_attention": (
+                joint_attention.detach() if joint_attention is not None else None
+            ),
             "profile_bank": profile,
             "fused_placeholder": fused,
         }

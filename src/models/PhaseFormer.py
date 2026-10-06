@@ -558,6 +558,9 @@ class PhaseFormer(DefaultPLModule):
                 gate_mode=getattr(configs, "trend_gate_mode", "static"),
                 pool_temperature=getattr(configs, "trend_pool_temperature", 1.0),
                 token_count=getattr(configs, "trend_token_count", 1),
+                interaction_mode=getattr(
+                    configs, "trend_interaction_mode", None
+                ),
                 direct_smooth_window=getattr(
                     configs, "trend_direct_smooth_window", 0
                 ),
@@ -2061,6 +2064,21 @@ class PhaseFormer(DefaultPLModule):
         if self.use_harmonic_modulation:
             Z = self.harmonic_modulation(Z, phase_series)
 
+        # Trend-token interaction happens after routing and before the final
+        # phase predictor.  This is the only location where T->P mechanisms can
+        # affect the phase forecast; phase->T-only keeps the historical output
+        # path numerically unchanged apart from the trend branch itself.
+        trend_forecast_normalized = None
+        trend_gate = None
+        trend_diag = None
+        if self.use_trend_token:
+            trend_forecast_normalized, trend_gate, trend_diag = self.trend_token_branch(
+                x_in, Z
+            )
+            updated_phase_latent = trend_diag.get("updated_phase_latent")
+            if updated_phase_latent is not None:
+                Z = updated_phase_latent
+
         # final predictor to produce P_out. TrajectoryDecoder (pure-phase plan,
         # stage 4) replaces the linear/MLP predictor with a per-slot polynomial
         # trajectory over the future cycles; both have the same (B, C, L, P_out)
@@ -2129,11 +2147,7 @@ class PhaseFormer(DefaultPLModule):
 
         phase_forecast_normalized = y_hat
         residual_forecast_normalized = None
-        trend_forecast_normalized = None
         if self.use_trend_token:
-            trend_forecast_normalized, trend_gate, trend_diag = self.trend_token_branch(
-                x_in, Z
-            )
             y_hat = (1.0 - trend_gate) * y_hat + trend_gate * trend_forecast_normalized
             self.last_trend_forecast = trend_forecast_normalized.detach()
             self.last_trend_lambda = (

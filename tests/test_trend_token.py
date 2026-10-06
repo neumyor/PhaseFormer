@@ -131,3 +131,55 @@ def test_multi_token_pool_has_separate_attention_maps():
     module(x, z)
     assert module.last_pool_weights.shape == (1, 2, 2, 12)
     assert torch.allclose(module.last_pool_weights.sum(-1), torch.ones(1, 2, 2), atol=1e-6)
+
+
+def test_interaction_modes_return_phase_latent_with_stable_shapes():
+    torch.manual_seed(4)
+    x = torch.randn(2, 16, 2)
+    z = torch.randn(2, 2, 4, 8)
+    modes = {
+        "none",
+        "phase_to_trend",
+        "trend_to_phase",
+        "parallel_bidirectional",
+        "alternating",
+        "joint",
+    }
+    for mode in modes:
+        module = TrendTokenBranch(
+            seq_len=16,
+            pred_len=7,
+            enc_in=2,
+            phase_dim=8,
+            token_dim=12,
+            readout_type="direct",
+            interaction_mode=mode,
+            use_phase_attention=mode != "none",
+        )
+        trend, gate, diag = module(x, z)
+        assert trend.shape == (2, 7, 2)
+        assert gate.shape in {(1, 1, 2), (2, 1, 2)}
+        assert diag["updated_phase_latent"].shape == z.shape
+        assert diag["interaction_mode"] == mode
+        loss = trend.square().mean() + diag["updated_phase_latent"].square().mean()
+        loss.backward()
+
+
+def test_reverse_attention_is_a_single_token_broadcast_control():
+    torch.manual_seed(5)
+    module = TrendTokenBranch(
+        seq_len=12,
+        pred_len=5,
+        enc_in=1,
+        phase_dim=4,
+        token_dim=8,
+        readout_type="direct",
+        interaction_mode="trend_to_phase",
+    )
+    x = torch.randn(1, 12, 1)
+    z = torch.randn(1, 1, 3, 4)
+    _, _, diag = module(x, z)
+    weights = module.last_phase_attention
+    assert weights.shape == (1, 1, 3)
+    assert torch.allclose(weights, torch.ones_like(weights), atol=1e-6)
+    assert diag["updated_phase_latent"].shape == z.shape
