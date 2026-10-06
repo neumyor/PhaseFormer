@@ -5525,3 +5525,19 @@ kernel=5、dilation=(1,2)、direct readout、gate_init=0.2），固定 lookback=
 period=24、Huber、8 epochs、best-validation checkpoint；ETT 四个数据集与 Weather，
 horizon 96/192/720，seed 2021/2022，验证集优先，另保留 phase-only 对照，共 210 jobs。
 本地已完成 Python 语法和 diff 检查；本机无 PyTorch，tensor smoke 待远程 time 环境。
+
+## 2026-10-06 — 交互矩阵二次校验与正式启动
+
+**二次校验**：远程 `time` 环境完成受影响文件 `py_compile` 和 `git diff --check`。
+6 种交互模式均完成 CUDA forward/backward smoke，输出形状为 `(B,H,C)`，phase
+latent 形状保持 `(B,C,M,D)`。随后完成 ETTh1-H96、i0、1 epoch 的 PhaseFormer
+端到端 CUDA smoke，validation 指标和 checkpoint 正常落盘，test 未读取。远程
+pytest 仍受已有原生 segmentation fault 限制，本轮用上述 tensor 和端到端 smoke
+替代确认运行链路。
+
+**正式任务**：远程 worktree `/home/yyk/yyk03/niuyiming/PhaseFormer_trend_interaction`
+在 commit `70f3d7b` 上启动 experiment id `trend_token_interaction_20261006`。
+监督进程 PID `20522`，日志为
+`~/niuyiming/trend_token_interaction_20261006.supervisor.log`。manifest 已确认
+210 jobs；启动时 8 张 A800 各运行一个任务，首轮已有 2 个任务完成、0 个失败。
+任务矩阵和验证专用协议以专项计划为准；训练过程中不读取 test。
