@@ -55,11 +55,11 @@ def main():
             continue
         setting = f"{frame.dataset.iloc[0]}_H{int(frame.horizon.iloc[0])}_S{int(frame.seed.iloc[0])}"
         key = ["sample_index", "channel"]
-        base = frame[frame.mode == MODES[0]].set_index(key)
+        base = frame[frame["mode"] == MODES[0]].set_index(key)
         if base.empty:
             continue
         for mode in MODES:
-            cur = frame[frame.mode == mode].set_index(key)
+            cur = frame[frame["mode"] == mode].set_index(key)
             if cur.empty:
                 continue
             common = base.join(cur, lsuffix="_i0", rsuffix="_cur", how="inner")
