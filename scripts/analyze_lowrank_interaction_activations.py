@@ -147,7 +147,13 @@ def evaluate_arm(
 
         def hook(_module, _inputs, output):
             weights = output[1] if isinstance(output, tuple) and len(output) > 1 else None
-            hook_calls[name].append(None if weights is None else weights.detach().cpu())
+            attended = output[0] if isinstance(output, tuple) else None
+            hook_calls[name].append(
+                None if weights is None else {
+                    "attended": attended.detach(),
+                    "weights": weights.detach().cpu(),
+                }
+            )
 
         hooks.append(module.register_forward_hook(hook))
 
@@ -202,9 +208,44 @@ def evaluate_arm(
             phase_cos = cosine(phase0, phase1, -1).mean(dim=-1)
 
             # Use the most recent module-hook weights from the branch call.
-            pt_weights = hook_calls["phase_to_trend"][-1] if hook_calls["phase_to_trend"] else None
-            tp_weights = hook_calls["trend_to_phase"][-1] if hook_calls["trend_to_phase"] else None
-            joint_weights = hook_calls["joint"][-1] if hook_calls["joint"] else None
+            pt_record = hook_calls["phase_to_trend"][-1] if hook_calls["phase_to_trend"] else None
+            tp_record = hook_calls["trend_to_phase"][-1] if hook_calls["trend_to_phase"] else None
+            joint_record = hook_calls["joint"][-1] if hook_calls["joint"] else None
+            pt_weights = pt_record["weights"] if pt_record is not None else None
+            tp_weights = tp_record["weights"] if tp_record is not None else None
+            joint_weights = joint_record["weights"] if joint_record is not None else None
+            if pt_record is not None:
+                trend_message = branch.trend_out(pt_record["attended"])
+                trend_message = trend_message.reshape(x.shape[0], x.shape[2], -1)
+                trend_message_n = tensor_norm(trend_message, -1)
+                trend_message_cos = cosine(trend0, trend_message, -1)
+            else:
+                trend_message_n = trend_message_cos = torch.zeros_like(trend0_n)
+            if tp_record is not None:
+                phase_message = branch.phase_out(tp_record["attended"])
+                phase_message = phase_message.reshape(
+                    x.shape[0], x.shape[2], phase0.shape[-2], phase0.shape[-1]
+                )
+                phase_message_n = tensor_norm(phase_message, (-1, -2))
+                phase_message_cos = cosine(phase0, phase_message, -1).mean(dim=-1)
+            elif joint_record is not None:
+                joint_attended = joint_record["attended"]
+                trend_message = branch.joint_trend_out(joint_attended[:, :1])
+                trend_message = trend_message.reshape(x.shape[0], x.shape[2], -1)
+                phase_message = branch.joint_phase_out(joint_attended[:, 1:])
+                phase_message = phase_message.reshape(
+                    x.shape[0], x.shape[2], phase0.shape[-2], phase0.shape[-1]
+                )
+                trend_message_n = tensor_norm(trend_message, -1)
+                trend_message_cos = cosine(trend0, trend_message, -1)
+                phase_message_n = tensor_norm(phase_message, (-1, -2))
+                phase_message_cos = cosine(phase0, phase_message, -1).mean(dim=-1)
+            else:
+                phase_message_n = phase_message_cos = torch.zeros_like(phase0_n)
+            if joint_record is not None and pt_record is None:
+                # The joint branch was handled above; these assignments keep
+                # the attention summaries below independent of message norms.
+                pass
             if pt_weights is not None:
                 pt_ent = entropy(pt_weights).mean(dim=-1)
                 pt_max = pt_weights.max(dim=-1).values.mean(dim=-1)
@@ -249,9 +290,13 @@ def evaluate_arm(
                         "trend0_norm": float(trend0_n[bi, ci].item()),
                         "trend1_norm": float(trend1_n[bi, ci].item()),
                         "trend_delta_norm": float(trend_delta_n[bi, ci].item()),
+                        "trend_message_norm": float(trend_message_n[bi, ci].item()),
+                        "trend_message_cosine": float(trend_message_cos[bi, ci].item()),
                         "phase0_norm": float(phase0_n[bi, ci].item()),
                         "phase1_norm": float(phase1_n[bi, ci].item()),
                         "phase_delta_norm": float(phase_delta_n[bi, ci].item()),
+                        "phase_message_norm": float(phase_message_n[bi, ci].item()),
+                        "phase_message_cosine": float(phase_message_cos[bi, ci].item()),
                         "phase_cosine": float(phase_cos[bi, ci].item()),
                         "pt_entropy": float(pt_ent.reshape(x.shape[0], x.shape[2])[bi, ci].item()),
                         "pt_max": float(pt_max.reshape(x.shape[0], x.shape[2])[bi, ci].item()),

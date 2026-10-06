@@ -20,7 +20,9 @@ MODES = [
 ]
 ACTIVATION_COLUMNS = [
     "trend0_norm", "trend1_norm", "trend_delta_norm",
+    "trend_message_norm", "trend_message_cosine",
     "phase0_norm", "phase1_norm", "phase_delta_norm", "phase_cosine",
+    "phase_message_norm", "phase_message_cosine",
     "pt_entropy", "pt_max", "tp_entropy", "tp_max",
     "joint_trend_to_phase_mass", "joint_phase_to_trend_mass",
     "joint_phase_to_phase_mass", "joint_trend_query_entropy",
