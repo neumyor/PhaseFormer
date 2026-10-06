@@ -129,7 +129,13 @@ def entropy(weights: torch.Tensor, dim: int = -1) -> torch.Tensor:
     return -(p * p.log()).sum(dim=dim)
 
 
-def evaluate_arm(item: dict, loader, device: torch.device, mode: str):
+def evaluate_arm(
+    item: dict,
+    loader,
+    device: torch.device,
+    mode: str,
+    max_batches: int = 0,
+):
     model, _ = make_model(item, device)
     branch = model.lowrank_interaction_branch
     hook_calls = {"phase_to_trend": [], "trend_to_phase": [], "joint": []}
@@ -154,6 +160,8 @@ def evaluate_arm(item: dict, loader, device: torch.device, mode: str):
     batch_size = int(item["config"]["batch_size"])
     with torch.inference_mode():
         for batch_index, batch in enumerate(loader):
+            if max_batches and batch_index >= max_batches:
+                break
             batch = [x.to(device) if torch.is_tensor(x) else x for x in batch]
             x, y, x_mark, y_mark = batch
             dec = model._build_decoder_input(y.float())
@@ -270,6 +278,8 @@ def main():
     parser.add_argument("--settings", required=True,
                         help="comma-separated dataset:horizon:seed entries")
     parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--max-batches", type=int, default=0,
+                        help="diagnostic limit; zero scans the complete validation split")
     args = parser.parse_args()
     source = args.source_dir.resolve()
     grouped = load_rows(source)
@@ -288,7 +298,10 @@ def main():
         # i0; phase-only errors remain available in the completed metrics.
         for arm in ARMS[1:]:
             print(f"[{args.gpu}] {setting} {arm}", flush=True)
-            rows = evaluate_arm(grouped[setting][arm], loader, device, arm)
+            rows = evaluate_arm(
+                grouped[setting][arm], loader, device, arm,
+                max_batches=args.max_batches,
+            )
             for row in rows:
                 row.update({"dataset": setting[0], "horizon": setting[1], "seed": setting[2]})
             all_rows.extend(rows)
