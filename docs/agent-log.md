@@ -5653,3 +5653,21 @@ AdaptivePool → Linear(720,r) → Linear(r,H) → +x_last`，`r=H/8`）。本�
 只回答交互图在固定低秩基线上的 validation 屏幕；不替代既有 Golden/test 记录，
 也不构成 test 泛化声明。最终 30-setting 配对汇总已完成，后续若进入 test 阶段应另行
 预注册并保留本轮 validation 选择轨迹。
+
+## 2026-10-07 — 低秩 trend/phase 交互激活审计
+
+**目标与范围**：在已校正的旧版 PhaseFormer-L 低秩路径上，读取 validation split 的逐样本×通道激活；不读取 test，不使用上一轮 Conv1d trend-token 矩阵。实验目录为远程 `research_runs/phaseformer_l_interaction_activation_audit_20261007_v2/`，汇总目录为 `research_runs/phaseformer_l_interaction_activation_audit_20261007_v2_summary/`。扫描 ETTh1-H96（两个随机种子）、ETTh1-H720、Weather-H96、Weather-H720（两个随机种子）、ETTm1-H720 和 ETTm2-H720，共 8 个 setting、i0/i1/i2/i3/i6/i7 六个 arm。
+
+**结构事实**：i0 的 trend/phase 状态和 message 均不变；i1 只改变 trend；i2 只改变 phase，但 T→P 只有一个 key/value，权重恒为 1，因此是 broadcast conditioning，不是 phase-slot selection；i3 并行改变两侧；i6 进行两轮 P→T→P；i7 同时更新两类 token。
+
+**可测量观察**：
+
+1. i1 的 P→T 在 Weather 上更集中（H720 平均熵约 1.60、最大权重约 0.54），在 ETTh1-H96 上近似均匀（熵约 3.0、最大权重约 0.07）。Weather 的 i1 相对 i0 在 3/3 个已扫描 setting 上改善，ETTh1-H96 的两个种子和 H720 则不稳定或退化；phase-slot 选择性是数据/水平相关的观测，不是普遍规律。
+2. i2 的 phase message 在 ETTm2-H720 平均约 26.9、phase delta 约 11.6、余弦约 0.60；ETTh1-H720 约为 8.0、7.35、0.96。即使没有 slot 选择，单个 trend token 也能强烈重写 phase 表示，但改写幅度和收益没有单调关系。
+3. i3 的双向更新在 Weather-H96/H720 和 ETTh1-H720 平均改善，但 ETTm2-H720 的 phase message 约 51.3、phase delta 约 12.4、余弦约 0.54，同时整体退化；大 message 只说明表示被强烈改写，不能当作有用交互的证据。
+4. i6 的交互累积明显。Weather-H720 两个种子的 phase delta 约 14.5--15.8、余弦约 0.43--0.44；其最后一轮 P→T 却接近均匀（熵约 3.08--3.16、最大权重约 0.05--0.09），更像重新混合而不是继续选择固定 phase slot。该 setting 改善，而 ETTm2-H720 的类似大改写（delta 约 12.6、余弦约 0.54）退化。
+5. i7 的 attention 明显不对称：phase query 读取 trend 的平均质量在 Weather-H720 seed2022 约 0.585、ETTm2-H720 约 0.398，而 trend query 读取 phase 的质量仅约 0.038 和 0.016。i7 在 ETTh1-H96/H720 整体退化，在 Weather 三个 setting 均改善；这与“联合 attention 自动对称融合”的直觉不符。
+
+**代表样本**：ETTh1-H96 seed2021 的 i3 样本 `1555,c3` 将 P→T 集中到一个 phase slot（最大权重 0.966、熵约 0.22），phase 余弦降到 0.092，MSE 相对 i0 下降 2.265；同一 setting 的 `701,c4` 的 P→T 近似分散（最大权重 0.138、熵约 2.79），trend/phase 仍分别改变 23.34/8.27，MSE 却上升 1.840。i2 在 ETTh1-H720 的 `1455,c1` 中 phase delta 7.28、余弦 0.966，MSE 上升 0.788，说明小方向偏移也可能伤害预测。i7 在 ETTh1-H96 的 `678,c4` 中 trend delta 35.16 而 MSE 上升 4.441；Weather-H96 的 `4536,c15` 中 trend delta 27.67、phase delta 9.39，MSE 下降 9.379。Weather-H720 的 i7 退化样本 `1702,c14` 出现 trend delta 443.46、phase message 832.08、phase→trend mass 0.993，MSE 上升 3.745，是需要可靠性限制的极端案例。
+
+**解释边界与启发**：这些是 validation 上的相关观察，跨独立训练 arm 的绝对范数不能直接比较为容量或因果强度；样本级大幅改写也不能单独证明退化由该改写导致。当前证据支持后续优先测试：带 null/稀疏选项的 P→T、基于 phase reliability 的交互门控、对 message 做幅度归一化或 trust-region 限制，以及对 i6 第二轮设置独立衰减；i2 应作为广播 conditioning 对照，而不应宣称为 phase-token selection。
