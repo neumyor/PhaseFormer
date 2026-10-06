@@ -206,13 +206,15 @@ def evaluate_arm(
             tp_weights = hook_calls["trend_to_phase"][-1] if hook_calls["trend_to_phase"] else None
             joint_weights = hook_calls["joint"][-1] if hook_calls["joint"] else None
             if pt_weights is not None:
-                pt_ent = entropy(pt_weights)
-                pt_max = pt_weights.max(dim=-1).values
+                pt_ent = entropy(pt_weights).mean(dim=-1)
+                pt_max = pt_weights.max(dim=-1).values.mean(dim=-1)
             else:
                 pt_ent = pt_max = torch.zeros_like(trend0_n)
             if tp_weights is not None:
-                tp_ent = entropy(tp_weights)
-                tp_max = tp_weights.max(dim=-1).values
+                # T -> P has one key/value token.  Average the per-slot
+                # diagnostics before restoring the (B, C) layout.
+                tp_ent = entropy(tp_weights).mean(dim=-1)
+                tp_max = tp_weights.max(dim=-1).values.mean(dim=-1)
             else:
                 tp_ent = tp_max = torch.zeros_like(trend0_n)
             if joint_weights is not None:
