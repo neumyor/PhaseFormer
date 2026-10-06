@@ -5578,3 +5578,23 @@ per-channel gate 和单个 trend token。i0 无交互；i1 只执行 `P -> T`；
 self-attention。单 token 的 i2 注意力权重恒为 1，因此它是 broadcast conditioning，
 不是 phase-slot selection。所有 arm 虽然实例化相同的 attention 子模块，但未使用模块
 在对应 arm 中没有梯度，参数总量不能代表有效计算量。
+
+## 2026-10-06 — 修正交互矩阵为真实 PhaseFormer-L 低秩路径
+
+**问题确认**：上一轮 `trend_token_interaction_20261006` 的六个 arm 使用了新的
+Conv1d history encoder、learned pooling 和 32 维 direct readout，不能解释为旧版
+PhaseFormer-L；其结果和结构结论均作废，不再用于比较。
+
+**修正实现**：新增 `LowRankPhaseInteractionBranch`。i0 直接复用
+`PooledLowRankWeakPeriodResidualHead` 的 `encode_latent()` / `decode_latent()`：
+`x-x_last -> adaptive pooling -> Linear(720,r) -> Linear(r,H) -> +x_last`，并使用
+旧版静态 per-channel gate。i1/2/3/6/7 只在该 `r=H/8` latent 与 phase latent 之间
+加入相应 cross/self-attention；i2/3/6/7 的更新 phase latent 仍在最终 phase predictor
+之前写回。i0 不构造任何 attention 子模块，以保持旧 L 的参数和计算路径。
+
+**验证状态**：本机无 PyTorch，已完成受影响 Python 文件的 `py_compile` 和
+`git diff --check`；远程 CUDA forward/backward smoke 尚未重新启动。修正后的实验应使用
+`phaseformer_l_i0_late_fusion`、`phaseformer_l_i1_phase_to_trend`、
+`phaseformer_l_i2_trend_to_phase`、`phaseformer_l_i3_parallel_bidir`、
+`phaseformer_l_i6_alternating`、`phaseformer_l_i7_joint`，而不是旧的
+`trend_token_i*` Conv1d arms。

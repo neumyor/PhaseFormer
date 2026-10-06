@@ -75,6 +75,7 @@ from src.models.residual_topology import (
 )
 from src.models.asymmetric_trend_components import extract_trend_component
 from src.models.trend_token import TrendTokenBranch
+from src.models.lowrank_interaction import LowRankPhaseInteractionBranch
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -530,11 +531,23 @@ class PhaseFormer(DefaultPLModule):
         self.use_weak_period_residual = getattr(configs, "use_weak_period_residual", False)
         if not self.use_residual_head:
             self.use_weak_period_residual = False
+        self.use_lowrank_interaction = bool(
+            getattr(configs, "use_lowrank_interaction", False)
+        )
+        if not self.use_residual_head:
+            self.use_lowrank_interaction = False
         self.use_trend_token = bool(getattr(configs, "use_trend_token", False))
-        if self.use_trend_token and self.use_weak_period_residual:
+        if sum(
+            int(flag)
+            for flag in (
+                self.use_trend_token,
+                self.use_weak_period_residual,
+                self.use_lowrank_interaction,
+            )
+        ) > 1:
             raise ValueError(
-                "trend token and dense weak residual are mutually exclusive; "
-                "use an explicit ablation to compare them"
+                "trend token, weak residual, and low-rank interaction are "
+                "mutually exclusive"
             )
         self.trend_token_branch = None
         if self.use_trend_token:
@@ -568,6 +581,38 @@ class PhaseFormer(DefaultPLModule):
                     configs, "trend_history_multiscale", False
                 ),
                 history_robust=getattr(configs, "trend_history_robust", False),
+            )
+        self.lowrank_interaction_branch = None
+        self.lowrank_interaction_gate = None
+        if self.use_lowrank_interaction:
+            self.lowrank_interaction_branch = LowRankPhaseInteractionBranch(
+                self.seq_len,
+                self.pred_len,
+                self.latent_dim,
+                pool_factor=getattr(
+                    configs, "weak_period_residual_pool_factor", 1
+                ),
+                rank=getattr(configs, "weak_period_residual_rank", 16),
+                smooth_ratio=getattr(
+                    configs, "weak_period_residual_smooth_ratio", 0.0
+                ),
+                smooth_window=getattr(
+                    configs, "weak_period_residual_smooth_window", 24
+                ),
+                interaction_mode=getattr(
+                    configs, "trend_interaction_mode", "none"
+                ),
+                num_heads=getattr(configs, "trend_attention_heads", 1),
+            )
+            gate_init = min(
+                max(float(getattr(configs, "weak_period_residual_gate_init", 0.2)), 1e-4),
+                1.0 - 1e-4,
+            )
+            self.lowrank_interaction_gate = nn.Parameter(
+                torch.full(
+                    (1, 1, self.enc_in),
+                    float(torch.logit(torch.tensor(gate_init))),
+                )
             )
         # In the asymmetric-input study this flag changes only the input to the
         # NLinear-style residual path.  The phase path always receives X.
@@ -1897,6 +1942,8 @@ class PhaseFormer(DefaultPLModule):
         self.last_trend_gate = None
         self.last_trend_pool_weights = None
         self.last_trend_phase_attention = None
+        self.last_lowrank_forecast = None
+        self.last_lowrank_phase_attention = None
 
         # 1) RevIN normalization
         if self.use_revin:
@@ -2071,6 +2118,9 @@ class PhaseFormer(DefaultPLModule):
         trend_forecast_normalized = None
         trend_gate = None
         trend_diag = None
+        lowrank_forecast_normalized = None
+        lowrank_diag = None
+        lowrank_gate = None
         if self.use_trend_token:
             trend_forecast_normalized, trend_gate, trend_diag = self.trend_token_branch(
                 x_in, Z
@@ -2078,6 +2128,14 @@ class PhaseFormer(DefaultPLModule):
             updated_phase_latent = trend_diag.get("updated_phase_latent")
             if updated_phase_latent is not None:
                 Z = updated_phase_latent
+        if self.use_lowrank_interaction:
+            lowrank_forecast_normalized, lowrank_diag = self.lowrank_interaction_branch(
+                residual_x_in, Z
+            )
+            updated_phase_latent = lowrank_diag.get("updated_phase_latent")
+            if updated_phase_latent is not None:
+                Z = updated_phase_latent
+            lowrank_gate = torch.sigmoid(self.lowrank_interaction_gate)
 
         # final predictor to produce P_out. TrajectoryDecoder (pure-phase plan,
         # stage 4) replaces the linear/MLP predictor with a per-slot polynomial
@@ -2161,6 +2219,11 @@ class PhaseFormer(DefaultPLModule):
             self.last_trend_gate = trend_gate.detach()
             self.last_trend_pool_weights = trend_diag["pool_weights"]
             self.last_trend_phase_attention = trend_diag["phase_attention"]
+        if self.use_lowrank_interaction:
+            y_hat = (1.0 - lowrank_gate) * y_hat + lowrank_gate * lowrank_forecast_normalized
+            self.last_weak_residual_alpha = lowrank_gate.detach()
+            self.last_lowrank_forecast = lowrank_forecast_normalized.detach()
+            self.last_lowrank_phase_attention = lowrank_diag["phase_attention"]
         if self.use_weak_period_residual:
             if self.use_dual_reliability_fusion:
                 linear_hat, periodic_hat = self.weak_period_residual.forward_components(
@@ -2301,6 +2364,13 @@ class PhaseFormer(DefaultPLModule):
                 self.last_trend_forecast = self.revin.denormalize(
                     trend_forecast_normalized, stats
                 ).detach()
+            if self.use_lowrank_interaction and lowrank_forecast_normalized is not None:
+                self.last_phase_forecast = self.revin.denormalize(
+                    phase_forecast_normalized, stats
+                ).detach()
+                self.last_lowrank_forecast = self.revin.denormalize(
+                    lowrank_forecast_normalized, stats
+                ).detach()
             if self.use_triaxis_fusion:
                 self.triaxis_expert_outputs = tuple(
                     self.revin.denormalize(expert, stats)
@@ -2355,6 +2425,9 @@ class PhaseFormer(DefaultPLModule):
         if self.use_trend_token and trend_forecast_normalized is not None and not self.use_revin:
             self.last_phase_forecast = phase_forecast_normalized.detach()
             self.last_trend_forecast = trend_forecast_normalized.detach()
+        if self.use_lowrank_interaction and lowrank_forecast_normalized is not None and not self.use_revin:
+            self.last_phase_forecast = phase_forecast_normalized.detach()
+            self.last_lowrank_forecast = lowrank_forecast_normalized.detach()
         if self.use_rcrf_fusion and residual_forecast_normalized is not None:
             self.last_rcrf_reliability = self.rcrf_fusion.last_r
             self.last_rcrf_alpha = self.rcrf_fusion.last_alpha

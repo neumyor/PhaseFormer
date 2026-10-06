@@ -146,6 +146,62 @@ MECHANISMS = {
         "trend_interaction_mode": "joint",
         "trend_gate_init": 0.2,
     },
+    # Corrected PhaseFormer-L interaction matrix.  These arms reuse the
+    # historical pooled_lowrank head; rank is resolved as H / 8 in build_spec.
+    "phaseformer_l_i0_late_fusion": {
+        "use_lowrank_interaction": True,
+        "weak_period_residual_head_type": "pooled_lowrank",
+        "weak_period_residual_pool_factor": 1,
+        "weak_period_residual_rank_div": 8,
+        "weak_period_residual_smooth_ratio": 0.0,
+        "weak_period_residual_gate_init": 0.2,
+        "trend_interaction_mode": "none",
+    },
+    "phaseformer_l_i1_phase_to_trend": {
+        "use_lowrank_interaction": True,
+        "weak_period_residual_head_type": "pooled_lowrank",
+        "weak_period_residual_pool_factor": 1,
+        "weak_period_residual_rank_div": 8,
+        "weak_period_residual_smooth_ratio": 0.0,
+        "weak_period_residual_gate_init": 0.2,
+        "trend_interaction_mode": "phase_to_trend",
+    },
+    "phaseformer_l_i2_trend_to_phase": {
+        "use_lowrank_interaction": True,
+        "weak_period_residual_head_type": "pooled_lowrank",
+        "weak_period_residual_pool_factor": 1,
+        "weak_period_residual_rank_div": 8,
+        "weak_period_residual_smooth_ratio": 0.0,
+        "weak_period_residual_gate_init": 0.2,
+        "trend_interaction_mode": "trend_to_phase",
+    },
+    "phaseformer_l_i3_parallel_bidir": {
+        "use_lowrank_interaction": True,
+        "weak_period_residual_head_type": "pooled_lowrank",
+        "weak_period_residual_pool_factor": 1,
+        "weak_period_residual_rank_div": 8,
+        "weak_period_residual_smooth_ratio": 0.0,
+        "weak_period_residual_gate_init": 0.2,
+        "trend_interaction_mode": "parallel_bidirectional",
+    },
+    "phaseformer_l_i6_alternating": {
+        "use_lowrank_interaction": True,
+        "weak_period_residual_head_type": "pooled_lowrank",
+        "weak_period_residual_pool_factor": 1,
+        "weak_period_residual_rank_div": 8,
+        "weak_period_residual_smooth_ratio": 0.0,
+        "weak_period_residual_gate_init": 0.2,
+        "trend_interaction_mode": "alternating",
+    },
+    "phaseformer_l_i7_joint": {
+        "use_lowrank_interaction": True,
+        "weak_period_residual_head_type": "pooled_lowrank",
+        "weak_period_residual_pool_factor": 1,
+        "weak_period_residual_rank_div": 8,
+        "weak_period_residual_smooth_ratio": 0.0,
+        "weak_period_residual_gate_init": 0.2,
+        "trend_interaction_mode": "joint",
+    },
     # Each hypothesis below is a one-field change from trend_token_direct.
     "trend_token_dynamic_gate": {
         "use_residual_head": False,
@@ -531,6 +587,9 @@ def build_spec(args):
     if args.capacity == "compact":
         apply_compact(base)
     base.update(overrides)
+    if base.get("use_lowrank_interaction") and "weak_period_residual_rank_div" in base:
+        divisor = int(base.pop("weak_period_residual_rank_div"))
+        base["weak_period_residual_rank"] = max(1, args.horizon // divisor)
     # ``build_hyperparams`` is mechanism-specific and hard-sets the residual head
     # type for the ``weak_residual`` family (``shared``).  Apply the explicit
     # head-type override once more so a run can select another registered head

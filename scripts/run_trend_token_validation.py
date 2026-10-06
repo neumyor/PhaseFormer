@@ -177,6 +177,15 @@ def build_jobs(args):
             "trend_use_phase_attention": True,
             "trend_history_robust": True,
         }),
+        # Legacy PhaseFormer-L matrix.  The mechanism definitions in
+        # search_phaseformer.py supply the pooled_lowrank head and H/8 rank;
+        # these names are intentionally separate from the old Conv1d study.
+        ("phaseformer_l_i0_late_fusion", {}),
+        ("phaseformer_l_i1_phase_to_trend", {}),
+        ("phaseformer_l_i2_trend_to_phase", {}),
+        ("phaseformer_l_i3_parallel_bidir", {}),
+        ("phaseformer_l_i6_alternating", {}),
+        ("phaseformer_l_i7_joint", {}),
     ]
     if args.arms:
         requested = set(args.arms)

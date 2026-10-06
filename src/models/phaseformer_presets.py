@@ -1620,6 +1620,9 @@ class PhaseFormerPresetConfig:
         self.huber_delta = exp_args.training_args.huber_delta
 
         self.use_weak_period_residual = hyperparams.get("use_weak_period_residual", False)
+        self.use_lowrank_interaction = hyperparams.get(
+            "use_lowrank_interaction", False
+        )
         # Scheme-1 learned trend token branch.  The branch is history-only and
         # phase-latent read-only.  Profile readout is the theorem path; direct
         # horizon readout is registered separately as an attribution control.

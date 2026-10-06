@@ -1,6 +1,8 @@
 import torch
 
 from src.models.trend_token import TrendTokenBranch
+from src.models.lowrank_interaction import LowRankPhaseInteractionBranch
+from src.models.phase_adapters import PooledLowRankWeakPeriodResidualHead
 
 
 def test_trend_token_shapes_and_profile_rank():
@@ -183,3 +185,61 @@ def test_reverse_attention_is_a_single_token_broadcast_control():
     assert weights.shape == (1, 1, 3)
     assert torch.allclose(weights, torch.ones_like(weights), atol=1e-6)
     assert diag["updated_phase_latent"].shape == z.shape
+
+
+def test_lowrank_i0_reuses_legacy_head_exactly():
+    torch.manual_seed(6)
+    legacy = PooledLowRankWeakPeriodResidualHead(
+        seq_len=16, pred_len=7, pool_factor=1, rank=2
+    )
+    branch = LowRankPhaseInteractionBranch(
+        seq_len=16, pred_len=7, phase_dim=8, pool_factor=1, rank=2
+    )
+    branch.lowrank_head.load_state_dict(legacy.state_dict())
+    x = torch.randn(2, 16, 3)
+    z = torch.randn(2, 3, 4, 8)
+    expected = legacy(x)
+    actual, diag = branch(x, z)
+    assert torch.equal(actual, expected)
+    assert diag["updated_phase_latent"] is z
+    assert all(
+        not name.startswith(("trend_", "phase_", "joint_"))
+        for name, _ in branch.named_parameters()
+    )
+
+
+def test_lowrank_interaction_modes_keep_rank_decoder_contract():
+    torch.manual_seed(7)
+    x = torch.randn(2, 16, 2)
+    z = torch.randn(2, 2, 4, 8)
+    for mode in LowRankPhaseInteractionBranch.MODES:
+        branch = LowRankPhaseInteractionBranch(
+            seq_len=16,
+            pred_len=7,
+            phase_dim=8,
+            pool_factor=1,
+            rank=2,
+            interaction_mode=mode,
+        )
+        forecast, diag = branch(x, z)
+        assert forecast.shape == (2, 7, 2)
+        assert diag["updated_phase_latent"].shape == z.shape
+        loss = forecast.square().mean() + diag["updated_phase_latent"].square().mean()
+        loss.backward()
+
+
+def test_lowrank_reverse_attention_is_broadcast_with_single_rank_token():
+    branch = LowRankPhaseInteractionBranch(
+        seq_len=12,
+        pred_len=5,
+        phase_dim=4,
+        pool_factor=1,
+        rank=1,
+        interaction_mode="trend_to_phase",
+    )
+    x = torch.randn(1, 12, 1)
+    z = torch.randn(1, 1, 3, 4)
+    _, diag = branch(x, z)
+    assert torch.allclose(
+        diag["phase_attention"], torch.ones_like(diag["phase_attention"]), atol=1e-6
+    )

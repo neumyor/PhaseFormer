@@ -162,7 +162,8 @@ class PooledLowRankWeakPeriodResidualHead(nn.Module):
         nn.init.zeros_(self.decoder.weight)
         nn.init.zeros_(self.decoder.bias)
 
-    def forward(self, x):  # x: (B, L, C), normalized scale
+    def encode_latent(self, x):
+        """Return the legacy pooled centered latent and its last-value anchor."""
         last = x[:, -1:, :]
         centered = (x - last).permute(0, 2, 1).contiguous()
         if self.smooth_ratio:
@@ -178,8 +179,17 @@ class PooledLowRankWeakPeriodResidualHead(nn.Module):
                 + self.smooth_ratio * smoothed
             )
         pooled = F.adaptive_avg_pool1d(centered, self.pooled_len)
-        delta = self.decoder(self.encoder(pooled)).permute(0, 2, 1).contiguous()
+        latent = self.encoder(pooled)
+        return latent, last
+
+    def decode_latent(self, latent, last):
+        """Decode a rank latent with the unchanged legacy x_last anchor."""
+        delta = self.decoder(latent).permute(0, 2, 1).contiguous()
         return delta + last.expand(-1, self.pred_len, -1)
+
+    def forward(self, x):  # x: (B, L, C), normalized scale
+        latent, last = self.encode_latent(x)
+        return self.decode_latent(latent, last)
 
 
 class PeriodPositionEncodedResidualHead(nn.Module):
