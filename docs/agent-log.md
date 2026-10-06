@@ -5620,29 +5620,29 @@ ETTh1-H96 随机输入的完整输出 `max_abs=0.0`、逐元素一致。由此�
 
 ## 2026-10-06 — 修正低秩交互矩阵当前进度与阶段性结论
 
-**进度**：远程 `phaseformer_l_interaction_20261006` 共 210 jobs，当前
-209/210 completed、1 running、0 failed；最后一个为 `Weather-H720-seed2022`
-的 `phaseformer_l_i6_alternating`。已有 29 个 setting 完成 phase-only 与六个
-交互 arm 的完整配对。8 张 A800 资源仍由该矩阵使用，test split 未读取。
+**进度**：远程 `phaseformer_l_interaction_20261006` 共 210 jobs，已
+210/210 completed、0 running、0 failed。30 个 setting 均完成 phase-only 与六个
+交互 arm 的完整配对；远程 supervisor 已退出、8 张 GPU 已释放，test split 未读取。
 
-**29 个完整配对的 validation-only 汇总**（candidate minus phase-only，负数更好）：
+**30 个完整配对的 validation-only 汇总**（candidate minus phase-only，负数更好）：
 
 | arm | ΔMAE | ΔMSE | MSE 胜出 |
 |---|---:|---:|---:|
-| i0 legacy late fusion | -0.019550 | -0.032289 | 27/29 |
-| i1 phase → trend | -0.017005 | -0.030418 | 26/29 |
-| i2 trend → phase | -0.019289 | -0.031178 | 27/29 |
-| i3 parallel bidirectional | -0.017885 | -0.032607 | 26/29 |
-| i6 alternating | -0.016401 | -0.029918 | 26/29 |
-| i7 joint | -0.016297 | -0.027182 | 26/29 |
+| i0 legacy late fusion | -0.019305 | -0.031429 | 28/30 |
+| i1 phase → trend | -0.016975 | -0.029768 | 27/30 |
+| i2 trend → phase | -0.018976 | -0.030283 | 28/30 |
+| i3 parallel bidirectional | -0.017828 | -0.031867 | 27/30 |
+| i6 alternating | -0.016361 | -0.029313 | 27/30 |
+| i7 joint | -0.016262 | -0.026534 | 27/30 |
 
-相对真正的低秩基线 i0，i1/i2/i3/i6/i7 的平均 ΔMSE 分别为
-`+0.001872/+0.001111/-0.000318/+0.002371/+0.005107`，胜出数为
-`14/29、16/29、15/29、13/29、11/29`。因此截至当前，i3 在 MSE 上最接近且略低于
-i0，但差异很小；i2 在 MAE 上最接近 i0。整体没有稳定证据表明增加 token 交互能超越
-旧低秩 late-fusion L。
+相对真正的低秩基线 i0，i1/i2/i3/i6/i7 的平均 ΔMAE 分别为
+`+0.002330/+0.000329/+0.001476/+0.002943/+0.003043`，平均 ΔMSE 分别为
+`+0.001661/+0.001146/-0.000438/+0.002116/+0.004895`；MSE 胜出数为
+`15/30、16/30、16/30、14/30、12/30`。因此 i3 在 MSE 上仅有很小的平均优势，
+i2 在 MAE 上最接近 i0；整体没有稳定证据表明增加 token 交互能超越旧低秩
+late-fusion L。
 
-**方向性观察**：Weather 的五个已完成 setting 上所有交互版本均优于 i0；ETTh1
+**方向性观察**：Weather 的六个 setting 上所有交互版本均优于 i0；ETTh1
 上所有交互版本均退化；ETTm1 上 i3/i7 有小幅改善；ETTm2 上 i2 轻微改善而其余
 版本退化。长 horizon 720 上 i1/i2/i3 相对 i0 的 MSE 差为负，短 horizon 上多数
 交互版本为正。这些是筛选信号，不足以形成跨数据集的统一提升结论。
@@ -5651,4 +5651,5 @@ i0，但差异很小；i2 在 MAE 上最接近 i0。整体没有稳定证据表�
 `PooledLowRankWeakPeriodResidualHead` 的 PhaseFormer-L（`x-x_last →
 AdaptivePool → Linear(720,r) → Linear(r,H) → +x_last`，`r=H/8`）。本轮结果
 只回答交互图在固定低秩基线上的 validation 屏幕；不替代既有 Golden/test 记录，
-也不构成 test 泛化声明。待最后一个 job 完成后再生成 30-setting 的最终配对汇总。
+也不构成 test 泛化声明。最终 30-setting 配对汇总已完成，后续若进入 test 阶段应另行
+预注册并保留本轮 validation 选择轨迹。
