@@ -5610,3 +5610,10 @@ H96/H192/H720 × seed 2021/2022 × phase-only 与六个 `phaseformer_l_i*` arm�
 210 jobs，8 epochs，validation-only，GPU 0–7。supervisor PID `97821`，日志
 `~/niuyiming/phaseformer_l_interaction_20261006.supervisor.log`；启动后 8 张 GPU
 均有任务。旧的 Conv1d 矩阵不再续跑。
+
+**完整 i0 等价性复核**：在远程 CUDA 环境分别构造旧版
+`use_weak_period_residual=True` 的 PhaseFormer-L 与新
+`use_lowrank_interaction=True, interaction_mode=none` 模型，将旧
+`weak_period_residual.*` 和 `weak_period_residual_gate` 权重映射到新路径后，
+ETTh1-H96 随机输入的完整输出 `max_abs=0.0`、逐元素一致。由此确认 i0 是代码级
+旧低秩 L，而不是仅 residual head 局部等价。
