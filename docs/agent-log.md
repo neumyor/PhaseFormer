@@ -5598,3 +5598,15 @@ PhaseFormer-L；其结果和结构结论均作废，不再用于比较。
 `phaseformer_l_i2_trend_to_phase`、`phaseformer_l_i3_parallel_bidir`、
 `phaseformer_l_i6_alternating`、`phaseformer_l_i7_joint`，而不是旧的
 `trend_token_i*` Conv1d arms。
+
+**修正后 smoke**：远程独立 worktree 完成 7 个 1-epoch job（phase-only + 六个
+`phaseformer_l_i*`），全部成功；i0 与旧 pooled-lowrank head 的输出逐元素一致，
+配置审计确认 ETTh1-H96 使用 `pooled_lowrank`、`pool_factor=1`、`rank=12=H/8`。
+
+**修正后正式任务**：远程独立 worktree
+`/home/yyk/yyk03/niuyiming/PhaseFormer_lowrank_fix`，experiment id
+`phaseformer_l_interaction_20261006`，commit `71f1a29`，矩阵为 ETT/Weather ×
+H96/H192/H720 × seed 2021/2022 × phase-only 与六个 `phaseformer_l_i*` arm，共
+210 jobs，8 epochs，validation-only，GPU 0–7。supervisor PID `97821`，日志
+`~/niuyiming/phaseformer_l_interaction_20261006.supervisor.log`；启动后 8 张 GPU
+均有任务。旧的 Conv1d 矩阵不再续跑。
