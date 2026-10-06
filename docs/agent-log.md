@@ -5556,3 +5556,25 @@ ETTm1-H96，尚未覆盖 ETTm2 或 Weather。相对 `phase_only` 的配对平均
 这 13 个 setting 上仍没有证据证明它们整体优于 phase-only。ETTh1 已完成的
 H96/H192/H720 都偏向退化，ETTh2 多数 horizon 偏向改善；Weather 和 ETTm2
 方向待完整矩阵确认。以上均为 validation-only 中期结果，不读取 test。
+
+## 2026-10-06 — 停止交互矩阵并完成结构审计
+
+**停止状态**：按用户要求终止远程 `trend_token_interaction_20261006`。停止前状态为
+105/210 completed、8 running、97 pending、0 failed；进程组已结束，远程无残留
+PhaseFormer 训练进程，8 张 GPU 已释放。已生成的 validation 结果保留在
+`research_runs/trend_token_interaction_20261006/`，不将未完成矩阵汇总为最终结论。
+
+**结构审计**：确认当前 i0 不是旧版 PhaseFormer-L。旧版 L 使用
+`x - x_last -> Linear(720,H) -> + x_last`，低秩版本使用池化后
+`Linear(720,r) -> Linear(r,H) -> + x_last`；当前 i0 使用 RevIN-normalized history、
+两层 causal Conv1d、learned softmax pooling 得到 32 维 nonlinear trend token，再经
+`LayerNorm + Linear(32,H)` 和 `x_last` anchor 生成 trend forecast。因此 `token_dim=32`
+不是旧版线性映射的矩阵 rank。
+
+六个交互 arm 共享 PhaseFormer 主干、history encoder、direct horizon readout、静态
+per-channel gate 和单个 trend token。i0 无交互；i1 只执行 `P -> T`；i2 执行
+`T -> P` 并把更新后的 phase latent 送入最终 predictor；i3 从原始状态并行执行双向
+更新；i6 顺序执行两轮 `P -> T -> P`；i7 对 `[T,P_1,...,P_M]` 做一次联合
+self-attention。单 token 的 i2 注意力权重恒为 1，因此它是 broadcast conditioning，
+不是 phase-slot selection。所有 arm 虽然实例化相同的 attention 子模块，但未使用模块
+在对应 arm 中没有梯度，参数总量不能代表有效计算量。
