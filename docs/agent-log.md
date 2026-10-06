@@ -5541,3 +5541,18 @@ pytest 仍受已有原生 segmentation fault 限制，本轮用上述 tensor 和
 `~/niuyiming/trend_token_interaction_20261006.supervisor.log`。manifest 已确认
 210 jobs；启动时 8 张 A800 各运行一个任务，首轮已有 2 个任务完成、0 个失败。
 任务矩阵和验证专用协议以专项计划为准；训练过程中不读取 test。
+
+## 2026-10-06 — 交互矩阵中期快照
+
+**进度**：远程状态为 100/210 completed、8 running、102 pending、0 failed；8 张
+A800 均有任务，监督进程仍存活。当前已生成 100 个 validation metrics 文件。
+
+**严格配对结果**：有 13 个 setting 完成全部 7 个 arms，覆盖 ETTh1、ETTh2 和
+ETTm1-H96，尚未覆盖 ETTm2 或 Weather。相对 `phase_only` 的配对平均验证 MSE
+差值（负数更好）为：i0 `+0.008762`、i1 `+0.006192`、i2 `+0.006453`、i3
+`+0.005520`、i6 `+0.000837`、i7 `+0.002339`。相对 i0，i1/i2/i3/i6/i7 的
+平均 MSE 差分别为 `-0.002570/-0.002310/-0.003242/-0.007926/-0.006423`，
+说明交互机制暂时看起来能明显缓解 late-fusion 的退化，i6 和 i7 最有希望；但在
+这 13 个 setting 上仍没有证据证明它们整体优于 phase-only。ETTh1 已完成的
+H96/H192/H720 都偏向退化，ETTh2 多数 horizon 偏向改善；Weather 和 ETTm2
+方向待完整矩阵确认。以上均为 validation-only 中期结果，不读取 test。
