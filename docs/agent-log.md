@@ -5671,3 +5671,51 @@ AdaptivePool → Linear(720,r) → Linear(r,H) → +x_last`，`r=H/8`）。本�
 **代表样本**：ETTh1-H96 seed2021 的 i3 样本 `1555,c3` 将 P→T 集中到一个 phase slot（最大权重 0.966、熵约 0.22），phase 余弦降到 0.092，MSE 相对 i0 下降 2.265；同一 setting 的 `701,c4` 的 P→T 近似分散（最大权重 0.138、熵约 2.79），trend/phase 仍分别改变 23.34/8.27，MSE 却上升 1.840。i2 在 ETTh1-H720 的 `1455,c1` 中 phase delta 7.28、余弦 0.966，MSE 上升 0.788，说明小方向偏移也可能伤害预测。i7 在 ETTh1-H96 的 `678,c4` 中 trend delta 35.16 而 MSE 上升 4.441；Weather-H96 的 `4536,c15` 中 trend delta 27.67、phase delta 9.39，MSE 下降 9.379。Weather-H720 的 i7 退化样本 `1702,c14` 出现 trend delta 443.46、phase message 832.08、phase→trend mass 0.993，MSE 上升 3.745，是需要可靠性限制的极端案例。
 
 **解释边界与启发**：这些是 validation 上的相关观察，跨独立训练 arm 的绝对范数不能直接比较为容量或因果强度；样本级大幅改写也不能单独证明退化由该改写导致。当前证据支持后续优先测试：带 null/稀疏选项的 P→T、基于 phase reliability 的交互门控、对 message 做幅度归一化或 trust-region 限制，以及对 i6 第二轮设置独立衰减；i2 应作为广播 conditioning 对照，而不应宣称为 phase-token selection。
+
+## 2026-10-07 — 激活解释更正与三个后续候选方案（仅讨论）
+
+**更正上一条审计中的解释**：
+
+- `analyze_lowrank_interaction_activations.py` 将 `jw[:,0,1:]` 沿 key 轴求均值，
+  因此 `joint_trend_to_phase_mass` 实际是每个 phase key 的平均权重，不能与
+  `jw[:,1:,0]` 的 query 平均直接当作两向总质量比较。本批次有 24 个 phase slots，
+  trend query 读取全部 phase 的总权重需乘以 24：Weather-H720 seed2022 为
+  `0.904133`（原字段 `0.037672`），ETTm2-H720 为 `0.387584`（原字段 `0.016149`）；
+  每个 phase query 读取 trend 的均值分别为 `0.584612` 和 `0.397847`。复核
+  `phase_to_trend + 24 * phase_to_phase = 1` 在八个 setting 均成立。
+  撤回“trend 几乎不读取 phase、主要是 phase 读取 trend”的总体结论。原字段还采用
+  query→key 命名，其箭头不能直接作为 value 信息传播方向。上述修正不改变预测误差。
+- 当前更新为 `LN(token + message)`，message 为零时也不等于原 token。
+  大 token delta 不能据此解释为大 attention message，更不能称为已证实的“耦合失控”。
+  例如 ETTh1-H96 seed2021 的 i7 平均 trend delta 为 `10.82`，而 message norm
+  仅 `0.82`，支持将归一化位置列为待排查因素，尚不能断言其导致性能退化。
+- i6 当前审计只保存最后一次 attention/message；支持“最后一轮较均匀”，不支持
+  “熵相对第一轮回升”或“第二轮 message 衰减”的轮次比较。
+
+**三个待验证方案**：共同保持旧版 `E(pool(x-x_last)) -> t in R^r -> D(t)+x_last`、
+`r=H/8`、phase 主干和静态输出融合。以下均是候选假设，未实现或训练。
+
+1. **保留原表示的残差交互**：将 post-LayerNorm 更新改为
+   `z' = z + alpha * F(LN(z), LN(source))`；归一化只用于 message 支路，原 z
+   原样保留。每个方向用独立可训练标量，初始化为零，message 投影保留非零初始化。
+   复制 i0 公共权重后初始完整输出应逐元素等价；验证时增加 normalization-only
+   对照，区分归一化位置与残差缩放的贡献。这是优先级最高的工程及机制诊断基线。
+2. **可拒绝的 phase-to-trend 读取**：在 P→T 的 phase keys 外加入一个可学习 null
+   score，其 value 在最终 rank 空间严格为零；使用 `t'=t+alpha*sum_j a_j v_j`。
+   null 权重无需重新分配到真实 phase，禁止输出 bias 造成 null 泄漏。
+   这样一次 softmax 同时决定读哪些 phase 和读多少；不强制低熵或 top-k。
+   与方案 1 的单向 P→T 对照，并检查 null mass 与逐样本误差、有效预测改变量的关系。
+   null 被忽略或全部选中都是可观测失败情形，不能预设其等于可靠性。
+3. **按 phase 决定的 trend 写入**：继续只用一个 rank-r trend token，通过
+   `g_j=sigmoid(q(p_j)^T k(t)/sqrt(d)-b_null)` 与
+   `p_j'=p_j+alpha*g_j*v(t)` 实现 phase 条件接收。这等价于每个 phase 在 trend
+   value 和零 value 之间选择，解决 i2 单 key softmax 恒为一、query 无法决定
+   接收量的问题；不增加 trend token 数或 rank。与方案 1 的广播 T→P 对照；
+   若 g_j 在 phase 间近乎相同，则机制仍退化为广播。共享 v(t) 的表达能力有限，
+   不将其宣称为每个 phase 获得不同内容。
+
+**验证安排建议**：先以同一 i0 checkpoint、同等微调预算验证方案 1；随后分别加入
+方案 2 或 3，不先合并。用 ETTh1-H96、Weather-H720、ETTm2-H720 的两个种子
+覆盖已观察到的收益/退化情形，沿用冻结配置并仅读取 validation。配对误差、尾部
+退化和同一 checkpoint 的 message 关闭诊断共同决定是否扩展，不凭 attention 熵
+或跨模型绝对范数选胜者。此阶段仅静态核对模型和指标定义，未修改分析脚本或训练代码。
