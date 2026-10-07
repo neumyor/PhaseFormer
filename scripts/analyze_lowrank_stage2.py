@@ -183,7 +183,7 @@ def merge(scratch, audit):
             result = json.loads((scratch / 'runs' / f'{setting}__{arm}' / 'result.json').read_text())
             cfg = json.loads((scratch / 'runs' / f'{setting}__{arm}' / 'config.json').read_text())
             init = json.loads((scratch / 'runs' / f'{setting}__{arm}' / 'initialization.json').read_text())
-            assert not cfg['evaluate_test'] and not result['smoke']
+            assert not cfg['evaluate_test'] and result['smoke'] == manifest['smoke']
             results.append({'setting': setting, 'config_id': arm, 'dataset': cfg['dataset'],
                 'horizon': cfg['horizon'], 'seed': cfg['seed'], 'model': 'PhaseFormer-L',
                 'key_params': json.dumps(ARMS[arm], sort_keys=True),
@@ -271,10 +271,11 @@ def merge(scratch, audit):
         stats.append(record)
     segments = errors.groupby('candidate_config_id')[[f'candidate_segment{i}_mse' for i in range(3)]].mean().reset_index()
     report = ['# Experiment and Objective Error Analysis', '', '## 1. Experiment Setup', '',
-        'Stage 2: matched four-epoch fine-tuning from paired stage-1 low-rank i0 checkpoints. '
+        f"Stage 2: matched {manifest['epochs']}-epoch fine-tuning from paired stage-1 low-rank i0 checkpoints. "
         'All arms retain L=720, rank=H/8, the legacy decoder and static fusion. '
         'Validation only; no test evaluation. The nine fixed arms share each source config and optimizer schedule. '
-        'These exploratory results do not replace Golden/test results.', '',
+        'These exploratory results do not replace Golden/test results. '
+        + ('SMOKE ONLY: two training/validation batches per epoch; no efficacy conclusions.' if manifest['smoke'] else ''), '',
         '## 2. Experiment Results', '', 'Setting-equal means relative to i0_continue:', '',
         *markdown_table(avg), '', 'Controlled incremental comparisons:', '',
         *markdown_table(pd.DataFrame(incremental)), '', 'All setting results:', '',
