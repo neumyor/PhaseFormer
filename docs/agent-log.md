@@ -5933,3 +5933,68 @@ research_runs/lowrank_stage3_20261007 --gpus 0,1,2,3,4,5,6,7`。
 远程 time 环境、torch 2.6.0+cu124、Lightning 2.6.5、八张 A800。
 旧 source/checkpoint/无效证据保持原位；更新远程前将内容哈希一致的未跟踪旧审计
 脚本保存到 stash，再以 bundle 快进，不修改数据资源。正式结论待全部结果与审计。
+
+## 2026-10-07 — 第三阶段完成：中心化冻结修正得到有限支持
+
+**完成与校验**：`lowrank_stage3_20261007` 42/42 completed、0 failed，模型/训练
+代码 `a8b2026`。统一审计通过 2,669,422 行、665 案例（含 35 个预指定 anchor
+记录）、24 图；42 训练版本加 6 source 参照共 48 行汇总。初始完整恒等、冻结
+state tensor 逐元素不变、全 validation 的 frozen off=source、trend-only
+permutation 恒等、中心化零均值均通过。13 项单元测试与七版本 smoke 在正式运行
+前已完成。原始正式六文件已下载并核对本地/远程 SHA256 完全一致，ZIP 字节与白名单
+通过。可视化审阅后 `93fae7c` 将热图色标以零对称，并增加选例奇异值参与秩统计；
+只重建报告，不改变训练或预测。
+
+**六 setting 等权结果**（ΔMAE / ΔMSE；负数更好）：
+
+| arm | 相应对照 | ΔMAE | ΔMSE | MSE 胜出 |
+|---|---|---:|---:|---:|
+| trend_frozen | source tp_pre | +0.000777 | +0.000536 | 3/6 |
+| phase_frozen | source tp_pre | +0.000670 | +0.000688 | 1/6 |
+| centered_frozen | source tp_pre | -0.000222 | -0.000290 | 5/6 |
+| trend_joint | tp_pre_continue | +0.000866 | +0.000533 | 2/6 |
+| phase_joint | tp_pre_continue | +0.000311 | +0.000392 | 2/6 |
+| centered_joint | tp_pre_continue | -0.000034 | +0.000205 | 2/6 |
+
+tp_pre_continue 自身相对 source 的平均 ΔMSE 为 +0.001139，centered_joint 相对
+source 为 +0.001344。因此没有把续训对照退化包装为超越旧模型。centered_frozen
+相对 phase_frozen 为 -0.000978、6/6 改善；相对 trend_frozen 为 -0.000826，
+但只有 3/6 改善。中心化有支持，phase 内容必然优于容量扩展没有被普遍证明。
+
+**固定权重与 phase 对齐**：centered_frozen 在五个改善 setting 上关闭消息都会
+变差，roll 和 reverse 也均变差；ETTm2 seed2022 的 native-minus-off 为
+-0.001188，roll/reverse-minus-native 为 +0.002931/+0.002702。ETTh1 seed2022
+本身轻微退化 +0.000013，打乱也未变差。centered_joint 六 setting 均出现
+native 优于 off/roll/reverse，但整体平均 MSE 仍弱于 matched continuation：
+新消息有用不等于联合微调成功，不能只凭开关差分选择模型。
+
+**预指定样本**：Weather seed2021 的 centered_frozen，source->candidate MSE：
+1910,c0 为 2.095243->2.095060（仅微小改善，主要偏差未修复）；2577,c15 为
+3.336931->3.322840；1955,c7 为 0.236906->0.224013。后两者 roll 后分别恶化到
+3.372239/0.255933。ETTm2 seed2022 7538,c4 为 0.365061->0.363035，但
+8142,c3 为 0.744187->0.747560，仍有具体退化。Weather 联合版本 2577,c15
+虽 native 比 off 好 0.100598，native 3.671724 仍差于续训基线 3.437480。
+
+**结构解释修正**：此前“隐空间零均值不一定保证预测零均值”对一般非线性 readout
+成立；本次核对六个实际模型后发现最终 phase predictor 均为共享 Linear，
+predictor_use_mlp=False、use_phase_align=False；RevIN 与静态 gate 对 channel
+是仿射变换。因此当前结构在实数运算下保持每个未来 24-phase 周期的预测均值。
+用最高 float32 精度核对每 setting 前八窗口，最大周期均值改变量依次为
+3.973643e-8、6.457170e-8、6.457170e-8、5.463759e-8、4.842877e-8、7.450581e-8。
+正式指标仍使用原 medium 精度，允许小舍入偏差。非中心化 frozen 在 Weather 的
+phase 平均向量范数几乎等于总 token 范数（0.206546/0.206647 和
+0.117665/0.117706），提示大部分新增量是共同分量；中心化将其排除。该观察支持
+保留周期均值、修正周期内形状的解释，但不证明所有误差变化都只来自这一因素。
+
+**方向容量边界与决策**：程序化选例的 centered_frozen 更新参与秩按 setting
+平均约 1.00--1.39，许多仍主要沿一个方向变化；不能宣称收益已证实来自高秩内容。
+保留 centered_frozen 作为现有 tp_pre 的小幅候选改进（ETTh1 +169 参数，其他
+两数据集 +857）；不采用联合解冻，不替换既有全量基线或宣称 Golden 超越。
+下一步若继续，应加中心化有符号标量消息和中心化 phase-only 对照，区分中心化、
+多方向内容与 trend 条件的作用；本轮没有启动这些额外实验。四 epoch 续训、六
+setting、反复复用 validation 的范围限制继续有效，未读取 test。
+
+**产物**：正式目录 `research_runs/lowrank_stage3_20261007/`，报告及 ZIP 包含
+完整数值、图、中文假设判定；原始选例激活和各干预预测在 selected_cases.npz，
+配置/来源哈希/运行时间/显存记录在 run.yaml 与 results.csv。训练记录和 checkpoint
+在独立忽略目录保留，未提交大文件。实验计划和本日志同步收尾结论。

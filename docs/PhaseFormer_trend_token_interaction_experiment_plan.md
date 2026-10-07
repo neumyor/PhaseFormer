@@ -371,3 +371,81 @@ research_runs/lowrank_stage3_20261007_scratch --audit-dir
 research_runs/lowrank_stage3_20261007 --gpus 0,1,2,3,4,5,6,7`.
 Canonical output has the six audit files and referenced figures only. Training
 records/checkpoints are kept separately in the ignored scratch directory.
+
+### Stage 3 completed: hypothesis decisions
+
+All 42 training jobs completed with zero formal failures on `a8b2026`.
+Full-validation audit passed: 2,669,422 paired rows, 665 selected case records
+(including 35 prespecified anchor records), 24 figures. Source and continued
+tp_pre references yield 48 aggregate rows. Thirteen unit checks, all seven
+training smokes, initial full-output identity, frozen-state equality and final
+off=source/permutation/centering invariants passed. `93fae7c` adds symmetric
+activation heatmap colors and selected-case update direction diversity; it does
+not change training or inference results.
+
+Setting-equal deltas, negative better. Frozen arms compare against source tp_pre;
+joint arms compare against matched tp_pre_continue:
+
+| Arm | Mean delta MAE | Mean delta MSE | MSE wins |
+|---|---:|---:|---:|
+| trend_frozen | +0.000777 | +0.000536 | 3/6 |
+| phase_frozen | +0.000670 | +0.000688 | 1/6 |
+| centered_frozen | -0.000222 | -0.000290 | 5/6 |
+| trend_joint | +0.000866 | +0.000533 | 2/6 |
+| phase_joint | +0.000311 | +0.000392 | 2/6 |
+| centered_joint | -0.000034 | +0.000205 | 2/6 |
+
+The continued baseline itself has mean delta MSE +0.001139 versus source tp_pre
+(2/6 wins). centered_joint is +0.001344 versus source. Thus neither additional
+training nor unfreezing is assumed beneficial. Results are a four-epoch pilot,
+not a claim that joint training can never work.
+
+1. **Centering: supported in this protocol.** centered_frozen improves over
+   phase_frozen by -0.000978 mean MSE, 6/6 settings; centered_joint improves over
+   phase_joint by -0.000187, 4/6. Uncentered phase content often mainly changes
+   the common phase component: Weather frozen mean-token norm is 0.206546 vs
+   total per-token norm 0.206647 in seed2021, and 0.117665 vs 0.117706 in seed2022.
+2. **Phase content beats capacity: partially supported, not universal.**
+   centered_frozen minus trend_frozen is -0.000826 on average, but only 3/6 wins.
+   Uncentered phase_frozen is worse than trend_frozen on average (+0.000152).
+   Added phase dependence alone is insufficient.
+3. **Independent useful correction: supported in 5/6 settings.** Frozen off
+   exactly equals source tp_pre throughout validation, and old state tensors
+   are unchanged. Its improvements therefore occur without old-weight
+   adaptation. ETTh1 seed2022 has a small regression (+0.000013 MSE).
+4. **Phase alignment: supported for the useful centered corrections.** Both
+   rolling and reversing phase context worsen all five improving frozen
+   settings. ETTm2 seed2022: native-minus-off -0.001188, roll-minus-native
+   +0.002931, reverse-minus-native +0.002702. The non-improving ETTh1 seed2022
+   also fails this alignment check. In joint models, native beats off and both
+   permutations in all six settings, yet whole-model MSE fails to beat matched
+   continuation on average. Useful message and useful joint training differ.
+5. **Targeted error repair: partial and small.** For Weather seed2021, frozen
+   centered source->candidate MSE is 2.095243->2.095060 at 1910,c0,
+   3.336931->3.322840 at 2577,c15 and 0.236906->0.224013 at 1955,c7.
+   The first anchor's main level error is not solved. ETTm2 seed2022 7538,c4
+   improves 0.365061->0.363035, whereas 8142,c3 worsens 0.744187->0.747560.
+
+**Mechanistic refinement:** all six source predictors are shared linear maps,
+with no phase alignment module; RevIN and fusion are channelwise affine. For
+these exact settings, centered latent updates imply zero summed correction over
+the 24 phases of each future cycle in real arithmetic. This is more specific
+than the earlier general warning for nonlinear predictors. A highest-precision
+check on eight validation windows per setting gives maximum absolute cycle-mean
+change 3.97e-8--7.45e-8. The medium-precision efficacy runs can show small rounding
+departures. The learned addition is therefore primarily a cycle-shape correction
+preserving the old cycle mean, not a solution for common level/trend errors.
+
+Available multi-direction capacity is not yet proved necessary. Selected-case
+participation rank (sum sigma^2)^2/sum sigma^4 averages approximately 1.00--1.39
+across settings; many updates remain dominated by one direction. A future
+centered signed-scalar control and a centered phase-only control are needed to
+separate the benefits of centering, direction diversity and trend conditioning.
+These controls are recommendations, not new experiments launched in this stage.
+
+**Decision:** retain centered_frozen as a small, attributable refinement of the
+trained tp_pre checkpoint, while retaining tp_pre as its baseline. It adds 169
+parameters on ETTh1 and 857 on ETTm2/Weather. Do not adopt joint unfreezing or claim
+a general benchmark win. Canonical evidence is
+`research_runs/lowrank_stage3_20261007/`; selection reused validation, no test
+was read, and the original PhaseFormer-L rank-r encoder/decoder remains intact.
