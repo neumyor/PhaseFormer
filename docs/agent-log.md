@@ -5998,3 +5998,25 @@ setting、反复复用 validation 的范围限制继续有效，未读取 test�
 完整数值、图、中文假设判定；原始选例激活和各干预预测在 selected_cases.npz，
 配置/来源哈希/运行时间/显存记录在 run.yaml 与 results.csv。训练记录和 checkpoint
 在独立忽略目录保留，未提交大文件。实验计划和本日志同步收尾结论。
+
+## 2026-10-07 — Correction: warm-start diagnostics do not establish the best architecture
+
+User clarified that mechanism comparisons should train from scratch rather
+than continue a pretrained i0. Read-only audit checked the actual corrected
+stage-1 remote configs: 210 configs, seven arms with 30 each, every
+`init_checkpoint` empty, every budget eight epochs, and all metrics present.
+`search_phaseformer.py` constructs the model and does not load a checkpoint on
+this path. Stage 2 instead explicitly loads stage-1 i0 in `train_job` through
+`load_i0` (54 valid v2 runs); stage 3 explicitly loads stage-2 tp_pre (42 runs,
+with frozen and joint regimes). These are trained-weight initializations, not
+merely reuse of hyperparameters or a shared random initialization.
+
+Corrected the active plan's interpretation: the second/third-stage rankings
+only concern their warm-start protocols. Withdraw unqualified claims of a best
+architecture, of pre-norm superiority from scratch, and of general failure of
+joint training/null/selective mechanisms. Fixed-weight activation interventions
+remain observations about those specific trained models. Future architecture
+comparisons must train the complete model from scratch with matched budgets,
+selection and seed handling and explicit no-checkpoint-load checks. Existing
+metrics/artifacts are preserved; no training was launched. This audit changes
+documentation only; checked the diff, no model tests required.

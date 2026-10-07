@@ -8,6 +8,23 @@
 
 ## Purpose
 
+> **Protocol correction (2026-10-07, user clarification):** the research target
+> is architecture comparison with training from scratch, not adaptation of a
+> pretrained i0. Audit of the corrected stage-1 remote configs found 210/210
+> with an empty `init_checkpoint`, an eight-epoch budget and completed metrics.
+> In contrast, all 54 valid stage-2 runs explicitly load trained stage-1 i0
+> weights; all 42 stage-3 runs explicitly load stage-2 tp_pre weights. Their
+> existing metrics remain valid for those warm-start protocols, but cannot
+> establish the best architecture under training from scratch. In particular,
+> tp_pre's normalization comparison, rejection of selective/null mechanisms,
+> and centered_frozen's advantage over joint adaptation must not be promoted
+> to from-scratch architecture decisions. Earlier "best model" wording is
+> withdrawn to that extent. Subsequent architecture tests must initialize and
+> train all branches jointly from scratch, use matched training/selection
+> budgets and seeds, and audit that no trained checkpoint was loaded. Keep
+> prior warm-start evidence separate as diagnostics; no new runs are launched
+> by this audit.
+
 This round tests whether the learned trend token should only correct the final
 forecast, read the phase tokens, write back to the phase tokens, or participate
 in repeated/joint token interaction. The existing low-rank PhaseFormer-L
