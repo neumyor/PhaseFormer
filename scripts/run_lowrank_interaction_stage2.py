@@ -128,6 +128,7 @@ def forecast(model, batch, device):
 
 
 def train_job(path):
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     import torch
     import pytorch_lightning as pl
     from src.dataset.data_factory import data_provider
@@ -141,6 +142,8 @@ def train_job(path):
     torch.set_num_threads(2)
     torch.set_float32_matmul_precision("medium")
     cfg = prepare_config(job["source"]["config"], job["arm"], job["epochs"])
+    if digest(cfg["checkpoint"]) != job["source"]["source_checkpoint_sha256"]:
+        raise ValueError("source checkpoint changed since manifest creation")
     pl.seed_everything(cfg["seed"], workers=True)
     model, args = construct(cfg)
     state = torch.load(cfg["checkpoint"], map_location="cpu", weights_only=False)["state_dict"]
