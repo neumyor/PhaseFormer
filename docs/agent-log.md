@@ -6045,3 +6045,16 @@ ablation is separate. No future labels or unsafe historical hindcasts enter
 gate features. Fixed-weight mean/shuffle interventions supplement retrained
 controls and sample-level error analysis. Reviewed documentation diff and
 whitespace; no model code, training process or historical metric was changed.
+
+## 2026-10-07 — Narrow revised stage 2 to six research hypotheses
+
+User limited dynamic output fusion to three Gate designs and retained the three
+original stage-2 interaction proposals. Replaced the active seven-Gate plan with
+six hypotheses: H1 pre-norm scaled residual interaction, H2 null P->T read, H3
+selective T->P write; G1 phase reliability (previous G1), G2 prediction disagreement
+(previous G4), G3 separate cycle-level/shape fusion (previous G7). Required static
+baselines, pre/post/scale ablations and repeated seeds are controls, not additional
+research directions. Removed automatic expansion to other gates/interaction
+combinations. All planned models train jointly from scratch; historical warm-start
+results stay diagnostic. No model code or experiments changed. Documentation
+diff and whitespace reviewed before commit.
