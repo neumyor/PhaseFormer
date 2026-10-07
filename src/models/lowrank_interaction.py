@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import math
+
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from src.models.phase_adapters import PooledLowRankWeakPeriodResidualHead
 
@@ -38,13 +41,36 @@ class LowRankPhaseInteractionBranch(nn.Module):
         smooth_window: int = 24,
         interaction_mode: str = "none",
         num_heads: int = 1,
+        update_style: str = "post_norm",
+        null_read: bool = False,
+        selective_write: bool = False,
     ) -> None:
         super().__init__()
         if interaction_mode not in self.MODES:
             raise ValueError(f"unsupported interaction_mode: {interaction_mode}")
         if phase_dim % num_heads:
             raise ValueError("phase_dim must be divisible by num_heads")
+        if update_style not in {"post_norm", "pre_norm", "scaled_pre_norm"}:
+            raise ValueError(f"unsupported update_style: {update_style}")
+        if update_style != "post_norm" and (
+            interaction_mode not in {"phase_to_trend", "trend_to_phase"}
+            or num_heads != 1
+        ):
+            raise ValueError("pre-norm audit supports single-head, one-way interaction")
+        if null_read and (
+            update_style != "scaled_pre_norm" or interaction_mode != "phase_to_trend"
+        ):
+            raise ValueError("null read requires scaled pre-norm P -> T")
+        if selective_write and (
+            update_style != "scaled_pre_norm" or interaction_mode != "trend_to_phase"
+        ):
+            raise ValueError("selective write requires scaled pre-norm T -> P")
         self.interaction_mode = interaction_mode
+        self.update_style = update_style
+        self.null_read = bool(null_read)
+        self.selective_write = bool(selective_write)
+        self.capture_diagnostics = False
+        self.last_diagnostics = {}
         self.rank = int(rank)
         self.phase_dim = int(phase_dim)
         self.lowrank_head = PooledLowRankWeakPeriodResidualHead(
@@ -106,12 +132,25 @@ class LowRankPhaseInteractionBranch(nn.Module):
         self.joint_trend_norm = nn.LayerNorm(rank) if use_joint else None
         self.joint_phase_norm = nn.LayerNorm(phase_dim) if use_joint else None
 
+        if update_style != "post_norm":
+            # Only the message sees normalized inputs; the rank latent bypasses LN.
+            if self.trend_norm is None:
+                self.trend_norm = nn.LayerNorm(rank)
+            if self.phase_norm is None:
+                self.phase_norm = nn.LayerNorm(phase_dim)
+            if update_style == "scaled_pre_norm":
+                self.interaction_scale = nn.Parameter(torch.zeros(()))
+            if null_read or selective_write:
+                self.null_score = nn.Parameter(torch.zeros(()))
+
         self.last_phase_attention = None
 
     def _phase_to_trend(self, latent, phase_latent):
         b, c, slots, _ = phase_latent.shape
         trend = latent.reshape(b * c, 1, self.rank)
         phase = phase_latent.reshape(b * c, slots, self.phase_dim)
+        if self.update_style != "post_norm":
+            return self._pre_norm_update(trend, phase, b, c, slots, to_trend=True)
         attended, weights = self.phase_to_trend_attention(
             self.trend_query(trend),
             self.phase_key(phase),
@@ -127,6 +166,8 @@ class LowRankPhaseInteractionBranch(nn.Module):
         b, c, slots, _ = phase_latent.shape
         phase = phase_latent.reshape(b * c, slots, self.phase_dim)
         trend = latent.reshape(b * c, 1, self.rank)
+        if self.update_style != "post_norm":
+            return self._pre_norm_update(trend, phase, b, c, slots, to_trend=False)
         attended, weights = self.trend_to_phase_attention(
             self.phase_query(phase),
             self.trend_key(trend),
@@ -135,6 +176,46 @@ class LowRankPhaseInteractionBranch(nn.Module):
         )
         phase = self.phase_norm(phase + self.phase_out(attended))
         return phase.reshape(b, c, slots, self.phase_dim), weights.reshape(b, c, slots)
+
+    def _pre_norm_update(self, trend, phase, b, c, slots, *, to_trend):
+        t, p = self.trend_norm(trend), self.phase_norm(phase)
+        if to_trend:
+            attention = self.phase_to_trend_attention
+            q, k, v = self.trend_query(t), self.phase_key(p), self.phase_value(p)
+        else:
+            attention = self.trend_to_phase_attention
+            q, k, v = self.phase_query(p), self.trend_key(t), self.trend_value(t)
+        # Use the same projections as the legacy MHA; expose the null competitor
+        # explicitly so an output bias cannot leak through a zero-valued null.
+        weights_q, weights_k, weights_v = attention.in_proj_weight.chunk(3)
+        bias_q, bias_k, bias_v = attention.in_proj_bias.chunk(3)
+        q = F.linear(q, weights_q, bias_q)
+        k = F.linear(k, weights_k, bias_k)
+        v = F.linear(v, weights_v, bias_v)
+        scores = q @ k.transpose(-2, -1) / math.sqrt(self.phase_dim)
+        if self.null_read or self.selective_write:
+            scores = torch.cat([scores, self.null_score.expand_as(scores[..., :1])], -1)
+            weights = scores.softmax(-1)[..., :-1]
+        else:
+            weights = scores.softmax(-1)
+        mass = weights.sum(-1, keepdim=True)
+        attended = F.linear(weights @ v, attention.out_proj.weight)
+        attended = attended + mass * attention.out_proj.bias
+        output = self.trend_out if to_trend else self.phase_out
+        message = F.linear(attended, output.weight) + mass * output.bias
+        scale = self.interaction_scale if self.update_style == "scaled_pre_norm" else 1.0
+        original = trend if to_trend else phase
+        updated = original + scale * message
+        if self.capture_diagnostics:
+            self.last_diagnostics = {
+                "message_norm": message.norm(dim=-1).mean(-1).reshape(b, c).detach(),
+                "update_norm": (updated - original).norm(dim=-1).mean(-1).reshape(b, c).detach(),
+                "original_norm": original.norm(dim=-1).mean(-1).reshape(b, c).detach(),
+                "acceptance": mass.squeeze(-1).reshape(b, c, -1).detach(),
+                "weights": weights.reshape(b, c, *weights.shape[1:]).detach(),
+            }
+        shape = (b, c, self.rank) if to_trend else (b, c, slots, self.phase_dim)
+        return updated.reshape(shape), weights.reshape(b, c, slots)
 
     def _joint(self, latent, phase_latent):
         b, c, slots, _ = phase_latent.shape
