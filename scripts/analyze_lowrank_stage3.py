@@ -216,7 +216,8 @@ def merge(scratch,audit):
                     axes[i,0].plot(c[name],label=name,color=color,lw=1)
                 axes[i,0].legend(fontsize=7,ncol=3)
                 axes[i,0].set_title(f"{meta['category']} {meta['sample_id']},c{meta['channel']}; delta MAE {meta['delta_mae']:+.4f}",fontsize=9)
-                im=axes[i,1].imshow(c['update'],aspect='auto',cmap='coolwarm')
+                limit=max(float(np.abs(c['update']).max()),1e-12)
+                im=axes[i,1].imshow(c['update'],aspect='auto',cmap='coolwarm',vmin=-limit,vmax=limit)
                 fig.colorbar(im,ax=axes[i,1],fraction=.04)
                 axes[i,1].set_title(f"Content update; on/off MSE {meta['native_mse']:.4f}/{meta['off_mse']:.4f}",fontsize=9)
                 axes[i,1].set_xlabel('latent coordinate');axes[i,1].set_ylabel('phase slot')
@@ -235,6 +236,15 @@ def merge(scratch,audit):
             'reverse_minus_native_mse':g.reverse_minus_native_mse.mean(),
             **{k:g[k].mean() for k in ('raw_norm','update_norm','update_phase_mean_norm','update_phase_spread','output_energy','output_alignment','output_mean_shift')}})
     anchors=pd.DataFrame([c['metadata'] for c in cases if c['metadata']['category']=='prespecified_anchor'])
+    rank_records=[]
+    for c in cases:
+        if c['metadata']['candidate_config_id']!='centered_frozen':continue
+        energy=c['singular_values'].astype(np.float64)**2
+        total=energy.sum()
+        rank_records.append({'setting':c['metadata']['setting'],
+            'top_direction_energy_fraction':float(energy[0]/total) if total>0 else 0.,
+            'participation_rank':float(total**2/(energy**2).sum()) if total>0 else 0.})
+    rank_summary=pd.DataFrame(rank_records).groupby('setting').mean().reset_index()
     segments=errors.groupby('candidate_config_id')[[f'{name}_segment{i}_mse' for name in ('baseline','native') for i in range(3)]].mean().reset_index()
     report=['# Stage 3: Phase-conditioned content on tp_pre','', '## 1. Experiment Setup','',
         f"Matched {manifest['epochs']}-epoch continuation from valid stage-2 tp_pre. Six predeclared candidate arms and matched tp_pre continuation; a separate source reference for frozen arms. Width 8, original low-rank E/D and broadcast retained. Frozen backbone stays in eval mode; only content module trains. No test. " + ('SMOKE ONLY; not efficacy evidence.' if manifest['smoke'] else ''),
@@ -251,6 +261,9 @@ def merge(scratch,audit):
     report += [f'![{Path(ref).stem}]({ref})' for ref in refs]
     if len(anchors):report += ['', '### Prespecified anchor cases','',*markdown_table(anchors[['setting','candidate_config_id','sample_id','channel','baseline_mse','native_mse','off_mse','roll_mse','reverse_mse','delta_mse']])]
     report += ['', '## 8. Repeated Observable Patterns','',*markdown_table(pd.DataFrame(stats)),
+        '', '### Selected centered-frozen cases: update direction diversity','',
+        'Descriptive averages over the selected case records, including anchors and possible repeated windows across categories; not representative full-validation estimates. Participation rank is (sum(sigma^2))^2 / sum(sigma^4). A value near one indicates a dominant direction despite the available multi-direction parameterization.',
+        '',*markdown_table(rank_summary),
         '', '## 9. Objective Defect Summary','',
         'Phase content must beat equal-capacity trend expansion and its appropriate baseline before being credited with efficacy. Centering must beat uncentered content. Native-minus-off <0 shows fixed-model benefit, not a retraining result; roll/reverse-minus-native >0 supports alignment dependence but may involve out-of-distribution activations. Frozen off outputs are checked bitwise against source tp_pre. Trend-only permutations are checked bitwise invariant. Centered content has zero phase mean in latent space, not necessarily zero output shift.',
         '', '## 10. Experiment Scope','',
@@ -266,6 +279,9 @@ def merge(scratch,audit):
     assert {p.name for p in figures.iterdir()}=={Path(r).name for r in refs}
     run['analysis']['selections']=[c['metadata'] for c in cases]
     run['analysis']['comparisons']=comparisons
+    run['analysis']['script_sha256']=digest(Path(__file__))
+    run['analysis']['code_commit']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    run['analysis']['selected_case_rank_summary']=rank_summary.to_dict('records')
     for entry in run['execution']['settings']:
         entry['runtime']=[json.loads((scratch/'runs'/f"{entry['setting']}__{arm}"/'result.json').read_text()) for arm in ARMS]
     run['validation']={'results_checked':True,'ranking_and_cases_checked':True,'report_and_archive_checked':True,'directory_and_settings_checked':True,'status':'passed'}
