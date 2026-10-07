@@ -5899,3 +5899,37 @@ research_runs/lowrank_stage2_mechanism_audit_20261007 --work-dir
 research_runs/lowrank_stage2_mechanism_audit_20261007_scratch --windows 128
 --gpus 0,1,2,3,4,5`；已有前向记录时用 `--merge-only` 重建数值报告。
 重建会覆盖人工解读章节，解读的结论也保存在本日志和专项计划中。
+
+## 2026-10-07 — 第三阶段内容交互实现、二次校验与正式启动
+
+**授权与协议**：用户要求将“保留 tp_pre 广播＋phase 条件内容修正”作为第三阶段，
+验证内容、中心化、冻结/联合适应及 phase 对齐假设。应用
+`.agents/skills/experiment-and-error-analysis/SKILL.md`，协议追加到原专项计划。
+六个既有 setting、七 trained arms，共 42 jobs，另评估六个 source tp_pre。
+来源仅为第二阶段有效 v2 的 tp_pre。四 epoch、原 LR/scheduler/batch/Huber、
+fresh Adam、同 seed 数据顺序，validation Huber 选 checkpoint，不读取 test。
+
+**结构与代码**：`PhaseContentCorrection` 在原广播结果上加 beta*u；trend-only
+容量对照、phase 条件非中心化、phase 条件中心化三者参数形状完全一致，width=8。
+beta 零初始化；不增加 trend token、不更改低秩 E/D，不加入 null 或新接收 gate。
+冻结组只训练新增模块，原模块 eval、参数不变；联合组正常 train。实现/计划
+`673fedf`，统一审计 `1bedeb9`；分析脚本记录消息开关、roll/reverse、half/double，
+phase 均值/分散度、输出修正能量/对齐及逐段误差。
+
+**二次校验与修复**：第一次 smoke 中 trend_joint 触发 CUDA adaptive pooling
+反向无确定性实现的错误，其他六组完成但本次 smoke 不用于效果。`a8b2026` 改用
+同分桶显式均值，保留数学定义；新增输出/梯度等价测试。全部 13 项 unittest 通过，
+包含旧阶段回归检查。使用独立 smoke_v2 目录重做七个 arm，全部通过：初始完整
+输出 max_abs=0、系数非零启动、三组 frozen 原 state tensor 逐元素未变。
+ETTh1 新增参数均为 169。随后全 validation 审计 smoke 通过 136,465 条行、
+105 案例、4 张图，核对汇总、排名、NPZ 预测、off=frozen source、trend-only
+permutation 恒等、中心化零均值和 ZIP 字节。两个 smoke 目录保留区分，不做效果声明。
+
+**正式启动**：模型/运行代码 `a8b2026`，入口 `scripts/run_lowrank_stage3.py`，
+`--source-scratch research_runs/lowrank_interaction_stage2_20261007_v2_scratch
+--scratch-dir research_runs/lowrank_stage3_20261007_scratch --audit-dir
+research_runs/lowrank_stage3_20261007 --gpus 0,1,2,3,4,5,6,7`。
+先 baseline＋frozen 再 joint，结束自动执行 `scripts/analyze_lowrank_stage3.py`。
+远程 time 环境、torch 2.6.0+cu124、Lightning 2.6.5、八张 A800。
+旧 source/checkpoint/无效证据保持原位；更新远程前将内容哈希一致的未跟踪旧审计
+脚本保存到 stash，再以 bundle 快进，不修改数据资源。正式结论待全部结果与审计。
