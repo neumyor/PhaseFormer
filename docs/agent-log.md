@@ -6020,3 +6020,28 @@ comparisons must train the complete model from scratch with matched budgets,
 selection and seed handling and explicit no-checkpoint-load checks. Existing
 metrics/artifacts are preserved; no training was launched. This audit changes
 documentation only; checked the diff, no model tests required.
+
+## 2026-10-07 — Replan stage 2 for from-scratch dynamic fusion and interaction
+
+User requested a revised second-stage hypothesis plan with more dynamic fusion
+mechanisms. Updated the active interaction plan, preserving historical results
+and marking the new section as planned, not implemented/launched. No experiment
+skill was triggered because this request is planning, not implementation and
+execution. Seven candidates cover phase reliability, historical state, latent
+state, prediction disagreement, smooth lead-time weights, per-phase weights,
+and separate cycle-level/shape fusion. Each has a falsifiable hypothesis and
+appropriate static/feature controls; component fusion is explicitly not a
+pointwise convex mixture of the two complete forecasts.
+
+All future runs start from untrained weights, retain the original low-rank E/D
+and single trend token, and train both branches jointly. Plan first isolates
+fusion on i0 (12 models x12 settings), then re-tests ten interaction candidates
+with static fusion, adding the previously missing no-LayerNorm controls. It
+specifies matched initialization/data order, common 8-epoch screening and fresh
+30-epoch confirmation, bounded candidate promotion, eight-GPU scheduling,
+validation-only selection and no dataset-specific winner stitching. Gate-read
+stop-gradient is a shared protocol choice, not frozen backbones; gradient-route
+ablation is separate. No future labels or unsafe historical hindcasts enter
+gate features. Fixed-weight mean/shuffle interventions supplement retrained
+controls and sample-level error analysis. Reviewed documentation diff and
+whitespace; no model code, training process or historical metric was changed.
