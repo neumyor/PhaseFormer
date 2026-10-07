@@ -5719,3 +5719,46 @@ AdaptivePool → Linear(720,r) → Linear(r,H) → +x_last`，`r=H/8`）。本�
 覆盖已观察到的收益/退化情形，沿用冻结配置并仅读取 validation。配对误差、尾部
 退化和同一 checkpoint 的 message 关闭诊断共同决定是否扩展，不凭 attention 熵
 或跨模型绝对范数选胜者。此阶段仅静态核对模型和指标定义，未修改分析脚本或训练代码。
+
+## 2026-10-07 — 第二阶段低秩交互实现、二次校验与启动
+
+**授权与范围**：用户要求实现并测试上一轮提出的三个方案。使用
+`.agents/skills/experiment-and-error-analysis/SKILL.md`，方案及冻结协议追加到
+`docs/PhaseFormer_trend_token_interaction_experiment_plan.md`。在现有
+`codex/trend-token-cross-attention` 分支继续，保持一个 rank-r trend token、旧
+pooled-lowrank encoder/decoder、phase 主干和静态输出 gate。没有更换 trend encoder。
+
+**实现**：`LowRankPhaseInteractionBranch` 增加独立 `update_style/null_read/selective_write`
+配置；默认路径及 state-dict 参数集合保持兼容。新残差更新保留原 token，归一化仅作用于
+message 输入；scale 为零初始化可训练标量。null 读取与选择性写入共用零 value 竞争机制，
+真实 value 的总权重同时缩放 attention/readout 输出 bias，避免拒绝时残留写入。
+新增训练入口 `scripts/run_lowrank_interaction_stage2.py` 与统一证据生成入口
+`scripts/analyze_lowrank_stage2.py`。每个 job 校验来源 checkpoint SHA256、公共权重、rank，
+新方案必须通过真实 validation batch 的初始完整输出恒等检查。
+
+**二次校验**：远程 time 环境（torch 2.6.0+cu124、Lightning 2.6.5）通过九项 unittest：
+旧 i0 等价及参数集合、四候选初始恒等、零 scale 梯度启动、null 拒绝含非零 bias、
+phase query/key 梯度、广播对照、显式 attention 与 MHA 一致性、真实模型配置透传、
+MAE 排名去重与符号。九个 arm 全部通过两 train batch/两 validation batch 集成 smoke，
+四候选完整初始输出 `max_abs=0.0`，两个优化步骤后 scale 均非零。首次 smoke 因 CUDA
+审计早于 Lightning 初始化触发 CuBLAS 确定性配置错误，已将 `CUBLAS_WORKSPACE_CONFIG`
+提前到进程 CUDA 初始化前，失败日志保留，正式矩阵未受影响。
+
+**证据闭环 smoke**：完成 ETTh1-H96 全 validation 的 155,960 条配对样本×通道行、
+120 个去重案例、4 张图及 Markdown/ZIP。通过汇总均值重算、Top-K 重算、NPZ 预测指标、
+setting 覆盖、六文件白名单、图片引用及 ZIP 字节一致性检查；已人工查看代表图。
+smoke 文档显著标识不可用于效果结论。
+
+**正式启动**：代码 `922caa8`；experiment id `lowrank_interaction_stage2_20261007`。
+ETTh1-H96、Weather-H720、ETTm2-H720 × seed 2021/2022 × 九个 arm，共 54 runs。
+每个 setting 从其旧 i0 checkpoint 开始，用原学习率/调度器、batch size、Huber loss
+继续训练四个 epoch，Adam 状态重置，最低 validation loss 选择 checkpoint；i0_continue
+享有同等训练预算。先完成 42 个 i0/旧 post-norm/pre-norm/scaled-pre-norm 对照，
+再执行 12 个 null/选择性写入候选。GPU 0--7，正式 supervisor PID 42260。
+结束后自动运行六个 setting 的配对激活分析并生成单组跨 setting 证据。
+此为 matched fine-tuning 探索，不是 from-scratch benchmark，未读取 test。
+
+**产物**：最终证据 `research_runs/lowrank_interaction_stage2_20261007/`；训练与分析中间
+文件独立位于 `research_runs/lowrank_interaction_stage2_20261007_scratch/`。
+来源为远程已完成 `phaseformer_l_interaction_20261006`，来源权重及旧结果保留不动。
+当前启动快照 6/54 completed、8 running、0 failed；最终结果待正式审计回填。
