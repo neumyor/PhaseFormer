@@ -121,6 +121,7 @@ class LowRankPhaseInteractionBranch(nn.Module):
         self.update_style = update_style
         self.null_read = bool(null_read)
         self.selective_write = bool(selective_write)
+        self.receipt_intervention = "native"
         self.capture_diagnostics = False
         self.last_diagnostics = {}
         self.rank = int(rank)
@@ -259,6 +260,11 @@ class LowRankPhaseInteractionBranch(nn.Module):
             weights = scores.softmax(-1)[..., :-1]
         else:
             weights = scores.softmax(-1)
+        if self.selective_write:
+            if self.receipt_intervention == "mean":
+                weights = weights.mean(1, keepdim=True).expand_as(weights)
+            elif self.receipt_intervention == "roll":
+                weights = weights.roll(slots // 2, dims=1)
         mass = weights.sum(-1, keepdim=True)
         attended = F.linear(weights @ v, attention.out_proj.weight)
         attended = attended + mass * attention.out_proj.bias

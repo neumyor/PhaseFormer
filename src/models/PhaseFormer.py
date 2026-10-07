@@ -76,6 +76,7 @@ from src.models.residual_topology import (
 from src.models.asymmetric_trend_components import extract_trend_component
 from src.models.trend_token import TrendTokenBranch
 from src.models.lowrank_interaction import LowRankPhaseInteractionBranch
+from src.models.lowrank_fusion import LowRankDynamicFusion
 
 class CrossPhaseRoutingLayer(nn.Module):
 
@@ -584,6 +585,7 @@ class PhaseFormer(DefaultPLModule):
             )
         self.lowrank_interaction_branch = None
         self.lowrank_interaction_gate = None
+        self.lowrank_dynamic_fusion = None
         if self.use_lowrank_interaction:
             self.lowrank_interaction_branch = LowRankPhaseInteractionBranch(
                 self.seq_len,
@@ -619,6 +621,12 @@ class PhaseFormer(DefaultPLModule):
                     float(torch.logit(torch.tensor(gate_init))),
                 )
             )
+            fusion_mode = getattr(configs, "lowrank_fusion_mode", "static")
+            if fusion_mode != "static":
+                self.lowrank_dynamic_fusion = LowRankDynamicFusion(
+                    self.lowrank_interaction_branch.rank, self.latent_dim,
+                    self.enc_in, self.period_len, fusion_mode,
+                )
         # In the asymmetric-input study this flag changes only the input to the
         # NLinear-style residual path.  The phase path always receives X.
         self.weak_residual_asymmetric_component = getattr(
@@ -2225,7 +2233,14 @@ class PhaseFormer(DefaultPLModule):
             self.last_trend_pool_weights = trend_diag["pool_weights"]
             self.last_trend_phase_attention = trend_diag["phase_attention"]
         if self.use_lowrank_interaction:
-            y_hat = (1.0 - lowrank_gate) * y_hat + lowrank_gate * lowrank_forecast_normalized
+            if self.lowrank_dynamic_fusion is None:
+                y_hat = (1.0 - lowrank_gate) * y_hat + lowrank_gate * lowrank_forecast_normalized
+            else:
+                y_hat = self.lowrank_dynamic_fusion(
+                    y_hat, lowrank_forecast_normalized, lowrank_diag["rank_latent"],
+                    Z, phase_series_raw, self.lowrank_interaction_gate,
+                )
+                lowrank_gate = self.lowrank_dynamic_fusion.last_gate.transpose(1, 2)
             self.last_weak_residual_alpha = lowrank_gate.detach()
             self.last_lowrank_forecast = lowrank_forecast_normalized.detach()
             self.last_lowrank_phase_attention = lowrank_diag["phase_attention"]

@@ -1628,6 +1628,7 @@ class PhaseFormerPresetConfig:
         self.lowrank_selective_write = hyperparams.get("lowrank_selective_write", False)
         self.lowrank_content_mode = hyperparams.get("lowrank_content_mode", "none")
         self.lowrank_content_width = hyperparams.get("lowrank_content_width", 8)
+        self.lowrank_fusion_mode = hyperparams.get("lowrank_fusion_mode", "static")
         # Scheme-1 learned trend token branch.  The branch is history-only and
         # phase-latent read-only.  Profile readout is the theorem path; direct
         # horizon readout is registered separately as an attribution control.

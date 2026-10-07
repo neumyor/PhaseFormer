@@ -33,7 +33,7 @@ interaction graph around the legacy residual latent.
 
 ## 新第二阶段：六个从头训练的研究方案（2026-10-07）
 
-**状态：已规划，尚未实现或启动。** 用户将范围收敛为三种动态输出 Gate，加上
+**状态：用户已授权实现与验证；代码与单元检查完成，端到端校验中。** 用户将范围收敛为三种动态输出 Gate，加上
 原第二阶段从实验现象提出的三个交互修改，共六个研究假设。此前七类 Gate 计划
 由本节取代，不继续扩展。下文旧 Stage 2/3 保留为 warm-start 历史证据。
 六个假设不等于六次训练；必要基线、机制消融和重复 seed 单列，不算新增研究方向。
@@ -107,7 +107,22 @@ G3：用与G2相同的可用上下文生成alpha_level与alpha_shape，每样本
 程序化筛选高误差、退化、改善案例，检查水平、形状、突变和峰谷，不只挑旧anchor。
 
 实验工件遵循六文件加figures的统一目录；训练日志/checkpoint另放忽略目录。
-保存所有尝试与失败、运行成本和选择规则。当前仅修改计划，未启动任何新实验。
+保存所有尝试与失败、运行成本和选择规则。
+
+**执行清单**：`scripts/run_lowrank_six.py` 实现14个固定配置：i0、pt_post、pt_pre、
+pt_scaled、tp_post、tp_pre、tp_scaled、pt_null、tp_selective、g1_reliability、
+g2_disagreement、g2_without_forecasts、g3_components、components_static。共12个
+settings、168次8轮从头训练。将G2等参数去预测特征对照提前纳入，避免仅在胜出后
+补测造成不完整归因。所有公共初始权重哈希按setting匹配；初始化期间禁止torch.load，
+替换未来标签后预测必须不变；每个训练batch检查全模型train模式与requires_grad。
+
+正式入口：`python scripts/run_lowrank_six.py --source-dir
+research_runs/phaseformer_l_interaction_20261006 --scratch-dir
+research_runs/lowrank_six_20261007_scratch --audit-dir research_runs/lowrank_six_20261007`。
+source-dir只提供配置，不加载旧checkpoint。代码包含自动全validation配对审计，
+每个arm/setting选每类Top3（至多9条）并保存可复算案例。推理时Gate可替换为训练集
+平均或同变量、预测窗不重叠样本的Gate；H2/H3包含no-null、H3包含接收量均值/错位。
+G3另测试固定水平与形状Gate。训练前必须完成所有14个arm的smoke和审计闭环。
 
 ## Controlled mechanisms (historical stage 1)
 

@@ -6058,3 +6058,25 @@ research directions. Removed automatic expansion to other gates/interaction
 combinations. All planned models train jointly from scratch; historical warm-start
 results stay diagnostic. No model code or experiments changed. Documentation
 diff and whitespace reviewed before commit.
+
+## 2026-10-07 — Implement six-hypothesis from-scratch verification
+
+User authorized implementation and experiments; applied project experiment-and-error-analysis
+skill. Added LowRankDynamicFusion and default-off preset/forward plumbing. Gates read
+detached representations/forecasts but both original branches remain jointly trainable.
+G1 uses history reliability; G2 reads latent summaries and forecast disagreement; G3
+separately blends cycle means/shapes. Added matched G2 no-forecast and static G3 controls.
+Existing H1/H2/H3 modules are reused, with nonpersistent receipt interventions for audit.
+
+New run_lowrank_six.py constructs a fresh random i0 per seed, copies only its untrained
+common tensors into each arm, forbids torch.load during initialization, records tensor
+hashes and checks target-independence and initial identity where required. Fourteen
+configs x12 settings =168 screening runs, full train data, eight epochs, original
+hyperparameters, no test. analyze_lowrank_six.py adds paired sample errors, mean/shuffled
+gate and null/receipt interventions, programmatic Top3 per category, case figures and
+ZIP validation. No trained checkpoint is an initialization source.
+
+Remote time environment passed 44 tests via unittest discover -s tests -p 'test_lowrank*.py'.
+Initial dotted-module unittest invocation failed because tests is not an importable
+package; discovery corrected the command. Syntax and diff checks passed. All-arm smoke
+and audit verification are in progress; no formal efficacy claim yet.
