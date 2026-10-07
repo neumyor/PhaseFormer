@@ -201,6 +201,22 @@ def worker(args):
                     preds[mode], _ = forecast(model, batch, device)
                     if mode == 'native':
                         activations = dict(probe.capture)
+                    elif mode in {'mean_gate', 'roll_gate'}:
+                        torch.testing.assert_close(
+                            probe.capture['acceptance'].mean(-1),
+                            activations['acceptance'].mean(-1), atol=2e-6, rtol=2e-6)
+                        torch.testing.assert_close(
+                            (probe.capture['updated']-probe.capture['original']).mean(-2),
+                            (activations['updated']-activations['original']).mean(-2),
+                            atol=2e-6, rtol=2e-6)
+                    elif mode == 'uniform_phase':
+                        torch.testing.assert_close(probe.capture['acceptance'],
+                            activations['acceptance'], atol=2e-6, rtol=2e-6)
+                if arm.startswith('pt_') and not arm.endswith('post'):
+                    # The unchanged rank decoder and output fusion are linear in
+                    # a fixed P->T message; this is a structural intervention check.
+                    torch.testing.assert_close(preds['half'],
+                        (preds['native']+preds['off'])/2, atol=3e-6, rtol=3e-6)
                 probe.restore()
                 native, _ = forecast(model, batch, device)
                 diff = (native-preds['native']).abs().max().item()
