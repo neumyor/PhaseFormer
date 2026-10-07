@@ -6080,3 +6080,15 @@ Remote time environment passed 44 tests via unittest discover -s tests -p 'test_
 Initial dotted-module unittest invocation failed because tests is not an importable
 package; discovery corrected the command. Syntax and diff checks passed. All-arm smoke
 and audit verification are in progress; no formal efficacy claim yet.
+
+### Six-hypothesis integration verification update
+
+All fourteen training arms passed independent two-batch smokes on ETTh1-H96 and
+Weather-H720. ETTh1 confirms one shared untrained-state hash across all arms,
+all parameters trainable and exact initial static-gate equality. The second smoke
+also includes the future-label replacement assertion. Full ETTh1 validation
+analysis completed inference/ranking but its first report merge exposed NumPy
+float32 values serialized as strings by the shared JSON helper. Converted summary
+metrics to native floats and made merge numeric parsing explicit; training and
+prediction outputs were unaffected. Re-running merge only, not training. Smoke
+reports now explicitly state that they are not efficacy evidence.

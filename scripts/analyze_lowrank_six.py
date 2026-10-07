@@ -161,8 +161,8 @@ def worker(scratch,setting):
                 'model':'PhaseFormer-L',
                 'key_params':json.dumps(json.loads((scratch/'runs'/f'{setting}__{arm}'/'config.json').read_text())['hyperparams'],sort_keys=True),
                 'dataset':source['config']['dataset'],'horizon':model.pred_len,'seed':source['config']['seed'],
-                'mse':frame.candidate_mse.mean(),'mae':frame.candidate_mae.mean(),
-                'delta_mse':frame.delta_mse.mean(),'delta_mae':frame.delta_mae.mean(),
+                'mse':float(frame.candidate_mse.mean()),'mae':float(frame.candidate_mae.mean()),
+                'delta_mse':float(frame.delta_mse.mean()),'delta_mae':float(frame.delta_mae.mean()),
                 'gate_train_sample_count':gate_count,'selected':True}
         for col in frame.select_dtypes('number').columns:
             if col not in ('sample_id','channel'):record['mean_'+col]=float(frame[col].mean())
@@ -229,6 +229,8 @@ def merge(scratch,audit):
                 'candidate_mae_p95':float(group.candidate_mae.quantile(.95))})
         frame.to_csv(audit/'sample_errors.csv',index=False,mode='w' if first else 'a',header=first);first=False
     table=pd.DataFrame(results)
+    for col in ('mse','mae','delta_mse','delta_mae'):
+        table[col]=pd.to_numeric(table[col],errors='raise')
     table.to_csv(audit/'results.csv',index=False);pack(cases,audit/'selected_cases.npz')
     for c in cases:
         for key in ('baseline','candidate','off'):
@@ -274,6 +276,8 @@ def merge(scratch,audit):
            'No pretrained checkpoint loaded. Shared untrained parameters and seed-matched data order. Original rank-r encoder/decoder retained.',
            'Validation-only exploratory selection; validation was previously inspected. No test or Golden superiority claim.','',
            '## 2. Experiment Results','']
+    if manifest['smoke']:
+        lines.insert(2, '> SMOKE ONLY: two training batches; these values are not efficacy evidence.\n')
     lines+=markdown_table(pd.DataFrame(paired));lines+=['','All settings and arms:','']
     lines+=markdown_table(table[['setting','config_id','mae','mse','delta_mae','delta_mse','parameter_count','elapsed_sec']])
     lines+=['','## 3. Parameter / Configuration Search','',
@@ -311,6 +315,7 @@ def merge(scratch,audit):
         assert set(z.namelist())=={'objective_error_analysis.md',*refs}
         for rel in z.namelist():assert z.read(rel)==(audit/rel).read_bytes()
     run['analysis']['selections']=selections;run['analysis']['paired_comparisons']=paired
+    run['code']['analysis_commit']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     run['execution']['results']=[{k:r[k] for k in ('setting','arm','epochs','elapsed_sec','peak_memory_bytes','environment','common_random_state_sha256')} for r in results]
     run['validation']={'status':'passed','results_checked':True,'ranking_and_cases_checked':True,
                        'report_and_archive_checked':True,'directory_and_settings_checked':True,
