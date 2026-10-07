@@ -246,3 +246,55 @@ and overlapping-window limitations.
 Output: `research_runs/lowrank_stage2_mechanism_audit_20261007/`, in the canonical
 six-file format with ten figures. Analysis intermediates use a separate ignored
 directory. Existing source weights and evidence are not changed.
+
+#### Mechanism audit outcome
+
+Completed 72,912 sample/channel/arm records and ten six-panel figures. All six
+settings have native-output max_abs=0 against the original forward. Off-path,
+gate-mean preservation and linear P->T half-scale identities passed. The final
+report adds a Chinese hypothesis review and next-step rationale in sections 9/10;
+this editorial interpretation is separate from the script-generated numeric
+sections. No training or test evaluation was performed.
+
+- **Identity bypass is supported in this warm-start context.** At source-i0
+  insertion on ETTh1 seed2021 `485,c5`, off/message-only/norm-only/post-norm MSE
+  is 1.357256/1.358235/4.341222/4.339780. Seed2022 `533,c5` reproduces the same
+  pattern (1.221824/1.235505/4.502841/4.503758). This directly identifies LN as
+  the dominant insertion perturbation for those samples, not as a universal
+  explanation of every trained-model difference. The additional efficacy of
+  zero-initialized scale remains unproven against the pre-norm-only control.
+- **Attention receipt is not a calibrated reliability measure.** Weather
+  seed2021 null-read `1910,c0` accepts nearly all mass and has output correction
+  cosine -0.959, native/off MSE 4.340156/1.250325. Conversely ETTm2 seed2022
+  selective-write `7538,c4` accepts only 0.0632, but native/off/no-null MSE is
+  0.587408/0.630951/0.143215. Rejection can suppress a useful correction.
+  Removing rejection is not universally beneficial: its diagnostic-cohort
+  effect differs across settings, so these examples do not justify removing
+  all gates or claiming that no rejection mechanism could work.
+- **Useful phase alignment is not demonstrated.** Constant mean receipt has
+  lower diagnostic-cohort MSE in all six settings; a 12-slot gate shift has
+  lower MSE in five. Many differences are tiny. The current update matrix over
+  phase slots has rank at most one, delta_p_j=alpha*g_j*v(t): its selectivity
+  varies magnitude, not direction. It should not be described as phase-specific
+  message content.
+- **Magnitude control alone is insufficient.** Wrong-direction examples need
+  different content or rejection, while `7538,c4` and `8142,c3` improve when
+  more of their current correction is allowed. Large token deltas and small
+  deltas can both help or hurt. Output-space alignment and energy are more
+  informative than raw latent norms, but require future labels for diagnosis.
+- **Training adaptation must be distinguished from current message efficacy.**
+  Weather selective-write `1955,c7` has i0/native/off MSE
+  1.012050/0.215311/0.214392. The large cross-model improvement is not evidence
+  that the current message helps. An off checkpoint also differs from a model
+  trained without interaction, so this is not a full causal decomposition.
+
+Next steps, not yet implemented: first compare frozen-i0 interaction-only
+learning with matched joint fine-tuning. Then test phase-conditioned message
+content using a small bilinear/Hadamard interaction from the same single rank-r
+trend token, with a centered-phase variant and a matched uncentered control.
+If reliability gating is revisited, use historical hindcast errors/disagreement
+to assess expected correction benefit, and validate calibration on held-out
+time intervals. Consider output-correction energy rather than latent norm for
+amplitude limits; retain separate direction/scale ablations. No oracle scale
+derived from the future labels may enter inference. These are new hypotheses,
+not conclusions that the proposed changes will improve forecasting.

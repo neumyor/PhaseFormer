@@ -5831,3 +5831,71 @@ from-scratch、Golden 超越或统计显著性结论。本轮授权的三个方�
 `run.yaml`；`scripts/analyze_lowrank_stage2.py` 负责重算配对审计。正式目录严格不含
 checkpoint 或训练日志；来源权重、无效批次证据及 v2 训练记录保留在独立忽略目录，
 供追溯和后续研究使用，不提交大文件。本次收尾只更新实验计划与本日志。
+
+## 2026-10-07 — 第二阶段固定权重激活干预与科研假设复核
+
+**请求与范围**：用户要求围绕具体样本细化激活分析，判断哪些科研假设成立或不可靠，
+并提出改进方向。本次只分析已有 v2 checkpoint，不训练、不读 test。新增
+`scripts/audit_lowrank_stage2_mechanisms.py`；沿用旧低秩单 trend token 结构。
+本次是已有模型分析，不新增模型实现/训练，未重新触发实现实验类 Skill。
+
+**协议与校验**：六 setting 各取 128 个等间隔 validation 窗口及全部通道，独立于
+误差选择；额外保存十个来源审计 rank-one MAE 改善/退化案例，且在相同样本上检查
+全部八个交互 arm。对 checkpoint 固定权重，测试 off、消息 0.25/0.5/2 倍、null
+移除、真实 phase 均匀读取、phase 接收量均值替换/循环移动、post-norm 的
+norm-only/message-only；另在两个 ETTh1 案例复原来源 i0 的插入时刻。
+GPU 0--5 并行。先完成 Weather 的八 arm 小样本 smoke，再完成正式诊断。
+输出使用最高 float32 精度，区别于旧效果报告的 medium 精度；不将诊断子集均值
+替代完整 validation 指标。六 setting native 与原 forward 最大差全部为 0，
+off 路径、门控均值保持和 P→T 半幅线性响应检查均通过。共 72,912 条记录、10 张图。
+
+**核心结果**：
+
+- 来源 i0 的 ETTh1 seed2021 `485,c5`，不交互 MSE 1.357256，只添 message
+  1.358235，只做 LN 4.341222，完整 post-norm 4.339780。seed2022 `533,c5`
+  分别为 1.221824/1.235505/4.502841/4.503758。直接支持这两个插入案例的主要
+  损伤来自归一化；不等价于从头训练或全部最终差异的普遍因果结论。
+- Weather seed2021 null `1910,c0` 接收量约 1、最大 phase 权重 0.734，更新量
+  为原 trend norm 的 3.194 倍；输出修正与所需修正 cosine -0.959。native/off/
+  half MSE 4.340156/1.250325/2.551745：强接收不代表方向正确。
+- ETTm2 seed2022 selective `7538,c4` 接收量 0.0632，gate 范围 0.0138--0.1771；
+  所有 24 个 phase 的当前消息都改善该 phase 的预测误差，但 native/off/no-null
+  MSE 为 0.587408/0.630951/0.143215。这提供了过度拒绝有用消息的明确反例。
+- 对 selective 用样本内 gate 均值替代各 phase 的 gate，六 setting 的平均 MSE
+  都略低；ETTm2 两 seed 的差为 -0.0000262/-0.0008240，其余差异多很小。
+  移动 gate 12 个 phase slots，5/6 setting 也没有变差。因此未建立有效 phase
+  对齐收益。结构上，各 phase 的更新是共享向量的标量倍数，更新矩阵秩至多为 1。
+- Weather selective `2577,c15` 的 24 个 gate 全为 1，24 个 phase 都受到有害
+  修正，输出 cosine -0.929；ETTm2 selective 改善例 `8142,c3` 的大更新
+  （相对 norm 0.756）却有正向 cosine 0.911，native/off/double MSE
+  0.462074/1.170454/0.200517。只限制幅度不能覆盖相反的修正需求。
+- Weather selective `1955,c7` 的 i0/native/off MSE 为
+  1.012050/0.215311/0.214392，跨模型改善主要不能归给当前消息。冻结模型的
+  off 也不是独立训练的 i0，不能把此算术差分包装为完整因果归因。
+
+**判断与下一步**：保留 pre-norm 原表示旁路；零初始化 scale 的额外效果仍未证明。
+撤回将 null/attention mass 直接解释为可靠性、将 gate 差异解释为有效 phase 选择、
+或将大 token delta 解释为坏消息的推断。低秩 token 是学习到的压缩表示，不保证
+只含低频趋势；当前结果也不否定 i0 已有收益。下一步先增加冻结 i0、仅训练交互的
+诊断，再研究保持一个 trend token 的 phase 条件消息内容（如低容量双线性交互），
+并用中心化/不中心化同参数对照拆分共享和 phase 修正。若再引入可靠性门控，候选
+特征应来自历史回溯误差/分支分歧，检验收益校准；幅度约束应关注预测空间并与方向
+判断分开验证。本次没有实施这些新方案，也没有按样本选择 oracle 推理系数。
+
+**代码与产物**：初始脚本 `33aaf80`，干预不变量检查 `efc1deb`，序列化/来源哈希
+`c259c33`。首次合并报告时遇到 numpy 标量的 YAML 序列化错误，修复后只重做合并，
+没有重跑或改变任何前向结果。模型代码为 `0f14e9e`；每个来源 checkpoint、来源
+审计 YAML 及分析脚本的 SHA256 写入新 run.yaml。正式产物为
+`research_runs/lowrank_stage2_mechanism_audit_20261007/` 的六文件和十张图，报告
+9/10 节为人工追加的中文判断和改进建议，ZIP 随后重建并重新校验字节一致性。
+原始激活、全部干预的选例预测及设置均可从 NPZ/CSV 复算；人工查看两张相反方向
+代表图，排版可读。未提交权重或大型结果。实验计划同步记录当前判断和可证伪方向。
+
+**复现命令**：在含来源权重及数据的环境运行
+`python scripts/audit_lowrank_stage2_mechanisms.py --source-scratch
+research_runs/lowrank_interaction_stage2_20261007_v2_scratch --source-audit
+research_runs/lowrank_interaction_stage2_20261007_v2 --output
+research_runs/lowrank_stage2_mechanism_audit_20261007 --work-dir
+research_runs/lowrank_stage2_mechanism_audit_20261007_scratch --windows 128
+--gpus 0,1,2,3,4,5`；已有前向记录时用 `--merge-only` 重建数值报告。
+重建会覆盖人工解读章节，解读的结论也保存在本日志和专项计划中。
