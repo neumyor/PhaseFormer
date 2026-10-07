@@ -173,11 +173,17 @@ def train_job(path):
     logger = build_logger(str(out / "lightning"), version="train")
     trainer, checkpoint = build_trainer(max_epochs=job["epochs"], logger=logger,
         patience=job["epochs"] + 1, checkpoint_dir=str(out / "checkpoints"), progress=False)
+    class TrainingModeAudit(pl.Callback):
+        def on_train_batch_start(self, trainer, module, batch, batch_idx):
+            if not all(part.training for part in module.modules()):
+                raise AssertionError("training batch contains a module left in eval mode")
+    trainer.callbacks.append(TrainingModeAudit())
     if job["smoke"]:
         trainer.limit_train_batches = 2
         trainer.limit_val_batches = 2
     # Reset after all construction/audits, so all arms use matched batch order.
     pl.seed_everything(cfg["seed"], workers=True)
+    model.train()
     torch.cuda.reset_peak_memory_stats()
     started = time.monotonic()
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
