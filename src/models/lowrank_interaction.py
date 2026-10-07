@@ -25,6 +25,9 @@ class PhaseContentCorrection(nn.Module):
             raise ValueError(f"unsupported content mode: {mode}")
         self.mode = mode
         self.phase_dim = phase_dim
+        self.context_bins = [(math.floor(i * rank / phase_dim),
+                              math.ceil((i + 1) * rank / phase_dim))
+                             for i in range(phase_dim)]
         self.trend_projection = nn.Linear(rank, width)
         # A context bias would cancel in the centered arm and confound matching.
         self.context_projection = nn.Linear(phase_dim, width, bias=False)
@@ -36,7 +39,9 @@ class PhaseContentCorrection(nn.Module):
 
     def forward(self, trend, phase):
         if self.mode == "trend":
-            context = F.adaptive_avg_pool1d(trend, self.phase_dim)
+            # Equivalent adaptive-pool bins with deterministic CUDA backward.
+            context = torch.stack([trend[..., start:end].mean(-1)
+                                   for start, end in self.context_bins], dim=-1)
             context = context.expand(-1, phase.shape[1], -1)
         else:
             context = phase

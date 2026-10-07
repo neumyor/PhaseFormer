@@ -48,6 +48,17 @@ class Stage3Tests(unittest.TestCase):
                 torch.testing.assert_close(rolled, native.roll(12, 1), atol=1e-7, rtol=1e-5)
                 self.assertGreater((rolled-native).abs().max().item(), 0)
 
+    def test_control_pooling_matches_adaptive_definition(self):
+        for rank, width in ((12, 4), (90, 8), (4, 8)):
+            addon = PhaseContentCorrection(rank, width, 8, 'trend')
+            value = torch.randn(3, 1, rank, requires_grad=True)
+            explicit = torch.stack([value[..., a:b].mean(-1) for a,b in addon.context_bins], -1)
+            reference = torch.nn.functional.adaptive_avg_pool1d(value, width)
+            torch.testing.assert_close(explicit, reference)
+            expected = torch.autograd.grad(reference.square().sum(), value, retain_graph=True)[0]
+            actual = torch.autograd.grad(explicit.square().sum(), value)[0]
+            torch.testing.assert_close(actual, expected)
+
     def test_legacy_branch_identity_and_unchanged_decoder(self):
         base = LowRankPhaseInteractionBranch(48, 16, 4, pool_factor=1, rank=12,
             interaction_mode='trend_to_phase', update_style='pre_norm')
