@@ -209,3 +209,40 @@ Canonical report and portable image bundle:
 and `objective_error_analysis.zip` in the same directory. Source checkpoints,
 invalid-run evidence and v2 training records remain outside the canonical audit
 directory for reproducibility; they are not committed to Git.
+
+### Frozen-checkpoint mechanism audit (2026-10-07)
+
+The user requests finer sample/activation analysis and reassessment of the
+research hypotheses. No training or test evaluation is added. Use the valid v2
+checkpoints only. `scripts/audit_lowrank_stage2_mechanisms.py` evaluates all eight
+interaction arms on 128 equally spaced validation windows per setting, with all
+channels. This cohort is selected independently of errors and is not a new full
+validation efficacy estimate. Adjacent windows may overlap.
+
+Ten detailed cases are selected from the existing audit's rank-one MAE cases:
+ETTh1-H96 both seeds, pt_post regression; Weather-H720 seed2021, pt_null and
+tp_selective regression/improvement; ETTm2-H720 seed2022, tp_selective
+regression/improvement; Weather-H720 seed2022, tp_scaled regression/improvement.
+The same windows/channels are also evaluated across all eight arms to prevent
+confusing differences between samples with differences between mechanisms.
+
+Frozen interventions: message bypass; 0.25/0.5/2 times message scale; removal of
+null with real-key renormalization; uniform phase read with original acceptance;
+constant per-sample mean phase gate; a 12-slot cyclic shift of gates preserving
+their histogram; and separate post-norm message-only versus norm-only paths.
+Native and bypass implementations must match the original model at every batch.
+ETTh1 source-i0 insertion checks additionally separate the initial normalization
+shock from later model adaptation. Use highest float32 precision, documenting
+the difference from the original medium-precision efficacy evaluation.
+
+Measure both latent changes and output corrections. For d=y_on-y_off and
+e=y_true-y_off, check the exact identity delta MSE=mean(d^2)-2 mean(d*e).
+The label-dependent optimum along d is a diagnostic upper bound, never an
+inference-time gate or an authorized model selection rule. Full-validation
+gate/error correlations are reused from the previous audit and reported as
+observational. Hold weights fixed, and qualify all activation-distribution shift
+and overlapping-window limitations.
+
+Output: `research_runs/lowrank_stage2_mechanism_audit_20261007/`, in the canonical
+six-file format with ten figures. Analysis intermediates use a separate ignored
+directory. Existing source weights and evidence are not changed.
