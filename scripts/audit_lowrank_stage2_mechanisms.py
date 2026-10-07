@@ -455,6 +455,14 @@ def merge(args):
          'selection':{'source':'previous validation audit','cases':cases,'cohort':'equally spaced indices; independent of errors'},
          'checks':checks,'full_validation_observations':observations,'output_diagnostics':diagnostics,
          'validation':{'results_checked':True,'ranking_and_cases_checked':True,'report_and_archive_checked':True,'directory_and_settings_checked':True,'status':'passed'}}
+    # Pandas reductions return numpy scalars; serialize them as plain YAML values.
+    run=json.loads(json.dumps(run,default=lambda value:value.item()))
+    run['code']['source_audit_sha256']=hashlib.sha256((args.source_audit/'run.yaml').read_bytes()).hexdigest()
+    run['code']['checkpoints']={}
+    for setting in settings:
+        for arm in ARMS:
+            cfg=json.loads((args.source_scratch/'runs'/f'{setting}__{arm}'/'config.json').read_text())
+            run['code']['checkpoints'][f'{setting}__{arm}']=hashlib.sha256(Path(cfg['checkpoint']).read_bytes()).hexdigest()
     (out/'run.yaml').write_text(yaml.safe_dump(run,sort_keys=False))
     assert {p.name for p in out.iterdir()}=={'run.yaml','results.csv','sample_errors.csv','selected_cases.npz','objective_error_analysis.md','objective_error_analysis.zip','figures'}
     print(json.dumps({'status':'passed','rows':len(frame),'cases':len(cases),'figures':len(refs)}),flush=True)
