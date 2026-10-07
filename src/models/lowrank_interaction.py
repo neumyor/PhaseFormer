@@ -11,6 +11,51 @@ from torch.nn import functional as F
 from src.models.phase_adapters import PooledLowRankWeakPeriodResidualHead
 
 
+class PhaseContentCorrection(nn.Module):
+    """Small content residual on the original pre-norm broadcast path.
+
+    All modes have identical parameter shapes. The trend-only control replaces
+    phase context with a deterministic pooled view of the same rank token.
+    Diagnostics/interventions never change parameters or the low-rank decoder.
+    """
+
+    def __init__(self, rank, phase_dim, width, mode):
+        super().__init__()
+        if mode not in {"trend", "phase", "centered"}:
+            raise ValueError(f"unsupported content mode: {mode}")
+        self.mode = mode
+        self.phase_dim = phase_dim
+        self.trend_projection = nn.Linear(rank, width)
+        # A context bias would cancel in the centered arm and confound matching.
+        self.context_projection = nn.Linear(phase_dim, width, bias=False)
+        self.output_projection = nn.Linear(width, phase_dim, bias=False)
+        self.scale = nn.Parameter(torch.zeros(()))
+        self.intervention = "native"
+        self.capture_diagnostics = False
+        self.last_diagnostics = {}
+
+    def forward(self, trend, phase):
+        if self.mode == "trend":
+            context = F.adaptive_avg_pool1d(trend, self.phase_dim)
+            context = context.expand(-1, phase.shape[1], -1)
+        else:
+            context = phase
+        if self.intervention == "roll":
+            context = context.roll(phase.shape[1] // 2, dims=1)
+        elif self.intervention == "reverse":
+            context = context.flip(1)
+        raw = self.output_projection(
+            self.trend_projection(trend) * self.context_projection(context)
+        )
+        if self.mode == "centered":
+            raw = raw - raw.mean(1, keepdim=True)
+        multiplier = {"off": 0., "half": .5, "double": 2.}.get(self.intervention, 1.)
+        update = multiplier * self.scale * raw
+        if self.capture_diagnostics:
+            self.last_diagnostics = {"raw": raw.detach(), "update": update.detach()}
+        return update
+
+
 class LowRankPhaseInteractionBranch(nn.Module):
     """Legacy pooled-low-rank residual head with optional phase interaction.
 
@@ -44,6 +89,8 @@ class LowRankPhaseInteractionBranch(nn.Module):
         update_style: str = "post_norm",
         null_read: bool = False,
         selective_write: bool = False,
+        content_mode: str = "none",
+        content_width: int = 8,
     ) -> None:
         super().__init__()
         if interaction_mode not in self.MODES:
@@ -144,6 +191,15 @@ class LowRankPhaseInteractionBranch(nn.Module):
                 self.null_score = nn.Parameter(torch.zeros(()))
 
         self.last_phase_attention = None
+        if content_mode != "none" and (
+            interaction_mode != "trend_to_phase" or update_style != "pre_norm"
+            or null_read or selective_write or content_width < 1
+        ):
+            raise ValueError("content residual requires plain pre-norm T -> P and positive width")
+        self.content_correction = (
+            PhaseContentCorrection(rank, phase_dim, content_width, content_mode)
+            if content_mode != "none" else None
+        )
 
     def _phase_to_trend(self, latent, phase_latent):
         b, c, slots, _ = phase_latent.shape
@@ -206,6 +262,8 @@ class LowRankPhaseInteractionBranch(nn.Module):
         scale = self.interaction_scale if self.update_style == "scaled_pre_norm" else 1.0
         original = trend if to_trend else phase
         updated = original + scale * message
+        if not to_trend and self.content_correction is not None:
+            updated = updated + self.content_correction(t, p)
         if self.capture_diagnostics:
             self.last_diagnostics = {
                 "message_norm": message.norm(dim=-1).mean(-1).reshape(b, c).detach(),

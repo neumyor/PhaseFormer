@@ -298,3 +298,76 @@ time intervals. Consider output-correction energy rather than latent norm for
 amplitude limits; retain separate direction/scale ablations. No oracle scale
 derived from the future labels may enter inference. These are new hypotheses,
 not conclusions that the proposed changes will improve forecasting.
+
+## Stage 3: Phase-conditioned content on tp_pre (2026-10-07)
+
+User authorizes implementation and tests of the preceding content hypothesis.
+Use the valid stage-2 `tp_pre` checkpoint for each of the six existing settings:
+ETTh1-H96, ETTm2-H720, Weather-H720, seeds 2021/2022. Keep original pooled-lowrank
+E/D, one rank-r trend token, r=H/8, phase backbone, pre-norm broadcast and static
+output fusion. No Conv1d, additional trend tokens, null gate, output norm penalty
+or additional rejection mechanism is introduced in this stage.
+
+Add u_j=Wo[Wt(LN(t))*Wp(LN(p_j))], width 8, and update p_j'=p_j+m0+beta*u_j.
+The centered candidate uses u_j-mean_k(u_k). beta starts at zero so the complete
+initial output exactly equals source tp_pre. Both conditional variants have
+identical parameters. The trend-only capacity control replaces LN(p_j) with
+adaptive pooling of LN(t) to the phase width, broadcast to every phase; it uses
+the same projection shapes and parameter count without unused parameters.
+Context and output projections omit biases that would cancel under centering.
+This control matches capacity but does not uniquely match every optimization
+property; trend-only performance must be reported, not assumed inferior.
+
+Seven trained arms per setting: tp_pre_continue; trend_frozen, phase_frozen,
+centered_frozen; trend_joint, phase_joint, centered_joint. Frozen arms train only
+the new content module while all original weights/buffers remain fixed and all
+original modules stay in eval mode (including dropout). Joint arms train all
+parameters in normal train mode. All start from the same tp_pre checkpoint,
+receive four epochs with fresh Adam, source LR/scheduler, batch size, loss and
+data order seed, and select minimum validation Huber after training. Source
+tp_pre is also evaluated as the frozen baseline. Frozen and joint comparisons
+are reported separately; a joint gain is not attributed to the new message
+unless fixed-weight message ablations support that narrower claim.
+
+Total: 42 training jobs plus six unchanged source evaluations. Complete baseline
+and frozen diagnostics before joint candidates. Nine existing stage-2 mechanism
+tests and new identity/gradient/centering/capacity/alignment checks precede seven
+arm training smokes. Each job checks source SHA256, exact common-weight loading,
+full-model initial identity, training mode, and (frozen arms) final bitwise
+equality of every source state tensor. No automatic hyperparameter sweep.
+
+Hypotheses and failure conditions:
+
+1. Phase-conditioned content should improve over matched tp_pre continuation
+   and over equal-parameter trend-only expansion, across seeds/settings. Without
+   both comparisons, added capacity cannot be excluded.
+2. Centering should add value over the uncentered conditional arm. Latent zero
+   mean is checked explicitly but is not assumed to preserve output mean.
+3. Frozen-arm gains establish that the new message can help without modifying
+   old weights; joint-only gains are labeled adaptation-dependent.
+4. At fixed trained weights, disabling just the new content, or cyclically
+   shifting/reversing its phase context, should worsen predictions if the new
+   content and its alignment matter. The trend-only control must be invariant
+   to phase permutations. Keep the old tp_pre broadcast enabled in every such
+   diagnostic. Off-path frozen predictions must equal source tp_pre.
+5. Revisit Weather-H720 seed2021 1910,c0 and 2577,c15 as prespecified anchor cases:
+   reduced harm on the former must not silently erase benefit on the latter.
+   Also inspect 1955,c7 and ETTm2-H720 seed2022 7538,c4 / 8142,c3. These targeted
+   checks do not replace programmatic top-five MAE regression/improvement/high
+   baseline error selection per setting/arm.
+
+Full validation inference records paired MAE/MSE, horizon thirds, content raw
+and effective update norms, phase mean/spread, output-correction energy and
+alignment, and enabled/off/phase-permuted predictions. The same validation set
+has already influenced source model selection and hypotheses; this is an
+exploratory matched continuation, not a blind or from-scratch benchmark. No test
+or Golden superiority claim, statistical significance claim, or output-space
+constraint experiment is authorized by this fixed matrix. Output constraints
+remain a separately testable follow-up if needed.
+
+Entrypoint: `scripts/run_lowrank_stage3.py --source-scratch
+research_runs/lowrank_interaction_stage2_20261007_v2_scratch --scratch-dir
+research_runs/lowrank_stage3_20261007_scratch --audit-dir
+research_runs/lowrank_stage3_20261007 --gpus 0,1,2,3,4,5,6,7`.
+Canonical output has the six audit files and referenced figures only. Training
+records/checkpoints are kept separately in the ignored scratch directory.

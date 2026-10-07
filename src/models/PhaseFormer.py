@@ -606,6 +606,8 @@ class PhaseFormer(DefaultPLModule):
                 update_style=getattr(configs, "lowrank_update_style", "post_norm"),
                 null_read=getattr(configs, "lowrank_null_read", False),
                 selective_write=getattr(configs, "lowrank_selective_write", False),
+                content_mode=getattr(configs, "lowrank_content_mode", "none"),
+                content_width=getattr(configs, "lowrank_content_width", 8),
             )
             gate_init = min(
                 max(float(getattr(configs, "weak_period_residual_gate_init", 0.2)), 1e-4),
