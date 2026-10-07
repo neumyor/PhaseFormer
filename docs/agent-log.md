@@ -6092,3 +6092,13 @@ float32 values serialized as strings by the shared JSON helper. Converted summar
 metrics to native floats and made merge numeric parsing explicit; training and
 prediction outputs were unaffected. Re-running merge only, not training. Smoke
 reports now explicitly state that they are not efficacy evidence.
+
+### Six-hypothesis screening launched after audit closure
+
+Both fourteen-arm smoke matrices completed with zero training failures. The ETTh1
+full-validation smoke audit passed on the numeric merge fix: 272,930 paired rows,
+117 selected records and seven figures; representative G3 figure inspected for
+layout and labels. These smoke metrics are not efficacy evidence. Formal 168-job
+eight-epoch from-scratch matrix launched on code a30494f, using eight GPUs and
+new lowrank_six_20261007 / lowrank_six_20261007_scratch directories. The original
+resources directory and prior remote stashes were preserved. No test evaluation.
