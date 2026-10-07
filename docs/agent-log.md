@@ -5762,3 +5762,21 @@ ETTh1-H96、Weather-H720、ETTm2-H720 × seed 2021/2022 × 九个 arm，共 54 r
 文件独立位于 `research_runs/lowrank_interaction_stage2_20261007_scratch/`。
 来源为远程已完成 `phaseformer_l_interaction_20261006`，来源权重及旧结果保留不动。
 当前启动快照 6/54 completed、8 running、0 failed；最终结果待正式审计回填。
+
+## 2026-10-07 — 第二阶段训练模式缺陷修复，旧批次作废并重跑 v2
+
+**发现与处置**：复核 Lightning 2.6.5 训练日志和 fit_loop 时发现，初始化等价性检查
+调用 `model.eval()` 后未显式恢复 `train()`，Lightning 保留了该状态。原批次训练开始
+显示全部模块在 eval mode，影响 dropout 等训练行为。立即定向停止 supervisor 42260
+及其子进程，22 个已落盘结果全部作废；不引用该批次的效果或此前中途口头比较。
+源 checkpoint、旧结果和失败日志保留，新结果使用独立 v2 目录。
+
+**修复与复验**：`0f14e9e` 在 fit 前明确调用 `model.train()`，并加入每个 train batch
+检查所有模块 training 状态的回调。九个 arm 全部重做集成 smoke 成功，新日志显示
+train mode 模块为 92/100 等实际数值、eval mode 为 0；scaled/null/selective 初始
+输出仍与 i0 完全一致。早先完成的样本报告 smoke 只验证证据管线，不用于训练效果。
+
+**v2 正式启动**：代码 `0f14e9e`，supervisor PID 47307，实验
+`lowrank_interaction_stage2_20261007_v2`，中间目录同名加 `_scratch`。54-run 矩阵、
+四 epoch matched fine-tuning、六 setting 和 validation-only 协议不变，GPU 0--7。
+成功后自动执行配对样本/激活审计，最终结果待回填。

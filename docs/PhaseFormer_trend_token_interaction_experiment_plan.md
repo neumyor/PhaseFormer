@@ -103,13 +103,20 @@ gradient startup, broadcast control, and explicit attention vs MHA equivalence.
 Then run all nine arms through a two-train-batch/two-validation-batch integration
 smoke before launching the complete pilot on the eight available A800 GPUs.
 
-Canonical output: `research_runs/lowrank_interaction_stage2_20261007/`, containing
+Canonical output: `research_runs/lowrank_interaction_stage2_20261007_v2/`, containing
 the six audit files and referenced figures only. Checkpoints/logs live in the
-separate ignored `research_runs/lowrank_interaction_stage2_20261007_scratch/`.
+separate ignored `research_runs/lowrank_interaction_stage2_20261007_v2_scratch/`.
 Entrypoint: `scripts/run_lowrank_interaction_stage2.py --source-dir
 research_runs/phaseformer_l_interaction_20261006 --scratch-dir
-research_runs/lowrank_interaction_stage2_20261007_scratch --audit-dir
-research_runs/lowrank_interaction_stage2_20261007 --gpus 0,1,2,3,4,5,6,7`.
+research_runs/lowrank_interaction_stage2_20261007_v2_scratch --audit-dir
+research_runs/lowrank_interaction_stage2_20261007_v2 --gpus 0,1,2,3,4,5,6,7`.
+
+The first stage-2 batch without the v2 suffix is INVALID: the initialization
+audit left the model in eval mode before fit (22 result files at interruption).
+Code `0f14e9e` explicitly calls train() after the audit and adds a per-training-
+batch assertion that all modules are in training mode. All nine integration
+smokes were repeated successfully before the v2 launch. Earlier smoke results
+establish pipeline behavior only and cannot establish training efficacy.
 
 Post-training paired analysis ranks sample/channel MAE, selects top five high
 baseline error, regression and improvement cases with a within-channel start
