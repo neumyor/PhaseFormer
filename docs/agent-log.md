@@ -5780,3 +5780,54 @@ train mode 模块为 92/100 等实际数值、eval mode 为 0；scaled/null/sele
 `lowrank_interaction_stage2_20261007_v2`，中间目录同名加 `_scratch`。54-run 矩阵、
 四 epoch matched fine-tuning、六 setting 和 validation-only 协议不变，GPU 0--7。
 成功后自动执行配对样本/激活审计，最终结果待回填。
+
+## 2026-10-07 — 第二阶段 v2 完成、配对结果与样本审计结论
+
+**完成状态**：正式代码 `0f14e9e`，`lowrank_interaction_stage2_20261007_v2`
+已完成 54/54 runs、0 failed，训练 supervisor 已退出。六个 setting 的自动审计通过，
+落盘 3,050,768 条配对样本×通道记录、720 个程序化去重案例、24 张图。六个审计文件
+已完整下载，本地/远程 SHA256 全部一致；本地再次通过六文件加 figures 白名单、54 行
+结果、六 setting 覆盖、图引用和 ZIP 字节一致性检查。九项单元测试、九 arm 集成 smoke
+及训练模式修复后的复验见前两条记录；正式过程每个 train batch 检查 training 状态。
+无 v2 训练失败。无后缀的首批 22 个 eval-mode 结果保持作废，不参与以下任何统计。
+
+**方案 1**：六 setting 等权、相对同等续训的 `i0_continue`，`pt_scaled` 的
+ΔMAE/ΔMSE 为 `-0.000140/+0.000167`，MSE 胜出 3/6；`tp_scaled` 为
+`-0.000225/-0.000379`，胜出 5/6。pre-norm 单独对照 `tp_pre` 为
+`-0.000270/-0.000606`，胜出 4/6，平均 MSE 优于零初始化 scale 版本。
+`tp_pre - tp_post` 的 ΔMSE 为 `-0.002145`，6/6 改善；
+`tp_scaled - tp_pre` 为 `+0.000227`，仅 2/6 改善。因此当前证据更支持
+pre-norm 的 T→P 更新，不能把收益全部归因于可学习 scale。胜出计数包含极小数值差，
+不代表显著性；P→T 没有稳定净收益。
+
+**方案 2/3 的增量检验**：null P→T 相对 `pt_scaled` 的
+ΔMAE/ΔMSE 为 `+0.000314/+0.000348`，仅两处极小 ETTm2 MSE 改善；
+selective T→P 相对 `tp_scaled` 为 `+0.000683/+0.001249`，六 setting 全部变差。
+相对 i0，二者 ΔMSE 分别为 `+0.000515/+0.000869`。暂不扩大这两种机制的实验。
+
+**激活与 bad case**：null 在 ETT 的真实 phase 接收质量为 `0.951--0.963`，接近
+24 个 phase 加一个 null 的均匀质量；Weather 为 `0.459/0.670`，更常拒绝但没有
+稳定收益。选择性写入在 ETTm2 的 phase 间 gate 标准差为 `0.071/0.120`，Weather
+仅 `0.0071/0.0077`。ETTm2 同 checkpoint 开启消息相对关闭消息的 MSE 增量为
+`+0.001131/+0.000479`；Weather 则为 `-0.006392/-0.005379`，但仍弱于训练后的
+广播对照，说明模型对消息的依赖不等于机制比较中的优势。
+
+程序化选例中，Weather-H720 seed2021 的 null 退化样本 `1910,c0` 接收质量约 1，
+相对 i0 ΔMSE `+2.35810`，同 checkpoint 消息开/关 ΔMSE `+3.0895`；
+改善样本 `2111,c14` 接收质量 `0.025`、相对 i0 ΔMSE `-1.28771`，但开/关仅
+`-0.00037`。ETTm2-H720 seed2022 的 selective 退化样本 `7538,c4` 接收质量
+`0.063`、相对 i0 ΔMSE `+0.25369`，开启消息反而比关闭好 `0.04355`。
+因此不能把低接收质量直接解释成可靠拒绝，也不能把跨模型差异全部归因于当前消息。
+
+**决策与边界**：保留 pre-norm T→P 作为下一步候选基础，优先研究消息内容而非继续
+增加接收门控；i0 仍是既有低秩基线。当前仅三个 dataset/horizon、两个 seed、四 epoch
+matched fine-tuning，复用 validation 选 checkpoint 和分析；没有读取 test，没有
+from-scratch、Golden 超越或统计显著性结论。本轮授权的三个方案已实现并测试完毕，
+不自动扩大矩阵。完整指标、对照和案例结论追加至原专项实验计划。
+
+**产物与复核**：`research_runs/lowrank_interaction_stage2_20261007_v2/` 下的
+`objective_error_analysis.md`、同名 ZIP 及其余四个审计文件为正式证据。
+复现入口仍是 `scripts/run_lowrank_interaction_stage2.py`，冻结参数见专项计划和
+`run.yaml`；`scripts/analyze_lowrank_stage2.py` 负责重算配对审计。正式目录严格不含
+checkpoint 或训练日志；来源权重、无效批次证据及 v2 训练记录保留在独立忽略目录，
+供追溯和后续研究使用，不提交大文件。本次收尾只更新实验计划与本日志。

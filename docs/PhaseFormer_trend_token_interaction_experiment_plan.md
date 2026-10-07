@@ -129,3 +129,83 @@ causal claims. Setting coverage, error means, ranking, NPZ predictions, figure
 references and ZIP bytes must be verified before reporting completion.
 No test loader or hyperparameter search is permitted in this pilot. No automatic
 full-matrix expansion is planned before assessing pilot evidence.
+
+### Stage 2 Completed Results (2026-10-07)
+
+The valid v2 matrix completed all 54 runs with zero failures on code `0f14e9e`.
+The paired audit passed: 3,050,768 sample/channel comparison rows, 720 selected
+cases and 24 figures. All six canonical files were downloaded and their SHA256
+hashes match the remote originals. The local directory whitelist, all 54 result
+rows, setting coverage and report/ZIP byte consistency were independently checked.
+The earlier unsuffixed eval-mode batch remains invalid and is excluded below.
+
+Setting-equal candidate-minus-`i0_continue` validation differences (negative is
+better; wins count any negative MSE difference, including very small differences):
+
+| Arm | Mean delta MAE | Mean delta MSE | MSE wins |
+|---|---:|---:|---:|
+| pt_post | +0.009651 | +0.016683 | 2/6 |
+| pt_pre | +0.000289 | +0.000410 | 2/6 |
+| pt_scaled | -0.000140 | +0.000167 | 3/6 |
+| tp_post | +0.000551 | +0.001539 | 2/6 |
+| tp_pre | -0.000270 | -0.000606 | 4/6 |
+| tp_scaled | -0.000225 | -0.000379 | 5/6 |
+| pt_null | +0.000174 | +0.000515 | 2/6 |
+| tp_selective | +0.000458 | +0.000869 | 1/6 |
+
+**Proposal decisions**:
+
+- Retain pre-norm T->P as the strongest direction for further investigation.
+  `tp_pre - tp_post` has mean delta MSE -0.002145 and improves all six settings.
+  However, `tp_scaled - tp_pre` is +0.000227, with only 2/6 improvements: the
+  evidence does not establish an additional average benefit from zero-initialized
+  residual scaling. In P->T, pre-norm largely removes the ETTh1 warm-start penalty
+  (seed 2021 MSE: i0 0.672340, post 0.721411, pre 0.672266), but does not provide
+  a consistent gain across settings. This is evidence about the update design in
+  matched fine-tuning, not a general claim that post-norm is always harmful.
+- Do not expand null read in its current form. `pt_null - pt_scaled` is
+  +0.000314 MAE / +0.000348 MSE; only 2/6 MSE improvements, both tiny ETTm2
+  differences. The rejection option has no demonstrated incremental benefit.
+- Do not expand selective write in its current form. `tp_selective - tp_scaled`
+  is +0.000683 MAE / +0.001249 MSE, with 0/6 improvements. Phase-dependent
+  receipt alone did not improve upon the corresponding broadcast control.
+
+**Activation and sample evidence**:
+
+- P->T null real-phase acceptance is 0.951--0.963 on ETT, close to the 24/25
+  acceptance of equal phase/null scores. Weather acceptance is 0.459/0.670,
+  showing more rejection, but both seeds are worse than `pt_scaled` in MSE.
+  Rejection magnitude is not established as a measure of reliability.
+- Selective-write phase-gate standard deviation is 0.071/0.120 on ETTm2, but
+  only 0.0071/0.0077 on Weather. Thus ETTm2 shows phase differentiation while
+  Weather remains nearly a common receipt magnitude. ETTm2 effective update
+  norms are 0.466/0.554, and same-checkpoint enabled-minus-disabled MSE is
+  +0.001131/+0.000479. Weather's corresponding MSE is -0.006392/-0.005379,
+  yet it still loses to the trained broadcast control. Reliance on a message
+  within one checkpoint does not establish superiority over another model.
+- The programmatically selected Weather-H720 seed2021 null-read regression
+  `1910,c0` has acceptance approximately 1 and delta MSE +2.35810 versus i0;
+  disabling its message at fixed weights reduces MSE by 3.0895. The improvement
+  `2111,c14` has acceptance 0.025 and delta MSE -1.28771, but the enabled-minus-
+  disabled difference is only -0.00037. Its improvement versus i0 cannot be
+  attributed to the current message alone.
+- Weather-H720 seed2021 selective-write regression `2577,c15` has acceptance
+  approximately 1, delta MSE +4.04697 versus i0 and enabled-minus-disabled MSE
+  +3.19742. ETTm2-H720 seed2022 regression `7538,c4` instead has acceptance
+  0.063 and delta MSE +0.25369, while enabling the message improves MSE by
+  0.04355. These cases rule out a simple reading of low acceptance as successful
+  protection or of every regression as direct harm from the current message.
+
+These observations motivate keeping the identity bypass and studying message
+content before adding more routing freedom. They do not identify a proven causal
+failure mechanism. The pilot used four extra training epochs from selected i0
+checkpoints and reused validation for checkpoint selection and analysis. It is
+not a from-scratch comparison, a full ETT/Weather benchmark, a significance test,
+or evidence of improvement over Golden/test results. No automatic expansion is
+launched; i0 remains the established low-rank baseline.
+
+Canonical report and portable image bundle:
+`research_runs/lowrank_interaction_stage2_20261007_v2/objective_error_analysis.md`
+and `objective_error_analysis.zip` in the same directory. Source checkpoints,
+invalid-run evidence and v2 training records remain outside the canonical audit
+directory for reproducibility; they are not committed to Git.
