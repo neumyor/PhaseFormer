@@ -6170,8 +6170,9 @@ checked Weather-H96-S2022 G3 Top3 rankings in all three categories, and verified
 the strict six-file/figures whitelist. Report and ZIP hashes match remotely too:
 b3d40d7a13d5030c815834594736812a5f4bc87f71eb60798588a2aa9fd91a36 and
 5e88051000c4ed9d46dd0f186ec072e722d980837ca68d6a9c7bce8c68324487.
-No training or analysis processes remain for this experiment. Requested hourly
-automation is ready to close after the documentation commit; no further training
-is needed for this authorized matrix. Prior resources, checkpoints and logs remain.
+No training or analysis processes remain for this experiment. The requested hourly
+automation `phaseformer` was set to PAUSED after result-documentation commit
+209e385; no further training is needed for this authorized matrix. Prior resources,
+checkpoints and logs remain.
 All results are repeatedly inspected validation results, two seeds, six tasks;
 no test, Golden superiority, statistical-significance or blind-generalization claim.
