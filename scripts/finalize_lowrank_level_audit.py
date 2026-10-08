@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import zipfile
 
 import numpy as np
@@ -71,6 +72,23 @@ def close(audit, validation, history):
             'shuffled_level_relative_mse_percent': float(((a.mean_shuffled_gate_mse / a.mse - 1) * 100).mean()),
             'oracle_vs_static_relative_mse_percent': float(((a.mean_oracle_mse / b.mse - 1) * 100).mean()),
             'oracle_worse_than_static_settings': int((a.mean_oracle_mse > b.mse).sum())})
+    observations = []
+    with np.load(audit / 'selected_cases.npz', allow_pickle=False) as cases:
+        seen = set()
+        for i, raw in enumerate(cases['metadata']):
+            m = json.loads(str(raw))
+            key = (m['setting'], m['candidate_config_id'], m['sample_id'], m['channel'])
+            if key in seen:
+                continue
+            seen.add(key)
+            truth = cases['truth'][i, :cases['truth_length'][i]]
+            candidate = cases['candidate'][i, :cases['candidate_length'][i]]
+            baseline = cases['baseline'][i, :cases['baseline_length'][i]]
+            observations.append({'config_id': m['candidate_config_id'], 'unique_cases': 1,
+                'level_error_dominant': int(m['candidate_level_mse'] > m['candidate_shape_mse']),
+                'std_above_truth': int(candidate.std() > truth.std()),
+                'absolute_mean_bias_above_baseline': int(abs((candidate-truth).mean()) > abs((baseline-truth).mean()))})
+    patterns = pd.DataFrame(observations).groupby('config_id').sum().reset_index().to_dict('records')
     matched = 0
     if history:
         previous = pd.read_csv(history / 'results.csv').set_index(['setting', 'config_id'])
@@ -92,10 +110,13 @@ def close(audit, validation, history):
         'rejected_default_upgrades': ['components_level_dynamic', 'tp_pre_level_dynamic'],
         'validation_advancement_checks': dynamic, 'split_comparisons': comparisons,
         'validation_gate_diagnostics': diagnostics, 'historical_exact_matches': matched,
+        'selected_case_observations': patterns, 'effective_early_stopping_patience': 8,
         'additional_training': 0, 'core_training_runs': 96,
         'context_zero_and_cross_task_extension': 'Not triggered: both dynamic-level candidates fail performance gates.',
         'golden_comparability': 'Numerical reference only; full original training protocol is not established as matched.',
         'causal_limit': 'Oracle uses future truth and is not deployable. Intervention and oracle do not prove causes of joint-training changes.'}
+    run['code']['closure_commit'] = subprocess.check_output(
+        ['git', 'rev-parse', 'HEAD'], cwd=Path(__file__).resolve().parents[1], text=True).strip()
     report = (audit / 'objective_error_analysis.md').read_text().split(MARKER)[0]
     report = report.replace('An eight-epoch loss is a budget-specific result; longer from-scratch confirmation may change ordering.',
                             'Results use a 30-epoch ceiling and validation checkpoint selection; another training budget may change ordering.')
@@ -104,6 +125,9 @@ def close(audit, validation, history):
         f'Final {split} paired comparisons; negative percentages indicate lower error, each setting receives equal weight:', '',
         md_table(comparisons, ['candidate', 'baseline', 'relative_mse_percent', 'median_relative_mse_percent',
                               'relative_mae_percent', 'mse_wins', 'settings', 'task_mse_wins', 'tasks']), '',
+        md_table(comparisons, ['candidate', 'baseline', 'mean_candidate_level_mse_relative_percent',
+                              'mean_candidate_shape_mse_relative_percent', 'candidate_mse_p95_relative_percent',
+                              'candidate_mse_top1_mean_relative_percent']), '',
         'Validation L0 and L1 both fail the preregistered advancement conditions. No context-zero control, third-seed training or cross-task expansion is warranted by this matrix. Total core training remains 96 runs; final test is 48 checkpoint evaluations with zero training.', '',
         'Static-component validation shape MSE improves in all 12 settings versus the original scalar gate. Its average benefit is small, and its p95/top-1% tail metrics are not uniformly better. Retention is a parsimonious research choice, not a statistical-significance claim.', '',
         'Validation component/tail diagnostics (setting-equal relative changes):', '',
@@ -117,8 +141,11 @@ def close(audit, validation, history):
                   'oracle_worse_than_static_settings']), '',
         'Gate matching has measurable value inside the trained dynamic models, but this does not make those models better than independently trained static components. Oracle error is below the static baseline in every setting, so a pure absence of within-branch reachable forecasts does not explain the aggregate loss. The oracle reads future truth; this does not establish learnable reliability or rule out branch-quality problems. Identifying a training cause would require a separately registered experiment.', '',
         'Removing dynamic shape is not supported: L0 loses to D0 in 11/12 settings and L1 loses to D1 in 9/12. Weather-H96-S2022 validation sample1702/channel14 illustrates this limitation: L0 MSE 33.272280 versus D0 15.393433, including shape MSE 22.539290 versus 10.425045. This historical anchor is diagnostic, not a selection criterion. Other Weather anchors regress, so no universal extreme-sample protection is claimed.', '',
+        f'Measurable patterns in the {split} selected-case subset (duplicate identities across categories counted once; this selected subset does not estimate population prevalence):', '',
+        md_table(patterns, ['config_id', 'unique_cases', 'level_error_dominant', 'std_above_truth',
+                            'absolute_mean_bias_above_baseline']), '',
         'Pre-norm is not established as complementary to dynamic level: the combination fails against B1 and lacks repeatable uniform gains. B1 lowers mean MSE versus B0 on validation while worsening mean relative MAE and winning only 6/12 settings. Its level and shape errors move in different directions; prefer B0 as the simpler default.', '',
-        f'{matched} historical same-seed/settings checkpoint metrics exactly reproduce the prior 30-epoch study. This confirms reproducibility, not extra independent seeds. Two scalar/static ETTh1-H96-S2022 runs reached the 30-epoch ceiling; conclusions are budget-specific, and convergence is not guaranteed.', '',
+        f'{matched} historical same-seed/settings checkpoint metrics exactly reproduce the prior 30-epoch study. This confirms reproducibility, not extra independent seeds. Two scalar/static ETTh1-H96-S2022 runs reached the 30-epoch ceiling, both with best validation Huber at epoch23 (zero-based); conclusions are budget-specific, and convergence is not guaranteed. Effective trainer patience is 8; inherited config fields do not override this callback.', '',
         'The tasks and validation/test splits have prior exposure. This stage did not use test for selection; it is not a fresh blind test. Golden values remain the authoritative original PhaseFormer reference, but matching lookback/horizon does not establish matching full training protocol. No Golden-superiority or unbiased-generalization claim is made.', '']
     report += '\n'.join(lines)
     (audit / 'objective_error_analysis.md').write_text(report)
