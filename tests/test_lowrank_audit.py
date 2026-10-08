@@ -3,12 +3,32 @@ from types import SimpleNamespace
 
 import torch
 
-from scripts.analyze_lowrank_six import replay_fusion
+from scripts.analyze_lowrank_six import replay_fusion, component_errors, oracle_component_gate, separated_shuffle_shifts, mix
 from src.models.lowrank_fusion import LowRankDynamicFusion
 from src.models.phase_adapters import RevIN
 
 
 class FusionReplayTests(unittest.TestCase):
+    def test_oracle_uses_shared_window_gate_and_decomposition_sums_to_mse(self):
+        torch.manual_seed(81)
+        p,t=torch.randn(4,96,2),torch.randn(4,96,2)
+        gates=torch.tensor([.3,.8]).expand(4,2,2)
+        truth=mix(p,t,gates,24)
+        oracle=oracle_component_gate(p,t,truth,24)
+        torch.testing.assert_close(oracle,gates)
+        torch.testing.assert_close(mix(p,t,oracle,24),truth)
+        level,shape=component_errors(p,truth,24)
+        torch.testing.assert_close(level+shape,(p-truth).double().square().mean(1))
+        degenerate=oracle_component_gate(p,p,truth,24)
+        self.assertTrue(torch.isfinite(degenerate).all())
+
+    def test_shuffle_seeds_never_overlap_forecast_windows(self):
+        shifts=separated_shuffle_shifts(1000,96)
+        self.assertEqual(len(shifts),5)
+        self.assertEqual(shifts,separated_shuffle_shifts(1000,96))
+        self.assertTrue(all(min(s,1000-s)>=96 for s in shifts))
+        with self.assertRaises(ValueError):separated_shuffle_shifts(191,96)
+
     def test_replay_and_gate_interventions_match_model_order_exactly(self):
         torch.manual_seed(31)
         device = torch.device('cpu')
@@ -22,7 +42,8 @@ class FusionReplayTests(unittest.TestCase):
         for use_revin in (False, True):
             model = SimpleNamespace(use_revin=use_revin, period_len=24, revin=RevIN(2))
             _, stats = model.revin.normalize(history.float())
-            for mode in ('disagreement', 'components', 'components_static'):
+            for mode in ('disagreement', 'components', 'components_static', 'components_level_dynamic',
+                         'components_level_without'):
                 fusion = LowRankDynamicFusion(12, 4, 2, 24, mode)
                 for intervention in ('native', 'mean', 'shuffle'):
                     gate = torch.rand(3, 2, 2 if fusion.components else 1)

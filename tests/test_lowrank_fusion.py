@@ -57,6 +57,22 @@ class FusionTests(unittest.TestCase):
         b=LowRankDynamicFusion(12,4,2,24,'disagreement_without')
         self.assertEqual([p.shape for p in a.parameters()],[p.shape for p in b.parameters()])
 
+    def test_dynamic_level_keeps_shape_static_and_context_control_matches_capacity(self):
+        dynamic=LowRankDynamicFusion(12,4,2,24,'components_level_dynamic')
+        control=LowRankDynamicFusion(12,4,2,24,'components_level_without')
+        self.assertEqual([p.shape for p in dynamic.parameters()],[p.shape for p in control.parameters()])
+        torch.nn.init.normal_(dynamic.head[-1].weight)
+        control.load_state_dict(dynamic.state_dict())
+        self.run_gate(dynamic)
+        self.assertGreater(float(dynamic.last_gate[...,0].std(0).sum()),0)
+        torch.testing.assert_close(dynamic.last_gate[...,1],self.bias.sigmoid().reshape(1,2).expand(3,2))
+        grads=torch.autograd.grad(self.run_gate(dynamic).square().sum(),
+                                 [dynamic.shape_bias_delta,self.yp,self.yt,self.t,self.p],allow_unused=True)
+        self.assertTrue(all(g is not None and g.abs().sum()>0 for g in grads[:3]))
+        self.assertEqual(grads[3:],(None,None))
+        self.run_gate(control)
+        torch.testing.assert_close(control.last_gate,control.last_gate[:1].expand_as(control.last_gate),atol=0,rtol=0)
+
     def test_phase_receipt_interventions_preserve_mass(self):
         branch=LowRankPhaseInteractionBranch(720,96,4,pool_factor=1,rank=12,
             interaction_mode='trend_to_phase',update_style='scaled_pre_norm',selective_write=True)

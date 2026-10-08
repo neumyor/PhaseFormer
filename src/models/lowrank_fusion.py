@@ -8,14 +8,16 @@ from torch.nn import functional as F
 
 class LowRankDynamicFusion(nn.Module):
     MODES = {"reliability", "disagreement", "disagreement_without",
-             "components", "components_static"}
+             "components", "components_static", "components_level_dynamic",
+             "components_level_without"}
 
     def __init__(self, rank, phase_dim, channels, period, mode, width=16):
         super().__init__()
         if mode not in self.MODES:
             raise ValueError(mode)
         self.mode, self.period = mode, period
-        self.components = mode in {"components", "components_static"}
+        self.components = mode.startswith("components")
+        self.level_only = mode in {"components_level_dynamic", "components_level_without"}
         if mode == "reliability":
             self.sensitivity = nn.Parameter(torch.zeros(()))
         elif mode == "components_static":
@@ -23,9 +25,11 @@ class LowRankDynamicFusion(nn.Module):
         else:
             # rank state, its scale, phase distribution, forecast summaries.
             self.head = nn.Sequential(nn.Linear(rank + 2 + 2 * phase_dim + 7, width),
-                                      nn.GELU(), nn.Linear(width, 2 if self.components else 1))
+                                      nn.GELU(), nn.Linear(width, 2 if self.components and not self.level_only else 1))
             nn.init.zeros_(self.head[-1].weight)
             nn.init.zeros_(self.head[-1].bias)
+            if self.level_only:
+                self.shape_bias_delta = nn.Parameter(torch.zeros(1, channels, 1))
         self.override_gate = None  # Nonpersistent diagnostic intervention (B,C,1/2).
         self.last_gate = None
         self.last_reliability = None
@@ -62,7 +66,11 @@ class LowRankDynamicFusion(nn.Module):
             features = self.features(trend, phase, yp, yt)
             if self.mode == "disagreement_without":
                 features = torch.cat([features[..., :-7], torch.zeros_like(features[..., -7:])], -1)
+            elif self.mode == "components_level_without":
+                features = torch.zeros_like(features)
             logits = bias + self.head(features)
+            if self.level_only:
+                logits = torch.cat([logits, bias + self.shape_bias_delta], -1)
         gate = logits.sigmoid()
         if self.override_gate is not None:
             gate = self.override_gate.to(gate).expand_as(gate)

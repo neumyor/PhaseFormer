@@ -25,8 +25,30 @@ ARMS = {'i0': {}, **{k:v for k,v in OLD_ARMS.items() if k != 'i0_continue'},
         'components_static': {'lowrank_fusion_mode':'components_static'},
         'tp_pre_g2': {'trend_interaction_mode':'trend_to_phase','lowrank_update_style':'pre_norm','lowrank_fusion_mode':'disagreement'},
         'tp_pre_g3': {'trend_interaction_mode':'trend_to_phase','lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components'}}
+SIX_ARMS = tuple(ARMS)
+ARMS.update(
+    tp_pre_components_static={'trend_interaction_mode':'trend_to_phase',
+        'lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components_static'},
+    components_level_dynamic={'lowrank_fusion_mode':'components_level_dynamic'},
+    tp_pre_level_dynamic={'trend_interaction_mode':'trend_to_phase',
+        'lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components_level_dynamic'},
+    components_level_without={'lowrank_fusion_mode':'components_level_without'},
+    tp_pre_level_without={'trend_interaction_mode':'trend_to_phase',
+        'lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components_level_without'})
+LEVEL_ARMS = ('i0','tp_pre','components_static','tp_pre_components_static',
+              'components_level_dynamic','tp_pre_level_dynamic','g3_components','tp_pre_g3')
+LEVEL_COMPARISONS = (
+    ('components_static','i0'),('tp_pre_components_static','tp_pre'),
+    ('components_level_dynamic','components_static'),('tp_pre_level_dynamic','tp_pre_components_static'),
+    ('components_level_dynamic','g3_components'),('tp_pre_level_dynamic','tp_pre_g3'),
+    ('tp_pre_components_static','components_static'),('tp_pre_level_dynamic','components_level_dynamic'),
+    ('tp_pre_g3','g3_components'),('components_level_dynamic','components_level_without'),
+    ('tp_pre_level_dynamic','tp_pre_level_without'))
 BASELINES = {arm: 'i0' for arm in ARMS}
 BASELINES.update(pt_null='pt_scaled', tp_selective='tp_scaled', g3_components='components_static', tp_pre_g2='g2_disagreement', tp_pre_g3='g3_components')
+BASELINES.update(tp_pre_components_static='components_static',
+    components_level_dynamic='components_static',tp_pre_level_dynamic='tp_pre_components_static',
+    components_level_without='components_static',tp_pre_level_without='tp_pre_components_static')
 DEFAULT_SETTINGS = ','.join(f'{d}:{h}:{s}' for d in ('ETTh1','ETTm2','Weather')
                             for h in (96,720) for s in (2021,2022))
 
@@ -93,6 +115,18 @@ def train_job(path):
     max_abs = float((a-b).abs().max())
     identity = job['arm'] == 'i0' or job['arm'].startswith('g') or job['arm'] in {
         'components_static','pt_scaled','tp_scaled','pt_null','tp_selective'}
+    if job['arm'].startswith('components_level'):
+        identity = True
+    if job['arm'] in {'tp_pre_components_static','tp_pre_level_dynamic','tp_pre_level_without','tp_pre_g3'}:
+        import pytorch_lightning as pl
+        pl.seed_everything(cfg['seed'], workers=True)
+        matched,_,_,_,matched_hash = random_models(job['source']['config'],'tp_pre')
+        matched.to(device).eval()
+        with torch.inference_mode():
+            expected,_ = forecast(matched,batch,device)
+        torch.testing.assert_close(a,expected,atol=0,rtol=0)
+        assert matched_hash == initial_hash
+        del matched
     if identity: torch.testing.assert_close(a,b,atol=0,rtol=0)
     assert all(p.requires_grad for p in model.parameters())
     save_json(out/'initialization.json',{'common_random_state_sha256':initial_hash,
@@ -162,15 +196,20 @@ def launch(path,gpu):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--source-dir',type=Path);p.add_argument('--scratch-dir',type=Path)
     p.add_argument('--audit-dir',type=Path);p.add_argument('--settings',default=DEFAULT_SETTINGS)
-    p.add_argument('--epochs',type=int,default=8);p.add_argument('--gpus',default='0,1,2,3,4,5,6,7')
-    p.add_argument('--arms',default=','.join(ARMS));p.add_argument('--smoke',action='store_true')
+    p.add_argument('--epochs',type=int);p.add_argument('--gpus',default='0,1,2,3,4,5,6,7')
+    p.add_argument('--study',choices=('six','level'),default='six')
+    p.add_argument('--arms');p.add_argument('--smoke',action='store_true')
     p.add_argument('--prepare-only',action='store_true');p.add_argument('--job',type=Path)
     p.add_argument('--skip-analysis',action='store_true');args=p.parse_args()
     if args.job:train_job(args.job);return
     import yaml
-    sources=configs(args.source_dir.resolve(),args.settings);arms=args.arms.split(',')
+    if args.epochs is None:args.epochs=30 if args.study=='level' else 8
+    sources=configs(args.source_dir.resolve(),args.settings)
+    arms=args.arms.split(',') if args.arms else list(LEVEL_ARMS if args.study=='level' else SIX_ARMS)
+    baselines=dict(BASELINES)
+    if args.study=='level':baselines['tp_pre_g3']='tp_pre_components_static'
     assert len(arms)==len(set(arms)) and set(arms)<=set(ARMS) and 'i0' in arms
-    assert all(BASELINES[a] in arms for a in arms)
+    assert all(baselines[a] in arms for a in arms)
     scratch=args.scratch_dir.resolve();audit=args.audit_dir.resolve();jobs=[]
     code=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     for arm in arms:
@@ -180,13 +219,17 @@ def main():
                  'code_commit':code,'output':str(scratch/'runs'/f"{source['setting']}__{arm}")}
             if path.exists():assert json.loads(path.read_text())==job,'Refuse changed resume job'
             save_json(path,job);jobs.append(path)
-    manifest={'sources':sources,'arms':arms,'jobs':list(map(str,jobs)),'epochs':args.epochs,
+    manifest={'sources':sources,'arms':arms,'baselines':{a:baselines[a] for a in arms},
+              'study':args.study,'jobs':list(map(str,jobs)),'epochs':args.epochs,
               'smoke':args.smoke,'code_commit':code}
+    if args.study=='level':manifest['comparisons']=LEVEL_COMPARISONS
     save_json(scratch/'manifest.json',manifest)
     settings=[{'setting':s['setting'],'dataset':s['config']['dataset'],'horizon':s['config']['horizon'],
                'seed':s['config']['seed'],'lookback':720,'split':'validation'} for s in sources]
     run={'experiment_id':audit.name,'code':{'commit':code,'branch':'codex/trend-token-cross-attention'},
-         'mechanism':{'hypotheses':['H1','H2','H3','G1','G2','G3'],'arms':{a:ARMS[a] for a in arms},'baselines':BASELINES},
+         'mechanism':{'hypotheses':(['static components','dynamic level','pre-norm interaction complementarity']
+             if args.study=='level' else ['H1','H2','H3','G1','G2','G3']),
+             'arms':{a:ARMS[a] for a in arms},'baselines':{a:baselines[a] for a in arms}},
          'experiment':{'settings':settings,'training':{'epochs':args.epochs,'initialization':'random shared untrained weights; no pretrained checkpoint',
             'all_parameters_trainable':True,'loss':'Huber','checkpoint':'lowest validation Huber','hyperparameters':{s['setting']:s['config']['hyperparams'] for s in sources}},
             'metrics':['MAE','MSE'],'smoke':args.smoke},
