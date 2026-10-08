@@ -211,7 +211,8 @@ setting等权相对MSE反而+0.101%，均值收益受高误差设置影响。com
 
 ## 下一阶段：静态双分量基线与动态水平融合（2026-10-08）
 
-**状态：仅完成规划，未实现新模式、未启动训练。** 用户接受将静态双分量融合
+**状态：用户已授权执行和每小时故障监测；新增实现、48项测试、16次双设置训练
+smoke及完整样本审计已通过，96次正式训练已启动，首次检查2完成/8运行/0失败。** 用户接受将静态双分量融合
 保留为下一阶段研究基线，进一步验证动态水平Gate及其与T->P pre-norm的组合。
 这里的基线升级是探索性工程选择，不代表测试集或Golden提升。旧Stage 3是续训
 历史，本节是新的从头训练阶段，两者不可混用。
@@ -331,11 +332,47 @@ H96/H720 x seed2023为6个新增设置；ETTh2、ETTm1 x H96/H720 x 三seed为12
 再改模型，另开实验并记录test-set selection。相对Golden的正式声明仅在任务和
 协议与`docs/PhaseFormer_gold_standard.md`一致时成立，否则只报告内部配对收益。
 
+### 实施与验证记录（2026-10-08）
+
+新增模型/训练/审计实现提交`08f4117`；运行溯源和seed模板记录提交`dc78bd3`。
+`0ee87a4`允许后续复核显式以components_static自对照，不强制额外训练i0，
+确保2--4配置复核预算可执行。正式矩阵manifest和训练代码冻结于`0ee87a4`。
+`LowRankDynamicFusion`增加`components_level_dynamic`及同容量上下文置零模式，
+默认六方案配置清单保持原行为；`--study level`启用本轮8配置和30轮预算。
+静态双分量/pre-norm、动态水平/pre-norm均使用已有模型插入点。
+Gate读取交互后的phase Z，与已有tp_pre_g3一致；形状系数按变量静态学习。
+
+远程time环境（torch2.6.0+cu124、Lightning2.6.5、numpy1.26.4、A800）通过
+`python -m unittest discover -s tests -p 'test_lowrank*.py'`的48项测试。
+ETTh1-H96-S2021、Weather-H720-S2021的8配置各做两个训练/验证batch的smoke，
+16/16完成、0失败；每个setting的公共初始化哈希一致，未加载训练权重，
+新增融合初始输出与相同交互参照逐位相等，全模型可训练。
+
+`lowrank_level_fusion_smoke`完成全validation审计：920,528条sample/channel/arm
+记录、126条程序选例，结果/排名/NPZ/报告/ZIP/六文件目录均通过校验；
+Weather-H720的动态水平组合图已人工检查。smoke不计入正式训练预算、不用于
+模型效果判断。所有Gate重放按模型原顺序逐位复现，水平和形状MSE和式经校验。
+
+正式入口：`python scripts/run_lowrank_six.py --study level --source-dir
+research_runs/phaseformer_l_interaction_20261006 --scratch-dir
+research_runs/lowrank_level_fusion_next_scratch --audit-dir
+research_runs/lowrank_level_fusion_next --epochs 30`。使用全8GPU，训练后自动运行
+完整审计；具体manifest在启动前冻结。同容量控制通过显式`--arms`登记；
+后续seed2023使用显式`--allow-seed-template`从同dataset/horizon的seed2021
+继承超参数，只改变随机种子并记录来源，不加载其checkpoint。
+后续精简复核使用`--baseline-reference components_static`及登记的`--arms`。
+第三seed/跨任务18设置的配置模板与数据均已检查存在。正式控制器PID48342，
+首次检查96任务中2完成、8运行、86待运行、0失败，训练指标已持续写入。
+代码同步时一次fetch提前于传输完成而失败；待传输完成并核对SHA256一致后，
+用增量bundle重新同步成功，没有启动错误版本训练或改动旧产物。
+
+已有每小时heartbeat已更新并关联当前会话，监测本轮目录、修复实际故障、避免
+重复启动，依据上述条件继续控制/复核及最终评估，全部授权工作完成后暂停。
+
 ### 预期交付与实施范围
 
-计划阶段只修改本节与agent-log。执行需补动态水平模式、静态双分量/pre-norm
-组合以及对应训练/审计配置，优先扩展现有lowrank_fusion和六方案入口；不另建
-模型主干。最终工件拟用`research_runs/lowrank_level_fusion_next`及独立确认实验ID，
+已在现有lowrank_fusion和六方案入口补齐动态水平模式、静态双分量/pre-norm
+组合及对应训练/审计配置。最终工件使用`research_runs/lowrank_level_fusion_next`及独立确认实验ID，
 遵守六文件加figures规则，保存全部试验、配置与选择轨迹。最终明确回答：静态
 基线能否复现、动态水平是否值得升级、形状动态性是否可简化、交互是否互补，以及
 剩余失败来自融合选择还是分支能力。未经执行，不报告上述假设已经成立。

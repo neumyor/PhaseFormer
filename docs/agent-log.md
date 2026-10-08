@@ -6195,3 +6195,40 @@ not evidence that the new from-scratch architecture will win.
 Planning only: no model code, training launch, remote changes or automation updates.
 Validation: reviewed the existing fusion module/training entry, checked the matrix
 and run counts, and ran git diff --check before the documentation commit.
+
+## 2026-10-08: Implement and verify the level-fusion experiment
+
+User authorized execution of the prospective plan and periodic fault recovery.
+Applied the project experiment-and-error-analysis Skill. Implementation commit
+08f4117 adds dynamic level/static shape and context-zero fusion, matched pre-norm
+combinations, the explicit eight-arm level study, level/shape MSE decomposition,
+normalized-coordinate oracle, five seeded nonoverlapping gate shuffles, tail risk,
+interaction marginal comparisons and historical-anchor diagnostics. dc78bd3 adds
+actual execution commit tracking, explicit seed-template configuration and gate
+context/shuffle provenance. Existing six-study defaults remain unchanged.
+
+Remote time environment passed 48 lowrank unittest cases. Two settings (ETTh1-H96
+and Weather-H720, seed2021) passed all 16 two-batch training smokes with matching
+shared initialization hashes, trainable original parameters and no pretrained
+loading. Complete validation smoke audit passed on 920,528 records and 126 ranked
+cases, including numerical replay, metric/rank recomputation and Markdown/ZIP
+whitelist checks. Inspected the Weather-H720 dynamic-level combination figure.
+Smokes are pipeline validation only, not architecture efficacy evidence.
+
+Commands: run_lowrank_six.py --study level with the registered source directory,
+two smoke settings, --epochs 1 --smoke; analyze_lowrank_six.py over those outputs.
+Local syntax and git diff --check passed. 0ee87a4 permits the component baseline
+to be its own reference in the planned smaller confirmation matrices, avoiding
+unregistered scalar-baseline reruns. All 18 seed/dataset confirmation templates
+and data paths checked. During synchronization one fetch ran before a bundle
+transfer completed and failed; after transfer completion its SHA256 matched,
+incremental fetch succeeded, and no wrong-version training was launched.
+
+Formal 96-run manifest was frozen at 0ee87a4 and the controller launched detached
+with PID48342. First snapshot: 2 completed, 8 running, 86 pending, zero failures;
+per-epoch metrics were advancing. Training and logs are in
+research_runs/lowrank_level_fusion_next_scratch and its sibling .log; canonical
+audit target is research_runs/lowrank_level_fusion_next. No performance conclusions
+yet. The existing hourly heartbeat was updated to
+monitor this experiment in the current chat and handle actual faults/restarts,
+with conditional controls/confirmation and a maximum 192-run training budget.
