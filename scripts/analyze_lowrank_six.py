@@ -49,6 +49,16 @@ def mix(p,t,g,period):
     return ((1-shape)*pc+shape*tc+(level-shape)*(tc.mean(2,keepdim=True)-pc.mean(2,keepdim=True))).reshape_as(p)
 
 
+def replay_fusion(model,batch,device,gate,inputs):
+    # Fuse in the model's normalized coordinates before undoing RevIN.
+    # Mixing separately denormalized branches amplifies cancellation error.
+    prediction=mix(inputs['phase'],inputs['trend'],gate,model.period_len)
+    if model.use_revin:
+        _,stats=model.revin.normalize(batch[0].float().to(device))
+        prediction=model.revin.denormalize(prediction,stats)
+    return prediction
+
+
 def train_mean_gate(model,args,device):
     # deterministic full training loader, including its last partial batch.
     dataset,_=data_provider(args.dataset_args,'train')
@@ -62,10 +72,10 @@ def train_mean_gate(model,args,device):
     return total/count,count
 
 
-def off_prediction(model,batch,device,mean_gate):
+def off_prediction(model,batch,device,mean_gate,fusion_inputs):
     branch=model.lowrank_interaction_branch
     if model.lowrank_dynamic_fusion is not None:
-        return mix(model.last_phase_forecast,model.last_lowrank_forecast,mean_gate[None].expand(len(batch[0]),-1,-1),model.period_len)
+        return replay_fusion(model,batch,device,mean_gate[None].expand(len(batch[0]),-1,-1),fusion_inputs)
     previous=branch.interaction_mode
     try:
         branch.interaction_mode='none';return forecast(model,batch,device)[0]
@@ -85,6 +95,11 @@ def worker(scratch,setting):
         dataset,loader=data_provider(args.dataset_args,'val')
         branch=model.lowrank_interaction_branch;branch.capture_diagnostics=True
         fusion=model.lowrank_dynamic_fusion
+        fusion_inputs={};capture_hook=None
+        if fusion is not None:
+            def capture_fusion(module,inputs,output):
+                fusion_inputs.update(phase=inputs[0].detach(),trend=inputs[1].detach())
+            capture_hook=fusion.register_forward_hook(capture_fusion)
         mean_gate=None;gate_count=0
         if fusion is not None:mean_gate,gate_count=train_mean_gate(model,args,device)
         rows=[];gates=[];offset=0
@@ -95,10 +110,10 @@ def worker(scratch,setting):
                 diag=dict(branch.last_diagnostics)
                 if fusion is not None:
                     g=fusion.last_gate.clone();gates.append(g.cpu())
-                    torch.testing.assert_close(cp,mix(phase,trend,g,model.period_len),atol=3e-5,rtol=3e-5)
+                    torch.testing.assert_close(cp,replay_fusion(model,batch,device,g,fusion_inputs),atol=0,rtol=0)
                 else:
                     g=torch.sigmoid(model.lowrank_interaction_gate).transpose(1,2).expand(len(cp),-1,-1)
-                off=off_prediction(model,batch,device,mean_gate)
+                off=off_prediction(model,batch,device,mean_gate,fusion_inputs)
                 arrays={}
                 for label,pred in [('baseline',bp),('candidate',cp),('off',off),('phase',phase),('trend',trend)]:
                     err=pred-truth
@@ -140,15 +155,14 @@ def worker(scratch,setting):
             with torch.inference_mode():
                 for batch in loader:
                     _,truth=forecast(model,batch,device);b=len(truth)
-                    p,t=model.last_phase_forecast,model.last_lowrank_forecast
                     indices=(torch.arange(offset,offset+b)+shift)%n
-                    v=mix(p,t,bank[indices].to(device),model.period_len)
+                    v=replay_fusion(model,batch,device,bank[indices].to(device),fusion_inputs)
                     shuffle.append((v-truth).square().mean(1).cpu().numpy())
                     if fusion.components:
                         native=fusion.last_gate.clone()
                         for component,values in ((0,level_fixed),(1,shape_fixed)):
                             g=native.clone();g[...,component]=mean_gate[...,component]
-                            v=mix(p,t,g,model.period_len);values.append((v-truth).square().mean(1).cpu().numpy())
+                            v=replay_fusion(model,batch,device,g,fusion_inputs);values.append((v-truth).square().mean(1).cpu().numpy())
                     offset+=b
             frame['shuffled_gate_mse']=np.concatenate(shuffle).reshape(-1)
             if level_fixed:
@@ -187,7 +201,7 @@ def worker(scratch,setting):
                           'phase':model.last_phase_forecast[bi,:,ch].cpu().numpy(),
                           'trend':model.last_lowrank_forecast[bi,:,ch].cpu().numpy(),'gate':g[bi,ch].cpu().numpy(),
                           'acceptance':diag['acceptance'][bi,ch].cpu().numpy() if diag else np.array([],dtype=np.float32)}
-                    data['off']=off_prediction(model,batch,device,mean_gate)[bi,:,ch].cpu().numpy()
+                    data['off']=off_prediction(model,batch,device,mean_gate,fusion_inputs)[bi,:,ch].cpu().numpy()
                     cache[sid,ch]=data
                 cases.append({'metadata':row,**cache[sid,ch]})
         # Fixed column schema across arms, so appended rows remain readable.
@@ -198,6 +212,7 @@ def worker(scratch,setting):
         frame=frame.reindex(sorted(frame.columns),axis=1)
         frame.to_csv(target,index=False,mode='w' if first else 'a',header=first);first=False
         print(setting,arm,len(frame),'rows',len(chosen),'cases',flush=True)
+        if capture_hook is not None:capture_hook.remove()
         del baseline,model,frame;torch.cuda.empty_cache()
     pack(cases,parts/f'{setting}.npz');save_json(parts/f'{setting}.json',summaries)
 
