@@ -6434,3 +6434,43 @@ the current thread's hourly phaseformer-token heartbeat (ACTIVE), explicitly sin
 agent, quiet when unchanged, fault diagnosis and isolated continuation, full audit
 and local synchronization, numerical architecture conclusion, then PAUSED. It cannot
 resume the stopped old parallel study or auto-expand this matrix.
+
+## 2026-10-08: Close the non-attention interaction matrix and retain b0
+
+Single-agent status audit found all60 formal jobs completed, no failed status, no
+controller remaining, and complete validation audit passed at frozen dcde3b6.
+Canonical evidence contains 3944500 sample/channel/arm rows,432 cases and48 figures.
+Synchronized all six files/figures locally; independently verified original artifact
+hashes,12-setting coverage,60 result rows,432 cases,2592 case metric recomputations,
+image references,ZIP entries and byte equality. Inspected the Weather-H96-S2021
+tp_add regression plot. All12 b0 training evaluation MSE/MAE exactly reproduce the
+prior level study's components_static arm, distinguishing reproduction from new seeds.
+
+Setting-equal relative MSE/MAE versus b0: pt_add +0.029581%/-0.096977%,4/12 MSE
+wins,2/6 task wins; pt_correct +0.081427%/-0.086880%,2/12,1/6; tp_add
++0.187889%/-0.048628%,3/12,2/6; tp_mod +0.233774%/+0.069713%,5/12,3/6.
+All median relative MSE values are positive and every candidate fails multiple
+predeclared necessary criteria. Retain b0; no conditional controls,combination,width
+search,extra seed/task or test evaluation launched. Local tp_mod H720 wins do not
+justify a dataset/horizon policy: ETTm2-H96 mean MSE +1.162889%, and ETTm2-H720
+shape MSE rises +2.905645%/+3.374726% for tp_add/tp_mod.
+
+Native beats same-checkpoint off in7/12,7/12,10/12,9/12 settings for the four arms;
+message use does not prove an independent-training architecture improvement.
+Weather-H96-S2021 tp_add ranked regression1702,c14 has MAE4.981612->7.451593 and
+MSE39.098984->133.049957; level MSE111.449243 dominates shape21.600718. Another
+ranked Weather-H720-S2022 pt_correct case3877,c0 has MAE0.402917->1.104225 and
+level MSE1.354751 of total1.356365. Branch coadaptation is a hypothesis,not established
+causal explanation. Additional parameters32--424 are0.128%--0.471% of b0; measured
+mean latency overhead3.164%/4.478%/2.981%/2.884%,without consistent efficacy benefit.
+
+Completed the canonical report's architecture review and YAML selection metadata;
+kept selected b0,recorded all rejected arms,retained original generated report/YAML/
+ZIP/marker in scratch/closure_previous_artifacts. Rebuilt ZIP from referenced images
+and refreshed completion hashes; results.csv,sample_errors.csv,selected_cases.npz
+and all figures remain byte-identical to the original audit. Final canonical artifacts
+and prior copies synchronized remotely,with local/remote final hashes verified.
+Updated the active plan; current hourly phaseformer-token monitor is paused after
+closure. No trained source/model edits,pretrained loading,freezing or test read.
+Validation reuse and historical test exposure remain disclosed; no Golden or blind
+generalization claim. Negative finding is restricted to this fixed four-arm protocol.
