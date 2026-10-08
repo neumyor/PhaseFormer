@@ -6176,3 +6176,22 @@ automation `phaseformer` was set to PAUSED after result-documentation commit
 checkpoints and logs remain.
 All results are repeatedly inspected validation results, two seeds, six tasks;
 no test, Golden superiority, statistical-significance or blind-generalization claim.
+
+## 2026-10-08: Plan the next low-rank level-fusion stage
+
+User accepted static level/shape fusion as the next research baseline and asked
+for a plan to study dynamic level gates and T->P pre-norm combinations. Added
+the prospective stage to PhaseFormer_trend_token_interaction_experiment_plan.md.
+Eight fixed arms cover original scalar references plus the 2x3 interaction/fusion
+matrix, with 12 settings and 96 matched from-scratch runs at a 30-epoch ceiling.
+No pretrained weights or frozen original branches. The plan includes conditional
+same-capacity context-zero controls (up to 24 runs), an additional seed and two
+datasets (36--72 runs), preset advancement gates, level/shape error decomposition,
+branch/oracle diagnostics, historical-anchor tracking, and frozen-selection test
+evaluation with explicit Golden comparability limits. Maximum conditional budget
+is 192 training runs. Existing fixed-weight shape-gate interventions are motivation,
+not evidence that the new from-scratch architecture will win.
+
+Planning only: no model code, training launch, remote changes or automation updates.
+Validation: reviewed the existing fusion module/training entry, checked the matrix
+and run counts, and ran git diff --check before the documentation commit.
