@@ -231,7 +231,7 @@ def worker(scratch,setting):
                 'dataset':source['config']['dataset'],'horizon':model.pred_len,'seed':source['config']['seed'],
                 'mse':float(frame.candidate_mse.mean()),'mae':float(frame.candidate_mae.mean()),
                 'delta_mse':float(frame.delta_mse.mean()),'delta_mae':float(frame.delta_mae.mean()),
-                'gate_train_sample_count':gate_count,'selected':True}
+                'gate_train_sample_count':gate_count,'selected':not level_study}
         for col in frame.select_dtypes('number').columns:
             if col not in ('sample_id','channel'):record['mean_'+col]=float(frame[col].mean())
         record['gate_level_std']=float(frame.gate_level.std());record['gate_shape_std']=float(frame.gate_shape.std())

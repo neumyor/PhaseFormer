@@ -153,6 +153,7 @@ def train_job(path):
     cfg['checkpoint']=checkpoint.best_model_path
     save_json(out/'config.json',cfg)
     save_json(out/'result.json',{'setting':job['source']['setting'],'arm':job['arm'],**metrics,
+        'code_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         'elapsed_sec':elapsed,'epochs':trainer.current_epoch,'epoch_budget':job['epochs'],
         'parameter_count':sum(p.numel() for p in model.parameters()),
         'trainable_count':sum(p.numel() for p in model.parameters() if p.requires_grad),
@@ -164,11 +165,12 @@ def train_job(path):
                        'cuda':torch.version.cuda,'gpu':torch.cuda.get_device_name(0)}})
 
 
-def configs(source_dir,settings):
+def configs(source_dir,settings,seed_template=False):
     requested={tuple(s.split(':')) for s in settings.split(',')}; found={}
+    templates={(d,h,'2021') for d,h,s in requested} if seed_template else set()
     for path in sorted((source_dir/'search/runs').glob('*/config.json')):
         cfg=json.loads(path.read_text()); key=tuple(str(cfg[k]) for k in ('dataset','horizon','seed'))
-        if key not in requested or cfg['mechanism']!='phaseformer_l_i0_late_fusion':continue
+        if key not in requested|templates or cfg['mechanism']!='phaseformer_l_i0_late_fusion':continue
         assert key not in found and not cfg['init_checkpoint'] and not cfg['evaluate_test']
         hp=cfg['hyperparams']; assert hp['weak_period_residual_rank']==cfg['horizon']//8
         assert hp['trend_interaction_mode']=='none' and not hp.get('use_trend_token',False)
@@ -177,6 +179,16 @@ def configs(source_dir,settings):
                   lowrank_null_read=False,lowrank_selective_write=False,lowrank_content_mode='none')
         found[key]={'setting':f'{key[0]}_H{key[1]}_S{key[2]}_val','config':cfg,
                     'config_source':str(path),'config_source_sha256':digest(path)}
+    if seed_template:
+        for key in sorted(requested-set(found)):
+            template=(key[0],key[1],'2021')
+            if template not in found:continue
+            source=copy.deepcopy(found[template])
+            source['config']['seed']=int(key[2])
+            source['setting']=f'{key[0]}_H{key[1]}_S{key[2]}_val'
+            source['seed_template']=2021
+            found[key]=source
+    found={key:value for key,value in found.items() if key in requested}
     assert set(found)==requested,(set(found),requested)
     return list(found.values())
 
@@ -198,13 +210,14 @@ def main():
     p.add_argument('--audit-dir',type=Path);p.add_argument('--settings',default=DEFAULT_SETTINGS)
     p.add_argument('--epochs',type=int);p.add_argument('--gpus',default='0,1,2,3,4,5,6,7')
     p.add_argument('--study',choices=('six','level'),default='six')
+    p.add_argument('--allow-seed-template',action='store_true')
     p.add_argument('--arms');p.add_argument('--smoke',action='store_true')
     p.add_argument('--prepare-only',action='store_true');p.add_argument('--job',type=Path)
     p.add_argument('--skip-analysis',action='store_true');args=p.parse_args()
     if args.job:train_job(args.job);return
     import yaml
     if args.epochs is None:args.epochs=30 if args.study=='level' else 8
-    sources=configs(args.source_dir.resolve(),args.settings)
+    sources=configs(args.source_dir.resolve(),args.settings,args.allow_seed_template)
     arms=args.arms.split(',') if args.arms else list(LEVEL_ARMS if args.study=='level' else SIX_ARMS)
     baselines=dict(BASELINES)
     if args.study=='level':baselines['tp_pre_g3']='tp_pre_components_static'
@@ -239,6 +252,10 @@ def main():
             'search_notes':'fixed arms; validation used for checkpoints and exploratory hypothesis selection; no test'} for s in sources]},
          'analysis':{'ranking_metric':'mae','top_k':3,'dedup_rule':'same channel/category selected starts at least H apart; maximum nine cases per arm/setting'},
          'validation':{'status':'incomplete'}}
+    if args.study=='level':
+        run['mechanism']['gate_context']='detached rank latent, post-interaction phase Z, and normalized branch forecasts; width=16; one gate per sample/channel/window'
+        run['analysis']['gate_shuffle_seeds']=list(range(5))
+        run['analysis']['gate_shuffle_rule']='same-channel circular offsets chosen independently by fixed seeds, both circular distances >= horizon; level-only modes preserve shape gate'
     audit.mkdir(parents=True,exist_ok=True)
     (audit/'run.yaml').write_text(yaml.safe_dump(run,sort_keys=False))
     print(json.dumps({'jobs':len(jobs),'settings':len(sources),'arms':arms,'code':code}),flush=True)
