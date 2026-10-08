@@ -188,7 +188,7 @@ def worker(scratch, setting):
             'model': 'PhaseFormer-L', 'key_params': json.dumps(json.loads((run_dir / 'config.json').read_text()), sort_keys=True),
             'mse': float(frame.candidate_mse.mean()), 'mae': float(frame.candidate_mae.mean()),
             'delta_mse': float(frame.delta_mse.mean()), 'delta_mae': float(frame.delta_mae.mean()),
-            'selected': False, 'sample_mae_win_fraction': float((frame.delta_mae < 0).mean())}
+            'selected': arm == 'b0', 'sample_mae_win_fraction': float((frame.delta_mae < 0).mean())}
         for col in frame.select_dtypes('number'):
             if col not in ('sample_id', 'channel'):
                 record['mean_' + col] = float(frame[col].mean())
@@ -281,6 +281,10 @@ def merge(scratch, audit):
     latency = pd.DataFrame(json.loads((scratch / 'benchmark.json').read_text()))
     assert len(latency) == len(table)
     table = table.merge(latency, on=['setting', 'config_id'], validate='one_to_one')
+    for entry in run['execution']['settings']:
+        group = table[table.setting == entry['setting']]
+        entry['runtime'] = {'summed_training_seconds': float(group.elapsed_sec.sum()),
+            'completed_runs': len(group), 'environments': group.environment.tolist()}
     comparisons = [paired(table, arm, 'b0') for arm in ARMS[1:]]
     comparisons += [paired(table, 'pt_correct', 'pt_add'), paired(table, 'tp_mod', 'tp_add')]
     table.to_csv(audit / 'results.csv', index=False)

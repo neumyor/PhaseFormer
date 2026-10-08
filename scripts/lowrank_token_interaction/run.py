@@ -303,7 +303,12 @@ def prepare(args):
     settings = [{'setting': s['setting'], 'dataset': s['config']['dataset'],
                  'horizon': s['config']['horizon'], 'seed': s['config']['seed'],
                  'lookback': 720, 'split': 'val'} for s in sources]
-    run = {'experiment_id': audit.name, 'code': {'commit': manifest['code_commit'],
+    run = {'experiment_id': audit.name, 'code': {'repository': 'PhaseFormer',
+            'branch': subprocess.check_output(['git', 'branch', '--show-current'], cwd=ROOT, text=True).strip() or 'detached',
+            'commit': manifest['code_commit'],
+            'modified_files': ['scripts/lowrank_token_interaction/' + p.name
+                               for p in sorted((ROOT / 'scripts/lowrank_token_interaction').glob('*.py'))]
+                              + ['tests/test_lowrank_token_interaction.py'],
             'source_hashes': manifest['source_hashes'], 'isolated_entry': str(Path(__file__).relative_to(ROOT))},
         'mechanism': {'description': 'Non-attention latent interaction with static level/shape output fusion',
                       'arms': list(ARMS), 'communication_width': 2, 'zero_initialized_exit': True},
@@ -318,17 +323,23 @@ def prepare(args):
             'commands': [[sys.executable, str(Path(__file__).resolve()), '--job', str(p)]
                          for p in jobs if p.name.startswith(s['setting'] + '__')]} for s in sources]},
         'selection': {'source': 'validation', 'test_set_selection': False,
-            'selected_configs': [{'setting': s['setting'], 'config_id': list(ARMS),
-             'search_notes': 'All predeclared arms retained for analysis; no test selection'} for s in sources]},
+            'decision_status': 'pending_candidate_review',
+            'selected_configs': [{'setting': s['setting'], 'config_id': 'b0',
+             'search_notes': 'B0 retained reference; all candidates audited, advancement pending validation review'} for s in sources]},
         'analysis': {'ranking_metric': 'mae', 'top_k': 3,
                      'dedup_rule': 'within category/channel, start separation >=H; at most9 per candidate/setting'},
         'validation': {'status': 'incomplete'}}
     audit.mkdir(parents=True, exist_ok=True)
     if (audit / 'run.yaml').exists():
         existing = yaml.safe_load((audit / 'run.yaml').read_text())
-        for key in ('experiment_id', 'code', 'mechanism', 'experiment', 'execution', 'selection'):
+        for key in ('experiment_id', 'code', 'mechanism', 'experiment', 'selection'):
             if existing[key] != run[key]:
                 raise ValueError(f'Audit protocol conflict: {key}')
+        execution = copy.deepcopy(existing['execution'])
+        for setting in execution['settings']:
+            setting.pop('runtime', None)
+        if execution != run['execution']:
+            raise ValueError('Audit execution protocol conflict')
     else:
         if any(audit.iterdir()):
             raise ValueError('Refuse an audit directory without registered metadata')
