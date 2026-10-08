@@ -6102,3 +6102,76 @@ layout and labels. These smoke metrics are not efficacy evidence. Formal 168-job
 eight-epoch from-scratch matrix launched on code a30494f, using eight GPUs and
 new lowrank_six_20261007 / lowrank_six_20261007_scratch directories. The original
 resources directory and prior remote stashes were preserved. No test evaluation.
+
+## 2026-10-08 - Complete six-hypothesis screening and longer confirmation
+
+Heartbeat checked the original matrix first: 168/168 eight-epoch runs completed,
+zero failures, canonical audit passed (11,044,600 sample rows, 1,404 selected
+records, 84 figures). All six hypotheses used full-model random initialization.
+Screening favored G2/G3 among dynamic gates and T->P pre-norm among interaction
+updates; zero-initialized scaling, null read and selective write lacked consistent
+incremental gains. The original screening artifacts remain preserved locally.
+
+The earlier turn synchronized f8fc8b2 and ran an eight-arm smoke, then launched
+96 fresh runs, 12 settings x eight arms: i0, G2, G3, components_static, tp_pre,
+tp_post, tp_pre_g2, tp_pre_g3. Thirty-epoch maximum, patience eight, same source
+hyperparameters and complete train split, no old trained checkpoint, no frozen
+branch. All 96 finished without training failures, actual 10--30 epochs, summed
+training wall time 7.113 hours. The combination selection and launch were recorded
+in conversation/manifest; the plan text was added after launch and is explicitly
+not described as preregistration. No additional mechanism was launched.
+
+The first long audit stopped in both Weather-H96 seeds at G3 reconstruction;
+10/12 setting parts had completed. Read-only replay traced this to float32
+operation order: the model fuses normalized forecasts before RevIN, whereas the
+audit mixed separately denormalized branches. Maximum validation differences
+were 3.53e-5 and 7.25e-5. Every validation batch of both affected G3 checkpoints
+replayed bitwise exactly when using model order. Commit fa02c14 adds an analysis
+forward hook and applies that same order to native/mean/shuffle/component gate
+replays. It changes no training/model weights and tightens native equality to
+atol=rtol=0. Remote `python -m unittest discover -s tests -p 'test_lowrank*.py'`
+passed 45 tests, including replay under float64 dataset inputs and RevIN on/off.
+Original failed logs and partial analysis were renamed and preserved in scratch.
+Recomputed all 12 setting audits on fa02c14 for consistent intervention arithmetic.
+
+Long canonical audit passed: 96 rows, 6,311,200 sample comparisons, 756 case records,
+48 figures; `research_runs/lowrank_six_20261007_long/`. Local independent checks
+confirmed all initialization hashes, trainable counts, setting coverage and every
+selected forecast's MAE/MSE. Reviewed two Weather G3 figures. Added Chinese
+hypothesis decisions, paired tradeoffs, intervention evidence, four objectively
+selected case studies, oracle diagnostics and limitations to the canonical report;
+regenerated its ZIP and verified its 48 image references and byte identity.
+
+Decisions: H1 partially supported for T->P pre-norm, not for scaling. H2 and G1
+lack consistent support for their intended dynamic selection explanations; H3
+is unsupported in the tested short-budget implementation. G2/G3 partially
+supported. H2/H3/G1, scaling and G2's no-forecast control lack long-budget retests,
+so those conclusions remain explicitly bounded. Short-budget null/selective
+fixed-weight benefits do not establish a better retrained architecture.
+
+Long paired results: tp_pre-tp_post mean MSE -0.004385 (9/12 wins). G3-i0
+-0.001808 MSE/-0.000759 MAE (6/12 MSE wins); G3-components_static -0.001076
+MSE/+0.000162 MAE (6/12). tp_pre_g3 has lowest mean MSE 0.581470 (i0 0.584271),
+8/12 wins, while components_static has lowest mean MAE 0.441097 (i0 0.442019),
+10/12 MSE wins, and only 7/21 added parameters. No universal winner is claimed.
+G3's level-mean intervention costs +0.003616 MSE, while shape-mean intervention
+improves -0.000125. Its Weather-H96 seed2022 1702/c14 gate (0.0131,0.9971)
+uses trend shape while rejecting severely inaccurate trend level; MSE improves
+76.3642->15.3934 vs static components. Seed2021 1980/c14 instead regresses
+0.1501->2.9085, dominated by level bias; even the within-model oracle is 1.3358.
+This motivates future branch/gate calibration and dynamic-level/static-shape
+controls, but they are recommendations and were not launched.
+
+All canonical files are now synchronized locally. Compressed chunk transfer
+completed for the 2.36 GB sample table; the decompressed SHA256 matches the remote
+original: bf8c2d79c0eaf538de677a53885fce8385b06c22006c366f5dce8a86b1612c46.
+Independently recomputed all 96 paired summary metrics from 6,311,200 local rows,
+checked Weather-H96-S2022 G3 Top3 rankings in all three categories, and verified
+the strict six-file/figures whitelist. Report and ZIP hashes match remotely too:
+b3d40d7a13d5030c815834594736812a5f4bc87f71eb60798588a2aa9fd91a36 and
+5e88051000c4ed9d46dd0f186ec072e722d980837ca68d6a9c7bce8c68324487.
+No training or analysis processes remain for this experiment. Requested hourly
+automation is ready to close after the documentation commit; no further training
+is needed for this authorized matrix. Prior resources, checkpoints and logs remain.
+All results are repeatedly inspected validation results, two seeds, six tasks;
+no test, Golden superiority, statistical-significance or blind-generalization claim.
