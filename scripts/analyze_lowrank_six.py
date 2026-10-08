@@ -440,7 +440,7 @@ def merge(scratch,audit):
             lines+=markdown_table(pd.DataFrame(anchors))
     lines+=['','## 9. Objective Defect Summary','',
             'Read the paired comparisons together with the regression cases: average improvement does not imply every sample improves. Component mixing is not pointwise convex mixing of the original forecasts.',
-            'A useful fixed-weight intervention does not establish a superior retrained architecture. An eight-epoch loss is a budget-specific result; longer from-scratch confirmation may change ordering.','',
+            f"A useful fixed-weight intervention does not establish a superior retrained architecture. Results use a {manifest['epochs']}-epoch ceiling and validation checkpoint selection; another training budget may change ordering.",'',
             '## 10. Experiment Scope','',
             f"{len(settings)} {split} settings; {row_count} sample/channel/arm records; {len(cases)} selected case records. No dataset-wise stitching of winners.",
             'This report is reproducible from the six audit files and referenced figures. Hypothesis decisions are added after numerical review.','']
