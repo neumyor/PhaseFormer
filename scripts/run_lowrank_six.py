@@ -211,6 +211,7 @@ def main():
     p.add_argument('--epochs',type=int);p.add_argument('--gpus',default='0,1,2,3,4,5,6,7')
     p.add_argument('--study',choices=('six','level'),default='six')
     p.add_argument('--allow-seed-template',action='store_true')
+    p.add_argument('--baseline-reference',choices=('i0','components_static'),default='i0')
     p.add_argument('--arms');p.add_argument('--smoke',action='store_true')
     p.add_argument('--prepare-only',action='store_true');p.add_argument('--job',type=Path)
     p.add_argument('--skip-analysis',action='store_true');args=p.parse_args()
@@ -221,7 +222,11 @@ def main():
     arms=args.arms.split(',') if args.arms else list(LEVEL_ARMS if args.study=='level' else SIX_ARMS)
     baselines=dict(BASELINES)
     if args.study=='level':baselines['tp_pre_g3']='tp_pre_components_static'
-    assert len(arms)==len(set(arms)) and set(arms)<=set(ARMS) and 'i0' in arms
+    if args.baseline_reference=='components_static':
+        assert args.study=='level'
+        baselines['components_static']='components_static'
+    assert len(arms)==len(set(arms)) and set(arms)<=set(ARMS)
+    assert args.baseline_reference in arms
     assert all(baselines[a] in arms for a in arms)
     scratch=args.scratch_dir.resolve();audit=args.audit_dir.resolve();jobs=[]
     code=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
