@@ -27,6 +27,25 @@ class LowrankStage2Tests(unittest.TestCase):
         self.assertTrue(torch.equal(diag['updated_phase_latent'], self.phase))
         self.assertTrue(all(k.startswith('lowrank_head.') for k in baseline.state_dict()))
 
+    def test_parallel_reads_original_states_and_both_directions_train(self):
+        branch=self.branch('parallel_bidirectional')
+        # The legacy decoder starts at zero; make its rank readout observable.
+        torch.nn.init.normal_(branch.lowrank_head.decoder.weight)
+        latent,last=branch.lowrank_head.encode_latent(self.x)
+        expected_trend,_=branch._phase_to_trend(latent,self.phase)
+        expected_phase,_=branch._trend_to_phase(latent,self.phase)
+        pred,diag=branch(self.x,self.phase)
+        torch.testing.assert_close(pred,branch.lowrank_head.decode_latent(expected_trend,last),atol=0,rtol=0)
+        torch.testing.assert_close(diag['updated_phase_latent'],expected_phase,atol=0,rtol=0)
+        sequential_phase,_=branch._trend_to_phase(expected_trend,self.phase)
+        self.assertGreater(float((expected_phase-sequential_phase).abs().max()),1e-5)
+        (pred.square().mean()+diag['updated_phase_latent'].square().mean()).backward()
+        for parameter in [branch.trend_out.weight,branch.phase_out.weight,
+                          branch.lowrank_head.encoder.weight,branch.lowrank_head.decoder.weight]:
+            self.assertIsNotNone(parameter.grad)
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertGreater(float(parameter.grad.abs().sum()),0)
+
     def test_scaled_identity_both_directions(self):
         for mode, flags in [("phase_to_trend", {}), ("trend_to_phase", {}),
                             ("phase_to_trend", {"null_read": True}),

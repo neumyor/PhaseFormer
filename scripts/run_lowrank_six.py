@@ -34,7 +34,15 @@ ARMS.update(
         'lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components_level_dynamic'},
     components_level_without={'lowrank_fusion_mode':'components_level_without'},
     tp_pre_level_without={'trend_interaction_mode':'trend_to_phase',
-        'lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components_level_without'})
+        'lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components_level_without'},
+    parallel_post={'trend_interaction_mode':'parallel_bidirectional',
+        'lowrank_update_style':'post_norm','lowrank_fusion_mode':'static'},
+    parallel_components_static={'trend_interaction_mode':'parallel_bidirectional',
+        'lowrank_update_style':'post_norm','lowrank_fusion_mode':'components_static'})
+PARALLEL_ARMS = ('components_static','parallel_post','parallel_components_static')
+PARALLEL_COMPARISONS = (('parallel_components_static','components_static'),
+                       ('parallel_components_static','parallel_post'),
+                       ('parallel_post','components_static'))
 LEVEL_ARMS = ('i0','tp_pre','components_static','tp_pre_components_static',
               'components_level_dynamic','tp_pre_level_dynamic','g3_components','tp_pre_g3')
 LEVEL_COMPARISONS = (
@@ -48,7 +56,8 @@ BASELINES = {arm: 'i0' for arm in ARMS}
 BASELINES.update(pt_null='pt_scaled', tp_selective='tp_scaled', g3_components='components_static', tp_pre_g2='g2_disagreement', tp_pre_g3='g3_components')
 BASELINES.update(tp_pre_components_static='components_static',
     components_level_dynamic='components_static',tp_pre_level_dynamic='tp_pre_components_static',
-    components_level_without='components_static',tp_pre_level_without='tp_pre_components_static')
+    components_level_without='components_static',tp_pre_level_without='tp_pre_components_static',
+    parallel_post='components_static',parallel_components_static='components_static')
 DEFAULT_SETTINGS = ','.join(f'{d}:{h}:{s}' for d in ('ETTh1','ETTm2','Weather')
                             for h in (96,720) for s in (2021,2022))
 
@@ -126,6 +135,13 @@ def train_job(path):
             expected,_ = forecast(matched,batch,device)
         torch.testing.assert_close(a,expected,atol=0,rtol=0)
         assert matched_hash == initial_hash
+        del matched
+    if job['arm']=='parallel_components_static':
+        matched,_,_,_,matched_hash=random_models(job['source']['config'],'parallel_post')
+        matched.to(device).eval()
+        with torch.inference_mode():expected,_=forecast(matched,batch,device)
+        torch.testing.assert_close(a,expected,atol=0,rtol=0)
+        assert matched_hash==initial_hash
         del matched
     if identity: torch.testing.assert_close(a,b,atol=0,rtol=0)
     assert all(p.requires_grad for p in model.parameters())
@@ -209,7 +225,7 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--source-dir',type=Path);p.add_argument('--scratch-dir',type=Path)
     p.add_argument('--audit-dir',type=Path);p.add_argument('--settings',default=DEFAULT_SETTINGS)
     p.add_argument('--epochs',type=int);p.add_argument('--gpus',default='0,1,2,3,4,5,6,7')
-    p.add_argument('--study',choices=('six','level'),default='six')
+    p.add_argument('--study',choices=('six','level','parallel'),default='six')
     p.add_argument('--allow-seed-template',action='store_true')
     p.add_argument('--baseline-reference',choices=('i0','components_static'),default='i0')
     p.add_argument('--arms');p.add_argument('--smoke',action='store_true')
@@ -217,13 +233,14 @@ def main():
     p.add_argument('--skip-analysis',action='store_true');args=p.parse_args()
     if args.job:train_job(args.job);return
     import yaml
-    if args.epochs is None:args.epochs=30 if args.study=='level' else 8
+    if args.epochs is None:args.epochs=30 if args.study in ('level','parallel') else 8
     sources=configs(args.source_dir.resolve(),args.settings,args.allow_seed_template)
-    arms=args.arms.split(',') if args.arms else list(LEVEL_ARMS if args.study=='level' else SIX_ARMS)
+    arms=args.arms.split(',') if args.arms else list(
+        PARALLEL_ARMS if args.study=='parallel' else LEVEL_ARMS if args.study=='level' else SIX_ARMS)
     baselines=dict(BASELINES)
     if args.study=='level':baselines['tp_pre_g3']='tp_pre_components_static'
     if args.baseline_reference=='components_static':
-        assert args.study=='level'
+        assert args.study in ('level','parallel')
         baselines['components_static']='components_static'
     assert len(arms)==len(set(arms)) and set(arms)<=set(ARMS)
     assert args.baseline_reference in arms
@@ -241,6 +258,9 @@ def main():
               'study':args.study,'jobs':list(map(str,jobs)),'epochs':args.epochs,
               'smoke':args.smoke,'code_commit':code}
     if args.study=='level':manifest['comparisons']=LEVEL_COMPARISONS
+    if args.study=='parallel':manifest['comparisons']=PARALLEL_COMPARISONS
+    if (scratch/'manifest.json').exists():
+        assert json.loads((scratch/'manifest.json').read_text())==json.loads(json.dumps(manifest)), 'Refuse changed resume manifest'
     save_json(scratch/'manifest.json',manifest)
     settings=[{'setting':s['setting'],'dataset':s['config']['dataset'],'horizon':s['config']['horizon'],
                'seed':s['config']['seed'],'lookback':720,'split':'validation'} for s in sources]
@@ -261,8 +281,13 @@ def main():
         run['mechanism']['gate_context']='detached rank latent, post-interaction phase Z, and normalized branch forecasts; width=16; one gate per sample/channel/window'
         run['analysis']['gate_shuffle_seeds']=list(range(5))
         run['analysis']['gate_shuffle_rule']='same-channel circular offsets chosen independently by fixed seeds, both circular distances >= horizon; level-only modes preserve shape gate'
+    if args.study=='parallel':
+        run['mechanism']['hypotheses']=['parallel bidirectional interaction with static level/shape output fusion']
+        run['mechanism']['parallel_state_rule']='Both directions read the same original rank and phase states; legacy post-norm, no sequential feedback.'
+        run['mechanism']['gate_context']='two learned per-channel constants; no context MLP; initialized at0.2'
+        run['analysis']['interventions']='disable both directions, keep only P->T, keep only T->P; fixed weights, not retraining'
     audit.mkdir(parents=True,exist_ok=True)
-    (audit/'run.yaml').write_text(yaml.safe_dump(run,sort_keys=False))
+    if not (audit/'run.yaml').exists():(audit/'run.yaml').write_text(yaml.safe_dump(run,sort_keys=False))
     print(json.dumps({'jobs':len(jobs),'settings':len(sources),'arms':arms,'code':code}),flush=True)
     if args.prepare_only:return
     tasks=queue.Queue()

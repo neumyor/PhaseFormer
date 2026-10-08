@@ -1,15 +1,26 @@
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 
-from scripts.analyze_lowrank_six import replay_fusion, component_errors, oracle_component_gate, separated_shuffle_shifts, mix, evaluation_context
+from scripts.analyze_lowrank_six import replay_fusion, component_errors, oracle_component_gate, separated_shuffle_shifts, mix, evaluation_context, interaction_prediction
 from src.models.lowrank_fusion import LowRankDynamicFusion
 from src.models.phase_adapters import RevIN
 
 
 class FusionReplayTests(unittest.TestCase):
+    def test_direction_intervention_restores_mode_on_success_and_failure(self):
+        branch=SimpleNamespace(interaction_mode='parallel_bidirectional')
+        model=SimpleNamespace(lowrank_interaction_branch=branch)
+        with patch('scripts.analyze_lowrank_six.forecast',side_effect=lambda *args:(branch.interaction_mode,None)):
+            self.assertEqual(interaction_prediction(model,[],None,'phase_to_trend'),'phase_to_trend')
+        self.assertEqual(branch.interaction_mode,'parallel_bidirectional')
+        with patch('scripts.analyze_lowrank_six.forecast',side_effect=RuntimeError('inference failure')):
+            with self.assertRaises(RuntimeError):interaction_prediction(model,[],None,'none')
+        self.assertEqual(branch.interaction_mode,'parallel_bidirectional')
+
     def test_test_split_resolves_validation_selected_training_run(self):
         source={'setting':'Weather_H96_S2021_test','training_setting':'Weather_H96_S2021_val'}
         runs,setting,split=evaluation_context(Path('/tmp/test_audit'),source,

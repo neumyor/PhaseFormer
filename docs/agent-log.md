@@ -6316,3 +6316,22 @@ verification, without changing the project environment. Inspected validation and
 test Weather case figures. Remote analysis ended successfully, with no active
 training or inference. The phaseformer heartbeat is PAUSED on completion.
 No further mechanism or training is launched by this closure.
+
+## 2026-10-08: Register parallel bidirectional/static-component validation
+
+User requests testing parallel P<->T with static level/shape fusion. Applied the
+experiment-and-error-analysis Skill and registered a new prospective study in the
+active interaction plan: B0 no-interaction/static components, Q0 parallel post-norm
+scalar fusion, Q1 parallel post-norm/static components. Both directions read the
+original states; no new pre-norm/null/scaling mechanism. Twelve prior settings,
+36 from-scratch joint-training runs, 30-epoch ceiling/patience8; no old weights or
+frozen branches. Two-setting smoke precedes formal training. Fixed-weight directional
+interventions, decomposition/oracle/tail and ranked sample audit are included;
+validation decisions precede 36 frozen-checkpoint test evaluations. No automatic
+seed/dataset expansion. Advancement criteria are written before training.
+
+Remote tracked checkout was clean, no experiment jobs active, all eight GPUs idle;
+user resources symlink preserved. Extended existing runner/analyzer, kept historical
+default arm lists unchanged, and added tests that parallel updates read original
+states and that inference interventions restore the mode even on failure. Numerical
+verification and smoke are pending; no efficacy conclusion yet.

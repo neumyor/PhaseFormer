@@ -472,6 +472,49 @@ H间隔规则。YAML/CSV/NPZ设置一致，ZIP白名单及字节一致性检查�
 收益可复现；动态水平不值得本轮升级；形状动态性简化未成立；交互互补未成立；
 融合选择存在oracle空间，但分支能力和训练原因仍不能作确定归因。条件扩展未执行。
 
+## 并行双向交互与静态双分量融合（2026-10-08，前瞻登记）
+
+用户要求关注并行P<->T与静态双分量融合，已授权实现和测试。假设是：原并行
+双向交互在单Gate下的水平/形状权重冲突，能否通过分别学习两个静态系数缓解。
+这是对已有机制组合的检验，不预设新方法成立；不混用8轮历史或warm-start结果。
+
+固定三个配置：B0=`components_static`（无交互、静态双分量），Q0=`parallel_post`
+（并行双向、原单静态Gate），Q1=`parallel_components_static`（并行双向、静态
+双分量）。主要比较Q1-B0检验交互价值，Q1-Q0检验分量拆分，Q0-B0仅作结构权衡。
+不追加i0，因为本阶段目标是相对已冻结B0的升级；B0本轮重新训练，不加载旧权重。
+
+两方向均读取交互前原状态：T'=LN(T+F_PT(T,P))、P'=LN(P+F_TP(P,T))，
+T'进入原rank-r decoder，P'进入原phase predictor，彼此不顺序读取更新后的状态。
+沿用历史parallel的post-norm，不同时试pre-norm、缩放、null或选择性写入。
+T->P只有单个trend key/value，仍是广播对照；P->T可选择phase slots。
+Gate为每变量两个静态sigmoid系数，初始化0.2，在RevIN归一化空间按24步周期
+融合水平/零均值形状。保留L720、P24、r=H/8、pool_factor1、smooth_ratio0及原主干。
+
+先对ETTh1-H96-S2021、Weather-H720-S2021做三配置两batch smoke并完整验证审计。
+通过后运行ETTh1、ETTm2、Weather x H96/H720 x seeds2021/2022，12设置x3配置
+=36次从头联合训练，上限30轮、patience8、最低validation Huber checkpoint。
+使用此前同任务超参数与全数据，不按arm调参；共同未训练权重和数据顺序匹配，
+不得加载训练checkpoint或冻结原分支。smoke不计入36次。此有限矩阵旨在同当前
+研究基线直接配对；不自动扩展第三seed、数据集或新增机制。
+
+validation的setting等权平均/中位相对MSE均<0、至少8/12设置和4/6任务改善、
+平均相对MAE不退化才支持默认升级。任务两seed均退化MSE/MAE>1%，或p95/
+最差1%两seed均退化>5%时阻止默认升级。即使通过，也只作为两seed探索性候选，
+不宣称显著性。Q1-Q0独立报告，不用相对Q0的改善替代相对B0的升级要求。
+
+样本审计：每周期水平/形状MSE、两分支和oracle误差、近中远段、峰谷误差、p95
+及最差1%；每arm/setting按MAE三类Top3并按同channel/H间隔去重。固定权重关闭
+两个方向、仅保留P->T、仅保留T->P，只作诊断，不替代重新训练单向对照。
+双向Q1是否真正改善两分支由结果检验，不把消息变化或oracle空间当作因果证明。
+
+在validation冻结统一结论后，一次性评估已登记B0/Q0/Q1的36个checkpoint test，
+不根据test改变本轮选择。既有test查看及Golden完整协议可比性限制继续披露。
+输出`research_runs/lowrank_parallel_static`及独立`lowrank_parallel_static_test`，
+分别严格六文件加figures；checkpoint/日志在同名scratch目录，旧成功结果不覆盖。
+入口`run_lowrank_six.py --study parallel --baseline-reference components_static`；
+manifest、训练代码提交与预算启动前冻结。完成后同步本地、提交计划/log并暂停
+既有监测。本节只登记方案，效果结论待真实实验与审计。
+
 ## Controlled mechanisms (historical stage 1)
 
 The arrow denotes information flow. `P` is the routed phase-token sequence and

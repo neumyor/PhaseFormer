@@ -116,10 +116,20 @@ def off_prediction(model,batch,device,mean_gate,fusion_inputs):
     finally:branch.interaction_mode=previous
 
 
+def interaction_prediction(model,batch,device,mode):
+    branch=model.lowrank_interaction_branch
+    previous=branch.interaction_mode
+    try:
+        branch.interaction_mode=mode
+        return forecast(model,batch,device)[0]
+    finally:branch.interaction_mode=previous
+
+
 def worker(scratch,setting):
     torch.set_num_threads(2);torch.set_float32_matmul_precision('medium');device=torch.device('cuda:0')
     manifest=json.loads((scratch/'manifest.json').read_text());arms=manifest['arms']
-    baselines=manifest.get('baselines',BASELINES);level_study=manifest.get('study')=='level'
+    baselines=manifest.get('baselines',BASELINES);level_study=manifest.get('study') in ('level','parallel')
+    parallel_study=manifest.get('study')=='parallel'
     source=next(s for s in manifest['sources'] if s['setting']==setting)
     runs,training_setting,split=evaluation_context(scratch,source,manifest)
     cases=[];summaries=[];parts=scratch/'analysis_parts';parts.mkdir(exist_ok=True)
@@ -144,13 +154,15 @@ def worker(scratch,setting):
             for batch in loader:
                 bp,truth=forecast(baseline,batch,device);cp,_=forecast(model,batch,device)
                 phase=model.last_phase_forecast.clone();trend=model.last_lowrank_forecast.clone()
+                native_inputs=dict(fusion_inputs)
                 diag=dict(branch.last_diagnostics)
                 if fusion is not None:
                     g=fusion.last_gate.clone();gates.append(g.cpu())
                     torch.testing.assert_close(cp,replay_fusion(model,batch,device,g,fusion_inputs),atol=0,rtol=0)
                 else:
                     g=torch.sigmoid(model.lowrank_interaction_gate).transpose(1,2).expand(len(cp),-1,-1)
-                off=off_prediction(model,batch,device,mean_gate,fusion_inputs)
+                off=(interaction_prediction(model,batch,device,'none') if parallel_study
+                     else off_prediction(model,batch,device,mean_gate,fusion_inputs))
                 arrays={}
                 for label,pred in [('baseline',bp),('candidate',cp),('off',off),('phase',phase),('trend',trend)]:
                     err=pred-truth
@@ -171,12 +183,16 @@ def worker(scratch,setting):
                     if model.use_revin:
                         _,stats=model.revin.normalize(batch[0].float().to(device))
                         normalized_truth=model.revin.normalize_with_stats(truth,stats)
-                    oracle_gate=oracle_component_gate(fusion_inputs['phase'],fusion_inputs['trend'],normalized_truth,model.period_len)
-                    oracle=replay_fusion(model,batch,device,oracle_gate,fusion_inputs)
+                    oracle_gate=oracle_component_gate(native_inputs['phase'],native_inputs['trend'],normalized_truth,model.period_len)
+                    oracle=replay_fusion(model,batch,device,oracle_gate,native_inputs)
                     arrays['oracle_mse']=(oracle-truth).square().mean(1).cpu().numpy()
                     arrays['oracle_gate_level']=oracle_gate[...,0].cpu().numpy()
                     arrays['oracle_gate_shape']=oracle_gate[...,1].cpu().numpy()
                     arrays['gate_regret_mse']=arrays['candidate_mse']-arrays['oracle_mse']
+                if parallel_study and branch.interaction_mode=='parallel_bidirectional':
+                    for mode,label in [('phase_to_trend','only_pt_mse'),('trend_to_phase','only_tp_mse')]:
+                        pred=interaction_prediction(model,batch,device,mode)
+                        arrays[label]=(pred-truth).square().mean(1).cpu().numpy()
                 arrays['gate_level']=g[...,0].cpu().numpy();arrays['gate_shape']=g[...,-1].cpu().numpy()
                 arrays['prediction_disagreement_rms']=(phase-trend).square().mean(1).sqrt().cpu().numpy()
                 arrays['outside_branch_interval']=((cp<torch.minimum(phase,trend)-1e-5)|(cp>torch.maximum(phase,trend)+1e-5)).float().mean(1).cpu().numpy()
@@ -273,7 +289,8 @@ def worker(scratch,setting):
                           'phase':model.last_phase_forecast[bi,:,ch].cpu().numpy(),
                           'trend':model.last_lowrank_forecast[bi,:,ch].cpu().numpy(),'gate':g[bi,ch].cpu().numpy(),
                           'acceptance':diag['acceptance'][bi,ch].cpu().numpy() if diag else np.array([],dtype=np.float32)}
-                    data['off']=off_prediction(model,batch,device,mean_gate,fusion_inputs)[bi,:,ch].cpu().numpy()
+                    data['off']=(interaction_prediction(model,batch,device,'none') if parallel_study
+                                 else off_prediction(model,batch,device,mean_gate,fusion_inputs))[bi,:,ch].cpu().numpy()
                     cache[sid,ch]=data
                 cases.append({'metadata':row,**cache[sid,ch]})
         # Fixed column schema across arms, so appended rows remain readable.
@@ -282,6 +299,7 @@ def worker(scratch,setting):
         if level_study:
             optional+=['oracle_mse','oracle_gate_level','oracle_gate_shape','gate_regret_mse']
             optional+=[f'shuffled_gate_seed{k}_mse' for k in range(5)]
+        if parallel_study:optional+=['only_pt_mse','only_tp_mse']
         for col in optional:
             if col not in frame:frame[col]=np.nan
         frame=frame.reindex(sorted(frame.columns),axis=1)
@@ -297,7 +315,7 @@ def merge(scratch,audit):
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     manifest=json.loads((scratch/'manifest.json').read_text());run=yaml.safe_load((audit/'run.yaml').read_text())
-    level_study=manifest.get('study')=='level'
+    level_study=manifest.get('study') in ('level','parallel')
     split=manifest.get('evaluation_split','val')
     settings=[s['setting'] for s in manifest['sources']];results=[];cases=[];selections=[];distributions=[]
     first=True;row_count=0
@@ -390,6 +408,10 @@ def merge(scratch,audit):
         lines[start:start+2]=[
             'Fixed predeclared matrix: no/pre-norm interaction crossed with static components, dynamic level/static shape, and fully dynamic components; scalar-gate references retained.',
             'Level-only gates share the G3 context and width=16. Shape gate is a learned per-channel constant. Context-zero controls preserve parameter shapes when registered.']
+        if manifest.get('study')=='parallel':
+            lines[start:start+2]=[
+                'Fixed three-arm comparison: no-interaction static components, parallel post-norm scalar gate, parallel post-norm static components; no per-arm tuning.',
+                'Both interaction directions read original states in parallel. Component coefficients are learned per-channel constants, initialized at0.2. Original branches jointly train from random initialization.']
     lines+=markdown_table(pd.DataFrame(distributions));lines+=['','## 5. Horizon-wise Error','']
     segments=['mean_'+s for s in ['baseline_segment0_mse','candidate_segment0_mse','baseline_segment1_mse','candidate_segment1_mse','baseline_segment2_mse','candidate_segment2_mse']]
     lines+=markdown_table(table[['setting','config_id']+segments])
@@ -403,7 +425,10 @@ def merge(scratch,audit):
             'Gate variation, attention mass and correlation are observations, not proof of calibrated reliability.','']
     diagcols=[c for c in ('mean_off_mse','mean_shuffled_gate_mse','mean_no_null_mse','mean_receipt_mean_mse',
                           'mean_receipt_roll_mse','mean_fixed_level_mse','mean_fixed_shape_mse','mean_gate_level',
-                          'mean_gate_shape','mean_outside_branch_interval') if c in table]
+                          'mean_gate_shape','mean_outside_branch_interval','mean_only_pt_mse','mean_only_tp_mse') if c in table]
+    if manifest.get('study')=='parallel':
+        explanation=lines.index('off means the current checkpoint with interaction disabled, or its output gate replaced by its own training-set mean. It is not a retrained model.')
+        lines[explanation]='off disables both directions with the same trained weights; only_pt/only_tp keep one direction. These are diagnostic interventions, not retrained architecture comparisons.'
     lines+=markdown_table(table[['setting','config_id','mse']+diagcols])
     if level_study:
         lines+=['','Level/shape decomposition, branch oracle and tail risk:','']
