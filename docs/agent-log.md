@@ -6335,3 +6335,45 @@ user resources symlink preserved. Extended existing runner/analyzer, kept histor
 default arm lists unchanged, and added tests that parallel updates read original
 states and that inference interventions restore the mode even on failure. Numerical
 verification and smoke are pending; no efficacy conclusion yet.
+
+## 2026-10-08: Stop parallel/static experiments at user request
+
+User explicitly requested stopping remote experiments and reporting current evidence.
+Stopped this study's controller, training workers and descendants; verified no
+remaining experiment processes and all eight GPUs idle at1MiB. All results,
+checkpoints and logs preserved. No continuation, analysis inference or test launched.
+Marked pipeline stopped_by_user/automatic_resume_allowed=false, six interrupted
+jobs stopped_by_user and the formal run.yaml validation incomplete. One result had
+finished before stop while its parent status still said running; preserved that result
+and marked completed_before_user_stop. There are30 complete results, not29:
+B0 12/12, Q0 parallel scalar10/12, Q1 parallel static-components8/12. No failures.
+Q1 Weather all four settings and Q0 Weather-H720-S2022/H96-S2021 remain incomplete.
+
+Implementation tests passed53 cases. Prior6 smoke runs and complete smoke audit
+passed; their efficacy values are excluded. Formal code frozen atf65f369, following
+f6db615 registration and40d456e closure additions. Complete formal sample audit,
+directional intervention diagnosis, tails/oracle and test were not run. Do not mark
+the formal experiment passed or infer unmeasured Weather performance.
+
+For Q1-B0, the eight complete ETTh1/ETTm2 setting-equal relative MSE/MAE are
++1.033810%/+1.112077%; MSE and MAE improve only2/8 settings. Task two-seed mean
+relative MSE/MAE: ETTh1-H720 -1.456579%/-0.447454%; ETTh1-H96
++2.952234%/+2.908181%; ETTm2-H720 +1.459104%/+0.949034%; ETTm2-H96
++1.180481%/+1.038548%. ETTh1-H96 both seeds exceed1% regression on both metrics,
+already triggering a preregistered block. Even four remaining wins yield only6/12,
+below the8/12 gate: no default upgrade is supported, retainB0.
+
+Same eight-setting Q1-Q0 relative MSE/MAE -0.207665%/-0.170258%, wins5/8 and6/8:
+component fusion slightly improves the measured parallel scalar model but does not
+recover B0 performance. Q0-B0's different ten-setting subset has+1.032172% MSE,
++0.797636% MAE,3/10 MSE wins. These incomplete subsets are not full-matrix means,
+not statistical-significance or Golden claims. All12 B0 validation metrics exactly
+match the prior same-seed run, which supplies reproducibility, not independent seeds.
+
+Synchronized partial_results.csv, partial_summary.json, manifest.json and stopped
+pipeline status into local lowrank_parallel_static_scratch; independently recomputed
+paired numbers and task means from30 local results. Formal audit directory remains
+incomplete; temporary partial tables stay in scratch, outside the canonical whitelist.
+Existing phaseformer hourly automation remainsPAUSED and will not restart the work.
+Updated active plan and log; no model-source edits or additional training required
+for this stop-and-report action.
