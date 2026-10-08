@@ -238,7 +238,7 @@ def merge(scratch,audit):
             np.testing.assert_allclose(np.square(e).mean(),c['metadata'][key+'_mse'],atol=5e-5,rtol=5e-4)
             np.testing.assert_allclose(np.abs(e).mean(),c['metadata'][key+'_mae'],atol=3e-5,rtol=3e-4)
     figures=audit/'figures';figures.mkdir(exist_ok=True);refs=[]
-    major=('pt_scaled','tp_scaled','pt_null','tp_selective','g1_reliability','g2_disagreement','g3_components')
+    major=('pt_scaled','tp_scaled','pt_null','tp_selective','g1_reliability','g2_disagreement','g3_components','tp_pre_g2','tp_pre_g3')
     for setting in settings:
         for arm in major:
             selected=[c for c in cases if c['metadata']['setting']==setting and c['metadata']['candidate_config_id']==arm and c['metadata']['rank']==1]
@@ -263,7 +263,7 @@ def merge(scratch,audit):
     comparisons=[('pt_pre','pt_post'),('tp_pre','tp_post'),('pt_scaled','pt_pre'),('tp_scaled','tp_pre'),
                  ('pt_null','pt_scaled'),('tp_selective','tp_scaled'),('g1_reliability','i0'),
                  ('g2_disagreement','i0'),('g2_disagreement','g2_without_forecasts'),
-                 ('g3_components','i0'),('g3_components','components_static'),('g3_components','g2_disagreement')]
+                 ('g3_components','i0'),('g3_components','components_static'),('g3_components','g2_disagreement'),('tp_pre_g2','g2_disagreement'),('tp_pre_g3','g3_components'),('tp_pre_g2','tp_pre'),('tp_pre_g3','tp_pre')]
     paired=[]
     for candidate,baseline in comparisons:
         if candidate not in manifest['arms'] or baseline not in manifest['arms']:continue

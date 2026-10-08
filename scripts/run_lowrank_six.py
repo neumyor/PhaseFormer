@@ -22,9 +22,11 @@ ARMS = {'i0': {}, **{k:v for k,v in OLD_ARMS.items() if k != 'i0_continue'},
         'g2_disagreement': {'lowrank_fusion_mode':'disagreement'},
         'g2_without_forecasts': {'lowrank_fusion_mode':'disagreement_without'},
         'g3_components': {'lowrank_fusion_mode':'components'},
-        'components_static': {'lowrank_fusion_mode':'components_static'}}
+        'components_static': {'lowrank_fusion_mode':'components_static'},
+        'tp_pre_g2': {'trend_interaction_mode':'trend_to_phase','lowrank_update_style':'pre_norm','lowrank_fusion_mode':'disagreement'},
+        'tp_pre_g3': {'trend_interaction_mode':'trend_to_phase','lowrank_update_style':'pre_norm','lowrank_fusion_mode':'components'}}
 BASELINES = {arm: 'i0' for arm in ARMS}
-BASELINES.update(pt_null='pt_scaled', tp_selective='tp_scaled', g3_components='components_static')
+BASELINES.update(pt_null='pt_scaled', tp_selective='tp_scaled', g3_components='components_static', tp_pre_g2='g2_disagreement', tp_pre_g3='g3_components')
 DEFAULT_SETTINGS = ','.join(f'{d}:{h}:{s}' for d in ('ETTh1','ETTm2','Weather')
                             for h in (96,720) for s in (2021,2022))
 
