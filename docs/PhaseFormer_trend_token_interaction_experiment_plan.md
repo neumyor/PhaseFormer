@@ -78,8 +78,24 @@ python scripts/lowrank_token_interaction/run.py \
 
 smoke 使用独立 `_smoke_scratch`/`_smoke` 路径，补 `--smoke --epochs 1
 --settings ETTh1:96:2021,Weather:720:2021`。canonical仅六文件加figures，
-训练checkpoint/日志/manifest单独放ignored scratch。当前代码已实现，远程数值
-验证、smoke和正式启动待完成，尚无新机制效果结论。
+训练checkpoint/日志/manifest单独放ignored scratch。
+
+**启动记录：** 49项针对性及相关回归测试通过。远程 pytest 的capture插件导入
+readline会触发环境segfault，使用 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m
+pytest -p no:capture` 绕过该测试入口问题，训练环境未改。补齐审计元数据后，最终
+8项针对性测试再次通过，最终提交 `dcde3b684f346b14df91d733ad22a159e97393c2`
+的10次smoke及完整validation审计全部通过：575330行、72条案例、8图，六文件、
+排名/案例重算、ZIP与本地同步哈希校验通过。最初smoke (`2191e40`) 独立保留，
+最终证据为 `research_runs/lowrank_token_interaction_20261008_smoke_v2/`。
+两批共20次smoke，仅验证流程，不计为正式效能训练或机制收益证据。
+
+2026-10-08正式60次训练已在独立checkout启动，controller PID23180，冻结于
+上述最终提交；源码不再原地更新。启动核验时8次完成、8次在运行、失败0，
+16次初始化审计均记录随机起点、全参数训练和初始输出与B0完全一致。
+北京时间20:00复核：24/60完成、8运行、28排队、失败0，30份初始化记录通过。
+正式manifest已同步本地。应用中旧监测任务无法更新，新建本会话每小时heartbeat
+`phaseformer-token`（ACTIVE），只跟进此60-run实验，完成审计和结论后自动暂停。
+正式效果仍待完整矩阵与样本审计，不读test，已停止的并行attention实验保持停止。
 
 ## Historical Purpose
 

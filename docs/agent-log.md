@@ -6396,3 +6396,41 @@ latency and canonical report/ZIP checks. Plan preregisters matrix and admission 
 Remote GPUs idle and no new experiments launched at implementation review. Local
 syntax validation pending final patch; remote numeric tests and ten smoke jobs must
 pass before formal60-run launch. No efficacy conclusion or test evaluation yet.
+
+## 2026-10-08: Verify and launch isolated token interaction matrix
+
+Code commits b37690d/2191e40/dcde3b6 implement the isolated study, serializable
+immutable metadata, strict checkpoint identity and explicit pending candidate
+selection. B0 remains the retained reference; all candidates are evaluated.
+Private model/restore, existing-model equivalence, formula/direction/gradient,
+checkpoint round-trip, signal recovery and metadata checks passed. Remote pytest
+initially crashed importing readline through its built-in capture plugin; disabling
+capture (PYTEST_DISABLE_PLUGIN_AUTOLOAD=1, python -m pytest -p no:capture) resolved
+the test entry issue without modifying packages. 49 focused/regression checks passed;
+final code's 8 focused checks passed after the audit metadata changes.
+
+Ten final-code smoke runs completed without failure, no old checkpoint loaded,
+all parameters trainable, exact initial B0 identity and eventual finite nonzero
+gradients for every communication parameter. Full validation audit passed 575330
+sample/channel/arm rows, 72 selected case records and 8 figures. Canonical directory,
+metrics, case rankings/recomputation, report/ZIP byte equality and local sync hashes
+passed; inspected the Weather-H720 PT-correct plot. Final smoke evidence:
+research_runs/lowrank_token_interaction_20261008_smoke_v2/. Initial 2191e40 smoke
+is separately retained; neither smoke supplies an efficacy conclusion.
+
+Formal manifest registers 5 arms x12 settings=60 scratch joint trainings, 30-epoch
+ceiling/patience8, validation-only audit, frozen at dcde3b684f346b14df91d733ad22a159e97393c2.
+Detached controller PID23180 started in an independent checkout; original remote
+repo and stopped parallel attention experiments unchanged. Startup snapshot 8
+completed/8 running/0 failures with 16 initialization records. Local formal manifest
+synced. No active-source update after launch; new local documentation commits do
+not alter the frozen checkout. Formal audit remains incomplete until all60 and the
+sample/report checks finish; no test evaluation, winner or Golden claim.
+At 12:00 UTC, verified 24/60 successful results, 8 running, 28 queued, zero failures;
+all 30 available initialization records passed the declared invariants.
+
+Old phaseformer automation update failed because the app did not find it. Created
+the current thread's hourly phaseformer-token heartbeat (ACTIVE), explicitly single
+agent, quiet when unchanged, fault diagnosis and isolated continuation, full audit
+and local synchronization, numerical architecture conclusion, then PAUSED. It cannot
+resume the stopped old parallel study or auto-expand this matrix.
