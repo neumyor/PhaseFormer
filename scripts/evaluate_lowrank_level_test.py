@@ -26,10 +26,12 @@ def main():
     training=args.training_scratch_dir.resolve();scratch=args.scratch_dir.resolve();audit=args.audit_dir.resolve()
     original=json.loads((training/'manifest.json').read_text())
     assert json.loads((training/'audit_complete.json').read_text())['status']=='passed'
-    assert original['study']=='level' and not original['smoke']
-    arms=['i0','tp_pre','components_static','tp_pre_components_static']
-    retained=['components_static','tp_pre_components_static']
-    baselines={'i0':'i0','tp_pre':'i0','components_static':'i0','tp_pre_components_static':'components_static'}
+    assert original['study'] in ('level','parallel') and not original['smoke']
+    parallel=original['study']=='parallel'
+    frozen=json.loads((training/'frozen_selection.json').read_text()) if parallel else None
+    arms=(original['arms'] if parallel else ['i0','tp_pre','components_static','tp_pre_components_static'])
+    retained=(frozen['retained_arms'] if parallel else ['components_static','tp_pre_components_static'])
+    baselines=(original['baselines'] if parallel else {'i0':'i0','tp_pre':'i0','components_static':'i0','tp_pre_components_static':'components_static'})
     sources=copy.deepcopy(original['sources']);checkpoints=[]
     for source in sources:
         source['training_setting']=source['setting']
@@ -44,10 +46,13 @@ def main():
             checkpoints.append({'setting':source['setting'],'config_id':arm,
                 'path':cfg['checkpoint'],'sha256':result['checkpoint_sha256']})
     manifest={'sources':sources,'arms':arms,'retained_arms':retained,'baselines':baselines,
-        'study':'level','evaluation_split':'test','training_scratch_dir':str(training),
+        'study':original['study'],'evaluation_split':'test','training_scratch_dir':str(training),
         'epochs':original['epochs'],'smoke':False,'training_code_commit':original['code_commit'],
         'comparisons':[['components_static','i0'],['tp_pre_components_static','tp_pre'],
             ['tp_pre_components_static','components_static'],['tp_pre','i0']]}
+    if parallel:
+        manifest['comparisons']=original['comparisons']
+        manifest['validation_frozen_selection']=frozen
     if (scratch/'manifest.json').exists():
         assert json.loads((scratch/'manifest.json').read_text())==manifest,'Refuse changed test selection'
     save_json(scratch/'manifest.json',manifest)
@@ -58,15 +63,20 @@ def main():
         'mechanism':{'description':'Frozen static level/shape fusion and pre-norm tradeoff candidate','arms':arms,'baselines':baselines},
         'experiment':{'settings':settings,'training':{'additional_training':False,'checkpoint':'registered lowest validation Huber'},'metrics':['MSE','MAE']},
         'execution':{'settings':[{'setting':s['setting'],'commands':[sys.argv]} for s in sources],'registered_checkpoints':checkpoints},
-        'selection':{'source':'validation','default_candidate':'components_static',
-            'tradeoff_candidate':'tp_pre_components_static','test_set_selection':False,
+        'selection':{'source':'validation','default_candidate':frozen['default_candidate'] if parallel else 'components_static',
+            'tradeoff_candidate':None if parallel else 'tp_pre_components_static','test_set_selection':False,
             'prior_test_exposure':True,'selected_configs':[{'setting':s['setting'],'config_id':retained,
                 'search_notes':'Frozen before test; failed dynamic level arms excluded; static pre-norm is a secondary MSE tradeoff, not default'} for s in sources]},
         'analysis':{'ranking_metric':'mae','top_k':3,'dedup_rule':'same-channel starts at least H apart per category'},
         'validation':{'status':'incomplete'}}
+    if parallel:
+        run['mechanism']['description']='Registered parallel post-norm/static-component hypothesis and controls'
+        run['selection']['validation_decision']=frozen
+        for record in run['selection']['selected_configs']:
+            record['search_notes']='Validation decision frozen before test. Registered arms evaluated for confirmation/diagnosis; test cannot reselect.'
     audit.mkdir(parents=True,exist_ok=True)
     if not (audit/'run.yaml').exists():(audit/'run.yaml').write_text(yaml.safe_dump(run,sort_keys=False))
-    print(json.dumps({'settings':len(settings),'checkpoint_evaluations':len(checkpoints),'additional_training':False,'default_candidate':retained[0]}),flush=True)
+    print(json.dumps({'settings':len(settings),'checkpoint_evaluations':len(checkpoints),'additional_training':False,'default_candidate':run['selection']['default_candidate']}),flush=True)
     if not args.prepare_only:
         subprocess.run([sys.executable,str(ROOT/'scripts/analyze_lowrank_six.py'),
             '--scratch-dir',str(scratch),'--audit-dir',str(audit),'--gpus',args.gpus],cwd=ROOT,check=True)
