@@ -8,6 +8,81 @@
 
 ## Purpose
 
+## 当前阶段：固定静态融合的非 attention token 交互（2026-10-08）
+
+用户将输出 Gate 与 latent 交互分开研究。本阶段固定已经验证的静态水平/形状
+双分量融合，独立探索原低秩 trend token 与 phase token 的小宽度消息。
+用户最新要求由单个 agent 完成代码核验、修复、smoke 与正式启动，不再使用子智能体。
+此前并行 attention/static 实验按用户要求停止，保持停止状态，不续跑。
+
+### 固定五臂与信息路径
+
+令 t=E(x-x_last) 为原 rank-r latent，Z 为 phase 主干完成 routing 后、最终 predictor
+前的表示；z_bar=mean_phase_slot(Z)，不是时间/周期轴平均。k=min(2,r,d)。
+消息矩阵均无 bias，B 零初始化；不增大 r，不增加 attention、norm、activation、
+动态 Gate 或损失项，不 detach 消息来源。
+
+| arm | 交互 | 额外参数 |
+|---|---|---|
+| b0 | 无 latent 交互 | 0 |
+| pt_add | t'=t+B V z_bar，Z'=Z | k(d+r) |
+| pt_correct | t'=t+B(V z_bar-Ct)，Z'=Z | k(d+2r) |
+| tp_add | t'=t，Z'_p=Z_p+B A t | k(r+d) |
+| tp_mod | t'=t，Z'_p=Z_p+Z_p*(B A t) | k(r+d) |
+
+PT 更新在原 D 解码前；TP 更新在原 phase predictor 前，广播到 phase slots。
+PT-correct 的线性自项可吸收进可训练 E/D，比较反映参数化/优化与 phase 信息作用，
+不能据此独称 Kalman 或可识别纠错机制。phase-slot 均值对 slot 重排不变，因此
+PT 不以 roll/reverse 为有效信息控制。TP-add 对共享线性 predictor 提供共同 slot
+轨迹，TP-mod 改变各 slot 的特征响应；两者表达能力不同。
+
+### 训练与决策协议
+
+- ETTh1/ETTm2/Weather × H96/H720 × seeds2021/2022，12 settings ×5 arms=60次。
+- L720、P24、r=H/8、pool_factor1、smooth_ratio0、原 E/D、last-value anchor、
+  phase 主干与 RevIN 不变；每个 setting 沿用已完成 level study manifest 的 LR、
+  batch、容量、Huber 和 scheduler，来源配置仅提供超参数，不加载来源权重。
+- 全部随机初始化、全参数联合训练，同 seed 公共未训练 state 完全匹配、数据顺序
+  匹配；静态 level/shape Gate 均从0.2开始，30轮上限、patience8，最低 val Huber
+  checkpoint。禁止预训练/冻结；本阶段只评估完整 validation，不读 test。
+- 先8项针对性测试，再两个 setting（ETTh1-H96-S2021、Weather-H720-S2021）×5臂
+  smoke：1轮、4 train batches、2 val batches，随后完整 validation 审计。
+  零 D 和零 B 会使梯度分步启动，记录最初8个优化步，检查消息所有参数最终获得
+  非零有限梯度，不要求第0步全部非零。smoke 结果不能作为效能结论。
+- 候选进入后续复核须平均/中位相对MSE均<0、至少8/12 MSE胜出、至少4/6任务
+  双seed平均胜出、平均相对MAE<=0；重复严重尾部退化阻止默认升级。
+  同容量上下文置零、双向组合、k搜索、第三seed或跨任务确认仅在审计后另行登记，
+  不由此60-run controller自动触发，不按dataset/horizon拼接赢家。
+- 比较参数、训练耗时/显存、同GPU串行随机次序 latency、分支/融合/oracle、
+  native/off消息干预、水平/形状、horizon三段、峰谷、p95和top1%误差。
+  off只诊断同一训练checkpoint；oracle仅事后读label，不可部署。
+- 全量sample×channel排名，每候选每setting各类Top3 MAE high error/regression/
+  improvement，同类同channel起点至少相隔H；报告/ZIP必须经过白名单和重算校验。
+  validation已有选择暴露；历史test查看不因本轮未读test而消失，不能声称盲测或
+  Golden优越。静态基线与历史结果匹配属于复现，不是独立seed证据。
+
+### 隔离与启动
+
+专用入口 `scripts/lowrank_token_interaction/{model,run,analyze}.py` 使用私有
+construct/restore，仅替换新建模型实例的 branch，不改旧模型、factory、runner
+或全局注册。测试位于 `tests/test_lowrank_token_interaction.py`。
+远程使用单独 checkout；原实验目录保持不变。manifest 冻结commit/source hashes，
+controller/worker/setting审计加锁；成功结果校验后跳过，失败目录保留，修复须新
+attempt目录；活跃源码不得原地替换。进程停止传递到子进程组并回收。
+
+```bash
+python scripts/lowrank_token_interaction/run.py \
+  --source-manifest <completed-level-scratch>/manifest.json \
+  --scratch-dir research_runs/lowrank_token_interaction_20261008_scratch \
+  --audit-dir research_runs/lowrank_token_interaction_20261008 \
+  --gpus 0,1,2,3,4,5,6,7
+```
+
+smoke 使用独立 `_smoke_scratch`/`_smoke` 路径，补 `--smoke --epochs 1
+--settings ETTh1:96:2021,Weather:720:2021`。canonical仅六文件加figures，
+训练checkpoint/日志/manifest单独放ignored scratch。当前代码已实现，远程数值
+验证、smoke和正式启动待完成，尚无新机制效果结论。
+
 > **Protocol correction (2026-10-07, user clarification):** the research target
 > is architecture comparison with training from scratch, not adaptation of a
 > pretrained i0. Audit of the corrected stage-1 remote configs found 210/210

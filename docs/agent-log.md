@@ -6377,3 +6377,22 @@ incomplete; temporary partial tables stay in scratch, outside the canonical whit
 Existing phaseformer hourly automation remainsPAUSED and will not restart the work.
 Updated active plan and log; no model-source edits or additional training required
 for this stop-and-report action.
+
+## 2026-10-08: Isolate non-attention latent interaction under static fusion
+
+User authorized five fixed arms (b0/PT-add/PT-correct/TP-add/TP-mod), 60 from-scratch
+paired runs, followed by sample audit. Latest correction requires one agent only;
+no subagents remain. Earlier Sol conceptual review is partial historical input,
+not approval of the final analyzer/tests. Stopped parallel attention study stays stopped.
+
+Added private model/controller/analyzer under scripts/lowrank_token_interaction and
+focused tests. No previous tracked model or runner modified. Zero message exits,
+unchanged rank-r E/D, static level/shape gates, paired random state and label
+unreachability checks; immutable manifests, strict private restore, worker/controller/
+setting locks, process-group termination and verified successful-result reuse.
+Audits include branches/oracle/off, level/shape/tails and programmatic cases, serial
+latency and canonical report/ZIP checks. Plan preregisters matrix and admission criteria.
+
+Remote GPUs idle and no new experiments launched at implementation review. Local
+syntax validation pending final patch; remote numeric tests and ten smoke jobs must
+pass before formal60-run launch. No efficacy conclusion or test evaluation yet.
