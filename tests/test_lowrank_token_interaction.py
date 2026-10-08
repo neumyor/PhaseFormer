@@ -1,5 +1,6 @@
 """Information-flow and protocol checks for the isolated communication study."""
 import copy
+import argparse
 import json
 from pathlib import Path
 import tempfile
@@ -15,7 +16,7 @@ import torch
 from scripts.lowrank_token_interaction.model import (
     ARMS, TokenCommunication, IsolatedBranch, construct, prepare_config, random_models, validate_protocol)
 from scripts.lowrank_token_interaction.run import (
-    sources_from_manifest, write_immutable, run_child, STOP, CHILDREN, CHILDREN_LOCK, request_stop)
+    sources_from_manifest, write_immutable, prepare, run_child, STOP, CHILDREN, CHILDREN_LOCK, request_stop)
 from scripts.lowrank_token_interaction.analyze import off_prediction
 from scripts.run_lowrank_interaction_stage2 import construct as legacy_construct
 from src.models.lowrank_interaction import LowRankPhaseInteractionBranch
@@ -166,6 +167,15 @@ class CommunicationTests(unittest.TestCase):
             value = {'study': 'level', 'smoke': False, 'sources': [source]}
             p.write_text(json.dumps(value))
             self.assertEqual(len(sources_from_manifest(p, 'ETTh1:96:2021')), 1)
+            args = argparse.Namespace(source_manifest=p, settings='ETTh1:96:2021',
+                scratch_dir=Path(directory) / 'scratch', audit_dir=Path(directory) / 'audit',
+                epochs=1, smoke=True)
+            manifest, jobs = prepare(args)
+            self.assertEqual(len(jobs), 5)
+            self.assertEqual(prepare(args)[0], manifest)
+            import yaml
+            metadata = yaml.safe_load((args.audit_dir / 'run.yaml').read_text())
+            self.assertIsInstance(metadata['execution']['environment']['torch'], str)
             value['sources'].append(source)
             p.write_text(json.dumps(value))
             with self.assertRaises(ValueError):

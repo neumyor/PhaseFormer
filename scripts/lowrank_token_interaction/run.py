@@ -311,7 +311,7 @@ def prepare(args):
             'training': {'epochs': args.epochs, 'patience': 8, 'initialization': 'from scratch',
                          'all_parameters_trainable': True, 'loss': 'Huber', 'checkpoint': 'lowest validation Huber'},
             'metrics': ['MSE', 'MAE'], 'smoke': args.smoke},
-        'execution': {'environment': {'python': sys.version, 'torch': torch.__version__,
+        'execution': {'environment': {'python': sys.version, 'torch': str(torch.__version__),
             'lightning': pl.__version__, 'cuda': torch.version.cuda,
             'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'unavailable'},
             'settings': [{'setting': s['setting'], 'source_config': s['config'],

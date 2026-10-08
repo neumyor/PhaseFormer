@@ -6,8 +6,6 @@
 > reuse `PooledLowRankWeakPeriodResidualHead` and insert attention only at its
 > learned rank-`r` latent.
 
-## Purpose
-
 ## 当前阶段：固定静态融合的非 attention token 交互（2026-10-08）
 
 用户将输出 Gate 与 latent 交互分开研究。本阶段固定已经验证的静态水平/形状
@@ -82,6 +80,8 @@ smoke 使用独立 `_smoke_scratch`/`_smoke` 路径，补 `--smoke --epochs 1
 --settings ETTh1:96:2021,Weather:720:2021`。canonical仅六文件加figures，
 训练checkpoint/日志/manifest单独放ignored scratch。当前代码已实现，远程数值
 验证、smoke和正式启动待完成，尚无新机制效果结论。
+
+## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
 > is architecture comparison with training from scratch, not adaptation of a
