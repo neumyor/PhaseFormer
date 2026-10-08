@@ -6232,3 +6232,21 @@ audit target is research_runs/lowrank_level_fusion_next. No performance conclusi
 yet. The existing hourly heartbeat was updated to
 monitor this experiment in the current chat and handle actual faults/restarts,
 with conditional controls/confirmation and a maximum 192-run training budget.
+
+## 2026-10-08: Freeze level-fusion conclusion before final test evaluation
+
+All 96 registered training runs completed, zero failures; remote validation audit
+passed for all 12 settings, 6,311,200 sample rows and 756 ranked case records.
+Dynamic level/static shape fails the predeclared performance gates: L0 vs B0
+relative MSE +0.203639%, 5/12 wins, two of six task means improve, MAE +0.152349%;
+L1 vs B1 MSE +0.441762%, 4/12 wins, two task means improve, MAE +0.078565%.
+No context-zero training or seed/dataset expansion will be launched.
+
+Before reading this stage's test results, retain B0 (static components) as default
+research candidate and B1 (pre-norm/static components) only as MSE tradeoff.
+Frozen test matrix is R0/R1/B0/B1 on 12 settings, 48 existing-checkpoint evaluations,
+no retraining or tuning. Added a dedicated preparation entry and split-aware audit
+that resolves original validation-selected weights, validates their hashes, and
+checks test metrics independently with the existing evaluator. Prior test exposure
+is disclosed; no new blind-test or Golden superiority claim. Local syntax/diff
+checks and remote tests are required before starting this final evaluation.

@@ -1,14 +1,24 @@
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 import torch
 
-from scripts.analyze_lowrank_six import replay_fusion, component_errors, oracle_component_gate, separated_shuffle_shifts, mix
+from scripts.analyze_lowrank_six import replay_fusion, component_errors, oracle_component_gate, separated_shuffle_shifts, mix, evaluation_context
 from src.models.lowrank_fusion import LowRankDynamicFusion
 from src.models.phase_adapters import RevIN
 
 
 class FusionReplayTests(unittest.TestCase):
+    def test_test_split_resolves_validation_selected_training_run(self):
+        source={'setting':'Weather_H96_S2021_test','training_setting':'Weather_H96_S2021_val'}
+        runs,setting,split=evaluation_context(Path('/tmp/test_audit'),source,
+            {'evaluation_split':'test','training_scratch_dir':'/tmp/training'})
+        self.assertEqual((runs,setting,split),(Path('/tmp/training/runs'),'Weather_H96_S2021_val','test'))
+        self.assertEqual(evaluation_context(Path('/tmp/original'),{'setting':'val_setting'},{}),
+                         (Path('/tmp/original/runs'),'val_setting','val'))
+        with self.assertRaises(ValueError):evaluation_context(Path('/tmp/x'),source,{'evaluation_split':'train'})
+
     def test_oracle_uses_shared_window_gate_and_decomposition_sums_to_mse(self):
         torch.manual_seed(81)
         p,t=torch.randn(4,96,2),torch.randn(4,96,2)

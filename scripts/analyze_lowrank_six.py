@@ -86,6 +86,13 @@ def separated_shuffle_shifts(count,horizon,seeds=range(5)):
     return [int(np.random.default_rng(seed).integers(horizon,count-horizon+1)) for seed in seeds]
 
 
+def evaluation_context(scratch,source,manifest):
+    split=manifest.get('evaluation_split','val')
+    if split not in {'val','test'}:raise ValueError(split)
+    runs=Path(manifest.get('training_scratch_dir',scratch))/'runs'
+    return runs,source.get('training_setting',source['setting']),split
+
+
 def train_mean_gate(model,args,device):
     # deterministic full training loader, including its last partial batch.
     dataset,_=data_provider(args.dataset_args,'train')
@@ -114,13 +121,15 @@ def worker(scratch,setting):
     manifest=json.loads((scratch/'manifest.json').read_text());arms=manifest['arms']
     baselines=manifest.get('baselines',BASELINES);level_study=manifest.get('study')=='level'
     source=next(s for s in manifest['sources'] if s['setting']==setting)
+    runs,training_setting,split=evaluation_context(scratch,source,manifest)
     cases=[];summaries=[];parts=scratch/'analysis_parts';parts.mkdir(exist_ok=True)
     target=parts/f'{setting}.csv';first=True
     for arm in arms:
-        model,args=load_model(scratch/'runs'/f'{setting}__{arm}',device)
+        run_dir=runs/f'{training_setting}__{arm}'
+        model,args=load_model(run_dir,device)
         args.dataset_args.num_workers=0
-        baseline,_=load_model(scratch/'runs'/f'{setting}__{baselines[arm]}',device)
-        dataset,loader=data_provider(args.dataset_args,'val')
+        baseline,_=load_model(runs/f'{training_setting}__{baselines[arm]}',device)
+        dataset,loader=data_provider(args.dataset_args,split)
         branch=model.lowrank_interaction_branch;branch.capture_diagnostics=True
         fusion=model.lowrank_dynamic_fusion
         fusion_inputs={};capture_hook=None
@@ -190,6 +199,7 @@ def worker(scratch,setting):
                 frame=pd.DataFrame({k:v.reshape(-1) for k,v in arrays.items()})
                 frame['sample_id']=np.repeat(np.arange(offset,offset+b),c);frame['channel']=np.tile(np.arange(c),b)
                 frame['setting']=setting;frame['baseline_config_id']=baselines[arm];frame['candidate_config_id']=arm
+                frame['split']=split
                 frame['delta_mae']=frame.candidate_mae-frame.baseline_mae;frame['delta_mse']=frame.candidate_mse-frame.baseline_mse
                 frame['time_range']=[f'{dataset.timestamps[i+model.seq_len]}/{dataset.timestamps[i+model.seq_len+model.pred_len-1]}' for i in frame.sample_id]
                 rows.append(frame);offset+=b
@@ -222,16 +232,19 @@ def worker(scratch,setting):
             if level_fixed:
                 frame['fixed_level_mse']=np.concatenate(level_fixed).reshape(-1)
                 frame['fixed_shape_mse']=np.concatenate(shape_fixed).reshape(-1)
-        result=json.loads((scratch/'runs'/f'{setting}__{arm}'/'result.json').read_text())
+        result=json.loads((run_dir/'result.json').read_text())
+        if split=='test':
+            from scripts.search_phaseformer import evaluate
+            result.update(evaluate(model,loader,dataset,'test',model.pred_len,scratch))
         for metric in ('mse','mae'):
-            np.testing.assert_allclose(frame['candidate_'+metric].mean(),result['val_'+metric],atol=3e-6,rtol=3e-5)
-        record={**result,'config_id':arm,'baseline_config_id':baselines[arm],
+            np.testing.assert_allclose(frame['candidate_'+metric].mean(),result[split+'_'+metric],atol=3e-6,rtol=3e-5)
+        record={**result,'setting':setting,'split':split,'config_id':arm,'baseline_config_id':baselines[arm],
                 'model':'PhaseFormer-L',
-                'key_params':json.dumps(json.loads((scratch/'runs'/f'{setting}__{arm}'/'config.json').read_text())['hyperparams'],sort_keys=True),
+                'key_params':json.dumps(json.loads((run_dir/'config.json').read_text())['hyperparams'],sort_keys=True),
                 'dataset':source['config']['dataset'],'horizon':model.pred_len,'seed':source['config']['seed'],
                 'mse':float(frame.candidate_mse.mean()),'mae':float(frame.candidate_mae.mean()),
                 'delta_mse':float(frame.delta_mse.mean()),'delta_mae':float(frame.delta_mae.mean()),
-                'gate_train_sample_count':gate_count,'selected':not level_study}
+                'gate_train_sample_count':gate_count,'selected':arm in manifest.get('retained_arms',[]) if level_study else True}
         for col in frame.select_dtypes('number').columns:
             if col not in ('sample_id','channel'):record['mean_'+col]=float(frame[col].mean())
         record['gate_level_std']=float(frame.gate_level.std());record['gate_shape_std']=float(frame.gate_shape.std())
@@ -285,6 +298,7 @@ def merge(scratch,audit):
     import matplotlib.pyplot as plt
     manifest=json.loads((scratch/'manifest.json').read_text());run=yaml.safe_load((audit/'run.yaml').read_text())
     level_study=manifest.get('study')=='level'
+    split=manifest.get('evaluation_split','val')
     settings=[s['setting'] for s in manifest['sources']];results=[];cases=[];selections=[];distributions=[]
     first=True;row_count=0
     for setting in settings:
@@ -354,10 +368,14 @@ def merge(scratch,audit):
                        'relative_mae_percent':float(((a.mae/b.mae-1)*100).mean()),
                        'delta_mae':float((a.mae-b.mae).mean()),'mse_wins':int((a.mse<b.mse).sum()),'settings':len(a)})
     lines=['# Experiment and Objective Error Analysis','', '## 1. Experiment Setup','',
-           f"From-scratch {manifest.get('study','six')}-fusion study: {len(table)} runs; budget {manifest['epochs']} epochs. All original parameters trainable.",
+           f"From-scratch {manifest.get('study','six')}-fusion study: {len(table)} evaluated checkpoints; training budget {manifest['epochs']} epochs. All original parameters were trainable.",
            'No pretrained checkpoint loaded. Shared untrained parameters and seed-matched data order. Original rank-r encoder/decoder retained.',
            'Validation-only exploratory selection; validation was previously inspected. No test or Golden superiority claim.','',
            '## 2. Experiment Results','']
+    if split=='test':
+        start=lines.index('Validation-only exploratory selection; validation was previously inspected. No test or Golden superiority claim.')
+        lines[start]='Frozen validation-selected checkpoints evaluated once on test; no training, retuning or test-based model selection. These tasks have prior test exposure; no fresh blind-test or Golden superiority claim.'
+        lines[start-1]='Training was from scratch with matched untrained weights. This evaluation loads only the registered validation-selected checkpoint; no additional training.'
     if manifest['smoke']:
         lines.insert(2, '> SMOKE ONLY: two training batches; these values are not efficacy evidence.\n')
     lines+=markdown_table(pd.DataFrame(paired));lines+=['','All settings and arms:','']
@@ -424,7 +442,7 @@ def merge(scratch,audit):
             'Read the paired comparisons together with the regression cases: average improvement does not imply every sample improves. Component mixing is not pointwise convex mixing of the original forecasts.',
             'A useful fixed-weight intervention does not establish a superior retrained architecture. An eight-epoch loss is a budget-specific result; longer from-scratch confirmation may change ordering.','',
             '## 10. Experiment Scope','',
-            f"{len(settings)} validation settings; {row_count} sample/channel/arm records; {len(cases)} selected case records. No dataset-wise stitching of winners.",
+            f"{len(settings)} {split} settings; {row_count} sample/channel/arm records; {len(cases)} selected case records. No dataset-wise stitching of winners.",
             'This report is reproducible from the six audit files and referenced figures. Hypothesis decisions are added after numerical review.','']
     report='\n'.join(lines);(audit/'objective_error_analysis.md').write_text(report)
     listed=re.findall(r'!\[[^\]]*\]\(([^)]+)\)',report);assert set(listed)==set(refs)
