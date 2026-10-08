@@ -6250,3 +6250,69 @@ that resolves original validation-selected weights, validates their hashes, and
 checks test metrics independently with the existing evaluator. Prior test exposure
 is disclosed; no new blind-test or Golden superiority claim. Local syntax/diff
 checks and remote tests are required before starting this final evaluation.
+
+## 2026-10-08: Complete level-fusion validation and frozen test closure
+
+Completed the authorized stage with the experiment-and-error-analysis Skill.
+All 96 from-scratch joint-training runs succeeded (30-epoch ceiling, effective
+trainer patience8, no pretrained initialization or frozen original branch),
+about 8.177 GPU task hours. Training remained frozen at 0ee87a4. The final
+R0/R1/B0/B1 test matrix evaluated 48 registered validation-Huber checkpoints,
+verified their hashes, and performed zero additional training or tuning.
+32062b4 adds split-aware test evaluation; e237b3a fixes a stale eight-epoch report
+sentence; 87b1a36/a8459e1 add reproducible conclusion/ZIP closure and measurable
+selected-case patterns. The remote lowrank unittest suite passed 49 cases;
+the finalizer executed successfully for both canonical audits.
+
+Decision was frozen on validation: retain B0 static level/static shape without
+interaction as the default research candidate; retain B1 only as an MSE tradeoff.
+L0-B0 and L1-B1 relative validation MSE worsen +0.203639%/+0.441762%, with
+5/12 and 4/12 wins. Both fail preregistered gates, so no context-zero control,
+third seed or cross-task expansion was triggered. L0 loses to full G3 in 11/12
+settings, L1 in 9/12; a useful fixed-weight shape intervention did not translate
+into a superior retrained static-shape architecture.
+
+Frozen test confirms the small static-component benefit: B0-R0 relative MSE/MAE
+-0.136905%/-0.157427%, 9/12 MSE wins; B1-R1 -0.147327%/-0.143509%, 12/12 wins.
+B1-B0 instead +0.091565%/+0.117127%, only 6/12 wins; no default pre-norm upgrade.
+No test result changed the selection. Test selected cases are mostly level-error
+dominated (B0 78/108, B1 82/107 unique cases); these selected counts do not estimate
+population prevalence. B0 test p95/top1% relative MSE +0.063462%/-0.495114%:
+the small mean gain does not establish uniform tail protection.
+
+Dynamic gates have real within-model matching value: fixed level-gate interventions
+cost +0.565911%/+0.734968% mean relative MSE and shuffled gates +1.510979%/+1.703037%.
+Both label-informed component oracles beat their independent static baselines in
+all settings, leaving fusion-selection space, but this does not prove learnability,
+exclude branch-quality problems or identify the cause of joint-training changes.
+Historical Weather anchors have mixed directions and are diagnostic only.
+60 prior same-seed/setting metrics exactly reproduce; they are not extra seeds.
+Two ETTh1-H96-S2022 runs reached the budget ceiling, both best at epoch23
+(zero-based). These are two-seed, budget-specific results with prior validation/test
+exposure. Golden values remain fixed; full original training-protocol comparability
+is unestablished, so no significance, fresh blind-test or Golden-superiority claim.
+
+Both audits were synchronized locally in full:
+- research_runs/lowrank_level_fusion_next: 6,311,200 rows, 756 cases, 84 images.
+- research_runs/lowrank_level_fusion_next_test: 4,925,984 rows, 324 cases, 36 images.
+
+All six-file hashes match remotely. Local independent streaming checks recomputed
+all 144 aggregate MSE/MAE and level/shape metrics and all 1080 selected-case metrics;
+checked validation Weather-H96-S2022 L0/G3 and test B0 three-category Top3 rankings;
+verified YAML/CSV/NPZ settings, selection flags, strict directory whitelist and ZIP
+contents byte-for-byte. Sample CSV SHA256:
+validation 49429c067b6226e8b8f3b27e847666cfafb0c319b8a429803260e53bc503ca8c;
+test b637234f468ce4ee824e5605c1c4c5fa7e6854f1ebdf5cf53172ffe8556c1c0c.
+Final report/ZIP SHA256:
+validation e6ac64fcf8bc2a1781d491e447537f6f186ee8bca4ae18af5a09c5a9d1c3ba5f /
+1e2cd4ab9873828c4fdbb9cde0c47b678590be42495a733ac43ee9b9184e3098;
+test e3970ecda493916f7205cf30d3d9d91a7a0bfcc25e0108652d8ea6db7ce38201 /
+02cb28545646d159b52a1806f8fb52abc67328ea558f3eedfe148d6a2863c42b.
+
+Local bundled Python3.12 supplied numpy/pandas. The installed local zstd executable
+could not launch (exit137 even for its version query); used temporary zstandard0.25.0
+and PyYAML6.0.3 in an isolated temporary dependency directory for decompression and
+verification, without changing the project environment. Inspected validation and
+test Weather case figures. Remote analysis ended successfully, with no active
+training or inference. The phaseformer heartbeat is PAUSED on completion.
+No further mechanism or training is launched by this closure.
