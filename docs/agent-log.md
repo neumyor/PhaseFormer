@@ -1,5 +1,23 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 笔记本关闭前接管完整test扩展至服务器后台
+
+本地18项phase-context/centered检查通过（3.93秒）；远程168项来源库存/权重
+核验通过。早期result缺code_commit，兼容读取原manifest，修复版代码7ca5026。
+两项H96补训smoke通过且未读test，正式22次于独立
+`PhaseFormer_interaction_test_extension_20261009_v2` checkout启动。
+
+用户准备关闭笔记本，明确要求服务器启动后退出。已部署后台接管入口
+`scripts/continue_interaction_test.py`，只替换连接绑定的协调进程，保留4个活跃
+训练worker；后台PID/session ID=102121、PPID=1、stdin=/dev/null，stdout/stderr
+为`research_runs/interaction_test_extension_20261009_scratch/detached_controller.log`。
+接管核验时16/22训练完成、4运行、2自动排队，0 test推理；无failure marker。
+后台将完成训练后自动168次test推理、覆盖/hash/初始化/基线核验，再调用
+`scripts/summarize_extended_interaction_test.py`生成
+`research_runs/interaction_test_extension_20261009/comparison.md`及CSV。
+此次按用户要求退出，不等待实验完成；后续从detached_complete.json或
+detached_failure.json及该日志恢复检查，不重复启动。原模型/成功权重不变。
+
 ## 2026-10-09 — 登记交互变体完整test补表
 
 用户要求扩展此前validation变体到三dataset×H96/H720完整test矩阵。单agent
