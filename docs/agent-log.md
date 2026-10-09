@@ -1,5 +1,14 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 修正先导效率审计并核验训练配对
+
+隔离checkout部署184e195，14项针对性/历史回归检查通过；首版8次smoke、完整val
+样本审计和ZIP检查通过。代码复核发现Module.to(cpu)不移动普通last_*缓存，可能
+污染跨臂显存测量；0d4e6df显式释放缓存并增加权重/输出不变检查。将抵消写入参考
+对齐此前激活分析，增加dataset hash和首8步训练batch指纹的跨臂检查。
+首版全部进程退出后才更新远程源文件，成功结果保留；修复版用独立smoke_v2输出。
+模型机制与训练协议未改变，尚未启动正式效能训练，不解读smoke数字。
+
 ## 2026-10-09 — 实现隔离的phase-context先导验证
 
 用户授权正式实验；使用experiment-and-error-analysis Skill，保持单agent。

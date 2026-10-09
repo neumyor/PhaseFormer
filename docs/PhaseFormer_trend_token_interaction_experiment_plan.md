@@ -269,7 +269,7 @@ Golden超越或新机制有效声明。既有PAUSED监测和已停止实验均�
 
 ## 下一步假设与验证设计：phase 上下文条件化的低秩消息（2026-10-09）
 
-**状态：仅假设与实验设计，未实现或启动训练。** 用户优先选择激活诊断建议中的
+**初始登记为假设与实验设计；现已授权执行，进度见下方执行登记。** 用户优先选择激活诊断建议中的
 第二步，并要求多个可证伪假设、实验、rubric及对设计价值的客观评价。继续单agent；
 不恢复旧实验或监测。保持原r、原E/D、last-value参考、phase主干、静态level/shape
 Gate、损失与训练协议，不在本轮组合稳健参考、动态Gate、额外norm或attention。
@@ -401,6 +401,14 @@ epsilon/幅度阈值由训练数据尺度在启动前冻结，禁止看validatio
 首轮仅b0/tp_add/context_full/phase_only、四setting、16次；context_zero以精确
 forward和有效参数梯度等价验证复用TP-Add，不启动重复训练。untied模型单元核验，
 错配训练及扩大矩阵仅在先导过门槛后实现/运行。保持单agent。
+
+184e195的14项新/旧针对性检查、两setting×四臂8次smoke和完整validation审计通过。
+后续单agent审阅发现普通last_*诊断输出不随Module.to(cpu)迁移，可能污染串行跨臂
+显存测量；0d4e6df显式清空此类缓存并补权重/输出不变检查，核对各臂数据hash及
+首8步batch指纹。抵消指标统一到此前激活审计的trend相对phase-off水平写入参考。
+模型及优化协议未改变；不在活跃job脚下替换源文件，待首版controller及分析退出后
+部署修复。首版smoke保留，最终修复版使用独立`phase_context_pilot_20261009_smoke_v2`
+及`_scratch`重跑，不用smoke性能筛选。正式16次在最终修复版流程核验完成后启动。
 
 canonical为`research_runs/phase_context_pilot_20261009/`，checkpoint、manifest、
 进程/训练/分析日志分别放`research_runs/phase_context_pilot_20261009_scratch/`。
