@@ -1,5 +1,44 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 时间隔离消息开关诊断完成，停止新Gate训练
+
+单agent按预登记流程完成三dataset×H96/720×seed2021/2022固定权重诊断，
+未训练PhaseFormer、未读新test、未恢复旧监测。四GPU隔离提取12/12完成；
+源码eb5b649，分析冻结514ebd8，案例目录修复7e5e775，报告af41e0d。
+报告和ZIP位于`research_runs/message_switch_temporal_20261009/`，六文件
+及10图；854644条提取记录、688100条eval行、108案例。
+
+history4及history_activation8两个选择器calibration均选all-on；42次阈值
+尝试全部保留，非平凡阈值忽略保护仍平均MSE变差。最接近cal-q95分别
++1.003791%/+0.020412%；eval AUC 0.504696/0.524514，激活cal AUC
+0.567319。固定q95敏感性eval平均MSE+0.321885%/+0.008782%、MAE
++0.335550%/+0.002407%；历史误关有益补偿最差32.3928%、最强1%损失
+46.5064%，激活最差6.6815%/0。后者保护大补偿但未获得效果，不能将这些
+小差值解读成显著性；窗口/seed标签不独立。selected相对native无改善、
+oracle recovery=0；相对b0平均MSE+0.102909%、MAE-0.041505%，5/12胜。
+label-oracle相对native/b0 MSE-5.691619%/-5.589524%不可部署。
+
+Weather-H96-S2021 rain1702 b0/native/off MAE4.980850/7.443823/74.402133
+再次阻止“大消息就关”；Weather-H96-S2022 rain1959对应0.506980/2.579217/
+0.542208体现真实可关情形。仅否定本轮有限特征+线性选择器的推进依据，
+不证明所有自适应交互无效。未达到效果及oracle门槛，不新增复杂选择器或
+消息Gate联合训练，保留低秩压缩+静态双分量b0；效果失败故未测效率。
+
+静态及真实smoke通过；单forward off公式、支持窗隔离及权重不变通过。
+4个核心测试passed；独立重新拟合预处理/系数/cal全部阈值精确复现；
+72行汇总全部数值含尾部/补偿/oracle/相对指标重算通过。程序Top3、108
+案例指标及10图视觉、ZIP字节/白名单、12settings一致性通过。远程再次
+核验12个原TP-Add checkpoint和提取CSV hash。首次案例最终保存缺目录，
+补mkdir后完整重放；报告摘要特征组名修复，不改提取/模型/选择结果。
+复现检查：`.venv/bin/python -m pytest tests/test_message_switch_diagnostic.py -q`；正式流程在独立checkout使用
+`extract.py -> analyze.py -> collect_cases.py -> report.py`，环境torch2.6+cu124/highest/A800，参数见现行计划及run.yaml。
+
+最终16个审计文件本地/远程hash完全一致，按Skill已清理本轮中间提取/临时日志；
+run.yaml保留所有系数/预处理/阈值搜索、role时间范围和source/checkpoint
+hash，可重新提取重现。原权重和以前成功结果保留，任务退出。既有train
+拟合及val选权重暴露，不称盲测；既有test启发方向，不与论文/Golden test
+混报。本轮授权工作完成，旧监测仍PAUSED。
+
 ## 2026-10-09 — 登记时间隔离消息开关诊断
 
 用户授权先验证条件收益可预测性；单agent使用experiment-and-error-analysis。

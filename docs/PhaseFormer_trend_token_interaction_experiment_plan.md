@@ -734,6 +734,52 @@ evaluation指标。所有评估使用highest精度，原medium口径不被静默
 从头消息Gate训练的理由，先检查效率/训练协议再决定，不把固定权重收益当新架构。
 详细案例按evaluation误差排名Top3、同channel间距≥H，最多10图。
 
+#### 时间隔离开关诊断结论（2026-10-09，已完成）
+
+12/12设置完成固定权重提取及案例重放，无PhaseFormer训练、无新test推理。
+四项历史及八项历史+激活的共享线性选择器均在calibration选择all-on；平局
+按预登记的少参数规则选history4。42个阈值尝试完整保留；排除保护约束后，
+所有非平凡calibration阈值的平均相对MSE仍为正，不能归因为门槛过严。
+最接近的q95为history4 +1.003791%、history_activation8 +0.020412%。
+
+evaluation setting等权平均AUC为history4 0.504696、history_activation8
+0.524514；后者在calibration为0.567319，迁移后减弱。固定cal-q95敏感性
+读取（未用于选择）相对native平均MSE分别+0.321885%/+0.008782%，MAE
++0.335550%/+0.002407%。历史规则在ETTh1-H96-S2022误关有益补偿损失
+32.3928%，最强1%补偿损失46.5064%；激活规则最差有益补偿损失6.6815%，
+最强1%损失0，但没有平均收益。不能把微小差值当显著退化或增益。
+
+同evaluation块label-oracle相对native/b0平均MSE-5.691619%/-5.589524%，
+关闭比例41.4204%，是不可部署的事后上限。实际选定all-on相对native收益
+及oracle recovery均为0，相对b0平均MSE+0.102909%、MAE-0.041505%，
+5/12 MSE胜出。效果及oracle recovery门槛失败，尾部和误关保护通过只因为
+不关闭。本轮不进入新消息Gate训练或复杂选择器扩展；保留低秩+静态双分量b0。
+
+反例：Weather-H96-S2021 sample1702/channel14 b0/native/off MAE为
+4.980850/7.443823/74.402133。native比独立b0差不意味着消息有害，关闭
+消息会取消必要补偿。相反Weather-H96-S2022 sample1959/channel14的
+b0/native/off MAE为0.506980/2.579217/0.542208，确实有可关闭的坏消息。
+有益/有害情形都存在，但本轮有限历史/激活线性特征没能稳定辨别其损失收益。
+这否定本实例的推进依据，不证明所有历史信息、非线性规则或联合Gate训练
+都无效；也没有证据授权继续增加复杂度。效率未测，不能宣称完整效率达标。
+
+审计：854644条fit/cal/eval记录，688100条evaluation样本×变量记录；
+108个程序排名案例、10图。单forward推导off与实际off核验、权重不变、
+时间支持窗隔离、重新拟合系数/预处理/cal阈值、72行全数值汇总/尾部/补偿/
+oracle重算、Top3及案例、ZIP/目录/setting一致性全部通过。原checkpoint
+hash与提取CSV hash经远程核验。案例保存首次因缺少目录失败，修复后12
+设置完整重放；报告摘要组名修复，不改变模型或选择结果。
+
+报告与便携包：`research_runs/message_switch_temporal_20261009/`
+`objective_error_analysis.md`/`.zip`，严格六文件+figures。代码版本：
+提取eb5b649、冻结分析514ebd8、案例目录修复7e5e775、报告af41e0d；
+原模型dcde3b6。复核命令为`.venv/bin/python -m pytest tests/test_message_switch_diagnostic.py -q`（4 passed）及独立目录下
+`extract.py -> analyze.py -> collect_cases.py -> report.py`，参数沿本节登记。
+最终16个文件本地/远程hash完全一致。完成归档后已清理本次中间提取文件；系数/阈值/全部搜索/时间范围/源码与权重
+hash保留run.yaml，可用原权重及冻结代码重新提取。本轮不恢复旧监测。
+既有train拟合、val选checkpoint及test启发方向明确披露；本诊断不是盲测，
+与minipaper/Golden test表不同口径，不据此更新其数值。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
