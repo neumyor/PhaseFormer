@@ -193,6 +193,36 @@ tp_add的收益集中于Weather，ETTh1和ETTm2平均MSE仍退化；不能据此
 跨组或论文差异全部归因于交互。既有test暴露继续披露；本次未根据test新调参，
 不是新的独立盲测或统计显著性结论。既有监测保持PAUSED。
 
+## TP-Add 激活值诊断（2026-10-09，运行前登记）
+
+用户授权聚焦TP-Add，分析更细的信息流与优化机会；仅使用现有b0/tp_add权重，
+不启动新训练，不改变冻结模型或Gate，不恢复旧实验。单agent执行。独立分析
+脚本 `scripts/lowrank_token_interaction/activation_audit.py` 以私有forward hooks
+读取原branch输入、rank-r状态、广播消息、phase表示与normalized输出。
+
+范围为三个数据集×H96/H720×两seed的12个模型setting，分别读取完整validation
+及test，共24个评估setting。validation用于形成优化假设；test用于描述既有
+模型的激活/误差变化。TP-Add研究焦点已受前轮test读数影响，显式记录test-informed
+选择，不能声称新的独立盲测；本次诊断不选择部署配置或改变validation架构决策。
+
+预先固定八种读数：独立b0、native TP-Add、同权重off、消息0.5倍/1.5倍、
+完整normalized输入→cycle-message线性图的rank1截断（保留encoder bias）、
+仅输入相关写入、仅encoder-bias写入。全部结果保留，不做scale搜索或新机制训练。
+逐sample/channel记录：消息与接收状态尺度、predictor不可见能量、完整输入图
+两个奇异模式的激活能量、消息/目标残差方向、同权重off收益的线性/二次项、
+水平/形状与horizon三段误差、原trend水平写入的重复/抵消，以及post-hoc oracle
+scale。oracle只用于归因，不进入推理；off只说明已训练模型依赖，不能替代b0。
+
+关键核验：hook开关原始输出逐位一致、消息scale真实forward与线性重放一致、
+predictor null-space去除保留输出、完整输入图两模式重构与实际native-off一致、
+权重state hash保持不变、模型完整validation/test指标复现。若线性predictor
+条件不满足，脚本拒绝上述解析归因。合并后核对汇总、程序化选例、案例重算与ZIP。
+
+产物分开保存为 `research_runs/tp_add_activation_20261009_scratch/` 与严格六文件
+加figures的 `research_runs/tp_add_activation_20261009/`。每setting自动保存最大
+MAE退化案例供覆盖核验，详细绘图只取validation/test各最大三例，最多六例。
+分析输出给出可测量结论和待验证优化方向；新增模型验证需后续另行登记。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
