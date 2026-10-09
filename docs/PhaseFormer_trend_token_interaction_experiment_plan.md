@@ -843,10 +843,10 @@ H96/720、seed2021/2022，共12个既有b0 checkpoint；不修改主干或读新
 四固定正交目标为最终归一化残差的常数、cycle-index斜率、P24第一sin/cos。
 
 每checkpoint独立、channel合并且无channel/task编号；fit-only标准化/PCA。
-trend原t与phase均值/均值+固定sin/cos slot摘要各取6轴。接收者保留last-anchor
-和自身原预测的4个模式系数，加4自身轴；同容量控制加2自身轴，跨分支加2来源
-轴，合计11输入/48个读出系数。t方向比较phase均值/slot，p方向读trend。
-10固定family各搜索ridge slope有效自由度1/2/4/6（加不惩罚截距）与no-op，
+trend原t与phase均值/均值+固定sin/cos slot摘要各取4轴。接收者保留last-anchor
+和自身原预测的4个模式系数，加2自身轴；同容量控制加2自身轴，跨分支加2来源
+轴，合计9输入/40个读出系数。t方向比较phase均值/slot，p方向读trend。
+10固定family各搜索ridge slope有效自由度1/2/3/4（加不惩罚截距）与no-op，
 同宽控制搜索预算相同；另用主候选所选有效自由度的receiver/mismatch对照。
 共480次ridge拟合、600个calibration候选；没有PhaseFormer训练。
 
@@ -863,6 +863,9 @@ MSE选唯一主候选，b0/no-op亦可选。选择落盘冻结后才执行eval�
 数据hash，完整样本误差、Top3三类案例、最多10图、报告ZIP及重算检查。连续
 起点块只报时间变化范围，不伪作独立CI；额外报告四模式label-oracle误差占比。
 H1通过才另登记H2固定width2乘积和早期截止主干复核；本轮不声称架构收益。
+首版smoke发现H96 phase均值仅4维，六轴摘要不可实现；H720六setting完成cal，
+H96两个shard在预处理检查退出，无eval/效果选择。执行前统一缩减到上述4轴/
+2+2/EDF1--4，并新增短horizon维度测试；修复版smoke独立v2目录重跑。
 
 ## Historical Purpose
 
