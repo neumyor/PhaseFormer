@@ -6563,3 +6563,10 @@ H720 test pressure accounts for almost the entire net reduction;remaining channe
 improve only0.00187%. Validation excluding pressure is-0.0445% atH96 and+0.1335% atH720.
 These are complete channel summaries,not an inference from selected rain cases,and
 do not authorize a pressure-specific routing policy. Updated report with this limit.
+
+All six canonical artifacts and6 figures synchronized locally;local/remote SHA256
+matched for every file. Independent local streaming audit checked2020396 sample/
+channel rows,24-setting coverage,192 aggregate records,Top1 rankings,24 case metric
+recomputations and ZIP bytes;maximum aggregate recomputation difference5.8e-11 after
+9-digit CSV rounding. No audit remains pending. Original model sources and weights
+were left intact throughout the diagnostic.
