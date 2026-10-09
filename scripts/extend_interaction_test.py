@@ -50,6 +50,13 @@ def module_for(family):
     return importlib.import_module('scripts.'+directory+'.run')
 
 
+def training_commit(run, result):
+    if result.get('code_commit'):
+        return result['code_commit']
+    manifest = json.loads((Path(run).parents[1]/'manifest.json').read_text())
+    return manifest['code_commit']
+
+
 def inventory(storage, scratch, smoke=False):
     original = storage/'PhaseFormer_token_interaction_20261008/research_runs/lowrank_token_interaction_20261008_scratch'
     manifest_path = original/'manifest.json'
@@ -88,7 +95,7 @@ def inventory(storage, scratch, smoke=False):
                         raise ValueError(f'Checkpoint provenance mismatch: {key}')
                     entry.update(source_checkpoint_sha256=result['checkpoint_sha256'],
                                  source_config_sha256=digest(run/'config.json'),
-                                 source_commit=result['code_commit'])
+                                 source_commit=training_commit(run, result))
                 entries.append(entry)
     if len(entries) != 168 or len(missing) != 22:
         raise ValueError(f'Unexpected source matrix: {len(entries)} records, {len(missing)} missing')
@@ -154,7 +161,7 @@ def worker(path, mode):
     row = {k: item[k] for k in ('key', 'family', 'setting', 'dataset', 'horizon', 'seed',
                                'arm', 'baseline_arm', 'existing', 'reused_baseline', 'new_training')}
     row.update(**scores, checkpoint=str(checkpoint), checkpoint_sha256=checkpoint_hash,
-        config_sha256=digest(run/'config.json'), source_commit=result['code_commit'],
+        config_sha256=digest(run/'config.json'), source_commit=training_commit(run, result),
         dataset_sha256=digest(Path(args.dataset_args.root_path)/args.dataset_args.data_path),
         test_samples=len(data), lookback=config['lookback'], batch_size=args.dataset_args.batch_size,
         epoch_budget=result['epoch_budget'], best_val_loss=result['best_val_loss'],
