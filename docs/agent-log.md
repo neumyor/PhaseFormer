@@ -1,5 +1,19 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 只读核对条件交互与理想开关空间
+
+用户询问交互失败原因及手动/自适应开关可行性。读取已有activation、phase-context、
+centered和Gate证据，不调用模型、不训练、不恢复监测。完整流式读取TP-Add
+2020396行sample CSV，逐样本/变量以candidate_mse<=off_mse选native，否则off；
+min MSE与同一个选择下的MAE先逐setting汇总。val/test off较优比例41.6084%/
+43.1129%；label-oracle相对native平均相对MSE-5.6756%/-4.3604%，相对独立b0
+-5.4970%/-4.4013%，两split均12/12胜b0。原始oracle MSE/MAE为val
+0.551541/0.426830、test0.282997/0.324825。highest诊断与9位CSV精度明确，
+不是新medium结果或可部署收益；test已暴露，未据此拟合开关规则。
+追加现行计划的只读诊断与边界：存在选择上限不证明历史可辨识；大消息可为必要
+补偿，off不等于b0，过去分支融合Gate失败不等价于消息开关失败。新实验若授权
+应先验证时间隔离特征的损失加权选择价值，而非按test样本/变量挑赢家。
+
 ## 2026-10-09 — 中心化TP-Mod正式24次完成，保留b0并关闭先导
 
 单agent完成24/24从头联合训练，无失败或续跑；训练/原审计冻结ae1c213，静态

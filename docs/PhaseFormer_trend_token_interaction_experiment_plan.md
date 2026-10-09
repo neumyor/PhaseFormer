@@ -667,6 +667,33 @@ ZIP字节及65个冻结源文件hash通过。首次同步CSV时远程仍在合�
 方向的影响和validation重复使用已披露，不声称显著性或Golden提升。旧监测保持
 PAUSED，训练/审计/复测进程均结束，当前授权范围内无待执行的门槛后续工作。
 
+### 条件有效性与理想交互开关诊断（2026-10-09，只读）
+
+用户询问失败机制是否仅条件有效，以及自适应/手动开关的可能性。本次只读取
+`research_runs/tp_add_activation_20261009/sample_errors.csv`，未训练或选择部署规则。
+按setting/sample/channel，以`candidate_mse<=off_mse`选择native，否则off；
+oracle MSE=`min(candidate_mse,off_mse)`，MAE使用同一MSE选择，不分别择优。
+各setting先平均样本，再算相对指标的setting等权均值。highest精度诊断、CSV
+9位有效数字，不能替换medium正式结果。完整2020396行重新流式计算。
+
+| Split | off较优的setting等权样本比例 | oracle相对native MSE | oracle相对b0 MSE | oracle胜b0设置 |
+|---|---:|---:|---:|---:|
+| validation | 41.6084% | -5.6756% | -5.4970% | 12/12 |
+| 已暴露test | 43.1129% | -4.3604% | -4.4013% | 12/12 |
+
+原始setting等权oracle MSE/MAE为val0.551541/0.426830、test0.282997/0.324825。
+这是未来label辅助选择上限，不是可实现提升、显著性或可部署配置；没有用test
+拟合阈值。off为已训练TP-Add的禁用路径，不等于独立b0。结果支持在已拟合模型
+中存在条件有效性，不证明历史特征能识别条件或门控训练仍保留同样两条路径。
+
+已有反例阻止简单规则：Weather-H96 rain1702的巨大消息修复off误差，不能“大
+消息就关”；ETTh1-H720的global oracle scale在val为负、test约1，固定按任务
+关也不稳。既有Gate实验是分支融合Gate，不等价于新的消息开关，不能据其失败
+否定后者。下一步若获授权，应先以时间块隔离的训练/校准数据验证少量历史可见
+特征能否预测误差收益，并计入误关的大损失；新门控只缩放消息、静态输出Gate
+保留，统一规则及完整forward成本核验。b0独立模型回退需要另一套权重/推理，
+不能声称无成本；test已暴露，不能称新盲测。此处仅讨论，不启动新实验。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
