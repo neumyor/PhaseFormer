@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
-from scripts.information_probe.core import output_basis, fit_pca, project, fit_ridge, predict, mismatch_indices
+from scripts.information_probe.core import (output_basis, fit_pca, project, fit_ridge,
+    predict, mismatch_indices, fit_transforms, design)
 
 
 def test_modes_separate_cycle_levels_and_shapes():
@@ -38,3 +39,14 @@ def test_preprocessing_is_frozen_for_later_samples():
     before = project(x, transform)
     project(x*100, transform)
     np.testing.assert_array_equal(before, project(x, transform))
+
+
+def test_short_horizon_four_dimensional_phase_mean_is_supported():
+    rng = np.random.default_rng(5)
+    raw = {k: rng.normal(size=(80, width)) for k, width in
+           [('t', 12), ('mean', 4), ('slot', 12), ('anchor', 1), ('trend_modes', 4), ('phase_modes', 4)]}
+    transforms = fit_transforms(raw)
+    for family in ('t_own4', 't_pmean', 't_pslot', 'p_own4', 'p_trend'):
+        x = design(raw, transforms, family, {})
+        assert x.shape == (80, 9)
+        assert fit_ridge(x, rng.normal(size=(80, 4)), 4.)['readout_parameters'] == 40

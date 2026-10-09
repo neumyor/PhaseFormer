@@ -1,13 +1,13 @@
 """Fit-only linear summaries and capacity-matched residual probes."""
 import numpy as np
 
-FAMILIES = ('t_own4', 't_own6', 't_pmean', 't_pslot', 't_mismatch_mean',
-            't_mismatch_slot', 'p_own4', 'p_own6', 'p_trend', 'p_mismatch_trend')
+FAMILIES = ('t_own2', 't_own4', 't_pmean', 't_pslot', 't_mismatch_mean',
+            't_mismatch_slot', 'p_own2', 'p_own4', 'p_trend', 'p_mismatch_trend')
 CROSS = ('t_pmean', 't_pslot', 'p_trend')
-DEGREES = (1., 2., 4., 6.)
-CONTROLS = {'t_pmean': ('t_own6', 't_mismatch_mean'),
-            't_pslot': ('t_own6', 't_mismatch_slot'),
-            'p_trend': ('p_own6', 'p_mismatch_trend')}
+DEGREES = (1., 2., 3., 4.)
+CONTROLS = {'t_pmean': ('t_own4', 't_mismatch_mean'),
+            't_pslot': ('t_own4', 't_mismatch_slot'),
+            'p_trend': ('p_own4', 'p_mismatch_trend')}
 
 
 def output_basis(horizon, period=24):
@@ -22,7 +22,7 @@ def output_basis(horizon, period=24):
     return q
 
 
-def fit_pca(x, width=6):
+def fit_pca(x, width=4):
     x = np.asarray(x, dtype=np.float64)
     center, scale = x.mean(0), np.maximum(x.std(0), 1e-8)
     _, _, vh = np.linalg.svd((x-center)/scale, full_matrices=False)
@@ -36,7 +36,7 @@ def project(x, transform):
 
 
 def fit_transforms(raw):
-    return {k: fit_pca(raw[k], 6) for k in ('t', 'mean', 'slot')}
+    return {k: fit_pca(raw[k], 4) for k in ('t', 'mean', 'slot')}
 
 
 def mismatch_indices(source_ids, target_ids, channels, support, same_role=False):
@@ -56,14 +56,14 @@ def design(raw, transforms, family, mismatch):
     mean = project(raw['mean'], transforms['mean'])
     base = np.c_[raw['anchor'], raw['trend_modes' if family.startswith('t_') else 'phase_modes']]
     own = own_t if family.startswith('t_') else own_p
+    if family.endswith('own2'):
+        return np.c_[base, own[:, :2]]
     if family.endswith('own4'):
         return np.c_[base, own[:, :4]]
-    if family.endswith('own6'):
-        return np.c_[base, own[:, :6]]
     source = own_t if family.startswith('p_') else (mean if family.endswith('mean') else own_p)
     if 'mismatch' in family:
         source = mismatch['t' if family.startswith('p_') else ('mean' if family.endswith('mean') else 'slot')]
-    return np.c_[base, own[:, :4], source[:, :2]]
+    return np.c_[base, own[:, :2], source[:, :2]]
 
 
 def fit_ridge(x, y, degrees):
