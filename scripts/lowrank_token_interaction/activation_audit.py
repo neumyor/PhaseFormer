@@ -414,13 +414,13 @@ def merge(cli):
     for m in metadata:
         setting = m['setting']
         frame = pd.read_csv(parts/f'{setting}.csv')
-        frame.to_csv(cli.audit/'sample_errors.csv', index=False, mode='w' if first else 'a', header=first)
+        frame.to_csv(cli.audit/'sample_errors.csv', index=False, mode='w' if first else 'a', header=first, float_format='%.9g')
         first = False
         cases.extend(unpack_cases(parts/f'{setting}.npz'))
         for column in ('relative_message_norm', 'output_message_rms', 'residual_alignment'):
             bins = pd.qcut(frame[column].rank(method='first'), 5, labels=False)
             for q, group in frame.groupby(bins):
-                grouped_stats.append({'setting': setting, 'group_variable': column, 'quintile': int(q)+1,
+                grouped_stats.append({'setting': setting, 'split': frame['split'].iloc[0], 'group_variable': column, 'quintile': int(q)+1,
                     'n': len(group), 'native_minus_off_mse': float(group.native_minus_off_mse.mean()),
                     'native_minus_b0_mse': float(group.delta_mse.mean()), 'alpha_oracle_median': float(group.alpha_oracle.median())})
         for name in ('candidate', 'baseline', 'off'):
@@ -461,7 +461,7 @@ def merge(cli):
         'No hyperparameter tuning or new mechanism training. Test-informed focus is disclosed; no configuration is chosen from these new diagnostic test values.', '',
         '## 4. Error Distribution', '',
         'Quintiles are calculated separately within each setting; activation norms alone are not evidence of reliability.', '',
-        *markdown(pd.DataFrame(grouped_stats).groupby(['group_variable','quintile'], as_index=False)[['native_minus_off_mse','native_minus_b0_mse','alpha_oracle_median']].mean()), '',
+        *markdown(pd.DataFrame(grouped_stats).groupby(['split','group_variable','quintile'], as_index=False)[['native_minus_off_mse','native_minus_b0_mse','alpha_oracle_median']].mean()), '',
         '## 5. Horizon-wise Error and Information Path', '',
         't=E(x−x_last), m=BAt, Z_slot′=Z_slot+m. All restored predictors are linear. '
         'q=Wm is identical at every phase offset of a cycle. Reassembly repeats q once per period; '
@@ -504,10 +504,19 @@ def merge(cli):
             f"Baseline/candidate MAE={meta['baseline_mae']:.6f}/{meta['candidate_mae']:.6f}; "
             f"message RMS={meta['output_message_rms']:.6f}; oracle α={meta['alpha_oracle']:.6f}; "
             f"message/residual cosine={meta['residual_alignment']:.6f}. These are measured quantities,not a causal training explanation.", '', f'![{name}]({ref})', ''])
+    kernel_rows=[]
+    for m in metadata:
+        if m['setting'].endswith('_val'):
+            s=np.asarray(m['input_map_singular_values'])
+            kernel_rows.append({'setting':m['setting'], 'map_rank1_energy_fraction':float(s[0]**2/max(np.sum(s**2),1e-20)),
+                'last_step_input_energy_fraction':m['input_last_step_energy_fraction'],
+                'recent24_input_energy_fraction':m['input_recent24_energy_fraction'],
+                'gate_level_channel_range':m['gate_level_channel_range']})
     report.extend(['## 8. Repeated Observable Patterns', '',
         *markdown(native[['setting','mean_relative_message_norm','message_relative_p95','null_energy_weighted_fraction',
                           'mean_mode0_output_energy','mean_mode1_output_energy','mean_bias_output_energy',
                           'direct_mse_win_fraction','oracle_alpha_global']]), '',
+        *markdown(pd.DataFrame(kernel_rows)), '',
         'Singular modes use the complete normalized-input→cycle-message map WBAE(I−1e_lastᵀ), not the arbitrary rank-latent basis. '
         'Rank-one intervention retains the original encoder-bias write. Null-space removal changes receiver activations but must preserve predictions; '
         'validated on the first original-size batch of every setting. Norm/cosine statistics stay descriptive.', '',
@@ -519,7 +528,7 @@ def merge(cli):
         'It could be moved to the forecast-level path algebraically; absorbing it into the original shared trend decoder additionally requires channel-independent gate ratios. '
         'No numerical fold or new architecture is claimed without checking that condition.', '',
         '## 10. Experiment Scope', '',
-        '24 existing-checkpoint settings; all192 comparison/diagnostic records retained. Full sample/channel activation/error statistics in sample_errors.csv; '
+        '24 existing-checkpoint settings; all192 comparison/diagnostic records retained. Full sample/channel activation/error statistics in sample_errors.csv (nine significant CSV digits; aggregate records computed before rounding); '
         '24 program-selected examples in selected_cases.npz. Six detailed case plots. No new training or default-architecture decision. '
         'Previous validation reuse and test exposure remain; post-hoc oracle quantities are not deployable. Results are diagnostic evidence,not final architecture superiority.', ''])
     (cli.audit/'objective_error_analysis.md').write_text('\n'.join(report))
@@ -537,10 +546,15 @@ def merge(cli):
                {'setting':m['setting'],'commands':['activation_audit.py --repo <frozen-checkout> --runs <existing-runs> --scratch <independent-scratch> --audit <canonical-audit> --shards 4 --shard 0|1|2|3'],
                 'runtime':m['elapsed_seconds'],'checkpoint_sha256':m['checkpoint_sha256'],'baseline_checkpoint_sha256':m['baseline_checkpoint_sha256'],
                 'config_sha256':m['config_sha256'],'data_sha256':m['data_sha256'],'script_sha256':m['script_sha256'], 'checks':m['checks'],
-                'input_map_singular_values':m['input_map_singular_values'],'gate_level_channel_range':m['gate_level_channel_range']} for m in metadata]},
+                'input_map_singular_values':m['input_map_singular_values'],'gate_level_channel_range':m['gate_level_channel_range'],
+                'input_mode0':m['input_mode0'],'output_mode0':m['output_mode0'],
+                'mean_cycle_input_kernel':m['mean_cycle_input_kernel'],
+                'input_last_step_energy_fraction':m['input_last_step_energy_fraction'],
+                'input_recent24_energy_fraction':m['input_recent24_energy_fraction']} for m in metadata]},
            'selection': {'source':'test','selected_configs':[
                {'setting':s['setting'],'config_id':'tp_add','search_notes':'Focus chosen after prior nine-method test comparison; no new configuration selected from activation interventions.'} for s in settings]},
            'analysis': {'ranking_metric':'mae','top_k':1,'dedup_rule':'One program-ranked case per setting; six detailed plots total',
+                        'worker_commit':'2f0a14d','initial_diagnostic_failures':'Four medium/TF32 attribution checks failed at max discrepancies0.0006807–0.0008816; no successful outputs overwritten. Repeated with highest precision and retained original medium metrics.',
                         'selections':[m['selection'] for m in metadata], 'quintile_statistics':grouped_stats},
            'validation': {'results_checked':True,'ranking_and_cases_checked':True,'report_and_archive_checked':False,'directory_and_settings_checked':False,'status':'incomplete'}}
     (cli.audit/'run.yaml').write_text(yaml.safe_dump(run, sort_keys=False))
