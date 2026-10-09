@@ -418,6 +418,43 @@ dataset hash/首8步batch指纹、排名与案例重算、ZIP字节及六文件�
 启动，controller PID48054，30epoch上限/patience8，仅读完整validation。
 smoke两版共16次仅流程核验，不计入80次正式训练上限，不作效能证据。
 
+**正式先导完成：16/16成功，无失败。** 两任务×两seed×四臂从头联合训练；原b0/
+TP-Add对应ETTh1结果逐值复现。全validation审计990416行、108排名快照及10张
+程序图，初始化/dataset hash/首8步batch顺序、排名/案例重算/ZIP/白名单全部通过。
+正式训练实际总耗时累加6134.66秒，早停11至21轮；四任务setting并非完整六任务。
+
+| 方法 | ETTh1-H720两seed平均MSE/MAE | Weather-H96两seed平均MSE/MAE |
+|---|---|---|
+| b0 | 1.463568/0.835493 | 0.385950/0.272639 |
+| TP-Add | 1.467015/0.836059 | 0.384540/0.269937 |
+| context_full | 1.466710/0.836020 | 0.386378/0.271597 |
+| phase_only | 1.463480/0.835521 | 0.387357/0.272870 |
+
+context_full相对b0的setting等权平均相对MSE/MAE为+0.169258%/-0.155780%，
+仅1/4 MSE胜出、0/2双seed任务均值胜出；相对TP-Add为+0.229480%/+0.305922%，
+2/4 MSE胜出。两基线效果门槛均失败；p95/top1% MAE门槛通过。**不执行条件控制、
+完整矩阵或第三seed，不读新test，不升级架构。** 本轮只否定当前线性均值读取/
+共享水平写入实例的实际收益，不能否定所有phase条件化机制；小幅两seed差值
+不作统计显著性声明，研究方向仍明确披露既有test-informed选择。
+
+H1 rubric=0（效能未支持、错配未运行）；H2未测（非共享训练受失败门槛取消）；
+H3=1（混合诊断）：normalized输出误修正正值均值相对TP-Add下降9.90%，发生频率
+下降1.30%，但严重抵消上升15.04%。同权重off参考在不同模型中不同，不能作严格
+因果分解。ETTh1两seed最大退化都在811,c4；Weather1702,c14仍是off/native/b0
+MAE68.83/7.46/4.98，补偿有用但独立架构更差，不支持简单截断消息。
+
+H4=1（低成本证据成立但完整资源门槛未证）：额外参数308/56，较b0增加0.16110%/
+0.35994%；新增标量运算量相对整模型计数下界保守上界0.07030%/0.20033%。原延迟
+个别native-batch p95失败，在空闲GPU串行复测并保留原读数：batch1 median增量
+3.12%至4.54%，native batch增量0.28%至1.85%，复测推理延迟/p95及显存过门槛。
+每epoch train时间来自各GPU并发任务及共享CPU，出现明显运行差异，未单独重训
+整epoch，因此不声称完整训练时间门槛通过，也不将异常比例直接归因为模块成本。
+
+最终解释脚本`finalize.py`提交beae835，以独立/tmp副本运行，冻结训练源码未替换；
+run.yaml记录finalizer hash和复测协议，results.csv保留原计时并新增recheck列，
+报告/ZIP追加中文假设评分与退出决策，audit_complete更新最终hash。产物同步本地
+并做独立重算、排名/案例/ZIP/文件hash核验。保留静态双分量b0，旧监测保持PAUSED。
+
 canonical为`research_runs/phase_context_pilot_20261009/`，checkpoint、manifest、
 进程/训练/分析日志分别放`research_runs/phase_context_pilot_20261009_scratch/`。
 smoke使用独立`phase_context_pilot_20261009_smoke`及同名`_scratch`，不覆盖历史结果。
