@@ -14,6 +14,10 @@
 smoke发现H96 phase均值仅4维，原6轴预处理拒绝；H720六setting完成cal，
 没有进入eval或据此选择效能。统一修正为4轴、receiver2+source2、9输入/
 40读出系数、EDF1/2/3/4，新增实际短维度回归，独立v2 smoke待重跑。
+v2完成12setting cal，案例重放拦截cal/eval误差扣除符号与预测加法不一致；
+truth-b0监督应在pred-truth误差上加修正。底模单样本/批量max差1.43e-6，不是
+大幅底模批次依赖。统一corrected_error并加入完美残差归零回归；案例按原batch
+重放。v2中间结果不作效能证据，v3将完整重跑smoke；尚未运行正式实验。
 
 ## 2026-10-09 — 讨论信息互补诊断，未启动实验
 

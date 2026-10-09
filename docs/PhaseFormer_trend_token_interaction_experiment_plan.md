@@ -866,6 +866,11 @@ H1通过才另登记H2固定width2乘积和早期截止主干复核；本轮不�
 首版smoke发现H96 phase均值仅4维，六轴摘要不可实现；H720六setting完成cal，
 H96两个shard在预处理检查退出，无eval/效果选择。执行前统一缩减到上述4轴/
 2+2/EDF1--4，并新增短horizon维度测试；修复版smoke独立v2目录重跑。
+v2的12setting cal全部完成，案例重放发现误差修正符号与预测修正不一致：监督
+是truth-b0，预测应加修正，误差pred-truth也应加修正；原cal/eval错误使用减号。
+直接核验底模batch/single最大差1.43e-6，排除大幅底模批次依赖。修正统一误差
+函数并加完美模式残差归零检查；案例按原评估batch重放。v2不作效能依据，v3
+新目录重新smoke，正式执行前模型与数据协议不变。
 
 ## Historical Purpose
 
