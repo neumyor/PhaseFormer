@@ -898,6 +898,30 @@ sample1702/channel14候选与b0几乎重合。连续block仅作时间变化描�
 时间迁移协议；不证明token交互、非线性摘要或所有可预测信息无效。保留静态
 低秩压缩+双分量融合b0；H2及更高成本复核没有达到登记门槛，不自动启动。
 
+### 固定交互变体扩展至完整test矩阵（2026-10-09）
+
+用户要求将上一张“其他已测交互变体：验证集结果”扩展为ETTh1/ETTm2/Weather
+×H96/H720的test结果并补表。本授权覆盖固定矩阵的缺失设置补训，取代此前
+pilot不扩展的退出状态；不增加机制、超参数搜索或test驱动选择。
+
+A保持8epoch的原初筛协议：i0及pt_post/pt_pre/pt_scaled/pt_null/tp_post/tp_pre/
+tp_scaled/tp_selective，12setting全部复用现有val-best权重，共108次test推理。
+B保留原context_full/phase_only两种候选与静态b0；已有四setting复用，缺八
+setting×两候选=16次从头训练。C保留tp_mod_centered与静态b0；已有六H720
+setting复用，缺六H96 setting=6次从头训练。B/C缺失的b0复用先前精确复现的
+lowrank_token_interaction b0，配置/权重/数据hash单列，避免重复基线训练。
+统一seeds2021/2022，不加载pretrained；新增22次均30epoch上限/patience8、
+原L720/P24/r=H8/静态level-shape Gate/Huber/每setting原LR及batch不变，最低
+validation Huber选权重；全部补训完成并冻结后才执行168次完整test推理。
+
+独立入口`scripts/extend_interaction_test.py`，先完整核验权重覆盖、再两family
+各一次H96 smoke，只验证训练链路且不读test；formal独立scratch，旧目录不改。
+仅补聚合test指标和表格，不扩展到冻结探针、warm-start、输出Gate或坏例新研究。
+主表与此前低秩PhaseFormer-L q1/8三seed参考对照，同时另保留各组配对无交互
+基线。逐dataset/horizon先均值两seed，再六task等权汇总；Δ按汇总均值之比
+计算，保留四位MSE/MAE和百分比delta，另给逐task值及两seed标准差。不同训练
+预算/融合/seed与既有test启发均披露，不声称盲测或Golden提升。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target

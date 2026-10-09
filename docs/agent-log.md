@@ -1,5 +1,15 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 登记交互变体完整test补表
+
+用户要求扩展此前validation变体到三dataset×H96/H720完整test矩阵。单agent
+核对范围：A八种norm/null/selective+原i0已有108权重；B context两候选缺16，
+C centered缺6，合计22次固定协议补训，168次test推理。新增入口
+`scripts/extend_interaction_test.py`复用原训练worker及strict load/evaluate；
+新目录、原seed/超参数不变、val-best冻结后才读test，不开展参数选择或新机制。
+服务器8GPU空闲。此任务为既定矩阵补齐和test汇总，无新模型假设/样本级分析
+要求，因此不触发experiment-and-error-analysis Skill；产物是可追溯指标与表格。
+
 ## 2026-10-09 — 接续token交互会话，登记H1互补信息探针
 
 当前会话读取“添加token交互和门控”的最后授权及讨论方案，用户再次明确
