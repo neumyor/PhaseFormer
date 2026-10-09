@@ -6507,3 +6507,59 @@ mechanisms have positive mean relativeMSE against their own reference. These rea
 do not change the earlier validation decision or prove a matched cross-family/paper
 architecture ranking. Updated active plan with full dataset-average table and limits;
 no additional training,tuning,mechanism selection or monitor restart.
+
+## 2026-10-09: Complete TP-Add activation and fixed-weight diagnostics
+
+Used the experiment-and-error-analysis skill for a single-agent read-only activation
+study of existing b0/TP-Add weights. Registered24 settings:ETTh1/ETTm2/Weather ×
+H96/H720 × seeds2021/2022 × validation/test. Kept original E/D,rankH/8,static level/
+shape gates and frozen source dcde3b6. No optimizer,training,weight edits or resumed
+older experiments. Isolated script scripts/lowrank_token_interaction/activation_audit.py.
+Four empty-GPU workers read activations through private hooks;all192 comparison/
+diagnostic records completed. Tested native,off,half,1.5×,input-map rank1 with encoder
+bias retained,input-only,bias-only and independent b0. All attempted readings retained.
+
+Initial code cd26233 passed synthetic broadcast/input-map/null-space/MSE checks,but
+four real medium/TF32 attribution checks failed with0.0006807–0.0008816 max discrepancy;
+no successful artifacts were overwritten. Fix2f0a14d uses highest precision for linear
+attribution and also re-evaluates medium b0/native on every full split. Source weights
+unchanged;original medium test metrics reproduce previous inference with max MSE/MAE
+differences5.1e-9/1.1e-8. Report distinguishes precisions. Merge43cd32b separates split
+statistics,retains full-input kernels,and rounds the large sample CSV to9 significant
+digits while aggregate records/case metadata remain computed before rounding.
+
+Hook identity,half-scale real forward,predictor-null removal,input-map rank2 replay,
+validation reproduction and state-hash invariance passed. Strict audit contains six
+files plus6 referenced figures;24 program-selected regression snapshots include rank
+tokens,phase tokens,messages,compressed2D values and cycle writes. Detailed plots are
+limited to six automatically ranked examples;inspected Weather-H96-S2021 rain case1702.
+Recomputed case MSE/MAE,Top1 ranking,setting coverage,ZIP contents and byte equality.
+Report adds quantitative findings and untrained optimization hypotheses;no deployed
+config was selected. Focus itself was chosen after earlier test inspection and is
+explicitly test-informed,not a blind test.
+
+Direct message is cycle-level only:maximum shape-energy fraction1.05e-12. Functional
+input-map rank1 accounts for93.79%–99.9984% weight energy,yet removing mode2 worsens
+Weather-H96 validation MSE4.53%/4.18% and test3.74%/3.27% versus native. Do not reduce
+width2. Last input coordinate accounts for85.9%–99.2% functional-map energy in ETT,
+98.3%/97.9% in Weather-H96;this is sensitivity in normalized coordinates,not causal
+proof of noisy input. Eight of12 val settings have negative mean message/trend-write
+cosine. Rain1702,c14 has compressed[-90.51,506.02],relative latent update27.57,output
+writeRMS71.95,cancellation10.65;off/native/b0 MAE74.40/7.44/4.98 demonstrates reliance
+and a worse independent-training outcome. Global scaling does not improve validation;
+ETTh1-H720 oracle direction flips between val and test,so no label-derived inference
+rule is introduced.
+
+Priorities recorded only:equivalent forecast-level message implementation for numerical
+and cost checks,phase-conditioned innovation with capacity controls,and separate
+message-only robust referencing while keeping the original head/gate. New efficacy
+tests would require matched from-scratch joint training;none launched. Canonical report
+and ZIP at research_runs/tp_add_activation_20261009/. Updated active plan,kept existing
+monitor PAUSED and previous stopped work stopped.
+
+Channel follow-up aggregated all280 setting/channel means into run.yaml. Weather-H96
+test pressure MSE falls25.22%,but remaining20 channels worsen0.438%;only9/21 improve.
+H720 test pressure accounts for almost the entire net reduction;remaining channels
+improve only0.00187%. Validation excluding pressure is-0.0445% atH96 and+0.1335% atH720.
+These are complete channel summaries,not an inference from selected rain cases,and
+do not authorize a pressure-specific routing policy. Updated report with this limit.

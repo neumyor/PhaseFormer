@@ -223,6 +223,50 @@ predictor null-space去除保留输出、完整输入图两模式重构与实际
 MAE退化案例供覆盖核验，详细绘图只取validation/test各最大三例，最多六例。
 分析输出给出可测量结论和待验证优化方向；新增模型验证需后续另行登记。
 
+### TP-Add 激活诊断完成结论（2026-10-09）
+
+24个validation/test setting、192条固定权重诊断记录全部完成，未启动新训练。
+脚本cd26233的首批4个precision核验在medium/TF32下因线性重构差异
+0.00068–0.00088失败，未产生成功记录；修复2f0a14d使用highest做解析归因，
+额外完整重算原medium指标，汇总脚本43cd32b区分两个split并保留输入核与原始
+案例激活。原medium全test MSE/MAE相对前次推理最大差5.1e-9/1.1e-8。
+hook开关逐位一致、真实半幅forward、predictor null-space去除、rank2输入图
+重构、权重不变和完整validation复现通过。归因使用highest，不静默替代正式
+medium精度指标。报告/ZIP/setting与案例核验通过；自动保存24个快照，详细图6张。
+
+明确观察：
+
+- 全24setting直接消息的cycle-shape能量占比最高1.05e-12；TP-Add当前直接
+  写入周期水平轨迹，不能直接改变周期内形状，且不读取接收phase状态。
+- 输入到周期消息图的第一奇异方向占93.79%–99.9984%能量，但Weather-H96
+  rank1截断相对native仍使validation MSE增加4.53%/4.18%，test增加
+  3.74%/3.27%。保留宽度2，不把能量集中误当预测维数为1。
+- ETTh1/ETTm2最后一个输入坐标占该输入图平方能量85.9%–99.2%，Weather-H96
+  为98.3%/97.9%；这含last-value中心化作用，表示结构敏感度而非噪声因果证明。
+- 12个validation模型中8个消息与原trend水平写入的平均余弦为负。排名案例
+  Weather-H96-S2021的1702,c14是rain(mm)，compressed token[-90.51,506.02]，
+  消息/接收范数比27.57，输出写入RMS71.95、水平抵消比10.65；off MAE74.40，
+  native7.44，而独立b0为4.98。依赖强补偿与独立架构收益需分开解释。
+- 统一0.5倍、1.5倍都无总体validation收益；ETTh1-H720的同权重oracle scale
+  在validation为-1.02/-1.21、test为1.06/0.99，不能以label oracle选择部署系数。
+
+优先优化方向仅登记，尚未执行：先核验等价cycle-level输出写入以改善实现和
+数值稳定性；效能方向研究phase-conditioned创新消息以及独立的message-only
+稳健参考，保留原r、原trend E/D与静态Gate。线性phase自反馈仍可能是
+重参数化，需同容量context控制；需要新增训练时使用从头联合训练及b0/TP-Add
+对照，不能用同checkpoint off/缩放替代新架构效果证据。若先筛选，可采用
+Weather-H96、ETTh1-H720各两seed，有validation信号后再回完整六任务。
+
+逐变量补查（280条setting/channel均值）：Weather-H96 test气压MSE下降25.22%，
+但其余20变量合计上升0.438%，仅9/21变量MSE改善；H720 test净收益几乎全部
+来自气压，剩余20变量仅改善0.00187%。validation移除气压后H96仅改善0.0445%，
+H720退化0.1335%。研究目标应保住水平修正收益、减少其他变量干扰，不做气压
+专用或后验变量路由。完整channel统计保存在run.yaml，不新增canonical文件。
+
+证据：`research_runs/tp_add_activation_20261009/`，六文件及6张引用图；
+run.yaml显式标记研究焦点由此前test读数选出，本轮不选择新部署配置，不作盲测、
+Golden超越或新机制有效声明。既有PAUSED监测和已停止实验均保持原状态。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
