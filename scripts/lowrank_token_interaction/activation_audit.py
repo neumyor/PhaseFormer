@@ -411,9 +411,17 @@ def merge(cli):
     results.to_csv(cli.audit/'results.csv', index=False)
     cases, first = [], True
     grouped_stats = []
+    channel_statistics = []
     for m in metadata:
         setting = m['setting']
         frame = pd.read_csv(parts/f'{setting}.csv')
+        columns = ['baseline_mse','candidate_mse','off_mse','delta_mse','baseline_mae',
+                   'candidate_mae','delta_mae','output_message_rms','relative_message_norm',
+                   'residual_alignment','cancellation_ratio','lowrank_write_cosine']
+        channel_frame = frame.groupby('channel')[columns].mean().reset_index()
+        channel_frame['setting'] = setting
+        channel_frame['n'] = frame.groupby('channel').size().values
+        channel_statistics.extend(channel_frame.to_dict('records'))
         frame.to_csv(cli.audit/'sample_errors.csv', index=False, mode='w' if first else 'a', header=first, float_format='%.9g')
         first = False
         cases.extend(unpack_cases(parts/f'{setting}.npz'))
@@ -554,6 +562,7 @@ def merge(cli):
            'selection': {'source':'test','selected_configs':[
                {'setting':s['setting'],'config_id':'tp_add','search_notes':'Focus chosen after prior nine-method test comparison; no new configuration selected from activation interventions.'} for s in settings]},
            'analysis': {'ranking_metric':'mae','top_k':1,'dedup_rule':'One program-ranked case per setting; six detailed plots total',
+                        'channel_statistics':channel_statistics,
                         'worker_commit':'2f0a14d','initial_diagnostic_failures':'Four medium/TF32 attribution checks failed at max discrepancies0.0006807–0.0008816; no successful outputs overwritten. Repeated with highest precision and retained original medium metrics.',
                         'selections':[m['selection'] for m in metadata], 'quintile_statistics':grouped_stats},
            'validation': {'results_checked':True,'ranking_and_cases_checked':True,'report_and_archive_checked':False,'directory_and_settings_checked':False,'status':'incomplete'}}
