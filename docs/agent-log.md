@@ -1,5 +1,15 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 启动16次正式phase-context先导实验
+
+最终冻结0d4e6df：15项新/旧针对性检查全部通过；修复版8次smoke及完整validation
+审计通过，495208行样本记录、54条案例快照，初始化/dataset/首8步batch指纹一致，
+排名、重算、ZIP及六文件结构通过。中间一次检查入口缩减PATH误用旧Git，继承正常
+shell环境重跑通过；模型/依赖未变。两版共16次smoke仅链路核验、正式预算外单列。
+正式16次在独立冻结checkout启动（controller PID48054），四setting×四臂，
+30epoch/patience8、随机初始化全参数训练、静态融合不变；manifest与进程实际启动
+已核对，后续依先导rubric决定是否进入控制阶段，不读test或拼接数据集赢家。
+
 ## 2026-10-09 — 修正先导效率审计并核验训练配对
 
 隔离checkout部署184e195，14项针对性/历史回归检查通过；首版8次smoke、完整val

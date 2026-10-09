@@ -410,6 +410,14 @@ forward和有效参数梯度等价验证复用TP-Add，不启动重复训练。u
 部署修复。首版smoke保留，最终修复版使用独立`phase_context_pilot_20261009_smoke_v2`
 及`_scratch`重跑，不用smoke性能筛选。正式16次在最终修复版流程核验完成后启动。
 
+修复版0d4e6df的15项针对性/历史回归检查通过，8次smoke及完整validation审计
+完成：495208条sample/channel/arm记录、54条排名快照、最多10个详细图；初始化/
+dataset hash/首8步batch指纹、排名与案例重算、ZIP字节及六文件白名单核验通过。
+一次检查进程因显式缩减PATH误用系统旧Git失败，继承正常shell环境重跑15项通过；
+这属于检查入口环境问题，未改依赖或模型。首轮正式16次已在冻结0d4e6df独立checkout
+启动，controller PID48054，30epoch上限/patience8，仅读完整validation。
+smoke两版共16次仅流程核验，不计入80次正式训练上限，不作效能证据。
+
 canonical为`research_runs/phase_context_pilot_20261009/`，checkpoint、manifest、
 进程/训练/分析日志分别放`research_runs/phase_context_pilot_20261009_scratch/`。
 smoke使用独立`phase_context_pilot_20261009_smoke`及同名`_scratch`，不覆盖历史结果。
