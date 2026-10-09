@@ -1,5 +1,15 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 提出中心化TP-Mod后续候选（未运行）
+
+用户询问下一步架构；只读核对现行计划、原TP-Mod实现、线性predictor与历史
+Stage3结果。纠正上轮讨论中将均值压缩当确证失败原因的表述；phase信息作用和
+shape是否为瓶颈均未证明。建议Z'=Z+(Z-mean_phase Z)⊙BAt，固定k2、静态Gate和
+原r，参数同TP-Mod，直接周期均值守恒而能改变shape；最终更新不保证rank2。
+明确旧centered_frozen只支持warm-start局部信号，原TP-Mod已有测试、并非新机制。
+计划登记零训练shape误差空间诊断和三任务两seed四臂24次建议，含ETTm2失败对照，
+沿用效率/尾部门槛，不自动实施、启动实验或恢复监测。仅文档验证git diff。
+
 ## 2026-10-09 — phase-context先导16次完成，拒绝扩展
 
 正式16/16成功、无失败，冻结训练/审计0d4e6df。全validation990416行、108排名

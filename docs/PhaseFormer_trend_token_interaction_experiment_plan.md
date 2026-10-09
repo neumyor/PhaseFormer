@@ -482,6 +482,62 @@ python scripts/phase_context_interaction/run.py \
   --gpus 0,1,2,3,4,5,6,7
 ```
 
+## 后续架构建议：保持周期水平的中心化TP-Mod（2026-10-09，仅讨论）
+
+用户询问下一步最值得测试的架构。本节为候选建议，未授权实现或启动新训练，
+不恢复已退出的phase-context实验或旧监测。此前通俗解释将“phase求平均丢信息”
+作为失败原因过于确定：该因素与结构约束、优化及信息冗余尚未被因果分离；
+TP-Add缺少shape写入是确切代数事实，但不证明shape一定是主要性能瓶颈。
+
+优先建议用中心化TP-Mod测试“trend是否有助于调节周期内波形”，以b0为可靠
+架构参照，不把未胜b0的TP-Add作为必保模块。令z_bar=mean_p Z_p，S_p=Z_p-z_bar，
+q=BAt，k=min(2,r,d)，无bias，B零初始化：
+
+    Z'_p = Z_p + S_p ⊙ q.
+
+原r/E/D/last-value参考、phase主干和静态level/shape Gate保持不变。每sample/channel
+的q可以不同，但同一历史窗内q对所有phase slot共享；S_p保留slot差异。相比原
+TP-Mod只增加减均值，不引入C、norm、softmax、动态输出Gate或新loss。其含乘法
+调制，不声称完全无任何广义门控含义；用户要求分开研究的输出融合Gate仍固定。
+
+该模块参数k(r+d)，与既有TP-Add/TP-Mod相同；典型Weather-H96为40、ETTh1-H720
+为244，而失败context_full为56/308。投影O(kr+kd)、均值/逐点运算O(Pd)，没有
+新增P×P或r×d稠密矩阵，不增大r。低秩约束的是trend到调制向量的映射BA，
+不能据此宣称slot×feature或未来cycle×phase的最终shape更新rank≤k。
+
+在共享线性predictor、完整周期重排、静态逐变量分量融合及输入RevIN仿射条件下，
+sum_p S_p=0 => sum_p(S_p⊙q)=0 => 直接预测修正每个未来周期均值为0。推理时
+保证直接shape写入不引入level变化；训练时dropout可能破坏逐次前向精确恒等式，
+独立联合训练也会间接改变原主干的level预测，不能声称整个训练结果level相同。
+相较简单phase线性adapter，q依赖t，包含输入条件化乘积，通常不能吸收到固定W。
+中心化不提供收缩/稳定性保证，大q仍可放大异常，仍需原尾部和效率硬门槛。
+
+既有证据：原tp_mod在ETTh1-H720、Weather-H720双seed均出现局部收益，但ETTm2
+两horizon退化，不能称整体有效。旧2026-10-07 Stage3中心化width8 bilinear在冻结
+tp_pre续训中5/6改善、mean deltaMSE -0.000290；联合续训整体不胜参照。它支持
+本假设的局部可行性，不是新的从头训练证据。新方案属于对既有TP-Mod的可归因
+结构约束消融，不宣称全新调制方法；真正贡献须是可证明约束及稳健经验收益。
+
+建议先对已有b0完整validation误差做零训练诊断：按cycle分解MSE为level+shape；
+假设完美替换shape时levelMSE给出该约束下的理想误差下界，shapeMSE是可消除
+误差上限，只读label作离线诊断，不作推理输入或可实现收益承诺。核验确有足够
+shape误差空间后，预登记首轮ETTh1-H720、Weather-H720、ETTm2-H720 × 两seed ×
+b0/TP-Add/原TP-Mod/中心化TP-Mod四臂=24次；覆盖两个旧局部正向任务和一个负向
+任务，披露validation-informed选择。不继续只测上轮两个任务。对照共同初始化/
+数据顺序/预算，均从头全参数训练，沿用30epoch/patience8，不搜索k或scale。
+
+首轮判据建议：相对b0与原TP-Mod均平均相对MSE≤-1%、各至少4/6胜出、平均
+相对MAE≤0、原始MSE/MAE均值不升；ETTm2双seed平均MSE不得退化，无setting
+MSE>2%退化；沿用p95/top1%和效率门槛。激活核验直接周期均值不变，独立训练的
+shape收益真实存在且level未抵消；同checkpoint off只辅助归因。乘法内容必要性
+及正确phase配对仍须后续对照；过先导门槛才登记phase-only/错配控制及完整六任务。
+这些阈值属于拟议预登记，未启动训练。
+
+如果不能胜b0，应停止该shape方向的扩展；如果只胜原TP-Mod，则只说明中心化
+减轻了旧机制的副作用，不足以升级架构。如果shape误差减少但level误差抵消收益，
+说明联合优化问题仍在，不自动新增训练正则或扩大模型。强level错误如Weather
+rain1702并非该约束的直接修复目标，不将该案例用作shape机制成功标准。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
