@@ -19,6 +19,25 @@ truth-b0监督应在pred-truth误差上加修正。底模单样本/批量max差1
 大幅底模批次依赖。统一corrected_error并加入完美残差归零回归；案例按原batch
 重放。v2中间结果不作效能证据，v3将完整重跑smoke；尚未运行正式实验。
 
+## 2026-10-09 — H1互补信息探针正式完成，关闭低维路线
+
+修复版v3 smoke后正式12/12设置完成，无主干训练和新test推理。canonical
+`research_runs/information_probe_20261009/`含688100条eval sample/channel、
+48个程序选例、10图；独立CSV/NPZ/排名/ZIP/目录复核通过，最大汇总重算差
+4.44e-16。代码caa1170；v1 H96六轴维度问题及v2 truth-b0符号问题未进入正式证据。
+
+校准选`t_pmean`（trend接收phase均值），正式平均相对b0 MSE -0.107230%、
+MAE +0.006160%，1/12 setting和1/6 task胜出，2/12非零修正。ETTm2-H720两
+seed +0.121364%/-1.408120%相反。未达到1% MSE/MAE/胜出/尾部门槛，也未胜过
+同容量receiver或同EDF mismatch；t_own4/receiver_matched/mismatch_matched
+平均MSE分别-0.170607%/-0.116772%/-0.123459%，不能归因于cross分支独有信息。
+
+label-oracle四模式解释9.7%--72.0%归一化能量，仅作不可部署诊断。ETTm2
+sample7887/c3候选MAE退化+0.26737，Weather sample1702/c14与b0近重合。
+结果只否定冻结b0、四模式、ridge摘要和时间迁移协议下的低维线性互补假设；
+停止width2乘积、消息Gate、前缀主干复核和新架构训练，保留静态b0。报告已
+加入v1/v2排除说明、选择轨迹、失败门槛和复现命令；旧监测保持PAUSED。
+
 ## 2026-10-09 — 讨论信息互补诊断，未启动实验
 
 用户询问在Gate阴性结果后如何探索，单agent只读核对低秩encode/decode、

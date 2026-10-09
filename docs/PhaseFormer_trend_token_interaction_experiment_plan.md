@@ -872,6 +872,32 @@ v2的12setting cal全部完成，案例重放发现误差修正符号与预测�
 函数并加完美模式残差归零检查；案例按原评估batch重放。v2不作效能依据，v3
 新目录重新smoke，正式执行前模型与数据协议不变。
 
+#### H1正式结果与关闭（2026-10-09）
+
+修复版v3 smoke通过12/12设置和完整归档复核后，正式12 setting完成；没有训练
+PhaseFormer、没有读取新test。canonical为`research_runs/information_probe_20261009/`，
+688100条evaluation sample/channel记录、48个程序选例、10图；独立CSV/NPZ/排名/
+ZIP/白名单复核通过，汇总最大差4.44e-16。正式执行代码为caa1170；v1 six-axis
+H96维度错误及v2 residual符号错误均排除在证据外，修复后的v3 smoke才进入正式流程。
+
+校准唯一主候选为`t_pmean`（trend接收phase均值摘要）；其validation-tail等权
+平均相对b0 MSE -0.107230%、MAE +0.006160%，只在1/12 setting胜出、1/6
+dataset-horizon任务胜出，只有2/12 setting实际使用非零修正。ETTm2-H720两seed
+MSE为+0.121364%/-1.408120%，方向不一致。它没有达到MSE≤-1%、MAE不升、8/12
+胜出、4/6任务胜出及最差/尾部门槛，也没有胜过同容量receiver或同有效自由度
+mismatch控制。`t_own4`平均MSE -0.170607%，`receiver_matched` -0.116772%，
+`mismatch_matched` -0.123459%，说明该微小cross收益不能归因于对方分支独有信息。
+
+四模式label-oracle仅作诊断：常量、cycle斜率、P24首sin/cos在不同设置解释的
+归一化残差能量约9.7%--72.0%，但不可部署，也不等价于可预测收益。候选案例中
+ETTm2-H720-S2021 sample7887/channel3的MAE退化+0.26737；Weather-H720-S2021
+sample1702/channel14候选与b0几乎重合。连续block仅作时间变化描述，未作独立CI。
+
+**决定：停止本轮低维线性互补信息假设，不训练width2乘积、消息Gate、前缀截止
+主干或新架构。** 结论只适用于冻结既有b0、四个固定输出模式、当前ridge摘要和
+时间迁移协议；不证明token交互、非线性摘要或所有可预测信息无效。保留静态
+低秩压缩+双分量融合b0；H2及更高成本复核没有达到登记门槛，不自动启动。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
