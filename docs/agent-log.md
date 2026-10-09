@@ -1,5 +1,19 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 服务器恢复，启动24次中心化TP-Mod正式实验
+
+用户要求正式实验，确认8GPU空闲、无重复任务后，以bundle部署独立checkout，
+冻结ae1c213d646121fca46ab02e324316dd93bb5242，旧实验代码与产物保持原位。
+远程Torch2.6.0+cu124/Lightning2.6.5的新旧26项检查通过（93.01秒）；ETTh1/ETTm2/
+Weather数据完整，源level-study manifest有效。单agent，不恢复旧监测。
+12/12真实数据smoke及完整审计通过，745220样本行、81快照、10图，配对初始化/
+首4batch、完整val指标、排名/案例/ZIP/白名单核验通过；不作为效果证据。
+formal controller PID86246，独立centered_mod_pilot_20261009[_scratch]，24次六H720
+setting×四臂，8GPU，从头全参数训练30epoch/patience8。入口保持计划登记参数，
+launch.json保存SHA及smoke审计hash；完成后自动推理和分析，不读取test。
+本地后续只改文档，不在活跃远程任务脚下替换源码，按事先双参照/尾部/效率
+门槛决定是否保留，不自动扩展phase-only/错配/额外seed。
+
 ## 2026-10-09 — 实现中心化TP-Mod，单元通过，远程连接阻塞
 
 用户“好，请你测试”授权三H720任务、两seed、四臂24次从头联合训练。仅单agent

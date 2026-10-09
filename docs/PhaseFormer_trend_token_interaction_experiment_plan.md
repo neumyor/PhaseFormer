@@ -601,6 +601,22 @@ checkpoint恢复、TP-Add/TP-Mod精确等价、原分支off等价、静态Gate�
 合成输入检查不作为真实数据smoke或性能结论。SSH多次10--15秒超时，远程部署、
 12次真实数据smoke及24次正式实验均未开始，不能判断假设支持或否定。
 
+### 服务器恢复后的正式执行（2026-10-09）
+
+用户明确要求正式实验，网络恢复后确认8张A800空闲且不存在本轮活跃任务。
+在独立checkout部署冻结提交`ae1c213d646121fca46ab02e324316dd93bb5242`；历史
+checkout/产物不替换，resources仅链接原数据目录。服务器Torch2.6.0+cu124/
+Lightning2.6.5环境的26项新旧检查通过（93.01秒），三个CSV完整，读取旧level
+study的12setting源manifest并仅选登记的六个H720 setting，未加载源权重。
+
+12/12真实数据smoke成功且完整审计passed：745220条sample/channel/arm记录、
+81条Top3快照、10图，四臂共同初始化/首4batch指纹一致；完整val指标重算、
+排名、案例、ZIP及六文件目录通过。smoke只是链路验证，不能据其数值选架构。
+随后启动24次formal（controller PID86246），冻结同一源码，8GPU并行；
+所有参数从头训练，30epoch/patience8、最低val Huber checkpoint。启动记录
+另存formal scratch的launch.json，含代码SHA和smoke审计SHA；完成后自动进行
+全val/样本审计。当前不读取test，不恢复旧PAUSED monitor，不添加其他机制。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
