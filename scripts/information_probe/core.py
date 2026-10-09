@@ -102,6 +102,11 @@ def sample_metrics(error):
     return {'mse': np.square(error).mean(-1), 'mae': np.abs(error).mean(-1)}
 
 
+def corrected_error(error, scale, coefficients, basis):
+    # Coefficients predict truth minus b0; prediction-minus-truth adds the correction.
+    return error+scale[:, None]*(coefficients @ basis.T)
+
+
 def summarize(metrics):
     mae = metrics['mae']
     return {'mse': float(metrics['mse'].mean()), 'mae': float(mae.mean()),

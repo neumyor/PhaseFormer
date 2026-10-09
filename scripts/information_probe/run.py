@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 from scripts.information_probe.core import (FAMILIES, DEGREES, CONTROLS, output_basis, fit_transforms,
-    project, mismatch_indices, design, fit_ridge, predict, sample_metrics, summarize)
+    project, mismatch_indices, design, fit_ridge, predict, sample_metrics, summarize, corrected_error)
 from scripts.message_switch_diagnostic.core import temporal_roles
 from scripts.message_switch_diagnostic.extract import batches
 from scripts.lowrank_token_interaction.model import load_model, state_hash
@@ -146,7 +146,7 @@ def work(args):
                     attempts = [{'family': family, 'degrees': 0., 'fitted': None, **baseline}]
                     for degrees in DEGREES:
                         fitted = fit_ridge(xf, target, degrees)
-                        corrected = error-scale[:, None]*(predict(xc, fitted) @ qn.T)
+                        corrected = corrected_error(error, scale, predict(xc, fitted), qn)
                         attempts.append({'family': family, 'degrees': degrees, 'fitted': fitted,
                                          **summarize(sample_metrics(corrected))})
                     chosen = min(attempts, key=lambda a: (a['mse'], a['degrees']))
@@ -183,7 +183,7 @@ def work(args):
                     metrics = {'b0': sample_metrics(error)}
                     for name, (family, fitted) in readouts.items():
                         coeff = predict(design(raw, transforms, family, mb), fitted)
-                        metrics[name] = sample_metrics(error-scale[:, None]*(coeff @ qn.T))
+                        metrics[name] = sample_metrics(corrected_error(error, scale, coeff, qn))
                     for name in metrics:
                         rows[name].append(metrics[name])
                     frame = pd.DataFrame({'sample_id': np.repeat(ids, channels),
@@ -222,27 +222,35 @@ def work(args):
                     results.append(record)
                 pd.DataFrame(results).to_csv(out/'results.csv', index=False)
                 requests = pick_cases(errors, horizon, top_k=3)
-                cases = []
+                cases, cache = [], {}
                 for request in requests:
                     sample, ch = int(request['sample_id']), int(request['channel'])
-                    item = val[sample]
-                    batch = [torch.as_tensor(v[None]) for v in item]
-                    raw, _, _, scale, bp, truth = extract_batch(model, batch, trace, q, device)
-                    index = mismatch_indices(bank['ids'], np.array([sample+len(train.data_x)-720]), channels, 720+horizon)
-                    mb = {k: bank[k][index] for k in ('t', 'mean', 'slot')}
-                    coeff = np.zeros((channels, 4)) if selected == 'b0' else predict(
-                        design(raw, transforms, selected, mb), frozen['families'][selected]['fitted'])
-                    cp = bp[0].T+scale[:, None]*(coeff @ qn.T)
-                    for label, prediction in [('baseline', bp[0, :, ch]), ('candidate', cp[ch])]:
-                        check = sample_metrics((prediction-truth[0, :, ch]).astype(np.float64)[None])
+                    position = int(np.searchsorted(roles['eval'], sample))
+                    assert roles['eval'][position] == sample
+                    start = position//config.dataset_args.batch_size*config.dataset_args.batch_size
+                    if start not in cache:
+                        ids = roles['eval'][start:start+config.dataset_args.batch_size]
+                        _, batch = next(batches(val, ids, len(ids)))
+                        raw, _, _, scale, bp, truth = extract_batch(model, batch, trace, q, device)
+                        index = mismatch_indices(bank['ids'], ids+len(train.data_x)-720, channels, 720+horizon)
+                        mb = {k: bank[k][index] for k in ('t', 'mean', 'slot')}
+                        coeff = np.zeros((len(ids)*channels, 4)) if selected == 'b0' else predict(
+                            design(raw, transforms, selected, mb), frozen['families'][selected]['fitted'])
+                        cp = bp.transpose(0, 2, 1).reshape(-1, horizon)+scale[:, None]*(coeff @ qn.T)
+                        cp = cp.reshape(len(ids), channels, horizon).transpose(0, 2, 1)
+                        cache[start] = (batch[0].numpy(), truth, bp, cp, coeff,
+                            model.last_phase_forecast.cpu().numpy(), model.last_lowrank_forecast.cpu().numpy(),
+                            model.lowrank_dynamic_fusion.last_gate.cpu().numpy())
+                    history, truth, bp, cp, coeff, phase_pred, trend_pred, gate = cache[start]
+                    i = position-start
+                    for label, prediction in [('baseline', bp[i, :, ch]), ('candidate', cp[i, :, ch])]:
+                        check = sample_metrics((prediction-truth[i, :, ch]).astype(np.float64)[None])
                         for metric in ('mse', 'mae'):
                             np.testing.assert_allclose(check[metric][0], request[label+'_'+metric], rtol=5e-4, atol=5e-5)
-                    cases.append({'metadata': request, 'history': item[0][:, ch], 'truth': truth[0, :, ch],
-                                  'baseline': bp[0, :, ch], 'candidate': cp[ch], 'off': bp[0, :, ch],
-                                  'phase': model.last_phase_forecast[0, :, ch].cpu().numpy(),
-                                  'trend': model.last_lowrank_forecast[0, :, ch].cpu().numpy(),
-                                  'gate': model.lowrank_dynamic_fusion.last_gate[0, ch].cpu().numpy(),
-                                  'acceptance': coeff[ch]})
+                    cases.append({'metadata': request, 'history': history[i, :, ch], 'truth': truth[i, :, ch],
+                                  'baseline': bp[i, :, ch], 'candidate': cp[i, :, ch], 'off': bp[i, :, ch],
+                                  'phase': phase_pred[i, :, ch], 'trend': trend_pred[i, :, ch],
+                                  'gate': gate[i, ch], 'acceptance': coeff[i*channels+ch]})
                 pack(cases, out/'selected_cases.npz')
                 save_json(out/'case_requests.json', requests)
                 provenance['selection_sha256'] = digest(args.scratch/'selection_frozen.json')

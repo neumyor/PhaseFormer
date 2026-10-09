@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from scripts.information_probe.core import (output_basis, fit_pca, project, fit_ridge,
-    predict, mismatch_indices, fit_transforms, design)
+    predict, mismatch_indices, fit_transforms, design, corrected_error)
 
 
 def test_modes_separate_cycle_levels_and_shapes():
@@ -50,3 +50,13 @@ def test_short_horizon_four_dimensional_phase_mean_is_supported():
         x = design(raw, transforms, family, {})
         assert x.shape == (80, 9)
         assert fit_ridge(x, rng.normal(size=(80, 4)), 4.)['readout_parameters'] == 40
+
+
+def test_truth_minus_prediction_correction_removes_mode_error():
+    rng = np.random.default_rng(6)
+    q = output_basis(96)
+    scale = np.array([.1, 1., 10.])
+    modes = rng.normal(size=(3, 4))
+    error = scale[:, None]*(modes @ q.T)
+    residual_target = (-error/scale[:, None]) @ q
+    np.testing.assert_allclose(corrected_error(error, scale, residual_target, q), 0, atol=1e-13)
