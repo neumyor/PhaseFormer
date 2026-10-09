@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 实现隔离的phase-context先导验证
+
+用户授权正式实验；使用experiment-and-error-analysis Skill，保持单agent。
+新增scripts/phase_context_interaction的模型/runner/analysis及针对性测试，保留旧实验
+源文件和产物。登记四setting四臂16次、全参数从头联合训练、静态双分量Gate及原r。
+候选B(At-C mean(Z))、phase-only、原TP-Add与b0配对；zero-context仅读等价核验，
+untied仅单元检查，后续控制受先导rubric门槛约束。补整模型计算下界/新增路径运算
+上界、双batch延迟/显存、epoch train计时、normalized误修正与抵消、变量统计，
+冻结幅度阈值并限制详细图至10个程序案例。远程8GPU空闲，无冲突研究进程，已有
+conda Python含torch2.6.0+cu124。静态语法检查通过，真实torch核验和smoke待完成。
+
 ## 2026-10-09 — 登记phase上下文低秩消息的科研假设与rubric
 
 按用户要求仅设计后续实验，未实现候选、未启动训练或恢复监测，继续单agent。

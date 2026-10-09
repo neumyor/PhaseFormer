@@ -394,6 +394,41 @@ epsilon/幅度阈值由训练数据尺度在启动前冻结，禁止看validatio
 - 所有臂未过效果/效率门槛：拒绝升级，回到更简单的静态融合b0。稳健参考、非线性
   误差整形、phase特定写入均不是本轮自动续跑方向。
 
+### Phase-context 执行登记（2026-10-09）
+
+用户已授权正式验证上述方案。新增隔离目录
+`scripts/phase_context_interaction/{model,run,analyze}.py`，原实验代码不修改。
+首轮仅b0/tp_add/context_full/phase_only、四setting、16次；context_zero以精确
+forward和有效参数梯度等价验证复用TP-Add，不启动重复训练。untied模型单元核验，
+错配训练及扩大矩阵仅在先导过门槛后实现/运行。保持单agent。
+
+canonical为`research_runs/phase_context_pilot_20261009/`，checkpoint、manifest、
+进程/训练/分析日志分别放`research_runs/phase_context_pilot_20261009_scratch/`。
+smoke使用独立`phase_context_pilot_20261009_smoke`及同名`_scratch`，不覆盖历史结果。
+新远程checkout独立冻结code commit，创建前检查GPU与活跃进程；本地不装新依赖，
+使用既有远程conda Python及A800。来源为已完成level-study manifest，仅读超参数。
+
+效率解析补充：整模型profiler支持算子的运算量作为完整运算量下界，新增交互路径
+显式计数投影/均值/除法/相减/广播的标量运算量；两者相除给出保守的增量计算上界，
+不把profiler遗漏算子算作零成本的完整MAC精确值。参数实计；延迟用batch1和原batch、
+每模型独占GPU驻留、5轮随机串行顺序、warmup10与150次单forward CUDA-event读数。
+每epoch train阶段计时，含实际backward，不以早停总耗时替代单轮成本。
+
+H3阈值在任何新训练前固定：RevIN normalized单位下两写入RMS均>0.01，抵消
+分母epsilon=1e-6，严重抵消为ratio>5且内积<0。正值误修正指标在各自off参考下
+计算，仅辅助机制归因。详细绘图按程序覆盖setting后按误差差值排序，最多10案例；
+更多排名快照保留供核验，不以选例估计总体发生率。
+
+执行示例（smoke补`--smoke --epochs 1`并使用独立输出路径）：
+
+```bash
+python scripts/phase_context_interaction/run.py \
+  --source-manifest <completed-level-study>/manifest.json \
+  --scratch-dir research_runs/phase_context_pilot_20261009_scratch \
+  --audit-dir research_runs/phase_context_pilot_20261009 \
+  --gpus 0,1,2,3,4,5,6,7
+```
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
