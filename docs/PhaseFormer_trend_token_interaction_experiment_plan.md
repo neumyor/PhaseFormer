@@ -780,9 +780,11 @@ hash保留run.yaml，可用原权重及冻结代码重新提取。本轮不恢�
 既有train拟合、val选checkpoint及test启发方向明确披露；本诊断不是盲测，
 与minipaper/Golden test表不同口径，不据此更新其数值。
 
-### 信息互补与写入可达性：下一步讨论方案（2026-10-09，尚未授权执行）
+### 信息互补与写入可达性：讨论方案及执行登记（2026-10-09）
 
 用户认可先找信息证据再设计交互，本节只提出方案，不恢复已关闭Gate/先导。
+原会话后续已授权逐步实践，但执行前中断；当前接续会话用户再次明确选择
+“直接继续实践验证”。下列执行登记取代此前“未授权”状态，不恢复旧监测。
 从已有独立训练b0读取原trend token t、last-value anchor和最终phase token Z，
 不先用TP-Add共适应表征判定信息必要性。两者同源历史，不可能新增外部观测；
 这里的“新增”严格指相对于接收分支表征/既有读出的额外可预测信息。
@@ -831,6 +833,36 @@ p95/top1% MAE≤+2%。同时胜同容量接收方及错配控制，报告连续�
 该低维信息假设，有信号才另行登记唯一的内容/写入结构及从头联合训练验证。
 最终设计原r/静态Gate保留，不建立P×P注意力；新增参数≤1%、推理median≤5%
 等效率硬边界继续适用。探针本身的冻结收益不是正式架构收益。
+
+#### H1固定执行协议
+
+新入口`scripts/information_probe/`，仅单agent。三数据集ETTh1/ETTm2/Weather、
+H96/720、seed2021/2022，共12个既有b0 checkpoint；不修改主干或读新test。
+完整history720+forecast支持窗隔离，原train前60% fit、后40% cal、val去跨界
+历史eval；fit/cal每24步取窗，eval全合法窗。既有backbone暴露仍明确披露。
+四固定正交目标为最终归一化残差的常数、cycle-index斜率、P24第一sin/cos。
+
+每checkpoint独立、channel合并且无channel/task编号；fit-only标准化/PCA。
+trend原t与phase均值/均值+固定sin/cos slot摘要各取6轴。接收者保留last-anchor
+和自身原预测的4个模式系数，加4自身轴；同容量控制加2自身轴，跨分支加2来源
+轴，合计11输入/48个读出系数。t方向比较phase均值/slot，p方向读trend。
+10固定family各搜索ridge slope有效自由度1/2/4/6（加不惩罚截距）与no-op，
+同宽控制搜索预算相同；另用主候选所选有效自由度的receiver/mismatch对照。
+共480次ridge拟合、600个calibration候选；没有PhaseFormer训练。
+
+错配保持同变量且完整支持窗不重叠：fit半周循环，cal/eval从固定fit时间库
+读取，由窗口起点确定索引。历史来源分布可能迁移，作为控制而非纯因果证明。
+各family以cal MSE选择自由度/no-op；三个cross family按12setting等权cal相对
+MSE选唯一主候选，b0/no-op亦可选。选择落盘冻结后才执行eval，各family及主候选
+同自由度控制均保留。以此前1%/8settings/4tasks/MAE/2%最差及尾部门槛判断，
+另须胜过同容量接收及错配控制；阴性停止本低维线性假设，不自动增加模块。
+
+先12setting真实数据smoke（fit至多约80窗口，cal/eval各8窗），只核验流程；
+正式canonical为`research_runs/information_probe_20261009/`，严格六文件+figures；
+临时产物隔离于同名`_scratch`。保存所有fit变换/系数、cal搜索、选择冻结与源权重/
+数据hash，完整样本误差、Top3三类案例、最多10图、报告ZIP及重算检查。连续
+起点块只报时间变化范围，不伪作独立CI；额外报告四模式label-oracle误差占比。
+H1通过才另登记H2固定width2乘积和早期截止主干复核；本轮不声称架构收益。
 
 ## Historical Purpose
 

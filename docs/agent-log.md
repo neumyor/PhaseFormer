@@ -1,5 +1,16 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 接续token交互会话，登记H1互补信息探针
+
+当前会话读取“添加token交互和门控”的最后授权及讨论方案，用户再次明确
+“直接继续实践验证”。单agent使用experiment-and-error-analysis，先固定b0
+四模式残差线性探针；12setting、时间支持隔离、fit-only PCA/标准化、cal
+自由度/no-op与主cross family冻结、同容量及同有效自由度接收/错配控制。
+新增`scripts/information_probe/`及`tests/test_information_probe.py`，保持现有
+模型/权重/成功结果原位。计划新增固定执行协议，480ridge拟合/600cal候选；
+若未达门槛停止本低维假设，不新增Gate或主干训练。服务器8GPU已确认空闲，
+尚未启动新推理。核心4项检查通过（0.19秒），真实数据smoke与审计待执行。
+
 ## 2026-10-09 — 讨论信息互补诊断，未启动实验
 
 用户询问在Gate阴性结果后如何探索，单agent只读核对低秩encode/decode、
