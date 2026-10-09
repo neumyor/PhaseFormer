@@ -1,5 +1,42 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 中心化TP-Mod正式24次完成，保留b0并关闭先导
+
+单agent完成24/24从头联合训练，无失败或续跑；训练/原审计冻结ae1c213，静态
+level/shape Gate、原r/E/D/phase/RevIN保留。18个旧对照MSE/MAE精确复现，
+不当作新增独立seed。完整val1490440条样本行、162快照、10图审计通过。
+Centered相对b0平均相对MSE/MAE+0.051515%/+0.157214%，2/6 MSE胜出；
+相对原TP-Mod+0.051340%/+0.034373%，2/6胜出。效果、ETTm2及尾部必要门槛
+失败，不追加控制、第三seed、任务、新机制或test，保留静态双分量b0。
+
+六setting直接cycle均值最高精度差5.96e-8至1.44e-7均通过；ETTm2直接shape
+修正改善但独立联合训练level退化抵消，ETTh1直接shape修正本身变差。
+Weather-S2022 top1% MAE对b0+2.876072%；rain1702/c14 b0/native/off
+MAE1.387573/3.958200/3.956777，levelMSE3.153256/28.649216/28.649216。
+这些是数值诊断，same-checkpoint off不因果分离主干适应/优化/信息冗余。
+只否定本固定中心化实例的稳定收益；不声称整个shape交互方向失效。
+
+新增244/196/196参数、约0.13%--0.15%；新增算术≤0.3354%。保留原计时并在
+空闲GPU同冻结benchmark串行复测，无训练/source变更。Weather-S2021 native
+median+60.69%变为+2.97%；ETTm2 batch1/native两seed median仍超过5%。
+并发epoch时间混杂，独立训练成本未确认，不追加训练计时。复测独立记录并列
+recheck列，不能选最快值声称达标。
+
+312f141新增独立finalize.py，先核验原审计hash并保留closure_previous_artifacts，
+再写最终解释/选择状态/复测列及重建ZIP。原训练源码65个hash、sample CSV/NPZ/图未变。
+首次CSV同步与远程合并重叠，本地均值重算发现不完整传输；重新同步后SHA256
+与完整远程原件一致，没有重训/覆盖成功结果。独立流式核验全部数值均值、
+尾部、Top3、162案例五种预测MSE/MAE及ZIP/目录/setting通过，汇总MSE/MAE
+最大差1.21e-7；一般数值均值最大绝对差2.69e-6，在记录相对容差内。
+复现：`.venv/bin/python scripts/centered_mod_interaction/finalize.py --scratch-dir
+research_runs/centered_mod_pilot_20261009_scratch --audit-dir
+research_runs/centered_mod_pilot_20261009 --verify-only`。
+
+Canonical报告/ZIP及小型审计更新同步远程，原件副本单独保留，最终16个文件
+hash比对完成。训练/分析/复测全部退出、8GPU空闲。已披露先前test参与研究
+方向选择和重复validation，结果不与Golden或论文test混用。旧监测仍PAUSED；
+本轮授权工作完成，不恢复已退出实验或开展门槛未授权的扩展。
+
 ## 2026-10-09 — 服务器恢复，启动24次中心化TP-Mod正式实验
 
 用户要求正式实验，确认8GPU空闲、无重复任务后，以bundle部署独立checkout，

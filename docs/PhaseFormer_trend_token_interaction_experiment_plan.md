@@ -617,6 +617,56 @@ study的12setting源manifest并仅选登记的六个H720 setting，未加载源�
 另存formal scratch的launch.json，含代码SHA和smoke审计SHA；完成后自动进行
 全val/样本审计。当前不读取test，不恢复旧PAUSED monitor，不添加其他机制。
 
+### Centered-Mod 正式结论与关闭（2026-10-09）
+
+**24/24正式训练全部成功，无失败或续跑；完整validation审计及本地独立复核通过。
+保留静态双分量b0，拒绝当前中心化TP-Mod升级，停止本轮扩展。**训练/原审计
+冻结ae1c213；最终解释与独立复核入口为312f141的
+`scripts/centered_mod_interaction/finalize.py`，不替换原训练源码或manifest。
+18个b0/TP-Add/原TP-Mod的MSE/MAE完全复现历史H720结果，是协议复现而非新增seed。
+
+全部为H720 validation、两seed均值，不能与论文或Golden的test指标混用：
+
+| Dataset | b0 MSE/MAE | TP-Add MSE/MAE | TP-Mod MSE/MAE | Centered MSE/MAE |
+|---|---|---|---|---|
+| ETTh1 | 1.463568 / 0.835493 | 1.467015 / 0.836059 | 1.458935 / 0.835544 | 1.464997 / 0.835323 |
+| ETTm2 | 0.262294 / 0.346579 | 0.264304 / 0.347508 | 0.264446 / 0.347699 | 0.262940 / 0.346784 |
+| Weather | 0.600806 / 0.408183 | 0.600133 / 0.408578 | 0.597833 / 0.408345 | 0.599670 / 0.409945 |
+
+Centered相对b0的setting等权平均相对MSE/MAE为+0.051515%/+0.157214%，2/6
+MSE胜出；相对原TP-Mod为+0.051340%/+0.034373%，2/6胜出。未达到两个参照
+均MSE≤-1%、MAE不升及≥4/6胜出门槛。原始MSE/MAE均值也不优于b0；
+原TP-Mod原始平均MSE较低而平均相对MSE略升，是任务权重不同，不混用口径。
+ETTm2相对b0两个seed均退化；Weather-S2022 top1% MAE相对b0+2.876072%，
+相对原TP-Mod还有ETTh1两个seed及Weather-S2022超出+2%尾部门槛。
+
+六setting最高精度直接cycle均值核验全通过，最大差5.96e-8至1.44e-7。
+约束实现正确，但不保证独立联合训练主干的level预测相同。ETTm2的直接shape
+修正有用，联合训练后level误差增加抵消收益；ETTh1两seed直接shape修正本身
+变差。相对b0原始平均shape MSE+0.00038246，不能用平均相对shape-0.049894%
+取代整体门槛。same-checkpoint off仅辅助定位，不作独立基线或因果证明。
+程序选出的Weather-S2022 rain1702/c14，b0/native/off MAE为1.387573/3.958200/
+3.956777；level MSE为3.153256/28.649216/28.649216。最大退化主要位于
+独立训练后的level预测，不是中心化直接写入均值，也不能外推全部样本原因。
+本轮否定固定中心化调制实例的稳定收益，不否定所有shape交互假设。
+
+新增244/196/196参数，占0.1276%/0.1481%/0.1459%；新增算术保守比例≤0.3354%，
+显存增量很小。首次Weather-S2021 native median+60.69%隔离复测为+2.97%；
+ETTm2两seed batch1 median+6.22%/+6.16%，native+5.15%/+5.91%，仍超5%门槛。
+保留原始benchmark及全部recheck列，不挑选最快读数；并发epoch时间受共享CPU/
+任务负载混杂，独立epoch成本未证实，不为效果失败继续训练计时。
+
+Canonical为`research_runs/centered_mod_pilot_20261009/`，1490440条sample/channel/
+arm记录、162排名快照、10图。独立流式重算所有数值均值、MSE/MAE尾部、Top3
+去重排名及五种预测案例误差，MSE/MAE均值最大差1.21e-7；白名单、setting覆盖、
+ZIP字节及65个冻结源文件hash通过。首次同步CSV时远程仍在合并，得到不完整
+本地副本；重算发现后重新同步完整原件并核对hash，属于传输问题而非实验失败。
+最终报告/复测/YAML选择状态及原件副本同步服务器，完整产物逐项校验。
+
+不运行phase-only/错配控制、增大k、第三seed、跨任务或新test；既有test对研究
+方向的影响和validation重复使用已披露，不声称显著性或Golden提升。旧监测保持
+PAUSED，训练/审计/复测进程均结束，当前授权范围内无待执行的门槛后续工作。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
