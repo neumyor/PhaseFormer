@@ -38,6 +38,37 @@ def mean_cos(a, b):
     return (a * b).sum(-1) / (a.norm(dim=-1) * b.norm(dim=-1)).clamp_min(1e-20)
 
 
+ACTIVATIONS = ('trend_token', 'phase_tokens', 'message', 'compressed_token', 'cycle_profile')
+
+
+def pack_cases(cases, path):
+    import numpy as np
+    from scripts.analyze_lowrank_six import pack
+    pack(cases, path)
+    with np.load(path, allow_pickle=False) as z:
+        values = {k: z[k].copy() for k in z.files}
+    for key in ACTIVATIONS:
+        arrays = [np.asarray(c[key]) for c in cases]
+        flat = [v.reshape(-1) for v in arrays]
+        values[key+'_length'] = np.array([len(v) for v in flat])
+        values[key+'_shape'] = np.array([json.dumps(v.shape) for v in arrays])
+        values[key] = np.full((len(cases), max(map(len, flat))), np.nan, np.float32)
+        for i, v in enumerate(flat):
+            values[key][i, :len(v)] = v
+    np.savez_compressed(path, **values)
+
+
+def unpack_cases(path):
+    import numpy as np
+    from scripts.analyze_lowrank_six import unpack
+    cases = unpack(path)
+    with np.load(path, allow_pickle=False) as z:
+        for key in ACTIVATIONS:
+            for i, case in enumerate(cases):
+                case[key] = z[key][i, :z[key+'_length'][i]].reshape(json.loads(str(z[key+'_shape'][i])))
+    return cases
+
+
 def message_maps(model):
     """Maps in normalized input coordinates, invariant to latent basis changes."""
     import torch
@@ -112,10 +143,12 @@ def worker(cli):
     import torch
     from scripts.lowrank_token_interaction.model import load_model, state_hash
     from scripts.run_lowrank_interaction_stage2 import forecast
-    from scripts.analyze_lowrank_six import component_errors, pack
+    from scripts.analyze_lowrank_six import component_errors
     from src.dataset.data_factory import data_provider
     torch.set_num_threads(2)
-    torch.set_float32_matmul_precision('medium')
+    # Medium/TF32 rounds Z and Z+m differently and spoils linear attribution.
+    # Record original-precision metrics separately; diagnose in full float32.
+    torch.set_float32_matmul_precision('highest')
     device = torch.device('cuda:0')
     jobs = [(d, h, s, split) for d in ('ETTh1', 'ETTm2', 'Weather')
             for h in (96, 720) for s in (2021, 2022) for split in ('val', 'test')]
@@ -212,6 +245,15 @@ def worker(cli):
                         arrays[name+'_level_mse'], arrays[name+'_shape_mse'] = level, shape
                         for j, segment in enumerate(torch.tensor_split(err, 3, dim=1)):
                             arrays[f'{name}_segment{j}_mse'] = segment.square().mean(1)
+                torch.set_float32_matmul_precision('medium')
+                try:
+                    medium_bp, _ = forecast(baseline, batch, device)
+                    medium_cp, _ = forecast(model, batch, device)
+                finally:
+                    torch.set_float32_matmul_precision('highest')
+                for name, prediction in [('medium_baseline', medium_bp), ('medium_candidate', medium_cp)]:
+                    err = prediction.double()-truth.double()
+                    arrays[name+'_mse'], arrays[name+'_mae'] = err.square().mean(1), err.abs().mean(1)
                 receiving_norm = z.square().mean(-2).sum(-1).sqrt()
                 message_sq = m.square().sum(-1)
                 null_sq = (m-m @ maps['projector']).square().sum(-1)
@@ -237,6 +279,7 @@ def worker(cli):
                     null_energy_fraction=null_sq/message_sq.clamp_min(1e-20),
                     predictor_message_rms=q.square().mean(-1).sqrt(), output_message_mse=denergy,
                     output_message_rms=denergy.sqrt(), output_message_shape_fraction=shapefraction,
+                    output_message_shape_energy=(shaped-shaped.mean(2, keepdim=True)).square().mean((1, 2)),
                     residual_alignment=mean_cos(output, required), message_residual_dot=dot,
                     alpha_oracle=dot/denergy.clamp_min(1e-20), native_minus_off_mse=arrays['candidate_mse']-arrays['off_mse'],
                     direct_gain_linear_term=2*dot, direct_cost_quadratic_term=denergy,
@@ -262,7 +305,7 @@ def worker(cli):
         frame = pd.concat(frames, ignore_index=True)
         if split == 'val':
             for name in ('mse', 'mae'):
-                np.testing.assert_allclose(frame['candidate_'+name].mean(), authority['val_'+name], atol=3e-6, rtol=3e-5)
+                np.testing.assert_allclose(frame['medium_candidate_'+name].mean(), authority['val_'+name], atol=3e-6, rtol=3e-5)
         if state_hash(model.state_dict()) != original_state:
             raise AssertionError('Diagnostic changed model weights')
         # One program-ranked regression example per setting, or maximal baseline MAE.
@@ -287,7 +330,12 @@ def worker(cli):
                     'baseline': bp[bi, :, ch].cpu().numpy(), 'candidate': cp[bi, :, ch].cpu().numpy(),
                     'phase': model.last_phase_forecast[bi, :, ch].cpu().numpy(),
                     'trend': model.last_lowrank_forecast[bi, :, ch].cpu().numpy(),
-                    'gate': captured['gate'][bi, ch].cpu().numpy(), 'acceptance': np.array([], dtype=np.float32)}
+                    'gate': captured['gate'][bi, ch].cpu().numpy(), 'acceptance': np.array([], dtype=np.float32),
+                    'trend_token': captured['t'][bi, ch].cpu().numpy(),
+                    'phase_tokens': captured['z'][bi, ch].cpu().numpy(),
+                    'message': captured['m'][bi, ch].cpu().numpy(),
+                    'compressed_token': branch.communication.source(captured['t'])[bi, ch].cpu().numpy(),
+                    'cycle_profile': model.predictor.decoder.weight.matmul(captured['m'][bi, ch]).cpu().numpy()}
             trace.enabled = False
             branch.intervention = 'off'
             try:
@@ -296,7 +344,7 @@ def worker(cli):
                 branch.intervention = 'native'
         np.testing.assert_allclose(np.mean((case['candidate']-case['truth'])**2), row['candidate_mse'], rtol=3e-5, atol=3e-6)
         frame.to_csv(parts/f'{setting}.csv', index=False)
-        pack([case], parts/f'{setting}.npz')
+        pack_cases([case], parts/f'{setting}.npz')
         records = []
         for name in predictions:
             record = {'setting': setting, 'config_id': 'tp_add' if name=='candidate' else 'b0' if name=='baseline' else 'diagnostic_'+name,
@@ -312,6 +360,7 @@ def worker(cli):
                         record['mean_'+col] = float(frame[col].mean())
                 record.update(message_relative_p95=float(frame.relative_message_norm.quantile(.95)),
                     null_energy_weighted_fraction=float(frame.null_energy.sum()/max(frame.message_energy.sum(), 1e-20)),
+                    output_shape_energy_fraction=float(frame.output_message_shape_energy.sum()/max(frame.output_message_mse.sum(), 1e-20)),
                     direct_mse_win_fraction=float((frame.native_minus_off_mse<0).mean()),
                     native_mse_p95=float(frame.candidate_mse.quantile(.95)),
                     oracle_alpha_global=float(frame.message_residual_dot.sum()/max(frame.output_message_mse.sum(), 1e-20)))
@@ -326,8 +375,11 @@ def worker(cli):
                    'encoder_bias_profile': maps['bias'].cpu().tolist(),
                    'input_map': maps['map'].cpu().tolist(), 'input_mode0': maps['vh'][0].cpu().tolist(),
                    'output_mode0': maps['u'][:, 0].cpu().tolist(),
+                   'mean_cycle_input_kernel': maps['map'].mean(0).cpu().tolist(),
+                   'input_last_step_energy_fraction': float(maps['map'][:, -1].square().sum()/maps['map'].square().sum().clamp_min(1e-20)),
+                   'input_recent24_energy_fraction': float(maps['map'][:, -24:].square().sum()/maps['map'].square().sum().clamp_min(1e-20)),
                    'gate_level_channel_range': float(native['gate'][0, :, 0].max()-native['gate'][0, :, 0].min()),
-                   'environment': {'torch': torch.__version__, 'gpu': torch.cuda.get_device_name(), 'matmul': 'medium'},
+                   'environment': {'torch': torch.__version__, 'gpu': torch.cuda.get_device_name(), 'matmul': 'highest for attribution; original medium also evaluated'},
                    'elapsed_seconds': time.monotonic()-started, 'selection': case['metadata']}
         save_json(done, summary)
         trace.close()
@@ -347,7 +399,6 @@ def merge(cli):
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    from scripts.analyze_lowrank_six import pack, unpack
     parts = cli.scratch/'parts'
     metadata = [json.loads(p.read_text()) for p in sorted(parts.glob('*.json'))]
     expected = {f'{d}_H{h}_S{s}_{split}' for d in ('ETTh1', 'ETTm2', 'Weather') for h in (96, 720) for s in (2021, 2022) for split in ('val', 'test')}
@@ -365,7 +416,7 @@ def merge(cli):
         frame = pd.read_csv(parts/f'{setting}.csv')
         frame.to_csv(cli.audit/'sample_errors.csv', index=False, mode='w' if first else 'a', header=first)
         first = False
-        cases.extend(unpack(parts/f'{setting}.npz'))
+        cases.extend(unpack_cases(parts/f'{setting}.npz'))
         for column in ('relative_message_norm', 'output_message_rms', 'residual_alignment'):
             bins = pd.qcut(frame[column].rank(method='first'), 5, labels=False)
             for q, group in frame.groupby(bins):
@@ -380,7 +431,7 @@ def merge(cli):
         ranked = frame[frame.delta_mae>0].sort_values(['delta_mae','sample_id','channel'], ascending=[False, True, True], kind='stable')
         if not ranked.empty:
             assert (int(ranked.iloc[0].sample_id), int(ranked.iloc[0].channel)) == (int(m['selection']['sample_id']), int(m['selection']['channel']))
-    pack(cases, cli.audit/'selected_cases.npz')
+    pack_cases(cases, cli.audit/'selected_cases.npz')
     native = results[results.config_id=='tp_add'].copy()
     rows = []
     for split in ('val', 'test'):
@@ -398,6 +449,9 @@ def merge(cli):
         'Existing validation-best b0/TP-Add weights; 3 datasets × H96/720 × seeds2021/2022 × validation/test =24 settings. '
         'No training, optimizer, checkpoint or original model source changes. Focus on TP-Add was chosen after viewing prior test results; '
         'this is test-informed diagnostic exploration, not an independent blind test. Fixed interventions below do not select a new deployed configuration.', '',
+        'Activation attribution uses highest float32 precision: the initial medium/TF32 precision check failed at0.00068–0.00088 maximum forward-versus-linear discrepancy. '
+        'Original medium-precision b0/TP-Add metrics are also evaluated over every full split and retained in sample_errors.csv and native summary mean_medium_* columns. '
+        'These original-precision validation metrics must reproduce registered training results; high-precision diagnostics are reported explicitly,not substituted silently.', '',
         '## 2. Experiment Results', '', *markdown(pd.DataFrame(rows)), '',
         'Raw MSE means give each setting equal weight; relative changes first divide within each setting and then average. '
         'Same-checkpoint off measures reliance, not the outcome of training without messages. Independent b0 provides the architecture comparison.', '',
@@ -427,7 +481,7 @@ def merge(cli):
         chosen.extend(sorted((c for c in cases if c['metadata']['split']==split), key=lambda c: (-c['metadata']['delta_mae'], c['metadata']['setting']))[:3])
     for case in chosen:
         meta = case['metadata']
-        fig, axes = plt.subplots(2, 1, figsize=(10, 5), constrained_layout=True)
+        fig, axes = plt.subplots(3, 1, figsize=(10, 7), constrained_layout=True)
         hist, truth = case['history'], case['truth']
         axes[0].plot(np.arange(-len(hist), 0), hist, color='gray', alpha=.6, label='history')
         for key in ('truth', 'baseline', 'candidate', 'off'):
@@ -437,6 +491,12 @@ def merge(cli):
         axes[1].plot(case['candidate']-case['off'], label='message write')
         axes[1].plot(truth-case['off'], label='required correction', alpha=.65)
         axes[1].axhline(0, color='gray', linewidth=.7); axes[1].legend(); axes[1].set_xlabel('Forecast step')
+        common=case['phase_tokens'].mean(0)
+        activation=np.stack([common, case['message'], common+case['message']])
+        limit=max(float(np.abs(activation).max()),1e-9)
+        axes[2].imshow(activation,aspect='auto',cmap='RdBu_r',vmin=-limit,vmax=limit)
+        axes[2].set_yticks([0,1,2],['phase mean','broadcast message','updated phase mean'])
+        axes[2].set_xlabel('Latent coordinate'); axes[2].set_title(f"Compressed token: {case['compressed_token'].round(4)}")
         name=f"{meta['setting']}__sample{int(meta['sample_id'])}_c{int(meta['channel'])}.png"
         fig.savefig(figures/name, dpi=150); plt.close(fig)
         ref='figures/'+name; refs.append(ref)
@@ -492,7 +552,6 @@ def verify(cli):
     import numpy as np
     import pandas as pd
     import yaml
-    from scripts.analyze_lowrank_six import unpack
     required={'run.yaml','results.csv','sample_errors.csv','selected_cases.npz','objective_error_analysis.md','objective_error_analysis.zip','figures'}
     assert {p.name for p in cli.audit.iterdir()}==required
     run = yaml.safe_load((cli.audit/'run.yaml').read_text())
@@ -505,7 +564,7 @@ def verify(cli):
     for frame in pd.read_csv(cli.audit/'sample_errors.csv', chunksize=100000):
         sample_settings.update(frame.setting)
     assert sample_settings==expected
-    cases=unpack(cli.audit/'selected_cases.npz')
+    cases=unpack_cases(cli.audit/'selected_cases.npz')
     assert {c['metadata']['setting'] for c in cases}==expected
     for c in cases:
         for label in ('baseline','candidate','off'):
