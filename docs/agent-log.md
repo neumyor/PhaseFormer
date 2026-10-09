@@ -28,7 +28,7 @@ truth-b0监督应在pred-truth误差上加修正。底模单样本/批量max差1
 
 校准选`t_pmean`（trend接收phase均值），正式平均相对b0 MSE -0.107230%、
 MAE +0.006160%，1/12 setting和1/6 task胜出，2/12非零修正。ETTm2-H720两
-seed +0.121364%/-1.408120%相反。未达到1% MSE/MAE/胜出/尾部门槛，也未胜过
+seed +0.121364%/-1.408120%相反。未达到1% MSE/MAE/胜出门槛，尾部保护通过；未胜过
 同容量receiver或同EDF mismatch；t_own4/receiver_matched/mismatch_matched
 平均MSE分别-0.170607%/-0.116772%/-0.123459%，不能归因于cross分支独有信息。
 

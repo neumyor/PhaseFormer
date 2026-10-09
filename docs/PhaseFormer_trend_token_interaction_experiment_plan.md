@@ -884,7 +884,7 @@ H96维度错误及v2 residual符号错误均排除在证据外，修复后的v3 
 平均相对b0 MSE -0.107230%、MAE +0.006160%，只在1/12 setting胜出、1/6
 dataset-horizon任务胜出，只有2/12 setting实际使用非零修正。ETTm2-H720两seed
 MSE为+0.121364%/-1.408120%，方向不一致。它没有达到MSE≤-1%、MAE不升、8/12
-胜出、4/6任务胜出及最差/尾部门槛，也没有胜过同容量receiver或同有效自由度
+胜出、4/6任务胜出门槛；最差MSE和尾部保护通过，但没有胜过同容量receiver或同有效自由度
 mismatch控制。`t_own4`平均MSE -0.170607%，`receiver_matched` -0.116772%，
 `mismatch_matched` -0.123459%，说明该微小cross收益不能归因于对方分支独有信息。
 
