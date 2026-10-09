@@ -694,6 +694,46 @@ oracle MSE=`min(candidate_mse,off_mse)`，MAE使用同一MSE选择，不分别�
 保留，统一规则及完整forward成本核验。b0独立模型回退需要另一套权重/推理，
 不能声称无成本；test已暴露，不能称新盲测。此处仅讨论，不启动新实验。
 
+### 时间隔离的消息开关可预测性实验（2026-10-09，执行前登记）
+
+用户授权先验证历史/激活特征能否预测交互收益，再决定是否训练消息Gate。
+本轮不重新训练PhaseFormer、不读新test、不恢复旧监测，单agent执行。独立目录
+`scripts/message_switch_diagnostic/`与`research_runs/message_switch_temporal_20261009`，
+权重读取既有12个TP-Add及对应b0，原r/E/D/静态融合/数据协议不改。
+使用experiment-and-error-analysis流程，保留全部选择器/阈值尝试和坏例。
+
+ETTh1-H720的完整val原始长度2880，不足以容纳三个互不重叠L+H=1440支持窗，
+故不随机拆分已有val。沿原训练原始时间轴60%处划分：fit窗口完整位于前60%，
+calibration窗口完整位于后40%；evaluation使用val，剔除首L个起点，使历史也
+完全位于val。不同角色的[history_start,target_end]无重叠，gap由支持窗检查，
+两seed和两horizon沿同dataset原始时间边界划分。fit/cal起点间隔P=24，evaluation
+覆盖所有合法起点；任何channel或seed不能跨块泄漏。记录各role原始时间范围。
+既有backbone用完整train拟合、完整val选过checkpoint，所以这只是固定模型的
+时间迁移诊断，不是独立盲测；test焦点暴露继续披露，不读取其新结果。
+
+预固定四项历史特征：normalized近期24步均值减全窗均值、末点减近期均值、
+lag24差分RMS、lag24相关。四项激活特征：normalized直接输出消息RMS、两分支
+周期水平差RMS、消息与原trend水平写入余弦、有效写入抵消比；正量log1p，抵消
+比先截到10。不输入dataset/horizon/channel/seed/sample/time id，不读取真值或
+oracle alignment作为特征；静态融合Gate照旧。两个统一线性logistic选择器：
+history4与history_activation8，预测off优于native，固定L2=0.01，不搜索模型宽度。
+fit采用MSE差绝对值加权，除该setting fit b0均值并按setting等权，惩罚误关
+大补偿；median/IQR标准化和0.5%/99.5%截断界只由fit得到。
+calibration评估固定score分位阈值0.05至0.95及全开/全关，不在evaluation调阈值；
+选择相对native平均相对MSE最低且平均MAE不升、p95/top1% MAE无>2%退化、
+有益写入损失≤10%的阈值，无候选则全开。阈值/系数/feature预处理冻结后才读val
+evaluation指标。所有评估使用highest精度，原medium口径不被静默替代。
+
+首阶段支持门槛：evaluation相对native与独立b0均平均相对MSE≤-1%，各至少
+8/12 MSE胜出、平均相对MAE≤0，任何setting MSE不退化>2%；p95/top1% MAE
+≤+2%；每setting有益补偿被误关的MSE收益损失≤10%，最强1%有益补偿同样≤10%；
+相对native可实现收益占该eval块oracle开关收益≥20%。参数≤+1%、推理≤+5%。
+分类准确率/AUC仅描述，不能替代实际风险；误关损失=off_mse-native_mse正值之和，
+漏关损失=native_mse-off_mse正值之和。oracle逐sample/channel仅事后上限。
+未过效果/补偿门槛则停止，不新增复杂选择器或重新训练；过门槛也只报告进入
+从头消息Gate训练的理由，先检查效率/训练协议再决定，不把固定权重收益当新架构。
+详细案例按evaluation误差排名Top3、同channel间距≥H，最多10图。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target

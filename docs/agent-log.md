@@ -1,5 +1,14 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 登记时间隔离消息开关诊断
+
+用户授权先验证条件收益可预测性；单agent使用experiment-and-error-analysis。
+登记train前60% fit/后40% calibration及val去跨界历史evaluation，完整支持窗
+隔离；P24抽样fit/cal，eval全合法窗。既有train拟合及val选权重暴露明确。
+两个共享4/8特征线性风险加权选择器、L2固定、fit预处理、cal阈值和补偿保护、
+eval效果/尾部/补偿/oracle recovery门槛在执行前固定。无新test、主模型训练或
+恢复旧监测；新目录隔离实现，先核验代码/真实流程再执行并审计报告/ZIP。
+
 ## 2026-10-09 — 只读核对条件交互与理想开关空间
 
 用户询问交互失败原因及手动/自适应开关可行性。读取已有activation、phase-context、
