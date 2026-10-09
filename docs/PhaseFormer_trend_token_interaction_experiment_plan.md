@@ -482,9 +482,9 @@ python scripts/phase_context_interaction/run.py \
   --gpus 0,1,2,3,4,5,6,7
 ```
 
-## 后续架构建议：保持周期水平的中心化TP-Mod（2026-10-09，仅讨论）
+## 后续架构建议：保持周期水平的中心化TP-Mod（2026-10-09）
 
-用户询问下一步最值得测试的架构。本节为候选建议，未授权实现或启动新训练，
+用户询问下一步最值得测试的架构后，明确回复“好，请你测试”，授权本节24次先导。
 不恢复已退出的phase-context实验或旧监测。此前通俗解释将“phase求平均丢信息”
 作为失败原因过于确定：该因素与结构约束、优化及信息冗余尚未被因果分离；
 TP-Add缺少shape写入是确切代数事实，但不证明shape一定是主要性能瓶颈。
@@ -531,12 +531,75 @@ b0/TP-Add/原TP-Mod/中心化TP-Mod四臂=24次；覆盖两个旧局部正向任
 MSE>2%退化；沿用p95/top1%和效率门槛。激活核验直接周期均值不变，独立训练的
 shape收益真实存在且level未抵消；同checkpoint off只辅助归因。乘法内容必要性
 及正确phase配对仍须后续对照；过先导门槛才登记phase-only/错配控制及完整六任务。
-这些阈值属于拟议预登记，未启动训练。
+这些阈值在本轮训练前固定登记，不随结果调节。
 
 如果不能胜b0，应停止该shape方向的扩展；如果只胜原TP-Mod，则只说明中心化
 减轻了旧机制的副作用，不足以升级架构。如果shape误差减少但level误差抵消收益，
 说明联合优化问题仍在，不自动新增训练正则或扩大模型。强level错误如Weather
 rain1702并非该约束的直接修复目标，不将该案例用作shape机制成功标准。
+
+### Centered-Mod 执行登记
+
+单agent执行；隔离代码为`scripts/centered_mod_interaction/`，只复用历史分支编码/
+解码、数据、训练及审计工具，不修改其他实验入口或`src/`。四臂共同初始化与
+首8步输入哈希核对，所有参数正常训练，禁止初始化加载checkpoint；验证集完整
+推理，训练最低validation Huber选权重。先静态/单元检查，再三个数据集各一个
+seed的四臂最小训练smoke（12次、1epoch、4train batch/2val batch，仅链路验证），
+然后六setting × 四臂24次正式训练。smoke不计入效果比较，不扩展机制或超参数。
+
+零训练可行性诊断读取已有`research_runs/lowrank_token_interaction_20261008/results.csv`
+的b0完整validation汇总，MSE=levelMSE+shapeMSE：
+
+| Dataset-H720 | Seed | MSE | Level MSE | Shape MSE | Shape fraction |
+|---|---:|---:|---:|---:|---:|
+| ETTh1 | 2021 | 1.465739 | 1.185141 | 0.280598 | 19.14% |
+| ETTh1 | 2022 | 1.461398 | 1.182369 | 0.279028 | 19.09% |
+| ETTm2 | 2021 | 0.262248 | 0.221022 | 0.041226 | 15.72% |
+| ETTm2 | 2022 | 0.262341 | 0.221156 | 0.041184 | 15.70% |
+| Weather | 2021 | 0.599335 | 0.443257 | 0.156078 | 26.04% |
+| Weather | 2022 | 0.602277 | 0.446032 | 0.156245 | 25.94% |
+
+该16--26%是label辅助理想可消除误差上限，足以保留假设但不是可实现收益证据。
+正式run.yaml记录来源hash；旧checkpoint不会用作新训练初值。
+
+审计路径`research_runs/centered_mod_pilot_20261009/`，checkpoint/log/manifest另放
+忽略目录`research_runs/centered_mod_pilot_20261009_scratch/`；smoke独立后缀`_smoke`。
+各setting记录native/off/b0、phase/trend/oracle、level/shape误差、尾部、horizon thirds、
+修正周期均值和shape能量。中心化候选每setting先取8窗在highest float32（double
+reduction）核验完整输出均值不变，与medium精度效果指标分开；容差为输出幅度
+乘32个float32 epsilon，报告实际最大差值与容差，不能把该数值容差当作精确恒等式。
+单元另外以float64检查非零latent修正及共享affine预测器的零均值性质。
+
+效率硬门槛：新增参数≤1%、算术≤5%；batch1/native batch串行同GPU完整forward
+median≤5%、p95≤10%、峰值内存≤5%；训练epoch≤10%。计时失败边界必须隔离复测，
+并披露并发训练计时混杂。tail按sample/channel的MAE p95和top1%均值，每setting
+相对b0及原TP-Mod均≤2%。必须同时胜两个参照才推进，不自动逐数据集拼最优架构。
+选例按各候选/setting基线高误差、正退化、负改善各Top3并按H去重，最多10张图。
+
+入口：`python scripts/centered_mod_interaction/run.py --source-manifest <level-study-manifest>
+--scratch-dir research_runs/centered_mod_pilot_20261009_scratch --audit-dir
+research_runs/centered_mod_pilot_20261009 --gpus 0,1,2,3,4,5,6,7`；formal默认六H720
+setting及30epoch。smoke另外指定`--smoke --epochs 1 --settings
+ETTh1:720:2021,ETTm2:720:2021,Weather:720:2021`与独立输出目录。
+
+当前服务器SSH连接持续超时，未取得活跃进程/GPU状态，因此没有部署或启动训练。
+本地仅做实现和验证；网络恢复后先核验进程，再在新checkout部署已提交代码。
+
+执行检查：本地conda无Torch且Python3.14不在项目支持范围，按仓库fallback规则使用
+已有`uv.lock`创建忽略的`.venv`，Python3.12.14/Torch2.7.1/Lightning2.6.5；依赖声明/
+锁文件未改变。本地CPU新机制11项及旧两组15项共26项通过，含完整联合梯度、
+checkpoint恢复、TP-Add/TP-Mod精确等价、原分支off等价、静态Gate、float64非零
+中心化与完整输出均值约束、缓存释放、算术公式、双参照rubric和manifest隔离。
+新旧runner/analyzer入口导入及语法检查通过。历史phase_graph docstring产生一个
+无关SyntaxWarning；保留旧源码不改。
+
+另用已同步的旧token实验manifest读取三个H720实际配置（仅配置，随机初始化，
+8个合成历史窗），新增244/196/196参数（ETTh1/ETTm2/Weather），占基线
+0.1276%/0.1481%/0.1459%。非零调制、不同level/shape权重、RevIN后的完整输出
+最高精度周期均值差分别8.38e-8/6.61e-8/1.01e-7，通过数值容差。首次本地临时
+检查误读dataset_args.enc_in，修正为模型有效channel数后完成；训练源码无此错误。
+合成输入检查不作为真实数据smoke或性能结论。SSH多次10--15秒超时，远程部署、
+12次真实数据smoke及24次正式实验均未开始，不能判断假设支持或否定。
 
 ## Historical Purpose
 

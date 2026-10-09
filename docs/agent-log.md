@@ -1,5 +1,31 @@
 # Agent Maintenance Log
 
+## 2026-10-09 — 实现中心化TP-Mod，单元通过，远程连接阻塞
+
+用户“好，请你测试”授权三H720任务、两seed、四臂24次从头联合训练。仅单agent
+完成；新入口`scripts/centered_mod_interaction/`和专属测试，不修改原模型/旧实验。
+Z'=Z+(Z-mean_phase Z)⊙BAt，k=min(2,r,d)，无bias、B零初始化；b0/TP-Add/原TP-Mod
+作为独立对照，静态双分量Gate及原r/E/D保留。登记30epoch/patience8、val Huber
+选权重、禁止pretrained/freeze/test、双参照效果及效率/尾部硬门槛；先12次真实数据
+smoke后24次formal。来源/初始化/首8batch/梯度hash、旧成功防覆盖、六文件审计
+与ZIP沿用隔离链路；新增centered输出均值核验和shape能量，修正算术开销公式。
+
+零训练读取旧b0全val汇总，shape误差占16--26%，只作理想误差机会而非承诺收益。
+本地conda缺Torch且Python3.14不兼容，按已有项目lock fallback uv，未改依赖配置。
+`.venv` Python3.12.14/Torch2.7.1/Lightning2.6.5；
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest
+tests/test_centered_mod_interaction.py tests/test_phase_context_interaction.py
+tests/test_lowrank_token_interaction.py -q`：26通过（46.73秒），旧无关docstring warning。
+语法及run/analyze入口通过；源码差异限定新目录/测试/计划/log。
+
+三实际H720配置合成8窗检查：参数244/196/196，占0.1276%/0.1481%/0.1459%，
+非零修正且不等静态Gate/RevIN的cycle均值差8.38e-8/6.61e-8/1.01e-7。临时检查
+首次把enc_in放错dataset_args，改用模型channel数后通过，无训练源码问题。
+这些是实现验证，不是数据smoke或性能结果。多次远程SSH10--15秒连接超时，尚未
+核验活跃进程/GPU，故未部署、未启动smoke/formal、无新test推理。旧监测仍PAUSED。
+下一步网络恢复后检查进程，在新checkout部署已提交代码并按既定顺序执行；本轮
+假设仍未被实证支持或否定。没有正在运行的本轮远程实验，也未覆盖旧成功产物。
+
 ## 2026-10-09 — 提出中心化TP-Mod后续候选（未运行）
 
 用户询问下一步架构；只读核对现行计划、原TP-Mod实现、线性predictor与历史
