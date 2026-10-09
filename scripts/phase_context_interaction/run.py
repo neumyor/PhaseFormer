@@ -130,6 +130,7 @@ def _train_job(path):
         torch.load = original_load
     _, train_loader = data_provider(args.dataset_args, 'train')
     val_set, val_loader = data_provider(args.dataset_args, 'val')
+    data_sha256 = digest(Path(args.dataset_args.root_path) / args.dataset_args.data_path)
     batch = [v[:2] for v in next(iter(val_loader))]
     device = torch.device('cuda:0')
     model.to(device).eval()
@@ -155,20 +156,34 @@ def _train_job(path):
         def on_train_epoch_start(self, trainer, module):
             torch.cuda.synchronize()
             self.epoch_start = time.monotonic()
+            self.validation_seconds = 0.0
+
+        def on_validation_start(self, trainer, module):
+            torch.cuda.synchronize()
+            self.validation_start = time.monotonic()
+
+        def on_validation_end(self, trainer, module):
+            torch.cuda.synchronize()
+            if not trainer.sanity_checking:
+                self.validation_seconds += time.monotonic() - self.validation_start
 
         def on_train_epoch_end(self, trainer, module):
             torch.cuda.synchronize()
-            epoch_times.append(time.monotonic() - self.epoch_start)
+            epoch_times.append(time.monotonic() - self.epoch_start - self.validation_seconds)
 
         def on_train_batch_start(self, trainer, module, batch, batch_idx):
             assert all(m.training for m in module.modules())
             assert all(p.requires_grad for p in module.parameters())
+            if trainer.global_step < 8:
+                from scripts.phase_context_interaction.model import state_hash
+                self.batch_hash = state_hash({'x':batch[0].detach().cpu()})
 
         def on_after_backward(self, trainer, module):
             if trainer.global_step < 8:
                 names = ('lowrank_interaction_branch.', 'lowrank_dynamic_fusion.',
                          'lowrank_interaction_gate', 'embedding.', 'predictor.')
-                record = {'step': int(trainer.global_step), 'gradient_l1': {}}
+                record = {'step': int(trainer.global_step), 'batch_x_sha256': self.batch_hash,
+                          'gradient_l1': {}}
                 for name, parameter in module.named_parameters():
                     if name.startswith(names):
                         if parameter.grad is not None:
@@ -204,6 +219,7 @@ def _train_job(path):
     communication_count = sum(p.numel() for n, p in model.named_parameters() if n.startswith(prefix))
     save_json(out / 'result.json', {
         'setting': job['source']['setting'], 'arm': job['arm'], **metrics,
+        'dataset_sha256': data_sha256,
         'code_commit': commit(), 'elapsed_sec': elapsed, 'epochs': trainer.current_epoch,
         'epoch_train_seconds': epoch_times,
         'epoch_train_median_seconds': float(sorted(epoch_times)[len(epoch_times)//2]),
