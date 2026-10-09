@@ -53,6 +53,15 @@ def read_manifest(scratch):
     return manifest
 
 
+def release_diagnostic_caches(model):
+    """Module.to does not move ordinary cached output tensors."""
+    for module in model.modules():
+        for name in list(vars(module)):
+            if name.startswith('last_'):
+                value = getattr(module,name)
+                setattr(module,name,{} if isinstance(value,dict) else None)
+
+
 def benchmark(scratch, gpu):
     """Serial randomized timings; one resident model; batch1 and native batch."""
     torch.set_num_threads(2)
@@ -79,6 +88,7 @@ def benchmark(scratch, gpu):
                     forecast(base_model, batch, device)
                     torch.cuda.synchronize(device)
                 lower_flops = sum(e.flops for e in prof.key_averages())
+                release_diagnostic_caches(base_model)
                 base_model.to('cpu')
                 torch.cuda.empty_cache()
             with torch.inference_mode():
@@ -101,6 +111,7 @@ def benchmark(scratch, gpu):
                             end.synchronize()
                             timings[arm].append(start.elapsed_time(end))
                         memories[arm].append(torch.cuda.max_memory_allocated(device))
+                        release_diagnostic_caches(model)
                         model.to('cpu')
                         torch.cuda.empty_cache()
             baseline = float(np.median(timings['b0']))
@@ -206,7 +217,10 @@ def worker(scratch, setting):
                 arrays['direct_harm_indicator'] = (regret > 1e-10).double().cpu().numpy()
                 dc = direct.reshape(len(direct),-1,model.period_len,direct.shape[-1]).mean(2)
                 tc = native['trend'].double().reshape_as(direct).reshape(len(direct),-1,model.period_len,direct.shape[-1]).mean(2)
-                tc = tc*gate[...,0].double().unsqueeze(1)
+                phase_off = model.revin.normalize_with_stats(model.last_phase_forecast, stats).double()
+                pc = phase_off.reshape(len(direct),-1,model.period_len,direct.shape[-1]).mean(2)
+                # Trend's level correction relative to the phase-only off forecast.
+                tc = (tc-pc)*gate[...,0].double().unsqueeze(1)
                 rms = lambda q: q.square().mean(1).sqrt()
                 valid = (rms(dc)>.01)&(rms(tc)>.01)
                 ratio = (rms(dc)+rms(tc))/(rms(dc+tc).clamp_min(1e-6))
@@ -352,6 +366,11 @@ def merge(scratch, audit):
         if {r['config_id'] for r in records} != set(ARMS) or len(records) != len(ARMS):
             raise ValueError('Missing arms')
         assert len({r['common_random_state_sha256'] for r in records}) == 1
+        assert len({r['dataset_sha256'] for r in records}) == 1
+        startup = [json.loads((scratch/'runs'/f'{setting}__{arm}'/'gradient_startup.json').read_text()) for arm in ARMS]
+        fingerprints = [[(r['step'],r['batch_x_sha256']) for r in rows] for rows in startup]
+        if not all(h==fingerprints[0] for h in fingerprints):
+            raise ValueError('Paired training data orders differ')
         current = unpack(scratch / 'analysis_parts' / f'{setting}.npz')
         for arm in ARMS:
             group = frame[frame.candidate_config_id == arm]
@@ -494,6 +513,7 @@ def merge(scratch, audit):
                 'baseline_mae':float(group.baseline_mae.mean()),'candidate_mae':float(group.candidate_mae.mean())})
     run['analysis']['channel_summaries'] = channel_summaries
     run['validation'] = {'status': 'passed', 'results_checked': True, 'ranking_and_cases_checked': True,
+        'paired_initialization_dataset_and_startup_order_checked': True,
         'report_and_archive_checked': True, 'directory_and_settings_checked': True,
         'sample_rows': count, 'case_records': len(cases)}
     (audit / 'run.yaml').write_text(yaml.safe_dump(run, sort_keys=False))

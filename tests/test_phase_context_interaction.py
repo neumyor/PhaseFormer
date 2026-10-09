@@ -139,6 +139,20 @@ class PhaseContextTests(unittest.TestCase):
         cfg['token_communication']['width']=8
         with self.assertRaises(ValueError):construct(cfg)
 
+    def test_benchmark_cache_release_preserves_parameters_and_forward(self):
+        from scripts.phase_context_interaction.analyze import release_diagnostic_caches
+        from scripts.phase_context_interaction.model import state_hash
+        model,_,_,_,_=random_models(source_config(),'context_full',1)
+        model.eval()
+        x=torch.randn(2,720,7)
+        with torch.no_grad():expected=model(x)[0]
+        state=state_hash(model.state_dict())
+        self.assertIsNotNone(model.last_phase_forecast)
+        release_diagnostic_caches(model)
+        self.assertIsNone(model.last_phase_forecast)
+        self.assertEqual(state_hash(model.state_dict()),state)
+        with torch.no_grad():torch.testing.assert_close(model(x)[0],expected,atol=0,rtol=0)
+
 
 if __name__=='__main__':
     unittest.main()
