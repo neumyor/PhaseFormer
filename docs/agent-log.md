@@ -6474,3 +6474,36 @@ Updated the active plan; current hourly phaseformer-token monitor is paused afte
 closure. No trained source/model edits,pretrained loading,freezing or test read.
 Validation reuse and historical test exposure remain disclosed; no Golden or blind
 generalization claim. Negative finding is restricted to this fixed four-arm protocol.
+
+## 2026-10-09: Read existing interaction checkpoints on six test settings
+
+User explicitly requested direct test inference only, without retraining, seed
+supplementation, broader settings, tuning or sample exports. Added isolated
+scripts/evaluate_existing_interaction_test.py (0f88dbb), checked syntax, strict-loaded
+registered validation-best weights and evaluated the complete original test split.
+No model/training source or checkpoint edits. One agent, four GPU inference shards;
+no active training before launch. All132 evaluations completed:108 for nine
+interaction mechanisms and24 for their two no-interaction references. Seeds2021/2022,
+ETTh1/ETTm2/Weather × H96/720,lookback720,rankH/8. No failures or training.
+
+Original source HEADs f65f369 (historical8-epoch scalar-gate Attention) and dcde3b6
+(30-epoch static-component lightweight messages); torch2.6.0+cu124,Lightning2.6.5,
+A800,matmul precision medium. Inference entry calls construct/load_model and
+evaluate only. Reproduce with --repo <original-checkout> --runs <registered-runs>
+--family attention|lightweight --output <independent-results> --shards 2 --shard 0|1.
+Checkpoint/config/data SHA256 and runtime provenance remain in results.csv.
+
+Synchronized small artifacts to research_runs/interaction_existing_test_20261009/:
+four raw JSONL shards,132-row results.csv,66-row setting_means.csv,dataset_averages.csv,
+paired_baseline.csv and comparison.md. Verified unique complete setting/arm coverage,
+finite metrics,common data hashes/test window counts across both source checkouts,
+and12 b0 test MSE/MAE against prior components_static (max absolute difference5.6e-17).
+Report compares the same six E14 paper settings with three-seed means and original
+Golden values,distinguishing these from best-single-seed witness tables.
+
+tp_add shows tiny setting-equal test MSE/MAE reductions0.056636%/0.091255% versus b0,
+with7/12 MSE wins,driven byWeather;ETTh1/ETTm2 averageMSE deteriorates. Other eight
+mechanisms have positive mean relativeMSE against their own reference. These readouts
+do not change the earlier validation decision or prove a matched cross-family/paper
+architecture ranking. Updated active plan with full dataset-average table and limits;
+no additional training,tuning,mechanism selection or monitor restart.
