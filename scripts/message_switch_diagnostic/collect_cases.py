@@ -16,6 +16,7 @@ from scripts.lowrank_token_interaction.activation_audit import save_json, digest
 
 
 def main(args):
+    args.audit.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2)
     torch.set_float32_matmul_precision('highest')
     device=torch.device('cuda:0')
