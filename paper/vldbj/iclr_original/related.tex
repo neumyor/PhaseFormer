@@ -1,0 +1,20 @@
+\section{Related Works}
+
+
+\fakeparagraph{Transformer-Based Forecasting Architectures}
+Early Transformer-based models for long sequence forecasting often overlooked the periodicity in time series~\citep{zhou2021informer, logtrans2019}. 
+Subsequent research introduced domain-specific priors that better understand recurring temporal structures. 
+Autoformer~\citep{wu2021autoformer} and FEDformer~\citep{zhou2022fedformer} incorporated decomposition strategies and frequency-domain modeling enabling explicit representation of seasonal–trend patterns. 
+Pyraformer~\citep{liu2021pyraformer} and Crossformer~\citep{zhang2023crossformer} further enriched temporal modeling by embedding multi-scale hierarchies and cross-variable dependencies, while \cite{nonstationarytrans2022} explicitly accounted for distributional shifts. 
+More recently, PatchTST~\citep{nie2023patchtst} reframed time series as patch sequences to enable more accurate characterization of sequence-level semantics, followed by an extension to jointly consider spatial and temporal correlations~\citep{ctpatchtst2025}. Generally speaking, these models embed progressively stronger temporal biases, though often at the cost of massive parameter counts and heavy computation.
+
+\fakeparagraph{Efficiency-Oriented Forecasting Models}
+A growing body of research emphasizes efficiency, aiming to design lightweight forecasting architectures. 
+Patch-based MLP variants such as xPatch~\citep{xpatch2025},TimeMixer~\citep{timemixer24}, and PITS~\citep{PITS2024} exploited compact tokenization or hierarchical dependencies to reduce parameter counts while maintaining accuracy. 
+Beyond patches-based methods, frequency-based counterparts leverage spectral representations for compression and denoising.
+FreTS~\citep{FreTS2023} applied MLPs in the frequency domain, \cite{filternet2024} learned frequency filters to improve noise robustness, and FITS~\citep{fits2024} achieved strong accuracy with only 10k parameters. 
+\cite{deng2024parsimony} demonstrated that selective decomposition can deliver both parsimony and capability.
+More recently, SparseTSF~\citep{lin2024sparsetsf} and TimeBase~\citep{huang2025timebase} highlighted the importance of cross-period correlation, sharing a similar motivation with ours.
+Despite their impressive computational efficiency, these methods still fall short on forecasting accuracy for large and complex datasets such as Traffic and Electricity~\citep{lin2024sparsetsf, huang2025timebase}. 
+Moreover, they lack systematic analysis to answer the fundamental question: \emph{Why can phase tokens serve as an efficient alternative to patch tokens?}
+%While these approaches excel in parameter efficiency, they largely overlook local drift and amplitude fluctuations, making them less robust under non-stationary conditions. By projecting inputs into a compact phase space, our model simultaneously denoises phase trends and controls complexity, demonstrating that efficiency and drift-robustness need not be mutually exclusive.

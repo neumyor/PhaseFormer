@@ -7043,3 +7043,28 @@ selection.json is immutable under the controller. Main stage launched at 2026-10
 from the same frozen commit b831dca8: 28 settings x 3 seeds x {b0, m1} = 168 trainings,
 16 slots on 8 A800s, E14-matched protocol, test not read until --stage test after all runs.
 Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pilot/.
+
+## 2026-10-10 VLDBJ manuscript skeleton and cover letter
+
+- Task: build the VLDBJ extended-version manuscript from the ICLR LaTeX source
+  (`~/Documents/ICLR_26_PhaseFormer/iclr2026`), with all new/changed text wrapped in a
+  `\blue{}` macro defined in `paper/vldbj/main.tex`; draft English cover letter plus
+  Chinese translation.
+- Template: VLDBJ submission rules require Springer's LaTeX package with the
+  `twocolumn` option, at most 25 pages; initial submission may be PDF. Using
+  `svjour3` v3.3 (`svjour3.cls`, `svglov3.clo`, `spbasic.bst`), copied into the paper folder.
+- Files: `paper/vldbj/main.tex`, `body/{introduction,related,motivations,method,
+  experiments,conclusion,statements,appendix}.tex` (ICLR-derived, changes in blue),
+  new `body/{theory,extension,extension_experiments,appendix_theory}.tex`,
+  `references.bib` (ICLR bib, duplicates removed, 11 entries added),
+  `cover_letter/cover_letter.tex` and `cover_letter/cover_letter_zh.md`.
+- Decisions recorded from the user: dual (phase-axis vs. cycle-axis) narrative; new
+  subtitle; model names PhaseFormer-L (b0) and PhaseFormer-LA (M1), paper emphasizes
+  PhaseFormer and PhaseFormer-LA; ICLR Table 4 unchanged; parameter claim worded as
+  "branch + modulation 119-367 params, horizon-independent, plus 2 gates per channel or 2
+  shared" (option a); cover letter signed by Jinliang Deng; authors/funding as ICLR.
+- Build: `cd paper/vldbj && latexmk -pdf main.tex` -> 28 pages, 0 undefined references,
+  0 bibtex errors. Word count of blue spans: ~53% of Sections 1-9.
+- Open items: main table / ablation / envelope / activation-analysis TODO boxes await the
+  168-run main stage (92/168 done at writing) and the test stage; architecture figure
+  for PhaseFormer-LA is a TODO box; page count 28 > 25 limit.

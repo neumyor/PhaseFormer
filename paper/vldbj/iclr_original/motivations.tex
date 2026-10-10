@@ -1,0 +1,89 @@
+\section{Motivations}
+\label{sec:motivations}
+%Real-world sequences are inherently non-stationary, often exhibiting distributional shifts in their cyclical patterns. Recent forecasting models increasingly adopt patch-based representations, where sequences are segmented into cycles—either known or estimated—and each cycle is treated as a fundamental modeling unit. This inductive bias supports a variety of architectures, from patch-based Transformers that align tokens with seasonal XXXXXs (e.g., PatchTST) to models that explicitly encode seasonal components (e.g., TimeBase). However, these approaches implicitly assume distributional invariance across patches, effectively treating seasonal segments as temporally stable. In practice, non-stationarity induces cycle drifts through time-varying amplitudes or subtle frequency modulations. Such shifts distort the intra-patch distribution and undermine robustness when patches are the sole modeling unit.
+
+%To address this limitation, we adopt a complementary phase-centric perspective, treating intra-patch positions as tokens, a strategy we term \emph{phase tokenization}.Intuitively, the impact of cycle drift on phase tokens is confined to only a subset of phases. Even within this subset, the effect manifests primarily as a uniform amplitude shift, which is comparatively easier to accommodate. Moreover, phase-based averaging across patches tends to be more robust to local perturbations. These observations motivate the exploration of phase tokenization.
+
+\begin{figure}[t]
+  \centering
+  %  subfigure
+  \begin{subfigure}[t]{0.59\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{iclr2026/figures/visualization_cycle_phase_comparison.png}
+    \caption{Temporal shift comparison across multiple datasets.}
+    \label{fig:visualization_tsne}
+  \end{subfigure}
+  \hfill
+%  subfigure
+  \begin{subfigure}[t]{0.37\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{iclr2026/figures/traffic_pca_cycle_phase.png}
+    \caption{PCA for phase tokens on \emph{Traffic}.}
+    \label{fig:traffic_pca_cycle_phase}
+  \end{subfigure}
+  \caption{Visualization of phase tokenization and its advantages.  
+  (a) Phase tokenization yields more stable representations than patch-based embeddings.
+  (b) Phase tokens exhibit clear low-dimensionality compared with patch tokens.}  
+  \label{fig:phase_token_comparison}
+\end{figure}
+
+
+To motivate our approach, we conduct a comparative analysis of the geometric structures of patch and phase tokens across three widely used datasets. 
+As illustrated in \figref{fig:phase_token}, a patch token is composed of adjacent observations within a local period, whereas a phase token is constructed by extracting values at identical offsets across consecutive periods. We gain the following two important insights from the thorough analysis. 
+
+
+\fakeparagraph{Insight 1: Phase tokens are globally stationary, while patch tokens are locally stationary}
+To provide an intuitive overview of their geometric structures, we project both types of tokens into two-dimensional spaces using t-SNE~\citep{tsne2008}.
+As shown in Fig.~\ref{fig:visualization_tsne}, the distributions of patch tokens drift continuously over time but exhibit local coherence, indicating \emph{local stationarity} and supporting the minimal impact of excluding cycle patterns from intensive processing. In contrast, phase tokens form compact and coherent clusters that remain stable over the long term, reflecting strong \emph{global stationarity}. To rigorously quantify the long-term drift, we compute the average discrepancy distance between each subsequent week and the initial week. Specifically, we adopt the Maximum Mean Discrepancy (MMD) metric~\citep{ouyang2021mmd}, a statistical measure of distributional divergence:
+\begin{equation}
+\mathrm{MMD}^2(P, Q) 
+= \mathbb{E}_{x,x' \sim P}[k(x,x')] 
++ \mathbb{E}_{y,y' \sim Q}[k(y,y')] 
+- 2\,\mathbb{E}_{x \sim P, y \sim Q}[k(x,y)],
+\end{equation}
+where \(P\) and \(Q\) denote tokens collected from two different weeks, respectively, and \(k(\cdot,\cdot)\) is the RBF kernel function. As two distributions become closer, their MMD value approaches zero. The results at the bottom of Fig.~\ref{fig:visualization_tsne} show that the average MMD distance of the phase token space is significantly smaller than that of the patch token space. Taken together, both qualitative and quantitative analyses demonstrate that phase tokenization exhibits substantially lower temporal distribution divergence, thereby \emph{facilitating better generalization across the time axis}.
+
+\fakeparagraph{Insight 2: Phase tokens reside in a lower-dimensional subspace than patch tokens}
+To measure the effective dimensionality of the token space, we perform principal component analysis (PCA) on it. Surprisingly, as illustrated in Fig.~\ref{fig:traffic_pca_cycle_phase}, two dimensions are already sufficient to explain over 90\% of the variance of phase tokens, whereas patch tokens require more than eleven dimensions to achieve the same degree of explanation, owing to their drifting behavior observed in Fig.~\ref{fig:visualization_tsne}. Consequently, phase information resides in a low-dimensional subspace, \emph{providing a principled basis for parameter- and computation-efficient modeling}.
+
+\revised{
+We further establish, using perturbation theory, that phase tokenization remains stable under perturbations of cycle patterns, whereas patch tokenization exhibits structural drift. 
+To formalize this result, we represent a univariate periodic sequence as a two-dimensional matrix via delay embedding and analyze the structural properties of this embedded matrix.
+}
+Due to space limitations, only the core theorem is presented here, while the detailed proof is provided in \secref{sub:theoretical}.
+\begin{theorem}[Phase Tokenization Stability]
+Let $X = A G^\top + N \in \mathbb{R}^{D\times H}$ with 
+$\operatorname{rank}(A)=\operatorname{rank}(G)=r \ll \min(D,H)$, 
+and consider the transformed data
+\begin{equation}
+X' = X S^\top + R,
+\end{equation}
+where $\|N'\|_2 \le \|S\|_2\|N\|_2$, 
+$\|R\|_2 \le \varepsilon(\|M\|_F+\|N\|_F)$, 
+and let $\delta_{\min} > 0$ denote the minimal spectral separation. 
+Then there exists a universal constant $C>0$ such that:
+\begin{enumerate}[leftmargin=2em]
+\item For phase tokenization and corresponding subspace $\mathcal U_r$, there exists:
+\begin{equation}
+d\big(\mathcal U_r(X),\mathcal U_r(X')\big)
+\;\le\;
+C\,\frac{\|N\|_2+\|N'\|_2+\|R\|_2}{\delta_{\min}},
+\end{equation}
+with exact invariance in the noiseless case $(N=R=0)$.
+\item For patch tokenization and corresponding subspace $\mathcal V_r$, there exists:
+\begin{equation}
+d\big(\mathcal V_r(X),\mathcal V_r(X')\big)
+\;\ge\;
+d\big(\mathrm{Col}(G),\mathrm{Col}(S G)\big)
+- C\,\frac{\|N\|_2+\|N'\|_2+\|R\|_2}{\delta_{\min}}.
+\end{equation}
+\end{enumerate}
+\end{theorem}
+
+\noindent
+\textbf{Takeaways.} 
+Phase tokenization is structurally invariant under the cycle pattern change $S$ and only subject to perturbations from noise and small day-to-day mismatches. 
+In contrast, patch tokenization generally suffers from a non-vanishing structural offset. 
+Hence, \emph{phase tokenization is more robust and consistent under cycle pattern drifts}.
+
+%Across multiple datasets, phase tokenization consistently yields lower MMD distances, demonstrating superior robustness. 

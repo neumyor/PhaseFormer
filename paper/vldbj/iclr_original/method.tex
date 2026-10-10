@@ -1,0 +1,176 @@
+
+\section{Methodology}
+\label{sec:method}
+
+Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear} and omit the channel dimension throughout the remainder of this paper. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following sections, we describe the data preprocessing procedure, present the proposed network architecture, and finally analyze the computational complexity of the method.
+
+%In the following section, we introduce phase tokenization, which reorganize time steps according to their positions within recurring cycles. Building on this concept, we propose \sysname, a lightweight forecasting model comprising an embedding layer, a cross-phase routing layer, and a predictor. This design is tailored to capture temporal dynamics at the phase level and to efficiently extrapolate future dynamics. The subsequent sections provide a detailed exposition of the architecture and methodological innovations underlying \sysname.
+
+\subsection{Data Pre-Processing}
+\label{subsec:phase-embedding}
+\fakeparagraph{Normalization and De-Normalization} 
+Following \cite{kim2021reversible}, we normalize inputs with their estimated mean and standard deviation, and de-normalize predictions to the original scale.
+
+\fakeparagraph{Phase Tokenization and De-Tokenization}  
+Phase tokenization transforms the one-dimensional input sequence into a two-dimensional phase--period matrix for the following processing. 
+Conversely, phase de-tokenization reconstructs the predicted phase--period matrix back into a one-dimensional output sequence. 
+\revised{Let $L_{\text{phase}}$ denotes the period length, which can be estimated using frequency analysis as we further illustrated in \secref{sec:phase_length}, and remain fixed during the process}. 
+
+To ensure that the input sequence length is a multiple of $L_{\text{phase}}$, we circularly pad the sequence to length $P_{\text{in}}* L_{\text{phase}}$, where $P_{\text{in}} = \left\lceil \frac{L_{\text{in}}}{L_{\text{phase}}} \right\rceil.$ 
+As illustrated in \figref{fig:overview}, the padded sequence $\mathbf{X}$ is then reshaped into a phase--period matrix $\mathbf{X}_{\text{phase}} \in \mathbb{R}^{L_{\text{phase}} \times P_{\text{in}}}$, where each entry $\mathbf{X}_{\text{phase}}[\ell, p]$ corresponds to the observation at the $\ell^\text{th}$ phase of the $p^\text{th}$ period. 
+In the de-tokenization process, the predicted phase–period matrix is mapped back to the temporal domain by reversing the transformation, thereby reconstructing the final one-dimensional forecast sequence.
+
+% --------------------------------------------------------------------
+\subsection{Phase-based Routing Transformer}
+\label{subsec:phase-network}
+
+The phase--period matrix is fed into our proposed phase-based routing Transformer, termed \sysname, to capture and extrapolate temporal dynamics at the phase level in an efficient and effective way. 
+As illustrated in \figref{fig:overview}, \sysname first applies an embedding layer to the phase tokens, then refines them through multiple cross-phase routing layers, and finally maps them to the target via a shared predictor. Next, we elaborate on the design of these modules in detail.
+%In the following, we provide a detailed description of the internal modules within \sysname.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\linewidth]{iclr2026//figures/overview.pdf}
+    \caption{The overview of \sysname.}
+    \label{fig:overview}
+\end{figure}
+% \begin{figure}[t]
+%     \centering
+%     % 左边子图：Tokenization
+%     \begin{subfigure}[t]{0.245\linewidth}
+%         \centering
+%         \includegraphics[width=\linewidth]{iclr2026/figures/tokenization.pdf}
+%         \caption{Phase tokenization and de-tokenization}
+%         \label{fig:tokenization}
+%     \end{subfigure}
+%     \hfill
+%     % 右边子图：Overview
+%     \begin{subfigure}[t]{0.74\linewidth}
+%         \centering
+%         \includegraphics[width=\linewidth]{iclr2026/figures/overview.pdf}
+%         \caption{Overview of PhaseFormer, which employs cross-phase routing via phase-to-router aggregation and router-to-phase distribution.}
+%         \label{fig:overview}
+%     \end{subfigure}
+%     \caption{Illustration of our proposed phase tokenization and \sysname.}
+%     \label{fig:full_overview}
+% \end{figure}
+
+
+% ---------------- embedding ----------------
+\subsubsection{Embedding Layer}
+\label{subsubsec:phase-embedding}
+The embedding layer projects the phase tokens $\mathbf{X}_{\text{phase}}$ into a low-dimensional representation space, allowing the informative components to be extracted from raw observations that are often contaminated by perturbations. 
+Formally, for each phase index $\ell \in \{1,\dots,L_{\text{phase}}\}$, the corresponding phase token $\mathbf{X}_{\text{phase}}[\ell, :]$ is mapped into a $d$-dimensional representation through a linear function $f_{\theta}$, parameterized by $\theta \in \mathbb{R}^{P_{\text{in}}\times d}$:
+\begin{equation}
+\mathbf{Z} 
+= f_{\theta}\!\left(\mathbf{X}_{\text{phase}}\right)\in \mathbb{R}^{L_{\text{phase}}\times d}
+\label{eq:phase-embedding}
+\end{equation}
+
+To better capture the temporal ordering among phases, we introduce a set of learnable positional embeddings $\mathbf{E}_{\text{pos}}\in\mathbb{R}^{L_{\text{phase}}\times d}$ to distinguish the relative position of each phase, following \cite{liu2023spatio}. 
+These embeddings are added to $\mathbf{Z}$ in a phase-wise manner, so that each phase representation is enriched with its positional information:
+\begin{equation}
+\tilde{\mathbf{Z}}=\mathbf{Z}+\mathbf{E}_{\text{pos}}.
+\end{equation}
+The resulting $\tilde{\mathbf{Z}}$ is then forwarded to the cross-phase routing layers for higher-level feature interaction and forecasting.
+
+% ---------------- Attention ----------------
+\subsubsection{Cross-Phase Routing Layer}
+% Directly modeling full pairwise interactions among phase representations via self-attention is computationally expensive. 
+% To handle this, we introduce a set of learnable routers $\mathbf{R}\in\mathbb{R}^{M\times d}$ to mediate information exchange across phases, drawing inspiration from previous methods~\citep{jaegle2021perceiver, zhang2023crossformer}.
+% This design substantially reduces the quadratic cost of self-attention while preserving rich cross-phase dependencies.
+
+Directly modeling full pairwise interactions among phase representations via self-attention is computationally expensive. 
+To handle this, we introduce a set of learnable routers $\mathbf{R}\in\mathbb{R}^{M\times d}$ to mediate information exchange across phases. 
+\revised{
+While the design is inspired by prior routing-style design~\citep{jaegle2021perceiver, zhang2023crossformer}, our contribution lies in \emph{leveraging the inherent low-rank structure of phase-aligned tokens}. 
+The cross-phase routing substantially reducing the quadratic cost of self-attention while preserving rich cross-phase dependencies.
+}
+
+Cross-phase routing consists of two steps:
+(i) \emph{phase-to-router aggregation}, which selectively compresses information from phase representations into the compact set of routers; and (ii) \emph{router-to-phase distribution}, which selectively propagates the aggregated cross-phase information from the routers back to the phase representations. Both steps are implemented via cross-attention, allowing the model to scale efficiently while preserving strong representational capacity.
+
+% Such a formulation not only preserves the representational capacity of phase tokens for arbitrarily long input sequences but also enforces an implicit bottleneck that regularizes representation learning.  
+% Consequently, it highlights a key innovation: modeling within a low-dimensional phase token space simultaneously improves both efficiency and generalization ability, which aligns with the analysis results in \secref{sec:motivations}.
+
+\fakeparagraph{Phase-to-Router Aggregation}  
+The routers attend to the phase representations to extract contextual information, yielding contextualized router embeddings 
+$\mathbf{H}\in\mathbb{R}^{M\times d}$.  
+Specifically, the routers act as queries while the phases provide keys and values. The projection matrices 
+$\mathbf{W}_Q^{\text{agg}},\mathbf{W}_K^{\text{agg}},\mathbf{W}_V^{\text{agg}}\in\mathbb{R}^{d\times d}$ 
+map the representations into query, key, and value spaces, respectively:  
+\begin{equation}
+\mathbf{Q}_r=\mathbf{R}\mathbf{W}_Q^{\text{agg}},\quad
+\mathbf{K}_z=\tilde{\mathbf{Z}}\mathbf{W}_K^{\text{agg}},\quad
+\mathbf{V}_z=\tilde{\mathbf{Z}}\mathbf{W}_V^{\text{agg}}.
+\end{equation}
+The aggregated router embeddings are then obtained via multi-head attention (MHA) with $d_h$ heads:  
+\begin{equation}
+\mathbf{H}=\mathrm{MHA}\!\left(\mathbf{Q}_r,\mathbf{K}_z,\mathbf{V}_z\right).
+\end{equation}
+
+\fakeparagraph{Router-to-Phase Distribution}  
+The aggregated information in the routers is subsequently redistributed to the phase representations, thereby enabling cross-phase information flow. In this step, the phase representations serve as queries while the routers provide keys and values, yielding refined phase representations $\mathbf{Z}_{\text{attn}}$. The projection matrices $\mathbf{W}_Q^{\text{dist}}, \mathbf{W}_K^{\text{dist}}, \mathbf{W}_V^{\text{dist}}\in\mathbb{R}^{d\times d}$ are used for this distribution:  
+\begin{equation}
+\mathbf{Q}_z=\tilde{\mathbf{Z}}\mathbf{W}_Q^{\text{dist}},\quad
+\mathbf{K}_r=\mathbf{H}\mathbf{W}_K^{\text{dist}},\quad
+\mathbf{V}_r=\mathbf{H}\mathbf{W}_V^{\text{dist}},
+\end{equation}
+\begin{equation}
+\mathbf{Z}_{\text{attn}}=\mathrm{MHA}\!\left(\mathbf{Q}_z,\mathbf{K}_r,\mathbf{V}_r\right).
+\end{equation}
+This mechanism restores phase-level resolution while simultaneously enforcing coherence across phases through the contextualized routers. 
+Ultimately, each phase representation attends to all others through a two-stage routing pathway.
+
+
+% ---------------- predictor ----------------
+\subsubsection{Predictor}
+\label{subsubsec:phase-predictor}
+
+The predictor produces multi-step forecasts of length $P_{\text{out}}$ for all phases simultaneously, based on their refined representations. Taking as input the refined phase representations $\mathbf{Z}_{\text{attn}} \in \mathbb{R}^{L_{\text{phase}}\times d}$ from the final cross-phase routing layer, the predictor is realized as a linear mapping $g_{\phi}$, parameterized by $\phi \in \mathbb{R}^{d \times P_{\text{out}}}$:  
+\begin{equation}
+\mathbf{Y}_{\text{phase}} = g_{\phi}(\mathbf{Z}_{\text{attn}}) 
+\in \mathbb{R}^{L_{\text{phase}}\times P_{\text{out}}}.
+\label{eq:phase-predictor}
+\end{equation}
+All phases share the same predictor parameters, which enforces consistency across phases and reduces the number of trainable parameters. This not only improves efficiency but also regularizes learning, thereby enhancing generalization. Finally, the predicted phase--period matrix $\mathbf{Y}_{\text{phase}}$ is passed through de-tokenization and de-normalization to produce the final forecast $\mathbf{Y}$.
+
+
+
+\subsection{Complexity of \sysname}
+
+For each variable, the overall complexity of \sysname\ can be summarized as follows:  
+the phase embedding layer requires $O(L_{\text{phase}} P_{\text{in}} d)$ time and $O(L_{\text{phase}} d)$ memory.  
+The cross-phase routing layer, which dominates computation, incurs $O((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d)$ time and $O(H M L_{\text{phase}} + (L_{\text{phase}}+M)d)$ memory.  
+Finally, the predictor costs $O(L_{\text{phase}} d P_{\text{out}})$ time and $O(L_{\text{phase}} P_{\text{out}})$ memory.  
+Aggregating across \(N\) blocks, the end-to-end time complexity is:
+\[
+O\Big(N\big((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d\big)
++ L_{\text{phase}}d(P_{\text{in}}+P_{\text{out}})\Big).
+\]
+Substituting $P_{\text{in}}=\lceil L_{\text{in}}/L_{\text{phase}}\rceil$ and 
+$P_{\text{out}}=\lceil L_{\text{out}}/L_{\text{phase}}\rceil$ into the above expression gives:
+\[
+O\Big(N\big((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d\big)
++ d(L_{\text{in}}+L_{\text{out}})\Big).
+\]
+As investigated in \secref{sec:motivations}, the phase token space exhibits a inherently low-dimensional structure, which allows $M$ and $d$ to be chosen as fixed and small numbers. 
+Thus, the computational cost grows in a linear manner with both the input length $L_{\text{in}}$ and the output horizon $L_{\text{out}}$.
+
+\revised{
+\subsection{Discussion}
+
+\fakeparagraph{Discussion on Periodic Alignment}
+Although PhaseFormer is built around a periodic alignment mechanism, it does not completely fail on weakly periodic or partially non-periodic time series. 
+When no strong periodic structure is present, the phase representation naturally degenerates into a coarse-scale subsampling of the sequence. These coarse phase tokens function similarly to trend embeddings sampled every k steps, capturing slowly varying components and broad temporal structures. 
+Through the routing mechanism, the model can still aggregate information across these coarse tokens, thereby suppressing high-frequency noise and emphasizing the underlying smooth temporal evolution. This prevents overfitting to short-term stochastic fluctuations and enables the model to retain a certain degree of robustness even without clear periodicity.
+
+\fakeparagraph{Discussion on Failure Modes}
+In datasets lacking a clear dominant period or exhibiting only weak periodicity, the automatically estimated phase length may be affected by noise or minor harmonics, resulting in unstable or incorrect phase alignment. Such misalignment constitutes a primary failure mode for the model.
+In multi-period settings, if the model aligns to a suboptimal harmonic instead of the true dominant component, it can still operate but tends to deliver inferior predictions, as we later shown in \secref{sec:phase_length}.
+
+\fakeparagraph{Discussion on Padding}
+PhaseFormer employs a cycle-padding mechanism to ensure alignment along the phase dimension. However, when the chosen phase length is excessively large or small, a substantial amount of padding is introduced. Excessive padding may inject artificial boundary information into the input, creating boundary artifacts that degrade prediction quality.
+Selecting an appropriate phase length is therefore crucial for minimizing padding and maintaining stable performance. In practice, using input sequence lengths that are divisible by the phase length is recommended whenever possible to avoid unnecessary padding and its associated artifacts.
+
+}

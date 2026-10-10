@@ -1,0 +1,170 @@
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2026_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{xspace}
+\usepackage{enumitem}
+\usepackage{wrapfig}
+\usepackage{xcolor}
+\usepackage{subcaption} % put this in the preamble
+
+% \setlist[itemize,1]{leftmargin=1em,labelsep=0.5em}
+
+% macros %
+\newtheorem{assumption}{Assumption}%[section]
+\newtheorem{corollary}{Corollary}
+\newtheorem{definition}{Definition}
+\newtheorem{example}{Example}
+\newtheorem{hypothesis}{Hypothesis}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proof}{Proof}
+\newtheorem{remark}{Remark}
+\newtheorem{theorem}{Theorem}
+
+\newcommand{\etal}{\textit{et~al.}\xspace}
+\newcommand{\eg}{\textit{e.g.}\xspace}
+\newcommand{\ie}{\textit{i.e.}\xspace}
+\newcommand{\etc}{etc.\xspace}
+\newcommand{\aka}{\textit{a.k.a.}\xspace}
+\newcommand{\versus}{\emph{vs.}\xspace}
+
+\newcommand\tabref[1]{Tab.~\ref{#1}}
+\renewcommand\secref[1]{Sec.~\ref{#1}}
+\renewcommand\figref[1]{Fig.~\ref{#1}}
+\newcommand\appref[1]{Appendix.~\ref{#1}}
+\newcommand\equref[1]{Eq.~(\ref{#1})}
+\newcommand\thmref[1]{Theorem ~\ref{#1}}
+\newcommand\lemmaref[1]{Lemma ~\ref{#1}}
+
+\newcommand{\fakeparagraph}[1]{\vspace{1mm}\noindent\textbf{#1.}}
+\newcommand{\sysname}{PhaseFormer\xspace}
+\newcommand{\codeurl}{https://github.com/neumyor/PhaseFormer_TSL}
+
+% 定义 red 和 blue 命令
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\blue}[1]{\textcolor{blue}{#1}}
+
+% 在此基础上定义 best 和 second
+\newcommand{\best}[1]{\red{\textbf{#1}}}
+\newcommand{\second}[1]{\blue{\underline{#1}}}
+
+\ifodd 1
+\newcommand{\TODO}[1]{\textbf{\color{red}{TODO: #1} }}
+\newcommand{\revised}[1]{{#1}}
+\newcommand{\yiming}[1]{{\color{purple}{#1}}}
+\else
+\newcommand{\TODO}[1]{\textbf{\color{red}{#1} }}
+\newcommand{\revised}[1]{{\color{purple}{#1} }}
+\newcommand{\yiming}[1]{{\color{purple}{#1}}}
+\fi
+
+\setcounter{topnumber}{5}           % 每页最多 5 个 top 图
+\setcounter{bottomnumber}{5}        % 每页最多 5 个 bottom 图
+\setcounter{totalnumber}{10}        % 每页最多 10 个浮动体
+\renewcommand{\topfraction}{0.95}   % top 图最多可占页面 95%
+\renewcommand{\textfraction}{0.05}  % 至少保留 5% 文字
+\renewcommand{\floatpagefraction}{0.9} % 独占页时至少 90% 填满
+
+
+\title{PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting}
+
+% Authors must not appear in the submitted version. They should be hidden
+% as long as the \iclrfinalcopy macro remains commented out below.
+% Non-anonymous submissions will be rejected without review.
+
+% \author{
+% Yiming Niu\thanks{These authors contributed equally to this work.} \\
+% State Key Laboratory of Complex & Critical Software Environment, Beijing Advanced Innovation Center for Future Blockchain and Privacy Computing\\
+% Beihang University\\
+% Beijing, China \\
+% \texttt{yimingniu@buaa.edu.cn} \\
+% \And
+% Jinliang Deng\textsuperscript{*} \\  % 引用第一个脚注的标签
+% HKGAI, Research Institute of Trustworthy Autonomous Systems\\
+% Hong Kong University of Science and Technology, Southern University of Science and Technology\\
+% Hong Kong SAR, Shenzhen, China \\
+% \texttt{dengjinliang@ust.hk} \\
+% \AND
+% Yongxin Tong \\
+% State Key Laboratory of Complex & Critical Software Environment, Beijing Advanced Innovation Center for Future Blockchain and Privacy Computing\\
+% Beihang University\\
+% Beijing, China \\
+% \texttt{yxtong@buaa.edu.cn}
+% }
+
+\author{
+Yiming Niu\textsuperscript{1,}\thanks{Yiming Niu and Jinliang Deng contributed equally to this work.}, Jinliang Deng\textsuperscript{1,2,\textmd{*}}, Yongxin Tong\textsuperscript{1,}\thanks{Corresponding author.}\\
+\textsuperscript{1} State Key Laboratory of Complex \& Critical Software Environment, Beihang University\\
+\texttt{\{yimingniu, yxtong\}@buaa.edu.cn} \\
+\textsuperscript{2} Research Institute of Trustworthy Autonomous Systems, SUSTech\\
+\texttt{jinliangdeng9588@gmail.com}
+}
+
+% \author{Antiquus S.~Hippocampus, Natalia Cerebro \& Amelie P. Amygdale \thanks{ Use footnote for providing further information
+% about author (webpage, alternative address)---\emph{not} for acknowledging
+% funding agencies.  Funding acknowledgements go at the end of the paper.} \\
+% Department of Computer Science\\
+% Cranberry-Lemon University\\
+% Pittsburgh, PA 15213, USA \\
+% \texttt{\{hippo,brain,jen\}@cs.cranberry-lemon.edu} \\
+% \And
+% Ji Q. Ren \& Yevgeny LeNet \\
+% Department of Computational Neuroscience \\
+% University of the Witwatersrand \\
+% Joburg, South Africa \\
+% \texttt{\{robot,net\}@wits.ac.za} \\
+% \AND
+% Coauthor \\
+% Affiliation \\
+% Address \\
+% \texttt{email}
+% }
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to \LaTeX{} to determine where to break
+% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
+% puts 3 of 4 authors names on the first line, and the last on the second
+% line, try using \AND instead of \And before the third author name.
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\iclrfinalcopy % Uncomment for camera-ready version, but NOT for submission.
+\begin{document}
+
+
+\maketitle
+
+\begin{abstract}
+Periodicity is a fundamental characteristic of time series data and has long played a central role in forecasting. Recent deep learning methods strengthen the exploitation of periodicity by treating patches as basic tokens, thereby improving predictive effectiveness. However, their efficiency remains a bottleneck due to large parameter counts and heavy computational costs. This paper provides, for the first time, a clear explanation of why patch-level processing is inherently inefficient, supported by strong evidence from real-world data. To address these limitations, we introduce a phase perspective for modeling periodicity and present an efficient yet effective solution, PhaseFormer. 
+PhaseFormer features phase-wise prediction through compact phase embeddings and efficient cross-phase interaction enabled by a lightweight routing mechanism. Extensive experiments demonstrate that PhaseFormer achieves state-of-the-art performance \revised{on the evaluated benchmarks} with around 1k parameters, consistently across benchmark datasets. Notably, it excels on large-scale and complex datasets, where models with comparable efficiency often struggle. This work marks a significant step toward truly efficient and effective time series forecasting.
+Code is available at this repository: \url{\codeurl}.
+
+%Time series forecasting is . yet existing approaches face challenges in capturing long-range dependencies while remaining robust to distortions. Recent advances in patch-based tokenization have demonstrated scalability and resilience to noise, but they remain susceptible to cycle pattern shift, which distorts patch tokens and degrades predictive accuracy. In this work, we introduce phase tokenization, a complementary paradigm that represents phase as tokens to explicitly align cross-cycle dynamics. Through theoretical analysis and empirical evaluation, we show that phase tokenization offers inherent robustness to cycle pattern shift compared to patch-based methods. Building on this insight, we propose \sysname, a novel forecasting model that maps input sequences into a phase-subspace, compresses them into evolving phase patterns, and reconstructs stable predictions, with small parameter scale and computational cost. Extensive experiments on standard long-term forecasting benchmarks demonstrate that \sysname consistently outperforms state-of-the-art baselines, delivering significant accuracy gains while advancing efficiency. Our findings establish phase tokenization as a powerful and generalizable representation, bridging local semantics with periodic stability and advancing the Pareto frontier of long-term time series forecasting.
+\end{abstract}
+
+\input{iclr2026/body/introduction}
+\input{iclr2026/body/related}
+\input{iclr2026/body/motivations}
+\input{iclr2026/body/method}
+\input{iclr2026/body/experiments}
+\input{iclr2026/body/conclusion}
+\newpage
+\input{iclr2026/body/statements}
+\bibliography{iclr2026_conference}
+\bibliographystyle{iclr2026_conference}
+
+\appendix
+\include{iclr2026/body/appendix}
+
+\end{document}

@@ -1,0 +1,69 @@
+% Cover letter for the VLDB Journal submission (English).
+% Compile with: pdflatex cover_letter.tex
+\documentclass[11pt,a4paper]{letter}
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parskip}{0.6em}
+
+\signature{Jinliang Deng\\
+State Key Laboratory of Complex \& Critical Software Environment, Beihang University\\
+Research Institute of Trustworthy Autonomous Systems, Southern University of Science and Technology\\
+\href{mailto:jinliangdeng9588@gmail.com}{jinliangdeng9588@gmail.com}\\
+on behalf of all authors: Yiming Niu, Jinliang Deng, and Yongxin Tong}
+
+\address{}
+\date{October 2026}
+
+\begin{document}
+\begin{letter}{The Editors-in-Chief, \emph{The VLDB Journal}\\
+Guest Editors of the Special Issue ``Spatio-Temporal Data Management and Analytics:\\
+Machine Learning-based Solutions and Beyond'':\\
+Prof.~Christian S.~Jensen, Dr.~Hao Miao, and Prof.~Yan Zhao}
+
+\opening{Dear Editors,}
+
+We submit the manuscript \emph{``PhaseFormer: Efficient Phase-Based Forecasting for Spatio-Temporal Data Beyond Stable Cycles''} by Yiming Niu, Jinliang Deng, and Yongxin Tong for consideration in the special issue \emph{Spatio-Temporal Data Management and Analytics: Machine Learning-based Solutions and Beyond}.
+
+\textbf{Disclosure of the conference version.} In accordance with the journal's submission rules, we disclose that this manuscript is an extended version of our refereed conference paper
+\begin{quote}
+Y.~Niu, J.~Deng, Y.~Tong. \emph{PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting.} International Conference on Learning Representations (ICLR), 2026.
+\end{quote}
+The conference paper is cited in the manuscript (title footnote, Section~1, and the Declarations), and the last paragraph of Section~1 states which parts are retained and which are new. Every passage that is new or changed relative to the conference version is printed in blue in the submitted PDF, so that the reviewers can verify the new content directly. The explanation below is intended for the reviewers and the handling Editor-in-Chief.
+
+\textbf{Relevance to the special issue.} The special issue asks for efficient and scalable methods for spatio-temporal data, with forecasting and streaming or edge settings among its topics. PhaseFormer forecasts each sensor stream of a network with one shared model of about a thousand parameters, so its cost grows linearly with the number of sensors and the sensors can be processed in parallel. The extension addresses the non-stationarity that is characteristic of large sensor networks: our data analysis shows that the coupling between the level and the amplitude of daily cycles is present in all seven benchmarks and is strongest in the two sensor networks, Traffic (862 road sensors) and Electricity (321 meters).
+
+\textbf{Summary of the new content.} The conference version established that phase tokens are stable under changes of the cycle shape and proposed the PhaseFormer architecture. Its stated limitation was the assumption of locally stable periodicity, and it named non-stationarity and complex drifts as future work. The journal version addresses this limitation. The new material consists of the following.
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=0.3em]
+\item \textbf{New problem formulation (Sections~1 and~3).} We identify which changes the conference stability theorem covers (changes along the phase axis of the folded series) and which it does not (changes along the cycle axis: drifts of the cycle level and of the level-dependent cycle amplitude, as in multiplicative seasonality).
+
+\item \textbf{New theory (Section~5, Appendix~B; entirely new).} The conference version contains one theorem. The journal version adds four theorems, with complete proofs:
+\begin{itemize}[itemsep=0.1em]
+\item a capability theorem: PhaseFormer transmits a common level shift exactly through its routing layer and can approximate the Bayes forecast of a seasonal random-walk model;
+\item a level-envelope theorem: for every parameter value, the forecast level is confined to an interval fixed by the final layer normalization and readable from the trained weights, with an explicit error floor and a level--shape competition;
+\item a low-rank complement theorem: the level that the phase path cannot follow acts only through a few fixed horizon profiles, so a rank-limited linear branch carries it;
+\item an amplitude theorem: an amplitude envelope of the phase path, the multiplicative structure of the amplitude demand, the exact invariance of every future cycle mean under a centered modulation, and the capability of that modulation.
+\end{itemize}
+
+\item \textbf{New model (Section~6; entirely new).} PhaseFormer-LA keeps the conference architecture unchanged and adds a rank-3 level branch on cycle means with fixed horizon profiles, a level/shape fusion, and a centered amplitude modulation, each derived from one of the new theorems. The extension adds between 119 and 367 parameters in all settings, independently of the forecast horizon, plus two fusion gates per channel or two in total. We give its exact nesting properties, its preserved guarantees, and its complexity.
+
+\item \textbf{New experiments (Section~8 and parts of Section~7, Appendix~C; entirely new).} PhaseFormer-LA on all 28 dataset--horizon settings with three seeds, added to the main comparison table; a data-centric analysis of level--amplitude coupling on all seven benchmarks; an ablation from PhaseFormer to PhaseFormer-LA; measurements of both envelopes and of the level hand-over on trained checkpoints; mechanism experiments on synthetic multiplicative series and on real data; and a capacity study of the level branch.
+
+\item \textbf{Extended related work and discussion (Sections~2 and~9).} New discussions of normalization methods for non-stationary forecasting, classical and deep seasonal decomposition including multiplicative seasonality, and spatio-temporal forecasting models, and a new discussion of limitations.
+\end{enumerate}
+
+\textbf{Overlap with the conference version.} Sections~3 (motivation) and~4 (methodology), the conference experiments in Section~7 (main comparison with eight baselines, efficiency comparison, router and routing ablations, phase-length sensitivity, and case study), and Appendix~A (supplementary material of the conference version, including the proof of the conference theorem) are retained with editorial changes. The abstract, introduction, related work and conclusion are revised and extended. Measured by the words of the main text (Sections~1--9), the passages marked as new or changed account for about half of the main text, and Sections~5, 6 and~8, together with Appendices~B and~C, are new in their entirety. The new content therefore exceeds the 30\% required by the journal.
+
+\textbf{Availability.} All datasets are public benchmarks. The code of PhaseFormer and PhaseFormer-LA, together with the scripts for all experiments, is available at \url{https://github.com/neumyor/PhaseFormer_TSL}.
+
+This manuscript has not been published elsewhere and is not under consideration by another journal. All authors have approved the submission.
+
+Thank you for considering our manuscript. We look forward to your response.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}

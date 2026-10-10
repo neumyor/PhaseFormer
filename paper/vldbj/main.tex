@@ -1,0 +1,136 @@
+% VLDB Journal extended version of the ICLR 2026 PhaseFormer paper.
+% Springer svjour3 class, two-column option, as required by the VLDBJ
+% submission rules (two-column template, at most 25 pages).
+\RequirePackage{fix-cm}
+\documentclass[twocolumn,natbib]{svjour3}
+\smartqed
+
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{xspace}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{subcaption}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+% ---------------------------------------------------------------------------
+% Change marking for the journal extension.
+% Every passage that is new or changed relative to the ICLR 2026 version is
+% wrapped in \blue{...}. Set \showchangestrue to false (\showchangesfalse)
+% for a clean copy. \blue accepts several paragraphs, lists, theorems and
+% section headings; inside a float, wrap the float's content, not the float.
+% ---------------------------------------------------------------------------
+\newif\ifshowchanges
+\showchangestrue
+\ifshowchanges
+\newcommand{\blue}[1]{{\color{blue}#1}}
+\else
+\newcommand{\blue}[1]{#1}
+\fi
+
+% Macros inherited from the conference version.
+\newcommand{\eg}{\textit{e.g.}\xspace}
+\newcommand{\ie}{\textit{i.e.}\xspace}
+\newcommand{\etc}{etc.\xspace}
+\newcommand{\aka}{\textit{a.k.a.}\xspace}
+\newcommand{\versus}{\emph{vs.}\xspace}
+
+\newcommand\tabref[1]{Tab.~\ref{#1}}
+\renewcommand\secref[1]{Sec.~\ref{#1}}
+\renewcommand\figref[1]{Fig.~\ref{#1}}
+\newcommand\appref[1]{Appendix~\ref{#1}}
+\newcommand\equref[1]{Eq.~(\ref{#1})}
+\newcommand\thmref[1]{Theorem~\ref{#1}}
+\newcommand\lemmaref[1]{Lemma~\ref{#1}}
+
+\newcommand{\fakeparagraph}[1]{\vspace{1mm}\noindent\textbf{#1.}}
+\newcommand{\sysname}{PhaseFormer\xspace}
+\newcommand{\sysL}{PhaseFormer-L\xspace}
+\newcommand{\sysLA}{PhaseFormer-LA\xspace}
+\newcommand{\codeurl}{https://github.com/neumyor/PhaseFormer_TSL}
+
+% Best / second-best marks of the conference tables. The second-best color is
+% kept separate from \blue so that it is not read as a change mark.
+\definecolor{secondcolor}{RGB}{0,90,160}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\best}[1]{\red{\textbf{#1}}}
+\newcommand{\second}[1]{\textcolor{secondcolor}{\underline{#1}}}
+% Passages revised during the ICLR rebuttal are ordinary text here.
+\newcommand{\revised}[1]{#1}
+\newcommand{\TODO}[1]{\textbf{\color{red}{[TODO: #1]}}}
+
+% Notation for the extension (Sections 3, 5 and 6).
+\newcommand{\Lp}{L_{\text{phase}}}
+\newcommand{\Pin}{P_{\text{in}}}
+\newcommand{\Pout}{P_{\text{out}}}
+\newcommand{\lev}{\operatorname{lev}}
+\newcommand{\LN}{\operatorname{LN}}
+\newcommand{\one}{\mathbf 1}
+
+% svjour3 provides theorem, lemma, corollary, proposition, definition,
+% remark and the proof environment. Only the missing ones are added.
+\spnewtheorem{assumption}{Assumption}{\bfseries}{\itshape}
+
+\journalname{The VLDB Journal}
+
+\begin{document}
+
+\title{PhaseFormer: \blue{Efficient Phase-Based Forecasting for Spatio-Temporal Data Beyond Stable Cycles}%
+\thanks{\blue{This article is an extended version of the conference paper ``PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting'' published at ICLR 2026~\citep{niu2026phaseformer}. The new material is summarized at the end of Section~\ref{sec:intro}.}}}
+
+\author{Yiming Niu \and Jinliang Deng \and Yongxin Tong}
+
+\authorrunning{Y. Niu, J. Deng, Y. Tong}
+
+\institute{Yiming Niu and Jinliang Deng contributed equally to this work. Yongxin Tong is the corresponding author. \at
+Yiming Niu, Yongxin Tong \at
+State Key Laboratory of Complex \& Critical Software Environment, Beihang University, Beijing, China \\
+\email{\{yimingniu, yxtong\}@buaa.edu.cn}
+\and
+Jinliang Deng \at
+State Key Laboratory of Complex \& Critical Software Environment, Beihang University, Beijing, China; Research Institute of Trustworthy Autonomous Systems, Southern University of Science and Technology, Shenzhen, China \\
+\email{jinliangdeng9588@gmail.com}}
+
+\date{Received: date / Accepted: date}
+
+\maketitle
+
+\begin{abstract}
+Periodicity is a fundamental characteristic of time series data and has long played a central role in forecasting. Recent deep learning methods strengthen the exploitation of periodicity by treating patches as basic tokens, thereby improving predictive effectiveness. However, their efficiency remains a bottleneck due to large parameter counts and heavy computational costs. This paper provides, for the first time, a clear explanation of why patch-level processing is inherently inefficient, supported by strong evidence from real-world data. To address these limitations, we introduce a phase perspective for modeling periodicity and present an efficient yet effective solution, PhaseFormer.
+PhaseFormer features phase-wise prediction through compact phase embeddings and efficient cross-phase interaction enabled by a lightweight routing mechanism.
+\blue{In this extended version, we further characterize where phase tokens stop being sufficient. Phase tokens are invariant to changes along the phase axis of a cycle, but changes along the cycle axis, namely drifts of the cycle level and of the cycle amplitude, alter the phase subspace. We prove that PhaseFormer can represent such drifts only inside two envelopes that are fixed by its final normalization, one for the level and one for the amplitude, and that both complements are structurally simple. This leads to PhaseFormer-LA, which adds to PhaseFormer a rank-3 level branch that reads cycle means and a centered amplitude modulation that provably leaves every future cycle mean unchanged. The extension adds at most a few hundred parameters, independent of the forecast horizon.}
+Extensive experiments demonstrate that PhaseFormer achieves state-of-the-art performance on the evaluated benchmarks with around 1k parameters \blue{at the 96-step horizon}, consistently across benchmark datasets. Notably, it excels on large-scale and complex datasets, \blue{such as sensor networks for traffic and electricity,} where models with comparable efficiency often struggle.
+\blue{An analysis of seven benchmarks shows that level--amplitude coupling is present in all of them and is strongest in the two large sensor networks, and mechanism experiments on synthetic and real data confirm each step of the theory.}
+Code is available at \url{\codeurl}.
+\keywords{Time series forecasting \and \blue{Spatio-temporal data} \and Periodicity \and Phase tokenization \and \blue{Non-stationarity} \and Efficient models}
+\end{abstract}
+
+\input{body/introduction}
+\input{body/related}
+\input{body/motivations}
+\input{body/method}
+\input{body/theory}
+\input{body/extension}
+\input{body/experiments}
+\input{body/extension_experiments}
+\input{body/conclusion}
+\input{body/statements}
+
+\bibliographystyle{spbasic}
+\bibliography{references}
+
+\clearpage
+\appendix
+
+\input{body/appendix}
+\input{body/appendix_theory}
+
+\end{document}

@@ -1,0 +1,77 @@
+\blue{
+\section{Extension Experiments}
+\label{sec:ext_exp}
+
+This section tests the theory of Section~\ref{sec:theory} and the design of Section~\ref{sec:extension}. It answers five questions. Do the benchmarks contain the cycle-axis changes that the theory addresses (Section~\ref{sec:exp_coupling})? Does each component of \sysLA contribute (Section~\ref{sec:exp_ladder})? Do the envelopes bind on trained checkpoints, and does the branch take over the level (Section~\ref{sec:exp_theory})? Does the modulation act as Theorem~\ref{thm:amplitude} predicts (Section~\ref{sec:exp_mechanism})? Does the branch need more than the capacity the theory specifies (Section~\ref{sec:exp_capacity})?
+
+\subsection{Setup}
+\label{sec:ext_setup}
+
+All models in this section use the input length $L=720$, the period $P=24$, and the seven datasets and four horizons of Section~\ref{sec:exp_main}. \sysL and \sysLA are built from the same random state for each setting and seed, so that they produce identical forecasts at initialization (Section~\ref{sec:ext_properties}); their differences are therefore due to the modulation alone. Before the 28-setting runs, we fixed the remaining design choices on the validation split of one setting per dataset (ETTh1-96, ETTh2-720, ETTm1-336, ETTm2-96, Weather-192, Electricity-96 and Traffic-96). The branch decoder was chosen among three variants of the same rank: learned decoders on 30 or 90 pooled values, and the fixed displacement, tilt and curvature profiles of \equref{eq:branch}. The gates were chosen per dataset between per-channel and shared. The rule preferred the variant with the fewest parameters whenever the validation errors were within 0.5\%, and it selected shared gates when they were within 0.1\% of per-channel gates. It selected the fixed profiles, and shared gates for ETTh2, ETTm1 and ETTm2.
+
+\subsection{Level--amplitude coupling in the benchmarks}
+\label{sec:exp_coupling}
+
+Theorem~\ref{thm:amplitude}(b) predicts that a multiplicative series has windows whose within-cycle amplitude moves with the cycle level. We measure this directly on the data, independently of any model. For every channel and every window of length 720 (stride 24, 30 cycles of 24 samples), we compute the Pearson correlation between the 30 cycle means and the 30 within-cycle root-mean-square deviations. An additive series gives a correlation near zero, up to estimation noise, and a multiplicative series a positive or negative one. As anchors, we compute the same statistic on a synthetic additive series and on a synthetic multiplicative series with $\alpha=0.25$, both following \equref{eq:mult_model} with a random-walk level.
+
+\begin{table}[t]
+\blue{
+\centering
+\caption{Level--amplitude coupling: mean absolute correlation between the cycle means and the within-cycle RMS deviations of length-720 windows, and the share of windows with absolute correlation at least 0.3. The synthetic anchors follow \equref{eq:mult_model} with $\alpha=0$ and $\alpha=0.25$.}
+\label{tab:coupling}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
+\toprule
+ & \multicolumn{3}{c}{mean $|\mathrm{corr}|$} & \multicolumn{2}{c}{share $\ge0.3$} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-6}
+Dataset & train & val & test & train & test \\
+\midrule
+Additive anchor & 0.12 & 0.12 & 0.14 & 0.06 & 0.08 \\
+\midrule
+ETTm2 & 0.26 & 0.27 & 0.37 & 0.33 & 0.58 \\
+ETTh2 & 0.34 & 0.26 & 0.29 & 0.49 & 0.44 \\
+ETTm1 & 0.38 & 0.43 & 0.38 & 0.53 & 0.63 \\
+ETTh1 & 0.42 & 0.49 & 0.51 & 0.58 & 0.66 \\
+Weather & 0.43 & 0.42 & 0.45 & 0.59 & 0.59 \\
+Electricity & 0.60 & 0.59 & 0.55 & 0.79 & 0.75 \\
+Traffic & 0.87 & 0.86 & 0.88 & 0.98 & 0.99 \\
+\midrule
+Multiplicative anchor & 0.75 & 0.74 & 0.79 & 0.99 & 1.00 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+Table~\ref{tab:coupling} shows that every benchmark lies well above the additive floor of 0.12, on every split. The coupling is weakest in ETTm2 and ETTh2, at roughly twice the floor, and strongest in the two sensor networks: Electricity, with 321 meters, reaches 0.60, and Traffic, with 862 road sensors, reaches 0.87, above the multiplicative anchor, with 98\% of its windows above 0.3. On a road network, a busier week raises the cycle level and deepens the rush-hour peaks together; on a power grid, demand scales with consumption in the same way. The cycle-axis amplitude change of \equref{eq:cycle_axis_changes} is therefore not a corner case. It is a dominant property of exactly the large spatio-temporal datasets on which \sysname performs best, and it is stable across the train, validation and test periods.
+
+\subsection{From \sysname to \sysLA}
+\label{sec:exp_ladder}
+
+\TODO{Ablation ladder on all 28 settings, three seeds: \sysname (conference) $\to$ \sysL (level branch and fusion) $\to$ \sysLA (+ modulation), and \sysLA with the modulation switched off on the trained checkpoint ($V_2=0$). Report average MSE/MAE per dataset and the number of improved settings per step.}
+
+\subsection{Envelopes and level hand-over on trained checkpoints}
+\label{sec:exp_theory}
+
+\TODO{Read $c_0$, $C_1$, $C_\varphi$ and $B_\varphi$ from every trained \sysL and \sysLA checkpoint; report the share of validation windows with $\Lambda\notin\mathcal I_\varphi$, the error floor of \equref{eq:level_floor} as a share of the MSE, the level tracking of the phase path, and the branch's share of the fused level. Expected from the theory: the envelope holds exactly (utilization below 1), it tightens with the horizon, the floor is a sizable share of the error at long horizons, and the backbone hands the level to the branch.}
+
+\subsection{Mechanism of the modulation}
+\label{sec:exp_mechanism}
+
+\fakeparagraph{Synthetic multiplicative series}
+We first test Theorem~\ref{thm:amplitude} where the ground truth is known. We generate seven-channel series from \equref{eq:mult_model} with a random-walk level, a sinusoidal daily profile and coupling $\alpha\in\{0,0.25,0.5\}$, and train \sysL and \sysLA from the same initialization (two seeds, 30 epochs). Without coupling ($\alpha=0$), the modulation has nothing to carry and the two models are indistinguishable: \sysLA changes the validation MSE by $-0.28\%$. With coupling, \sysLA reduces the validation MSE by $3.3\%$ at $\alpha=0.25$ and by $4.8\%$ at $\alpha=0.5$, and it does so for both seeds. The gain appears exactly when the data contain level-dependent amplitude and grows with the coupling, as Theorem~\ref{thm:amplitude}(b,d) predicts.
+
+\fakeparagraph{Cycle-mean invariance}
+Theorem~\ref{thm:amplitude}(c) is an exact identity, so we verify it on every trained \sysLA checkpoint. Switching the modulation off and on, in double precision, changes every future cycle mean of the phase forecast by at most \TODO{value} relative to the forecast scale, while it changes individual phase forecasts by up to \TODO{value}.
+
+\fakeparagraph{What drives the modulation}
+\TODO{Activation analysis on trained checkpoints: correlation between the modulation magnitude $\|q\|$ (or its component along $\gamma_2$) and the level demand $\Lambda$; mean $\|q\|$ in high- versus low-coupling windows (Table~\ref{tab:coupling} statistic); attribution of $q$ to the displacement, tilt and curvature states of $t$.}
+
+\fakeparagraph{Where the gain occurs}
+\TODO{Per-window gain of \sysLA over \sysL stratified by window coupling and by $|\Lambda|$ quantiles.}
+
+\subsection{Capacity of the level branch}
+\label{sec:exp_capacity}
+
+Theorem~\ref{thm:complement} predicts that the level complement needs only a few fixed profiles. The selection experiment of Section~\ref{sec:ext_setup} provides a direct check. The three decoders differ widely in capacity: the learned decoders have $93+4H$ and $273+4H$ parameters, up to 3{,}153 at $H=720$, whereas the fixed profiles have 105 parameters at every horizon. Yet their setting-normalized validation errors, averaged over seven datasets and both gate variants, differ by only 0.13\% (1.0102, 1.0107 and 1.0115 relative to the best variant of each setting). A branch restricted to the span of the displacement, tilt and curvature profiles therefore loses essentially nothing against branches that can learn arbitrary horizon profiles, which is what Theorem~\ref{thm:complement}(a) predicts. In \sysLA, the fixed profiles are used throughout.
+}

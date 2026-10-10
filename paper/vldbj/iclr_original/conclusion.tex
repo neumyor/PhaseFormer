@@ -1,0 +1,9 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+This work identifies the inefficiencies of patch-based forecasting and presents \sysname, a phase-centric model that captures periodicity via compact phase representations and lightweight cross-phase routing. 
+Both theoretical analysis and empirical validation converge on the same conclusion that phase representations remain both more robust and more efficient than patch-based approaches under cycle pattern shifts. 
+Consequently, \sysname maintains high predictive accuracy while remaining lightweight compared to patch-based methods.
+More broadly, these results provide a practical pathway for building lightweight yet powerful forecasting models that retain accuracy without heavy and complex architectures.
+
+However, the approach assumes locally stable periodicity across the input and output horizons; under highly irregular or non-repetitive cycles, phase representations may fail to capture meaningful dynamics. Future work will relax this assumption by modeling non-stationarity and complex drifts, aiming to develop more resilient phase representations and further establish \sysname as a benchmark for long-term time-series forecasting.

@@ -1,0 +1,300 @@
+\section{Experiments}
+\label{sec:exp}
+
+\subsection{Long-term Time Series Forecasting}
+
+We conduct a joint evaluation of model efficiency and predictive accuracy. 
+The comparative analysis highlights that the proposed \textit{\sysname} establishes an improved effectiveness-efficiency tradeoff in terms of parameter scale and error metrics.
+We also provide the code in \url{\codeurl}.
+
+\fakeparagraph{Datasets and Setup}
+Experiments are performed on seven widely used long-term time series forecasting datasets: 
+\textit{ETTh1}, 
+\textit{ETTh2}, 
+\textit{ETTm1}, 
+\textit{ETTm2}\footnote{\url{https://github.com/zhouhaoyi/ETDataset}}, 
+\textit{Weather}\footnote{\url{https://www.bgc-jena.mpg.de/wetter/}}, 
+\textit{Electricity}\footnote{\url{https://archive.ics.uci.edu/ml/datasets}}, 
+and \textit{Traffic}\footnote{\url{https://pems.dot.ca.gov/}}, 
+covering a diverse range of real-world scenarios.
+The details of the datasets are provided in \secref{sec:dataset_details}. 
+Following prior works~\citep{nie2023patchtst, zhang2023crossformer, huang2025timebase}, we adopt a 6:2:2 split for the ETT datasets and a 7:1:2 split for the other datasets. 
+For \sysname, we report the average results over three random seeds, while for the other baselines we follow their official implementations and released code. 
+We evaluate the forecasting \textbf{accuracy} of all tested models using mean squared error (MSE) and mean absolute error (MAE), 
+and assess \textbf{efficiency} in terms of floating-point operations (FLOPs) and the number of parameters (Params).
+
+\fakeparagraph{Baselines and Implementation Details}
+% We evaluate our approach against eight competitive baselines, encompassing both state-of-the-art Transformer architectures and parameter-efficient forecasting models.  
+\revised{
+We evaluate our approach against eight competitive baselines, following the standard non-pretraining setting where all models are trained and evaluated directly on domain-specific datasets. 
+The baselines span both state-of-the-art Transformer-based architectures and recent parameter-efficient forecasting models.
+}
+We compare our method with {PatchTST}\citeyearpar{nie2023patchtst}, {iTransformer}\citeyearpar{liu2023itransformer}, {Crossformer}\citeyearpar{zhang2023crossformer}, {FEDformer}\citeyearpar{zhou2022fedformer}, {TimeBase}\citeyearpar{huang2025timebase}, {SparseTSF}\citeyearpar{lin2024sparsetsf}, {FITS}\citeyearpar{fits2024}, and {TimeMixer}\citeyearpar{timemixer24}.
+Among these, PatchTST, Crossformer, and TimeMixer are patch-based; SparseTSF is phase-based; TimeBase integrates patch and phase paradigms; FITS and FEDformer are frequency-domain; and iTransformer models the full sequence directly.
+For all baselines, we adopt the recommended configurations provided in their official implementations\revised{, keeping hyperparameters aligned with ~\cite{huang2025timebase}.}
+The model is optimized using the Adam optimizer with a fixed learning rate of $1 \times 10^{-3}$.  
+Following the settings from efficiency-oriented works~\citep{huang2025timebase, lin2024sparsetsf, fits2024}, the look-back length is set to 720 time steps.
+More implementation details are provided in \secref{sec:dataset_details}.
+
+
+\begin{table}[t]
+\centering
+\caption{
+Main results for long-term forecasting.
+The input sequence length is $L_{\text{input}} = 720$, and results are averaged over forecast horizons $L_{\text{out}} \in \{96, 192, 336, 720\}$.
+The best results are shown in \best{bold}, and the second-best in \second{underline}.
+}
+\label{tab:main_results}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{c|cc|cc|cc|cc|cc|cc|cc|cc|cc}
+\hline
+\multirow{2}{*}{Dataset}
+& \multicolumn{2}{c|}{\sysname} 
+& \multicolumn{2}{c|}{PatchTST} 
+& \multicolumn{2}{c|}{iTransformer} 
+& \multicolumn{2}{c|}{Crossformer}
+& \multicolumn{2}{c|}{FEDformer}
+& \multicolumn{2}{c|}{TimeBase} 
+& \multicolumn{2}{c|}{SparseTSF} 
+& \multicolumn{2}{c|}{FITS} 
+& \multicolumn{2}{c}{TimeMixer} \\ 
+\cline{2-19}
+ & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
+\hline
+ETTh1 & \best{0.403} & \best{0.415} & 0.420 & 0.439 & 0.453 & 0.467 & 0.517 & 0.512 & 0.523 & 0.523 & \second{0.404} & \second{0.416} & 0.406 & 0.418 & 0.419 & 0.435 & 0.452 & 0.474 \\
+ETTh2 & 0.346 & 0.388 & 0.344 & 0.390 & 0.392 & 0.422 & 1.468 & 0.867 & 0.428 & 0.469 & 0.347 & 0.397 & \second{0.345} & \second{0.383} & \best{0.334} & \best{0.382} & 0.386 & 0.425 \\
+ETTm1 & \best{0.346} & \best{0.374} & \second{0.354} & 0.383 & 0.370 & 0.401 & 0.390 & 0.417 & 0.438 & 0.465 & 0.356 & \second{0.380} & 0.362 & 0.383 & 0.359 & 0.382 & 0.383 & 0.413 \\
+ETTm2 & \best{0.250} & \best{0.313} & 0.251 & 0.319 & 0.278 & 0.337 & 0.392 & 0.426 & 0.401 & 0.452 & \best{0.250} & \second{0.314} & 0.252 & 0.316 & 0.285 & 0.336 & 0.314 & 0.367 \\
+Electricity & \best{0.160} & \best{0.250} & 0.169 & 0.265 & \second{0.165} & 0.263 & 0.180 & 0.273 & 0.235 & 0.348 & 0.167 & \second{0.258} & 0.168 & 0.263 & 0.172 & 0.270 & 0.171 & 0.273 \\
+Traffic & \best{0.386} & \best{0.249} & \second{0.394} & \second{0.266} & 0.406 & 0.290 & 0.545 & 0.282 & 0.638 & 0.400 & 0.418 & 0.278 & 0.413 & 0.280 & 0.410 & 0.290 & 0.421 & 0.298 \\
+Weather & \best{0.223} & \best{0.260} & \second{0.223} & 0.264 & 0.233 & 0.273 & 0.255 & 0.304 & 0.354 & 0.393 & 0.227 & \second{0.262} & 0.243 & 0.285 & 0.241 & 0.283 & 0.237 & 0.281 \\
+\hline
+\end{tabular}}
+\end{table}
+
+\begin{figure}[t]
+    \centering
+    % 子图1 - Traffic FLOPs
+    \begin{subfigure}{0.24\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{iclr2026/figures/flops_traffic.png}
+        \caption{FLOPs on Traffic}
+        \label{fig:traffic_flops}
+    \end{subfigure}
+    % 子图2 - Traffic Params
+    \begin{subfigure}{0.24\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{iclr2026/figures/params_traffic.png}
+        \caption{Params on Traffic}
+        \label{fig:traffic_params}
+    \end{subfigure}
+    % 子图3 - Electricity FLOPs
+    \begin{subfigure}{0.24\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{iclr2026/figures/flops_electricity.png}
+        \caption{FLOPs on Electricity}
+        \label{fig:electricity_flops}
+    \end{subfigure}
+    % 子图4 - Electricity Params
+    \begin{subfigure}{0.24\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{iclr2026/figures/params_electricity.png}
+        \caption{Params on Electricity}
+        \label{fig:electricity_params}
+    \end{subfigure}
+    \caption{
+    Comparison of FLOPs and parameter counts across models on the Traffic and Electricity\revised{, using an input length of 720 steps and predicting 96 future steps}.
+    Patch-based models are shown in green, phase-based models in blue, and other models in gray.
+    }
+    \label{fig:flops_params_visualization}
+\end{figure}
+
+
+\fakeparagraph{Main Results}
+We evaluate the predictive accuracy of \sysname and the baseline methods on seven datasets. 
+\tabref{tab:main_results} reports the average prediction errors across four forecasting horizons, with detailed results provided in \secref{sec:accuracy_details}. 
+Overall, \sysname consistently achieves superior performance on nearly all datasets, with particularly notable gains on complex and dynamic benchmarks such as Weather, Electricity, and Traffic.
+For example, on the largest dataset, Traffic, \sysname surpasses the second-best method, PatchTST, by 6.3\% and outperforms TimeBase by 10.4\%, underscoring its robustness on large-scale and heterogeneous data. 
+The only exception is ETTh2, where \sysname ranks second to FITS while still maintaining highly competitive accuracy.
+A closer examination reveals that patch-based baselines, including PatchTST, Crossformer, and TimeMixer, exhibit performance degradation on the Electricity, likely due to stronger distributional shifts. 
+
+
+\fakeparagraph{Efficiency Comparison}
+We evaluate the computational overhead of all models, with detailed results in \secref{sec:efficiency_details}.
+\figref{fig:flops_params_visualization} shows the FLOPs and the number of parameters of all tested models on the Electricity and Traffic.
+Overall, phase-based models incur lower overhead than patch-based ones.
+On the Traffic dataset, \sysname achieves an extraordinary FLOPs reduction of about 99.99\% over PatchTST and Crossformer.
+Beyond patch-based baselines, it also outperforms other phase-based models like SparseTSF, consistently delivering high efficiency.
+This stems from the lower variety of phase tokens over time (\secref{sec:motivations}), making them inherently more efficient to process. 
+Taken together with the previous accuracy evaluations, these results clearly demonstrate that \sysname provides an efficient yet effective solution, delivering superior performance on complex datasets.
+
+
+
+\subsection{Ablation Studies and Analysis}
+
+\fakeparagraph{Varying the Number of Routers}
+We systematically evaluate the impact of different number of routers $M$ on model performance, with results summarized in \figref{fig:router_number_visualization}.
+The experiments indicate that across three datasets, the model’s prediction error generally decreases as the number of routers $M$ increases, before eventually stabilizing or slightly rising.
+It is worth noting that the best performance is usually achieved when $M \in \{4,8\}$, which is much smaller compared to the actual number of phase tokens, $L_{\text{phase}} = 24$.
+This observation indicates that the phase token spans an inherently low-dimensional space, so only a small number of routers is sufficient to effectively capture and represent its underlying structure.
+More detailed results are provided in \secref{sec:all_results_router_numbers}.
+
+\begin{figure}[t]
+    \centering
+    % 子图1
+    \begin{subfigure}{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{iclr2026/figures/router_number_effect_electricity_lines.png}
+        \caption{Electricity}
+        \label{fig:electricity}
+    \end{subfigure}
+    % 子图2
+    \begin{subfigure}{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{iclr2026/figures/router_number_effect_traffic_lines.png}
+        \caption{Traffic}
+        \label{fig:traffic}
+    \end{subfigure}
+    % 子图3
+    \begin{subfigure}{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{iclr2026/figures/router_number_effect_weather_lines.png}
+        \caption{Weather}
+        \label{fig:Weather}
+    \end{subfigure}
+    
+    \caption{Effect of varying the number of routers $M$ on forecasting performance on three datasets.}
+    \label{fig:router_number_visualization}
+\end{figure}
+
+
+
+\begin{table}[t]
+\centering
+\caption{Cross-Phase Routing layer ablation. Each cell reports MSE, MAE, and FLOPs. Lower is better for all metrics. FLOPs are reported in millions (MFLOPs). The best results are highlighted with \best{Bold}, and the second-best results with \second{Underlined}.}
+\label{tab:ablation_phase}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{c|ccc|ccc|ccc|ccc}
+\hline
+\multirow{2}{*}{Dataset}
+& \multicolumn{3}{c|}{\textbf{\sysname}} 
+& \multicolumn{3}{c|}{\textbf{w/ FullAttention}} 
+& \multicolumn{3}{c|}{\textbf{w/ LinearMixing}} 
+& \multicolumn{3}{c}{\textbf{w/o Routing}} \\
+\cline{2-13}
+& MSE & MAE & FLOPs 
+& MSE & MAE & FLOPs 
+& MSE & MAE & FLOPs 
+& MSE & MAE & FLOPs \\
+\hline
+Weather 
+& \best{0.1503} & \best{0.1971} & 3.119 
+& \second{0.1527} & \second{0.2005} & 3.202 
+& 0.1700 & 0.2226 & \second{0.920} 
+& 0.1907 & 0.2406 & \best{0.783} \\
+\hline
+Electricity 
+& \best{0.1290} & \best{0.2209} & 42.213 
+& \second{0.1295} & \second{0.2217} & 48.951 
+& 0.1403 & 0.2334 & \second{14.068} 
+& 0.1423 & 0.2365 & \best{11.972 } \\
+\hline
+Traffic     
+& \best{0.3721} & \best{0.2475} & 113.356 
+& \second{0.3791} & \second{0.2513} & 131.452 
+& 0.3842 & 0.2532 & \second{37.776}
+& 0.3892 & 0.2584 & \best{32.149}  \\
+\hline
+\end{tabular}}
+\end{table}
+
+
+
+
+\fakeparagraph{Effectiveness of Cross-Phase Routing} 
+To assess the contribution of the cross-phase routing layer, we compare four variants of the model: 
+\textbf{\sysname}, which adopts the original cross-phase routing layer; 
+\textbf{w/ FullAttention}, which substitutes the cross-phase routing layer with a full attention mechanism; and
+\textbf{w/ LinearMixing}, which replaces the cross-phase routing layer with a linear layer; and 
+\textbf{w/o Routing}, which directly projects each phase into its own future.
+All other experimental settings are kept identical across these variants. 
+
+As summarized in \tabref{tab:ablation_phase}, \sysname consistently outperforms \textbf{w/ LinearMixing} and \textbf{w/o Routing}, indicating that explicit cross-phase routing is crucial for modeling periodic dynamics. Moreover, \sysname not only incurs less computational and memory overhead, but also achieves lower prediction error than \textbf{w/ FullAttention}, showing that the routing layer is both efficient and effective. We attribute these gains to operating in a low-dimensional phase token space, which concentrates informative interactions and reduces cost.
+
+
+\revised{
+\subsection{Sensitivity Analysis of Phase Length Choices}
+\label{sec:phase_length}
+
+\begin{wraptable}[11]{r}{0.48\textwidth}
+\vspace{-10pt}
+\centering
+\begin{tabular}{ccc}
+\hline
+\textbf{Phase Length} & \textbf{MSE} & \textbf{MAE} \\
+\hline
+24 & 0.3619 & 0.2384 \\
+12 & 0.3960 & 0.2765 \\
+8  & 0.4032 & 0.2801 \\
+28 & 0.4063 & 0.2753 \\
+21 & 0.4184 & 0.2970 \\
+\hline
+\end{tabular}
+\caption{Comparison of forecasting performance under different phase lengths on the Traffic dataset (lookback=720, horizon=96).}
+\label{tab:phase_length}
+\vspace{-5pt}
+\end{wraptable}
+sysname automatically determines the phase length through frequency-domain analysis (see \secref{sec:dataset_details}), extracting salient periodic components directly from the data. 
+To assess its sensitivity to phase length, we conduct experiments on the Traffic dataset. Its frequency spectrum contains several clear periodic components (see \figref{fig:spectrum_traffic}). Based on spectral amplitudes, we select the top five candidate phase lengths and run \sysname for forecasting. The results are shown in \tabref{tab:phase_length}.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{iclr2026//figures/spectrum_traffic.png}
+    \caption{The spectrum calculated on the Traffic dataset. The top-5 phase length is 24, 12, 8, 28, 21.}
+    \label{fig:spectrum_traffic}
+    \vspace{-5pt}
+\end{figure}
+
+The experiments show that the model performs best when the phase length is 24, corresponding to the dominant spectral component. As the phase length deviates from this main period, forecasting errors increase, consistent with the magnitude patterns in the frequency domain.
+These findings demonstrate that \sysname effectively captures the dataset’s primary periodic structure.
+}
+\vspace{-3pt}
+
+\subsection{Case Study}
+We select one sample from Traffic dataset, comprising an input sequence of length 720 and an output sequence of length 96 (816 time steps in total). 
+The input sequence is fed into \sysname, and we record the attention-weight matrices at the first cross-phase routing layer during both aggregation (Phase$\rightarrow$Router) and distribution (Router$\rightarrow$Phase).
+As shown in \figref{fig:sender} and \figref{fig:receiver}, both attention patterns exhibit clear local similarity: adjacent phases tend to be assigned to the same routers and to receive attention from similar routers.
+This indicates that the routing mechanism captures temporally consistent phase relationships. 
+Meanwhile, the attention weights reveal that certain phases share similar attentive patterns.
+To analyze this further, we focus on three phases with distinct attentive patterns and visualized them in \figref{fig:traffic_data_visualization}.
+These phases display different temporal behaviors: Phase 5 remains relatively stable over long horizons, whereas Phase 9 and Phase 1 both exhibit a pronounced 7-day periodicity but with opposite trends.
+The differing patterns of these phase tokens suggest that the router structure not only distinguishes among phase tokens but also effectively models their periodicity and trend characteristics.
+
+
+\begin{figure}[t] 
+  \centering
+  \begin{subfigure}{0.24\linewidth}
+    \includegraphics[width=\linewidth]{iclr2026/figures/attention_layer_0_sender_var4.png}
+    \caption{Aggregation Weights}
+    \label{fig:sender}
+  \end{subfigure}%
+  \hfill
+  \begin{subfigure}{0.24\linewidth}
+    \includegraphics[width=\linewidth]{iclr2026/figures/attention_layer_0_receiver_var4.png}
+    \caption{Distribution Weights}
+    \label{fig:receiver}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.48\linewidth}
+    \includegraphics[width=\linewidth]{iclr2026/figures/sequence_with_phase_curves_sample_0_feature_0.png}
+    \caption{Visualization of three selected phase tokens}
+    \label{fig:traffic_data_visualization}
+  \end{subfigure}%
+  \caption{Case study on a sample from the Traffic dataset. 
+  (a) Attention weight matrix during Phase-to-Router aggregation. 
+  (b) Attention weight matrix during Router-to-Phase distribution. 
+  Both matrices capture the association between 8 routers and 24 input phases. 
+  (c) Visualization of three representative phases (1, 5, and 9), each represents a distinct attentive pattern with routers.} 
+  \label{fig:case_study_wrap_all}
+\vspace{-8pt}
+\end{figure}

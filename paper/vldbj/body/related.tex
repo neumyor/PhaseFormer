@@ -1,0 +1,31 @@
+\section{Related Works}
+
+
+\fakeparagraph{Transformer-Based Forecasting Architectures}
+Early Transformer-based models for long sequence forecasting often overlooked the periodicity in time series~\citep{zhou2021informer, logtrans2019}. 
+Subsequent research introduced domain-specific priors that better understand recurring temporal structures. 
+Autoformer~\citep{wu2021autoformer} and FEDformer~\citep{zhou2022fedformer} incorporated decomposition strategies and frequency-domain modeling enabling explicit representation of seasonal–trend patterns. 
+Pyraformer~\citep{liu2021pyraformer} and Crossformer~\citep{zhang2023crossformer} further enriched temporal modeling by embedding multi-scale hierarchies and cross-variable dependencies, while \cite{nonstationarytrans2022} explicitly accounted for distributional shifts. 
+More recently, PatchTST~\citep{nie2023patchtst} reframed time series as patch sequences to enable more accurate characterization of sequence-level semantics, followed by an extension to jointly consider spatial and temporal correlations~\citep{ctpatchtst2025}. Generally speaking, these models embed progressively stronger temporal biases, though often at the cost of massive parameter counts and heavy computation.
+
+\fakeparagraph{Efficiency-Oriented Forecasting Models}
+A growing body of research emphasizes efficiency, aiming to design lightweight forecasting architectures. 
+Patch-based MLP variants such as xPatch~\citep{xpatch2025},TimeMixer~\citep{timemixer24}, and PITS~\citep{PITS2024} exploited compact tokenization or hierarchical dependencies to reduce parameter counts while maintaining accuracy. 
+Beyond patches-based methods, frequency-based counterparts leverage spectral representations for compression and denoising.
+FreTS~\citep{FreTS2023} applied MLPs in the frequency domain, \cite{filternet2024} learned frequency filters to improve noise robustness, and FITS~\citep{fits2024} achieved strong accuracy with only 10k parameters. 
+\cite{deng2024parsimony} demonstrated that selective decomposition can deliver both parsimony and capability.
+More recently, SparseTSF~\citep{lin2024sparsetsf} and TimeBase~\citep{huang2025timebase} highlighted the importance of cross-period correlation, sharing a similar motivation with ours.
+Despite their impressive computational efficiency, these methods still fall short on forecasting accuracy for large and complex datasets such as Traffic and Electricity~\citep{lin2024sparsetsf, huang2025timebase}. 
+Moreover, they lack systematic analysis to answer the fundamental question: \emph{Why can phase tokens serve as an efficient alternative to patch tokens?}
+%While these approaches excel in parameter efficiency, they largely overlook local drift and amplitude fluctuations, making them less robust under non-stationary conditions. By projecting inputs into a compact phase space, our model simultaneously denoises phase trends and controls complexity, demonstrating that efficiency and drift-robustness need not be mutually exclusive.
+
+\blue{
+\fakeparagraph{Non-Stationarity and Normalization}
+Instance normalization such as RevIN~\citep{kim2021reversible} removes the window mean and scale before forecasting and restores them afterwards, and it is used by most recent forecasters, including \sysname. Later methods adapt the normalization to distribution shift between input and output windows~\citep{fan2023dishts}, to temporal slices~\citep{liu2023san}, or to the frequency components of each window~\citep{ye2024fan}, and the Non-stationary Transformer~\citep{nonstationarytrans2022} reinjects the removed statistics into attention. These methods change the input statistics that a model sees. Our analysis takes the complementary view: given RevIN, we ask which level and amplitude departures a phase model can still express, and we show that the answer is an envelope that is fixed by the model's final normalization rather than by the input normalization.
+
+\fakeparagraph{Seasonal Level and Amplitude}
+Classical forecasting separates the level, trend and seasonal components of a series, either additively or multiplicatively. In the multiplicative Holt--Winters model~\citep{holt2004forecasting,winters1960forecasting,hyndman2021fpp3} the seasonal amplitude scales with the level, and STL~\citep{cleveland1990stl} handles the multiplicative case through a log transform. Decomposition is also common in deep forecasters~\citep{wu2021autoformer,zhou2022fedformer,zeng2023dlinear,deng2024parsimony}, where a moving-average trend and a seasonal residual are modeled separately and added. \sysLA keeps this classical view inside the phase representation: the level is carried by a separate rank-3 branch, and the multiplicative interaction between level and shape is carried by a modulation that is centered over the phases, so that it cannot change the level.
+
+\fakeparagraph{Spatio-Temporal Forecasting}
+Spatio-temporal forecasting models such as Graph WaveNet~\citep{wu2019graphwavenet}, MTGNN~\citep{wu2020mtgnn}, AGCRN~\citep{bai2020agcrn} and STID~\citep{shao2022stid} learn dependencies between sensors explicitly, and lightweight variants such as LightCTS~\citep{lai2023lightcts} reduce their cost. These models target the spatial structure of a sensor network; their cost grows with the size of the graph. \sysname and \sysLA take the channel-independent approach~\citep{nie2023patchtst,zeng2023dlinear}: one shared model with about a thousand parameters serves every sensor, its cost grows linearly with the number of sensors, and the sensors can be processed in parallel. This makes the model a building block for forecasting at the scale of a whole sensor network, and it is complementary to explicit spatial modeling.
+}

@@ -1,0 +1,102 @@
+\section{Introduction}
+Time series forecasting underpins decision-making across diverse domains such as finance, energy, climate science, and healthcare, playing a pivotal role in tasks including weather forecasting~\citep{weathernature2025,wu2021autoformer}, energy consumption planning~\citep{lai2018energy,alvarez2010energy,cheng2021windturbine}, traffic scheduling~\citep{cirstea2022towardstraffic,cirstea2021enhancenet,wu2021autocts}.
+In recent years, deep learning has demonstrated promising potential in this field by leveraging end-to-end modeling and powerful representational capacity to extrapolate from history to future trends. 
+
+A central inductive bias in forecasting models is periodicity--the recurring temporal structure inherent in many real-world time series.
+\revised{
+Periodicity are ubiquitous in practice, appearing in domains ranging from urban traffic flow to cloud resource utilization and other workloads, making periodicity-aware modeling broadly applicable~\citep{deng2024disentangling, xia2025timeemb}.
+}
+Recent advances exploited this property by segmenting sequences into patch tokens, potentially aligned with cycles, prior to processing by the crafted models~\citep{nie2023patchtst, zhang2023crossformer, huang2025timebase, tang2025unlocking}. 
+For instance, \cite{nie2023patchtst} applied Transformer to tokenized time series to capture temporal correlations within and between cycles, while \cite{zhang2023crossformer} extended this paradigm by modeling cross-dimension dependencies and cross-scale interactions.
+
+\begin{figure}[t]
+  \centering
+  %  subfigure
+  \begin{subfigure}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{iclr2026/figures/phase_token.png}
+    \caption{Patch Token vs. Phase Token.}
+    \label{fig:phase_token}
+  \end{subfigure}
+  \hfill
+\begin{subfigure}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{iclr2026/figures/efficiency_plot.pdf}
+    \caption{Model Accuracy and Efficiency Comparison.}
+    \label{fig:efficiency_plot}
+  \end{subfigure}
+  \caption{Comparison between patch-based and phase-based representations for time-series forecasting. (a) illustrates the difference in tokenization. (b) \revised{provides a joint evaluation of model accuracy, parameter scale, and computational overhead on the Traffic dataset, using an input length of 720 steps and predicting 96 future steps, where the marker size denotes the FLOPs.}}
+  \label{fig:introduction}
+\end{figure}
+
+Despite their effectiveness, patch-based approaches struggle to scale efficiently to large and complex datasets~\citep{nie2023patchtst, zhang2023crossformer,tang2025unlocking}. 
+\emph{We attribute this poor scalability to the substantial variability of cycle patterns in real-world scenarios}. 
+This variability stems from dynamic external factors, which continuously shift the cycle patterns. For instance, traffic flow patterns may evolve as new infrastructure is introduced, while electricity demand can change with adjustments in work schedules~\citep{shao2025hutformer, shao2025hyperd, zhou2025feddis}. 
+% This variability forces models to construct a high-dimensional representation space to faithfully accommodate the broadened distribution, which inevitably inflates both parameter counts and computational costs~\citep{nie2023patchtst, zhang2023crossformer}. 
+This variability forces models to construct a high-dimensional representation space to faithfully accommodate the broadened distribution, which inevitably inflates both parameter counts and computational costs~\citep{shao2025blast}. 
+Additionally, these methods also struggle to generalize under such varying behavior, resulting in unreliable forecasts for samples beyond training data.
+
+To address this challenge, we introduce a novel phase-based perspective that focuses on values aligned at the same offset across successive cycles. From this perspective, the dynamics of a time series are characterized by the cross-period trends of each phase--captured as phase tokens--while disregarding the full cyclic behavior. As illustrated in Fig.~\ref{fig:phase_token}, phase tokens exhibit significantly lower variability than patch tokens, enabling more efficient and generalizable representation\revised{, which in turn makes \sysname well suited for resource-constrained environments}. 
+Importantly, excluding cycle patterns has minimal impact on forecasting effectiveness, since the cyclic behaviors remain locally stable and thus require little effort to predict. We study and verify these properties in depth in Sec.~\ref{sec:motivations} using real-world data, showing the stationarity and compactness of the feature space offered by phase tokenization. 
+
+%This is motivated by a critical observation: cycle patterns remain locally stable across the input and output horizons, rendering the full cycle pattern itself redundant for prediction. To rigorously validate the reduction in modeling complexity afforded by this perspective, we conduct a thorough analysis using real-world data, as detailed in Sec.~\ref{sec:motivations}. %The results reveal a surprising enhancement in both the stationarity and compactness of the feature space compared with the patch perspective, underscoring its strong potential to enable forecasting in a more efficient and robust manner.
+
+Building on these insights, we propose Phase-based Routing Transformer, abbreviated as \textbf{\sysname}, which reframes time series as a collection of phase tokens and casts step-wise prediction as phase-wise prediction. Specifically, \sysname (i) aligns and extracts phase tokens from the input sequence and maps them into a shared low-dimensional latent space, (ii) employs a lightweight routing mechanism to enable efficient communication across phases, and (iii) applies a shared predictor to project the latent representations into forecasts for each phase. Extensive experiments demonstrate that, compared with PatchTST~\citep{nie2023patchtst} and Crossformer~\citep{zhang2023crossformer}, \sysname achieves over \textbf{99.9\%} reduction in both parameter count and computational cost, while delivering consistent improvements in prediction accuracy across all seven benchmark datasets, as illustrated by the Traffic dataset in Fig.~\ref{fig:efficiency_plot}. 
+Moreover, in contrast to methods with comparable efficiency  such as SparseTSF~\citep{lin2024sparsetsf} and TimeBase~\citep{huang2025timebase}, \sysname significantly enhances predictive effectiveness, particularly on large and complex datasets. 
+Finally, we conduct a comprehensive analysis of different configurations to reveal the necessity of the constructed components and the effects of various hyperparameters. Our contributions are as follows:
+
+
+\begin{enumerate}[leftmargin=2em]
+\item We introduce a phase-based perspective that aligns values across cycles for the characterization of long-term time series, empirically and theoretically demonstrating improved feature stationarity and compactness over the patch-based perspective.
+
+\item We propose \sysname, a lightweight forecasting model that reframes time series as phase tokens, maps them into a shared latent space, and \revised{employs a low-rank routing mechanism specifically designed around phase tokens to enable efficient phase-wise forecasting.}
+
+\item Extensive experiments are conducted to showcase that \sysname achieves substantial efficiency gains while consistently improving forecasting accuracy, establishing a superior efficiency–effectiveness trade-off across diverse benchmarks.
+\end{enumerate}
+
+%Consequently, in scenarios characterized by diversified periodic patterns and cycle pattern drifts, \sysname demonstrates greater robustness. At the same time, by sharing variable representations in the phase subspace and supporting parallel modeling of multiple temporal granularities (from daily to weekly), \sysname is able to simultaneously capture cross-dimensional dependencies and cross-scale interactions. In summary, \sysname advances long-horizon time-series forecasting from the scale-aggregation patch paradigm toward a more robust and computationally efficient phase-representation paradigm. Our contributions are as followed.
+
+
+% A prominent line of research addresses long-sequence modeling by introducing structural inductive biases that remain relatively stable over time.
+% Among these, patch-based representations mark a significant advancement.
+% PatchTST, for instance, transforms consecutive time steps into fixed-length patches that serve as tokens, thereby preserving local semantics while stabilizing training under outliers and distribution shifts. 
+% Extensions such as Crossformer further couple local semantics with periodic dependencies across both temporal and variable dimensions. 
+% This localized tokenization naturally denoises point-level fluctuations, enables multi-scale control through patch size, and provides robust empirical gains by emphasizing periodic structures.
+
+% Nonetheless, patch representations remain limited in handling local drift, which refers to \emph{short-term shifts in value levels or amplitudes occurring within a cycle}. 
+% Because patches aggregate consecutive time steps, such drifts accumulate and distort the entire token representation.
+% From the model’s perspective, drifted tokens deviate from the original distribution, forcing an expansion of representational capacity to avoid information loss, ultimately impairing efficiency and predictive accuracy.
+
+
+% To address this gap, we introduce phase tokenization as a complementary modeling perspective. 
+% Unlike patch representations, which focus on contiguous local segments, lag embedding aggregates information from the same phase across multiple cycles. 
+% % 让图片占据右侧 0.5\textwidth，左边环绕正文。
+% % 中括号可指定环绕的行数（这里大约 16 行，可按实际需要微调）。
+% \begin{wrapfigure}[10]{r}{0.5\textwidth}
+%   \centering
+%   \vspace{-10pt}
+%   \includegraphics[width=\linewidth]{iclr2026//figures/shift_example.png}
+%   \caption{Illustration of cycle pattern drift.}
+%   \label{fig:shift_example}
+% \end{wrapfigure}
+% This design ensures that when local drift occurs, its impact is confined to a single dimension of the embedding vector rather than diffusing across the entire token representation, thereby effectively constraining drift-induced distortions. 
+% In addition, the cross-cycle phase alignment mechanism supplies historical statistical references for each time point, enabling the model to more robustly withstand short-term anomalies and seasonal intensity fluctuations, which are highly prevalent in real-world scenarios. 
+% For example, the daily traffic flow may experience a shortened evening peak period due to road widening projects, and once this change occurs, it will continue to affect the temporal dynamics, as show in \figref{fig:shift_example}.
+% Functionally, phase tokenization complements patch representations, and together they offer a more comprehensive framework for handling the diverse forms of distribution shifts inherent in real-world time series.
+
+
+
+% Building on these insights, we propose \sysname, a phase-aware architecture for time-series forecasting. 
+% \sysname extracts phase information within input series and compresses it into a compact set of evolving patterns. 
+% These patterns are embedded in a low-dimensional latent space and connected via a fixed set of routers, which both denoise phase trends and control complexity that scales with sampling resolution. 
+% By projecting sequences onto phase patterns and reconstructing them back into the temporal domain, \sysname achieves robustness to phase noise, local drift, and amplitude perturbations. 
+% Unlike patch-based approaches, it encodes temporal dynamics through a \emph{“series–phase–series”} pathway, advancing long-horizon forecasting from scale aggregation toward phase-robust representation.
+
+% \begin{enumerate}
+%   \item We place phase at the core of time encoding and demonstrate, both theoretically and empirically, its robustness to amplitude scaling and slow frequency perturbations. Across multiple datasets, phase-based representations exhibit more stable distributions than patch-based counterparts.
+  
+%   \item We design a novel forecasting model, \sysname, in which input sequences are projected into a phase space and compressed into a set of gradually evolving phase patterns. To efficiently capture these patterns, we embed them in a low-dimensional latent space and employ a fixed set of routers as bridging units that connect and aggregate phase information across cycles. This design not only compresses and denoises phase trends but also reduces computational complexity in phase dimension.
+  
+%   \item On \emph{xx} standard long-term forecasting datasets, \sysname achieves an average improvement of \emph{xx\%} in accuracy while requiring significantly fewer parameters than existing baselines, demonstrating superior robustness under the non-stationary observed in real-world scenarios.
+% \end{enumerate}
+
