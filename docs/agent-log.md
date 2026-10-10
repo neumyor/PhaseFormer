@@ -6981,3 +6981,42 @@ Measured M1 S2 params, per-variable gates (backbone -> total):
 | Traffic | 37154/273160/273934/275998 -> 39053/275251/276025/278089 (shared: 37331/273529/274303/276367) |
 
 S1 adds 4H-12 over S2 and S3 adds a further 180.
+
+## 2026-10-10: VLDBJ M1 smoke fixed, formal pilot launched, V1/V2/Theorem-5 drafted
+
+Server work (A800, frozen checkout ~/niuyiming/PhaseFormer_vldbj_m1_20261010, commit b831dca8,
+then 53b5b3b locally only for coupling paths):
+- First smoke failed 42/42: E14 phase-only sources carry use_residual_head=False, which
+  PhaseFormer interprets as "disable every residual slot" and silently forces the low-rank
+  interaction branch off (src/models/PhaseFormer.py around line 538). Fix 21ed117 re-enables
+  the slot in prepare_config and hard-fails construct if the branch is missing; the local
+  regression test now seeds use_residual_head=False like the real sources. Second smoke
+  42/42 passed; a smoke result shows the expected parameter breakdown
+  (ETTh1-H96 S2: backbone 2072, branch 105, modulation 14, fusion 14).
+- Formal pilot (val-only, 7 settings x S1/S2/S3 x per-variable/shared gates, 42 runs,
+  30 epochs, 16 slots on 8 GPUs) is running from manifest at code b831dca8; log
+  ~/niuyiming/vldbj_m1_pilot.log. No mid-run code syncs per REMOTE_SERVER.md.
+
+V2 coupling diagnostic (read-only, CPU, ran from a copy outside the frozen worktree because
+the pilot holds provenance hashes; local canonical commit 53b5b3b):
+- Mean |corr(cycle mean, cycle amplitude)| on train splits: ETTh1 0.41, ETTh2 0.34, ETTm1
+  0.38, ETTm2 0.26, Weather 0.43, Electricity 0.60, Traffic 0.87; fraction of windows with
+  |corr|>=0.3: 33%-98%. Additive-null anchor 0.12 (6%), multiplicative anchor alpha=0.25
+  0.75 (99%). All seven datasets sit well above the additive floor; Traffic and Electricity,
+  the two large spatial sensor datasets, are the most multiplicative. Output:
+  research_runs/vldbj_m1_coupling/coupling.csv (server; to be rsynced).
+
+Theorem 5 draft written to docs/PhaseFormer_VLDBJ_theorem5_draft.md:
+(a) cycle-mean invariance, full proof, already numerically verified;
+(b) capability construction on the multiplicative model under stated hypotheses H1 (linear
+content regime, cites 0930 Lemma 1.3) and H2 (level linearly readable from the cycle-mean
+latent); (c) b0 amplitude envelope via a circle-family harmonic argument (affine branch has
+no second harmonic; phase shape bounded by the Theorem-2 ellipsoid). Three items flagged
+for careful re-derivation before the manuscript.
+
+V1 synthetic mechanism check implemented (scripts/vldbj_m1/synthetic.py; 7-channel synthetic
+multiplicative series, b0 vs M1 with the S2 head, plain torch loop on CPU - disclosed as a
+mechanism check, not the benchmark protocol); full run launched locally in background.
+
+Pending: pilot completion -> --stage select -> 168-run main stage -> single registered test
+read; V1 results; V3/V4 need the main-stage checkpoints.
