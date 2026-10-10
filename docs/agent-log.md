@@ -6920,3 +6920,19 @@ Risks recorded: the choice is a research-direction decision, not a performance c
 by -0.095% MSE but +0.017% MAE with 4/12 seed-setting MSE wins; the earlier H720 validation pilot
 rejected promotion (2/6 wins); phase-only C2 (0.2931) matches M1 (0.2930), so cross-branch
 attribution is unestablished. Selecting M1 used test rankings (test-set selection).
+
+## 2026-10-10: Outline VLDBJ special-issue extension of ICLR PhaseFormer
+
+User decided to submit the ICLR 2026 PhaseFormer journal extension to the VLDBJ special issue
+"Spatio-Temporal Data Management and Analytics: ML-based Solutions and Beyond" (deadline
+2026-10-15), positioned as theory-driven, with M1 as the final model and PhaseFormer-L as the
+intermediate stage. The user stressed this is an extension of the ICLR paper, not independent
+follow-up work, so most content stays ICLR. Added docs/PhaseFormer_VLDBJ_extension_outline.md:
+constraints (>=30% new content plus a cover letter, two-column template, artifacts), narrative,
+section-to-source mapping, theory reuse from minipaper_0930 plus a new Theorem 5 that is not yet
+proved, the five-day M1 plan (28-setting x 3-seed full test against the ICLR table with a
+pre-registered E14 l_q1_8-derived template, and auxiliary validations V1-V10 with
+pre-registered interpretations), result-dependent wording, and open decisions D1-D7.
+Documentation only; no experiments launched. ICLR structure was read from arXiv 2510.04134.
+Flagged a parameter-count conflict: about 1k for ICLR versus roughly 10k-190k for M1 at
+rank=H/8 (inferred, still to measure).
