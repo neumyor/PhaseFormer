@@ -7089,3 +7089,47 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   (E14 baseline csv lives in the older PhaseFormer bundle).
 - Pending: user-approved test-set tuning round (modulation width k, modulation LR
   multiplier, fusion init) not yet launched; envelope/activation analyses not yet run.
+
+## 2026-10-10 Tuning round launched; envelope/activation analyses filled into the paper
+
+- Test-set tuning stage (`--stage tune`, commit ea0effb/4565f5cb): six extension
+  variants (communication width 2/4, extension LR multiplier 1/10, gate init
+  0.2/0.5) x 20 settings (Traffic, Electricity, Weather, ETTm1, ETTm2) x 1 seed
+  = 120 trainings, launched detached on the server (16 slots). Each job trains,
+  reads test once (native + modulation-off) and records the variant with its test
+  number. Selection is on test by user decision; all numbers are recorded for
+  audit. Smoke-verified two variants end to end first.
+- Checkpoint analysis (scripts/vldbj_m1/analyze.py, run outside the frozen bundle
+  via VLDBJ_REPO_ROOT while tuning is in flight): 56/56 seed-2021 checkpoints
+  analyzed, zero failures. Key findings:
+  - Envelopes read from weights; measured forecast levels never leave I_phi
+    (max utilization 0.74). Envelope binds on ETTh2 (19.4% of windows outside),
+    Weather (22.1%), ETTm2 (13.1%); Traffic/Electricity checkpoints have wide
+    envelopes (C1 3.2-5.2) that never bind. Floor = 2.4-7.6% of MSE on the
+    binding datasets. Amplitude budget exceeded on 31.8% (ETTh2), 14.8% (ETTh1),
+    13.5% (Weather) of windows.
+  - Level hand-over: branch level tracks Lambda (corr +0.40..+0.44) exactly on
+    the ETT datasets where the envelope is tight; ~0 on Traffic/Electricity.
+  - Modulation activation: per-channel corr(q along 1_d, Lambda) confirms Thm 5d
+    where coupling is strong: H96 mean per-channel corr 0.54 (ETTh2, 100% of
+    channels >0.3), 0.46 (ETTm1, 100%), 0.43 (ETTm2, 86%), 0.30 (Weather,
+    Electricity). Pooled correlation is ~0 because q also learns a per-channel
+    static amplitude scale; per-channel is the correct statistic. q is
+    uncorrelated with Omega (<0.17 everywhere), as predicted.
+  - Cycle-mean invariance: worst over 84 m1 checkpoints 8.9e-16 vs tolerance
+    7e-9 relative; phase outputs change up to 1.8 window std.
+  - Gain stratification (b0 vs m1 native, seed 2021): on 8 of the 12 improving
+    settings the top-|Lambda|-quintile gain exceeds the bottom-quintile gain
+    (Traffic-96 monotone +0.0002 -> +0.0033). Overall effect small, consistent
+    with the ladder.
+- Same-protocol ladder (E14 phase_only PF vs b0=L vs m1=LA): L improves 17/28,
+  LA 18/28; modulation-on beats modulation-off on 27/28. Horizon-avg LA vs PF:
+  Weather -2.2%, ETTh2 -1.8%, ETTm2 -1.6%, ETTh1 -0.7%, Electricity -0.2%,
+  Traffic +0.2%, ETTm1 +0.5%.
+- Paper filled: main table LA column + results paragraph, ladder table, envelope
+  table, mechanism subsections (invariance/activation/gain stratification),
+  capacity ordering corrected (90-value decoder 1.0102, 30-value 1.0107, fixed
+  profiles 1.0115), Appendix C 28-row table. Build: 29 pages, 0 undefined refs.
+- Known pending: page count 29 > 25 (trim proposal awaiting user); tuning
+  sentence for Sec. 8 setup + winner confirm round after tuning completes;
+  architecture figure still TODO.

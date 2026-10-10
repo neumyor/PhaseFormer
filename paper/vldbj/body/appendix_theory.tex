@@ -123,20 +123,53 @@ The level branch of \sysL is affine in the window, and its within-cycle output i
 \section{Extended Results of \sysLA}
 \label{app:ext_results}
 
-\TODO{Full results of \sysLA and \sysL for all 28 settings (mean $\pm$ standard deviation over three seeds), compared with the conference \sysname; parameter counts per setting.}
+Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the identical protocol. The parameter increments of the extension over the backbone are horizon-independent: the level branch contributes 105 parameters, the modulation $k(3+d)$ with $k=\min(2,d)$, between 14 and 262 parameters, and the fusion two gates per channel or two shared gates, giving between 119 and 367 parameters in total across the seven datasets (Section~\ref{sec:ext_properties}).
 
 \begin{table*}[t]
 \blue{
 \centering
-\caption{Per-horizon results of \sysLA (three seeds) and the conference \sysname. \TODO{fill}}
+\caption{Per-horizon test results of \sysLA (mean $\pm$ standard deviation over three seeds) and the \sysname backbone retrained under the identical protocol, on all 28 settings. The conference numbers of \sysname are in Table~\ref{tab:main_results}; the ladder of Section~\ref{sec:exp_ladder} uses this same-protocol column.}
 \label{tab:la_full}
 \footnotesize
 \begin{tabular}{llcccc}
 \toprule
-Dataset & $H$ & \multicolumn{2}{c}{\sysname} & \multicolumn{2}{c}{\sysLA} \\
+Dataset & $H$ & \multicolumn{2}{c}{\sysname (same protocol)} & \multicolumn{2}{c}{\sysLA} \\
  & & MSE & MAE & MSE & MAE \\
 \midrule
-\multicolumn{6}{c}{\TODO{28 rows}} \\
+ETTh1 & 96 & 0.361 & 0.387 & 0.3629{\scriptsize$\pm$0.0035} & 0.3897{\scriptsize$\pm$0.0018} \\
+ & 192 & 0.405 & 0.411 & 0.4015{\scriptsize$\pm$0.0066} & 0.4153{\scriptsize$\pm$0.0086} \\
+ & 336 & 0.442 & 0.435 & 0.4273{\scriptsize$\pm$0.0057} & 0.4318{\scriptsize$\pm$0.0024} \\
+ & 720 & 0.423 & 0.442 & 0.4281{\scriptsize$\pm$0.0058} & 0.4457{\scriptsize$\pm$0.0035} \\
+\midrule
+ETTh2 & 96 & 0.282 & 0.343 & 0.2806{\scriptsize$\pm$0.0046} & 0.3437{\scriptsize$\pm$0.0028} \\
+ & 192 & 0.344 & 0.383 & 0.3434{\scriptsize$\pm$0.0049} & 0.3839{\scriptsize$\pm$0.0030} \\
+ & 336 & 0.376 & 0.409 & 0.3679{\scriptsize$\pm$0.0011} & 0.4071{\scriptsize$\pm$0.0013} \\
+ & 720 & 0.416 & 0.449 & 0.4008{\scriptsize$\pm$0.0011} & 0.4374{\scriptsize$\pm$0.0007} \\
+\midrule
+ETTm1 & 96 & 0.302 & 0.351 & 0.3042{\scriptsize$\pm$0.0067} & 0.3529{\scriptsize$\pm$0.0038} \\
+ & 192 & 0.330 & 0.363 & 0.3346{\scriptsize$\pm$0.0015} & 0.3686{\scriptsize$\pm$0.0023} \\
+ & 336 & 0.359 & 0.381 & 0.3619{\scriptsize$\pm$0.0013} & 0.3851{\scriptsize$\pm$0.0010} \\
+ & 720 & 0.415 & 0.413 & 0.4132{\scriptsize$\pm$0.0017} & 0.4134{\scriptsize$\pm$0.0012} \\
+\midrule
+ETTm2 & 96 & 0.174 & 0.265 & 0.1670{\scriptsize$\pm$0.0025} & 0.2585{\scriptsize$\pm$0.0013} \\
+ & 192 & 0.228 & 0.300 & 0.2218{\scriptsize$\pm$0.0063} & 0.2951{\scriptsize$\pm$0.0033} \\
+ & 336 & 0.276 & 0.331 & 0.2701{\scriptsize$\pm$0.0052} & 0.3270{\scriptsize$\pm$0.0022} \\
+ & 720 & 0.352 & 0.380 & 0.3548{\scriptsize$\pm$0.0050} & 0.3808{\scriptsize$\pm$0.0017} \\
+\midrule
+Electricity & 96 & 0.130 & 0.223 & 0.1298{\scriptsize$\pm$0.0008} & 0.2227{\scriptsize$\pm$0.0014} \\
+ & 192 & 0.146 & 0.236 & 0.1465{\scriptsize$\pm$0.0004} & 0.2367{\scriptsize$\pm$0.0007} \\
+ & 336 & 0.167 & 0.260 & 0.1667{\scriptsize$\pm$0.0021} & 0.2594{\scriptsize$\pm$0.0019} \\
+ & 720 & 0.199 & 0.285 & 0.1987{\scriptsize$\pm$0.0020} & 0.2858{\scriptsize$\pm$0.0021} \\
+\midrule
+Traffic & 96 & 0.363 & 0.232 & 0.3617{\scriptsize$\pm$0.0020} & 0.2339{\scriptsize$\pm$0.0004} \\
+ & 192 & 0.380 & 0.242 & 0.3817{\scriptsize$\pm$0.0019} & 0.2453{\scriptsize$\pm$0.0028} \\
+ & 336 & 0.393 & 0.250 & 0.3956{\scriptsize$\pm$0.0039} & 0.2523{\scriptsize$\pm$0.0013} \\
+ & 720 & 0.433 & 0.270 & 0.4340{\scriptsize$\pm$0.0012} & 0.2724{\scriptsize$\pm$0.0009} \\
+\midrule
+Weather & 96 & 0.150 & 0.197 & 0.1465{\scriptsize$\pm$0.0014} & 0.1940{\scriptsize$\pm$0.0020} \\
+ & 192 & 0.195 & 0.240 & 0.1864{\scriptsize$\pm$0.0004} & 0.2325{\scriptsize$\pm$0.0005} \\
+ & 336 & 0.246 & 0.280 & 0.2393{\scriptsize$\pm$0.0006} & 0.2763{\scriptsize$\pm$0.0009} \\
+ & 720 & 0.316 & 0.332 & 0.3148{\scriptsize$\pm$0.0024} & 0.3296{\scriptsize$\pm$0.0003} \\
 \bottomrule
 \end{tabular}
 }
