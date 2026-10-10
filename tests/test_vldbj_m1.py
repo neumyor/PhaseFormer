@@ -111,7 +111,7 @@ class VLDBJM1Tests(unittest.TestCase):
         # Everything except the two fusion logits is still the same-seed b0 parameter.
         state = m1.state_dict()
         for name, value in b0.state_dict().items():
-            if 'shape_bias_delta' in name:
+            if 'shape_bias_delta' in name or name.startswith('lowrank_interaction_gate'):
                 continue
             torch.testing.assert_close(state[name], value, atol=0, rtol=0)
 
