@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-10-10 — 将完整test表的delta参照改为Golden
+
+用户要求加入Golden并将delta全部改为相对Golden。汇总脚本结构化读取
+`docs/PhaseFormer_gold_standard.md`的ETTh1/ETTm2/Weather×H96/720六任务，
+平均Golden MSE=0.2935、MAE=0.3323333333。保持上一表delta符号：
+`(candidate_mean/Golden_mean-1)*100`，负值误差降低；它是误差变化，不是
+gold文档中正号提升的improvement_rate。没有改变Golden源值或模型选择。
+重建`research_runs/interaction_test_extension_20261009/`的Markdown/汇总CSV，
+原q1/8参照保留为对照行，配对基线delta仅作为CSV辅助列。旧版保留scratch。
+独立Decimal重算所有Golden delta通过；原始results.csv/setting_means.csv字节
+和所有已有MSE/MAE逐项不变。没有新训练或test推理。
+
 ## 2026-10-10 — 确认后台完整test扩展结果，补表并独立复核
 
 后台2026-10-09北京时间21:36:54完成，22/22固定补训、168/168完整test评估成功。

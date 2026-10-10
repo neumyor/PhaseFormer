@@ -1,5 +1,6 @@
 """Verify full coverage and append test-only interaction tables to prior results."""
 import argparse
+import csv
 import hashlib
 import json
 from pathlib import Path
@@ -21,13 +22,32 @@ NAMES = {
 }
 
 
+def golden_reference(path):
+    requested = {(dataset, horizon) for dataset, horizon, _ in SETTINGS}
+    values = {}
+    for row in csv.reader(path.read_text().splitlines(), delimiter='|'):
+        if len(row) != 6:
+            continue
+        dataset, horizon, mse, mae = (v.strip() for v in row[1:5])
+        if not horizon.isdigit() or (dataset, int(horizon)) not in requested:
+            continue
+        key = (dataset, int(horizon))
+        if key in values:
+            raise ValueError(f'Duplicate Golden task: {key}')
+        values[key] = (float(mse), float(mae))
+    assert set(values) == requested
+    return pd.Series(np.mean(list(values.values()), axis=0), index=['test_mse', 'test_mae'])
+
+
 def table(frame, columns):
     lines = ['| '+' | '.join(columns)+' |', '| '+' | '.join('---' for _ in columns)+' |']
     for row in frame.to_dict('records'):
         values = []
         for column in columns:
             value = row[column]
-            if column in ('MSE', 'MAE'):
+            if pd.isna(value):
+                value = '-'
+            elif column in ('MSE', 'MAE'):
                 value = f'{value:.4f}'
             elif column.startswith('Delta'):
                 value = f'{value:+.3f}%'
@@ -86,24 +106,31 @@ def main(args):
     task.columns = ['_'.join(c).rstrip('_') if isinstance(c, tuple) else c for c in task.columns]
     task.to_csv(args.output/'setting_means.csv', index=False)
     paper = pd.read_csv(args.previous/'dataset_averages.csv')
-    anchor = paper[paper.arm == '论文 PhaseFormer-L q=1/8'][['test_mse', 'test_mae']].mean()
+    anchor = golden_reference(args.golden)
+    stored_golden = paper[paper.arm == '论文 Golden'][['test_mse', 'test_mae']].mean()
+    np.testing.assert_allclose(anchor, stored_golden, atol=1e-15, rtol=1e-15)
     average = results.groupby(['family', 'arm'])[['test_mse', 'test_mae']].mean()
     new_rows = []
     for (family, arm), values in average.iterrows():
         baseline = average.loc[(family, 'i0' if family == 'normalization' else 'b0')]
         new_rows.append({'Family': family, 'Method': NAMES[arm], 'MSE': values.test_mse, 'MAE': values.test_mae,
-            'Delta MSE vs paper': (values.test_mse/anchor.test_mse-1)*100,
-            'Delta MAE vs paper': (values.test_mae/anchor.test_mae-1)*100,
+            'Delta MSE vs Golden': (values.test_mse/anchor.test_mse-1)*100,
+            'Delta MAE vs Golden': (values.test_mae/anchor.test_mae-1)*100,
             'Delta MSE paired': (values.test_mse/baseline.test_mse-1)*100,
             'Delta MAE paired': (values.test_mae/baseline.test_mae-1)*100})
-    new = pd.DataFrame(new_rows)
+    references = [{'Family': 'reference', 'Method': label, 'MSE': values.test_mse,
+                   'MAE': values.test_mae, 'Delta MSE vs Golden': (values.test_mse/anchor.test_mse-1)*100,
+                   'Delta MAE vs Golden': (values.test_mae/anchor.test_mae-1)*100}
+                  for label, values in [('Golden (original PhaseFormer)', anchor),
+                      ('Original PhaseFormer-L q=1/8', paper[paper.arm == '论文 PhaseFormer-L q=1/8'][['test_mse', 'test_mae']].mean())]]
+    new = pd.DataFrame(references+new_rows)
     new.to_csv(args.output/'new_method_averages.csv', index=False)
     prior = paper.groupby(['arm', 'method'])[['test_mse', 'test_mae']].mean().reset_index()
     master = []
     for row in prior.to_dict('records'):
         master.append({'Family': 'previous', 'Method': row['method'], 'MSE': row['test_mse'], 'MAE': row['test_mae'],
-            'Delta MSE vs paper': (row['test_mse']/anchor.test_mse-1)*100,
-            'Delta MAE vs paper': (row['test_mae']/anchor.test_mae-1)*100})
+            'Delta MSE vs Golden': (row['test_mse']/anchor.test_mse-1)*100,
+            'Delta MAE vs Golden': (row['test_mae']/anchor.test_mae-1)*100})
     # Preserve the two previously evaluated 30-epoch Pre-Norm variants as separate rows.
     long = pd.read_csv(args.long_test/'results.csv')
     for arm in ('tp_pre', 'tp_pre_components_static'):
@@ -111,19 +138,20 @@ def main(args):
         assert len(group) == 12
         mse, mae = group.test_mse.mean(), group.test_mae.mean()
         master.append({'Family': 'previous_long', 'Method': arm+' (30 epochs)', 'MSE': mse, 'MAE': mae,
-                       'Delta MSE vs paper': (mse/anchor.test_mse-1)*100,
-                       'Delta MAE vs paper': (mae/anchor.test_mae-1)*100})
-    master = pd.concat([pd.DataFrame(master), new.drop(columns=['Delta MSE paired', 'Delta MAE paired'])], ignore_index=True)
+                       'Delta MSE vs Golden': (mse/anchor.test_mse-1)*100,
+                       'Delta MAE vs Golden': (mae/anchor.test_mae-1)*100})
+    master = pd.concat([pd.DataFrame(master), new[new.Family != 'reference'].drop(columns=['Delta MSE paired', 'Delta MAE paired'])], ignore_index=True)
+    master = pd.concat([master[master.Method == '论文 Golden'], master[master.Method != '论文 Golden']], ignore_index=True)
     master.to_csv(args.output/'all_method_averages.csv', index=False)
     lines = ['# Extended Interaction Comparison: Full Test Matrix', '',
         'ETTh1 / ETTm2 / Weather x H96/H720; lookback720. Existing seeds2021/2022 for every interaction. '
-        'Each task first averages two seeds, then six tasks receive equal weight. Paper q1/8 anchor uses the existing three-seed E14 means on the same tasks.', '',
+        'Each task first averages two seeds, then six tasks receive equal weight. Golden anchor uses the original published PhaseFormer values in docs/PhaseFormer_gold_standard.md on these exact six tasks (MSE0.2935, MAE0.3323333333). Original PhaseFormer-L q1/8 uses the existing three-seed E14 means.', '',
         'Delta = (candidate aggregate mean / reference aggregate mean - 1) * 100%; negative means lower error. '
         'This is a ratio of aggregate means, not a mean of per-setting percentages. Metrics are calculated from all test forecast elements, with no dropped batch.', '',
         '## Newly Completed Test Table', '',
-        table(new, ['Family', 'Method', 'MSE', 'MAE', 'Delta MSE vs paper', 'Delta MAE vs paper', 'Delta MSE paired', 'Delta MAE paired']), '',
+        table(new, ['Family', 'Method', 'MSE', 'MAE', 'Delta MSE vs Golden', 'Delta MAE vs Golden']), '',
         '## Combined Previous and New Table', '',
-        table(master, ['Family', 'Method', 'MSE', 'MAE', 'Delta MSE vs paper', 'Delta MAE vs paper']), '',
+        table(master, ['Family', 'Method', 'MSE', 'MAE', 'Delta MSE vs Golden', 'Delta MAE vs Golden']), '',
         '## Six Task Details', '']
     for dataset, horizon in sorted({(d, h) for d, h, _ in SETTINGS}):
         block = task[(task.dataset == dataset)&(task.horizon == horizon)]
@@ -150,9 +178,13 @@ def main(args):
                 'manifest': manifest, 'training_frozen_before_test': freeze, 'complete': complete,
                 'validation': {'coverage': True, 'source_hashes': True, 'data_alignment': True,
                                'initialization': True, 'baseline_reproduction': True, 'aggregation': True},
-                'summary_script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+                'summary_script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                'delta_reference': {'model': 'original PhaseFormer Golden', 'file': str(args.golden),
+                                    'source_sha256': hashlib.sha256(args.golden.read_bytes()).hexdigest(),
+                                    'mse': float(anchor.test_mse), 'mae': float(anchor.test_mae),
+                                    'formula': '(candidate aggregate mean / Golden aggregate mean - 1) * 100'}}
     (args.output/'metadata.json').write_text(json.dumps(metadata, indent=2)+'\n')
-    print(table(new, ['Family', 'Method', 'MSE', 'MAE', 'Delta MSE vs paper', 'Delta MAE vs paper', 'Delta MSE paired', 'Delta MAE paired']))
+    print(table(new, ['Family', 'Method', 'MSE', 'MAE', 'Delta MSE vs Golden', 'Delta MAE vs Golden']))
 
 
 if __name__ == '__main__':
@@ -161,4 +193,5 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--previous', type=Path, default=Path('research_runs/interaction_existing_test_20261009'))
     parser.add_argument('--long-test', type=Path, default=Path('research_runs/lowrank_level_fusion_next_test'))
+    parser.add_argument('--golden', type=Path, default=Path('docs/PhaseFormer_gold_standard.md'))
     main(parser.parse_args())
