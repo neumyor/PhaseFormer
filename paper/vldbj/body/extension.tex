@@ -4,14 +4,41 @@
 
 \sysLA keeps the conference architecture of Section~\ref{sec:method} unchanged: phase tokenization, embedding, cross-phase routing and the shared predictor are exactly those of \sysname. It adds three components, each derived from one result of Section~\ref{sec:theory}. Figure~\ref{fig:la_overview} shows where they attach.
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\fbox{\parbox{0.93\linewidth}{\centering\small
-\TODO{Architecture figure of \sysLA: the \sysname backbone (unchanged) with the level branch on cycle means, the centered modulation inserted between the last routing layer and the shared predictor, and the cycle-wise level/shape fusion.}\\[1ex]
-}}
-\caption{\sysLA. The \sysname backbone is unchanged. A rank-3 level branch reads the anchored cycle means and writes onto three fixed horizon profiles; its state drives a centered modulation of the final phase latents; the two forecasts are fused with separate level and shape gates.}
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=2pt, align=center, inner sep=3.5pt, minimum height=17pt},
+  old/.style={box, fill=black!7},
+  new/.style={box, fill=blue!10, draw=blue!50!black},
+  arr/.style={-{Stealth[length=4pt]}, semithick},
+  arrnew/.style={arr, blue!50!black},
+  lab/.style={font=\tiny, inner sep=1.5pt, fill=white}]
+% main path
+\node[old, text width=1.9cm] (input) at (0,0) {window\\ $x\in\mathbb R^{L}$};
+\node[old, text width=3.1cm] (backbone) at (3.4,0) {\textbf{\sysname backbone}\\ (unchanged): phase tokens, embedding, cross-phase routing};
+\node[new, text width=3.3cm] (mod) at (7.6,0) {centered modulation\\ $h'_p=h_p+(h_p-\bar h)\odot q$};
+\node[new, text width=1.9cm] (pred) at (11.0,0) {shared\\ predictor $\Phi$};
+\node[new, text width=4.2cm, font=\tiny] (fusion) at (14.6,0)
+  {\scriptsize level/shape fusion\\[1pt] $M_c\hat{\tilde y}=(1-g_\ell)M_cF+g_\ell M_cR$\\ $J_c\hat{\tilde y}=(1-g_s)J_cF+g_sJ_cR$};
+\node[old, minimum width=0.9cm] (out) at (17.9,0) {$\hat y$};
+% level branch
+\node[new, text width=3.4cm] (pool) at (3.4,-2.5) {pool anchored window to cycle means $\bar z\in\mathbb R^{K}$\\ $t=E\bar z+e\in\mathbb R^{3}$};
+\node[new, text width=3.3cm] (prof) at (11.0,-2.5) {fixed profiles $\Psi_H$\\ (displacement, tilt, curvature)\\ $R=\tilde x_L\one_H+\Psi_H(Nt+n)$};
+\coordinate (jt) at (7.6,-2.5);
+\draw[arr] (input) -- (backbone);
+\draw[arr] (backbone) -- node[lab, above=1pt]{$h_1,\dots,h_P$} (mod);
+\draw[arr] (mod) -- (pred);
+\draw[arr] (pred) -- node[lab, above=1pt]{$F$} (fusion);
+\draw[arr] (fusion) -- (out);
+\draw[arrnew] (input.south) |- node[lab, pos=0.7, above]{$\tilde x-\tilde x_L\one_L$} (pool.west);
+\draw[arrnew] (pool.east) -- node[lab, pos=0.5, above]{$t$} (jt) -- (prof.west);
+\draw[arrnew] (jt) -- node[lab, pos=0.5, right]{$q=V_2V_1t$} (mod.south);
+\draw[arrnew] (prof.east) -| node[lab, pos=0.25, above]{$R$} (fusion.south);
+\end{tikzpicture}
+\caption{\sysLA. The \sysname backbone (gray) is unchanged. A rank-3 level branch (blue) reads the anchored cycle means and writes onto three fixed horizon profiles; its state $t$ drives a centered modulation of the final phase latents; the two forecasts are fused with separate level and shape gates.}
 \label{fig:la_overview}
-\end{figure}
+\end{figure*}
 
 \subsection{Level branch on cycle means}
 \label{sec:ext_branch}
