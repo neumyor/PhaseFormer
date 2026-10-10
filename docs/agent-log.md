@@ -6904,3 +6904,19 @@ channel rows,24-setting coverage,192 aggregate records,Top1 rankings,24 case met
 recomputations and ZIP bytes;maximum aggregate recomputation difference5.8e-11 after
 9-digit CSV rounding. No audit remains pending. Original model sources and weights
 were left intact throughout the diagnostic.
+
+## 2026-10-10: Record M1 (centered TP-Mod) as primary architecture and its design rationale
+
+User designated M1 (`tp_mod_centered`: Z' = Z + (Z - mean_phase Z) * (B A t), on top of b0 static
+level/shape fusion) as the primary model structure going forward. Documentation only: added
+docs/PhaseFormer_M1_design_rationale.md covering structure, design ideas (level/shape division of
+labour, centering as an algebraic cycle-mean constraint, zero-init exact reduction to b0), evidence
+for and against, falsification conditions and unlaunched follow-up checks. No training, test
+reads or code changes; no experiment authorized. Source code read: scripts/centered_mod_interaction/
+model.py, src/models/lowrank_fusion.py. Per-task M1-vs-b0 deltas in the doc are recomputed from the
+four-digit values in the interaction results record and are approximate.
+
+Risks recorded: the choice is a research-direction decision, not a performance claim. M1 beats b0
+by -0.095% MSE but +0.017% MAE with 4/12 seed-setting MSE wins; the earlier H720 validation pilot
+rejected promotion (2/6 wins); phase-only C2 (0.2931) matches M1 (0.2930), so cross-branch
+attribution is unestablished. Selecting M1 used test rankings (test-set selection).
