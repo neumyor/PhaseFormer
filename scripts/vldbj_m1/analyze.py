@@ -87,7 +87,7 @@ def analysis_job(path):
         arm, is_m1 = job['arm'], job['arm'] == 'm1'
 
         # --- envelope constants read from the weights (Theorems 3 and 5a) ---
-        ln = model.routing_layers[-1].norm2
+        ln = model.routing_layers[-1].interact.norm2
         gamma, beta = ln.weight.detach().float(), ln.bias.detach().float()
         phi_w = model.predictor.decoder.weight.detach().float()   # (K', d)
         phi_b = model.predictor.decoder.bias.detach().float()     # (K',)
