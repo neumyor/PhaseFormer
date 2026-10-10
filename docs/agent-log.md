@@ -6936,3 +6936,18 @@ pre-registered interpretations), result-dependent wording, and open decisions D1
 Documentation only; no experiments launched. ICLR structure was read from arXiv 2510.04134.
 Flagged a parameter-count conflict: about 1k for ICLR versus roughly 10k-190k for M1 at
 rank=H/8 (inferred, still to measure).
+
+## 2026-10-10: Fix M1 to a compressed level branch and flag ICLR backbone mismatch
+
+User decided that the extension must keep the ICLR low-parameter claim. M1 therefore uses a
+compressed branch everywhere, including the main table. Updated the VLDBJ outline (section 4.1)
+with theory-driven candidates and a pre-registered validation-only pilot rule:
+- S1: pool=24 cycle means, r=3, learnable decoder, 93+4H params, existing code.
+- S2: same input with a fixed Legendre 0-2 profile decoder, about 105 params, needs new code.
+- S3: pool=8, r=3.
+Instantiated phase-only backbones locally from repo presets via the .venv: Torch 2.7.1, CPU, no
+data loading. Several presets differ from the ICLR-reported ~1.156K parameters: ETTh1-720 60,762;
+Electricity-192/720 about 273k-276k; Traffic 37k-276k. This was added as blocking decision D9:
+the ICLR per-setting configs are needed. Per-channel static fusion gates cost 2C parameters
+(1,724 on Traffic); added as D8. The M1 design doc now notes that its rank=H/8 numbers are pilot
+evidence only. No experiments launched.
