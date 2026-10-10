@@ -1,5 +1,17 @@
 # Agent Maintenance Log
 
+## 2026-10-10 — 新建交互结果记录，逐setting说明执行与来源
+
+按用户要求新增`docs/PhaseFormer_interaction_results_record_20261010.md`，固定
+当前已核验结果。统一G/P/A/N/B/L/F/C/M编号，记录每种交互公式、配对基线、
+i0/b0融合区别、8/30epoch预算、原权重复用及22次补训分布。覆盖三dataset×
+H96/720六task，每task附30方法/参照的test MSE/MAE四位及Golden delta百分比；
+六task汇总与逐task用未舍入值计算，不混入val诊断。冻结信息探针、消息开关、
+warm-start/动态Gate/不完整矩阵单列解释边界与来源，无新训练或推理。
+独立从原始CSV和Golden文本重算210行指标及delta通过，所有本地相对链接存在，
+`git diff --check`通过。记录保留源文件hash、结果路径和原复现入口；原实验工件
+不变，本次仅文档更新。
+
 ## 2026-10-10 — 将完整test表的delta参照改为Golden
 
 用户要求加入Golden并将delta全部改为相对Golden。汇总脚本结构化读取
