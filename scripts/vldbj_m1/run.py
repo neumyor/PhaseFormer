@@ -486,10 +486,10 @@ def plan_jobs(stage, scratch, sources, selection, smoke):
         chosen = json.loads((scratch / 'tune_selection.json').read_text())
         if chosen['smoke'] != smoke:
             raise ValueError('Smoke and formal selections must not mix')
-        for name, record in chosen['settings'].items():
+        for setting, record in chosen['settings'].items():
             if record['chosen'] is None:
                 continue
-            dataset, horizon = name.split('_H')
+            dataset, horizon = setting.split('_H')
             for seed in CONFIRM_SEEDS:
                 specs.append((dataset, int(horizon), seed, 'm1', selection['head'],
                               selection['shared_gate'][dataset], record['chosen'],
