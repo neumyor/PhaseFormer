@@ -10,6 +10,9 @@ Stages (each refuses to run out of order):
   tune   -- test-set tuning round (user decision 2026-10-10): six extension
             variants over five datasets, one seed; each job trains and reads
             its test split once, recording the variant with its test number
+  tune-select -- pick the per-setting winner against the main-stage
+            configuration on seed-paired test reads (test-set selection)
+  confirm -- rerun the chosen variants on the seeds the tune round skipped
 """
 from __future__ import annotations
 
@@ -54,6 +57,9 @@ TUNE_GRID = (
     {'communication_width': 2, 'extension_lr_mult': 10.0, 'gate_init': 0.5},
     {'communication_width': 4, 'extension_lr_mult': 10.0, 'gate_init': 0.5},
 )
+# The confirm stage reruns the per-setting winners on the seeds the tune round
+# did not cover; seed TUNE_SEED of every variant is already measured there.
+CONFIRM_SEEDS = tuple(s for s in SEEDS if s != TUNE_SEED)
 E14 = 'research_runs/phaseformer_L_e14_main_v1/results.csv'
 # E14 runs live in the original server checkout; experiments run in a frozen copy.
 E14_ROOT = Path(os.environ.get('VLDBJ_E14_ROOT', ROOT))
@@ -403,6 +409,65 @@ def tune_job(path):
             'smoke': job['smoke']})
 
 
+def tune_select(scratch, smoke):
+    """Select one extension variant per tuned setting against the main-stage
+    configuration, on the test split (test-set selection, user decision
+    2026-10-10). Every candidate number is recorded here so the selection is
+    auditable; reports built on it must label it test-set selection.
+
+    The comparison is seed-paired: the main-stage configuration is the variant
+    ``None`` of prepare_config and every tune run shares its common random
+    state, so the tune reads and the main seed-TUNE_SEED test reads differ only
+    in the variant fields. A setting keeps the main-stage configuration unless
+    some variant beats it; those variant winners are rerun on CONFIRM_SEEDS.
+    """
+    main = {}
+    for path in (scratch / 'main' / 'runs').glob(f'*_S{TUNE_SEED}__m1__*/test_result.json'):
+        r = json.loads(path.read_text())
+        dataset, rest = r['name'].split('_H', 1)
+        horizon = int(rest.split('_')[0])
+        if dataset in TUNE_DATASETS:
+            main[(dataset, horizon)] = r['test_mse']
+    expected = {(d, h) for d in TUNE_DATASETS for h in HORIZONS}
+    if set(main) != expected:
+        raise ValueError(f'Missing main test reads: {sorted(expected - set(main))}')
+    tune = {}
+    for path in (scratch / 'tune' / 'runs').glob(f'*_S{TUNE_SEED}__*/tune_result.json'):
+        r = json.loads(path.read_text())
+        if r['smoke'] != smoke:
+            raise ValueError('Smoke and formal results must not mix')
+        dataset, rest = r['name'].split('_H', 1)
+        horizon = int(rest.split('_')[0])
+        variant_id = int(r['name'].rsplit('__t', 1)[1])
+        tune[(dataset, horizon, variant_id)] = r['test_mse']
+    missing = {(d, h, v) for d in TUNE_DATASETS for h in HORIZONS
+               for v in range(len(TUNE_GRID))} - set(tune)
+    if missing:
+        raise ValueError(f'Tune round incomplete: missing {sorted(missing)}')
+    settings = {}
+    for key in sorted(expected):
+        dataset, horizon = key
+        best = min(range(len(TUNE_GRID)), key=lambda v: tune[(dataset, horizon, v)])
+        best_mse = tune[(dataset, horizon, best)]
+        keep_main = best_mse >= main[key]
+        settings[f'{dataset}_H{horizon}'] = {
+            'chosen': None if keep_main else best,
+            'main_test_mse': main[key],
+            'variant_test_mse': {f't{v}': tune[(dataset, horizon, v)] for v in range(len(TUNE_GRID))},
+            'margin_vs_main': (main[key] - best_mse) / main[key],
+        }
+    record = {
+        'selection_basis': ('test split, seed-paired single-seed reads; test-set '
+                            'selection by user decision 2026-10-10; exploratory'),
+        'rule': 'choose the variant with the lowest test MSE; keep the main-stage '
+                'configuration when no variant beats it',
+        'confirm_seeds': list(CONFIRM_SEEDS),
+        'settings': settings, 'smoke': smoke,
+    }
+    write_immutable(scratch / 'tune_selection.json', record)
+    return record
+
+
 def plan_jobs(stage, scratch, sources, selection, smoke):
     base = {'code_commit': commit(), 'source_hashes': provenance(), 'smoke': smoke, 'stage': stage}
     specs = []
@@ -417,6 +482,18 @@ def plan_jobs(stage, scratch, sources, selection, smoke):
                 for vid, variant in enumerate(TUNE_GRID):
                     specs.append((dataset, horizon, TUNE_SEED, 'm1', selection['head'],
                                   selection['shared_gate'][dataset], vid, dict(variant)))
+    elif stage == 'confirm':
+        chosen = json.loads((scratch / 'tune_selection.json').read_text())
+        if chosen['smoke'] != smoke:
+            raise ValueError('Smoke and formal selections must not mix')
+        for name, record in chosen['settings'].items():
+            if record['chosen'] is None:
+                continue
+            dataset, horizon = name.split('_H')
+            for seed in CONFIRM_SEEDS:
+                specs.append((dataset, int(horizon), seed, 'm1', selection['head'],
+                              selection['shared_gate'][dataset], record['chosen'],
+                              dict(TUNE_GRID[record['chosen']])))
     else:
         for dataset in DATASETS:
             for horizon in HORIZONS:
@@ -507,7 +584,8 @@ def run_jobs(jobs, gpus, worker_flag):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--stage', choices=('pilot', 'select', 'main', 'test', 'tune'))
+    parser.add_argument('--stage', choices=('pilot', 'select', 'main', 'test', 'tune',
+                                            'tune-select', 'confirm'))
     parser.add_argument('--scratch-dir', type=Path)
     parser.add_argument('--gpus', default='0,1,2,3,4,5,6,7')
     parser.add_argument('--slots-per-gpu', type=int, default=1)
@@ -533,9 +611,12 @@ def main():
         if args.stage == 'select':
             print(json.dumps(select(scratch, args.smoke), indent=1))
             return
+        if args.stage == 'tune-select':
+            print(json.dumps(tune_select(scratch, args.smoke), indent=1))
+            return
         sources = e14_sources()
         selection = None
-        if args.stage in ('main', 'test', 'tune'):
+        if args.stage in ('main', 'test', 'tune', 'confirm'):
             selection = json.loads((scratch / 'selection.json').read_text())
         jobs = plan_jobs('main' if args.stage == 'test' else args.stage, scratch, sources, selection, args.smoke)
         write_immutable(scratch / f'{args.stage}_manifest.json', {
@@ -549,7 +630,7 @@ def main():
             if missing:
                 raise RuntimeError(f'Test read refused: {len(missing)} main runs unfinished')
             run_jobs(jobs, gpus, '--test-job')
-        elif args.stage == 'tune':
+        elif args.stage in ('tune', 'confirm'):
             run_jobs(jobs, gpus, '--tune-job')
         else:
             run_jobs(jobs, gpus, '--job')
