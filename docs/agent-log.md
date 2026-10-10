@@ -6951,3 +6951,33 @@ Electricity-192/720 about 273k-276k; Traffic 37k-276k. This was added as blockin
 the ICLR per-setting configs are needed. Per-channel static fusion gates cost 2C parameters
 (1,724 on Traffic); added as D8. The M1 design doc now notes that its rank=H/8 numbers are pilot
 evidence only. No experiments launched.
+
+## 2026-10-10: Implement compressed-branch M1 pipeline for the VLDBJ main table
+
+User decisions:
+- D9: the ICLR Table 5 backbones are the repo presets, and "~1k parameters" is to be stated for H96 only.
+- D8: sharing the fusion weights across variables is optional and may be enabled per setting.
+
+Added isolated code scripts/vldbj_m1/{model.py,run.py} and tests/test_vldbj_m1.py. No src/ or older experiment entries were changed.
+- S1/S2/S3 heads use rank 3. ProfileLevelHead (S2) writes onto discrete orthogonal displacement/tilt/curvature profiles: 105 params, independent of the horizon.
+- Fusion gates can optionally be shared across variables.
+- M1 reuses the centered tp_mod communication.
+- b0 and M1 are paired from the same seed's b0 state.
+- The run.py stages are pilot (val only, 7 settings x 3 heads x 2 gates), select (pre-registered rule), main (28 x 3 seeds x {b0, m1} from same-seed E14 phase-only configs), and test (one read after all training, plus modulation-off and a highest-precision cycle-mean check).
+
+Local check: `.venv/bin/python -m pytest tests/test_vldbj_m1.py tests/test_centered_mod_interaction.py -q` gives 16 passed (CPU, Torch 2.7.1). This covers paired zero-init equality, parameter budgets, a shared-gate forward with 862 channels, and nonzero modulation leaving every predictor cycle mean unchanged in float64.
+
+Measured M1 S2 params, per-variable gates (backbone -> total):
+
+| Setting | Backbone -> total |
+|---|---|
+| ETTh1-96/192/336 | 2072/2092/2122 -> 2205/2225/2255 |
+| ETTh1-720 | 60762 -> 60951 |
+| ETTh2 | 1716/1752/1806/718 -> 1857/1893/1947/851 |
+| ETTm1 | 3666/3702/1806/3900 -> 3807/3843/1947/4041 |
+| ETTm2 | 3666/1752/1806/1950 -> 3807/1893/1947/2091 |
+| Weather | 5616/3702/3756/3900 -> 5785/3871/3925/4069 |
+| Electricity | 3666/273160/3756/275998 -> 4435/274169/4525/277007 (shared: 3795/273529/3885/276367) |
+| Traffic | 37154/273160/273934/275998 -> 39053/275251/276025/278089 (shared: 37331/273529/274303/276367) |
+
+S1 adds 4H-12 over S2 and S3 adds a further 180.

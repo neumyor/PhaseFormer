@@ -121,7 +121,15 @@ ICLR Thm 1 将周期模式变化建模为 `X′ = XSᵀ + R`。跨周期水平�
 
 S2 与 Thm 4 一一对应：读周期均值，写固定轮廓。它的参数与 horizon 无关，最符合 phase 设计的精神；风险是丢掉 0930 中 ETTh2-720 占 15% 贡献的周期形状修正模态（理论上应由 phase 主干承担）。S1 无需新代码、风险最低。
 
-**选择规则（预登记）**：在 4 个先导 setting（ETTh2-720、ETTm2-96、Weather-192、ETTh1-96）× seed 2021 上训练 S1/S2/S3，**只看 validation**，选 val MSE 等权平均最低者；若差距小于 0.5%，选参数最少者。选定后 28 setting 全部使用，不再更换。先导 setting 的 test 不读取。
+**选择规则（预登记，2026-10-10，代码 `scripts/vldbj_m1/run.py`）**：
+- 先导设置：每个数据集一个，共 7 个：ETTh1-96、ETTh2-720、ETTm1-336、ETTm2-96、Weather-192、Electricity-96、Traffic-96；seed 2021。
+- 先导规模：只训练 M1，S1/S2/S3 × {每变量融合权重, 跨变量共享} = 42 次；**只读 validation**，先导设置的 test 不读取。
+- 分支规格：全局选一个。按“该候选 val MSE / 该 setting 所有候选的最低 val MSE”计分，对 7 个 setting 和两种融合方式取平均，取均值最低者；差距在 0.5% 以内时按参数少的优先（S2 > S1 > S3）。
+- 融合权重共享（D8，用户决定可按 setting 选择启用）：**按数据集**选择，规则在训练前固定。在选定的分支规格下，若该数据集先导 setting 的共享版 val MSE ≤ 每变量版 ×1.001，则该数据集的 4 个 horizon 都用共享版。
+- 主实验：28 setting × 3 seed × {b0, M1}，配置模板为同 setting、同 seed 的 E14 phase-only 配置（ICLR preset 主干 + E14 训练协议：30 epoch、batch ETT 256 / Weather 64 / Electricity 64 / Traffic 8、E14 学习率），只加上第4.1节的分支、融合与调制。与 E14 已有的 phase-only 和 rank=H/8 结果按 seed 配对。
+- 全部 168 次训练完成后统一读取一次 test（`--stage test` 会拒绝在训练未完成时运行），同时记录调制关闭（V7）与周期均值不变性（V5）。
+
+实测参数量（S2，每变量融合权重；括号内为相对 ICLR preset 主干的增量）：ETT 与 Weather 为主干 + 133–169（ETTh2-720 为 718 → 851）；Electricity-96 为 3,666 → 4,435（改为共享权重后为 3,795）；Traffic-96 为 37,154 → 39,053（共享后为 37,331）。完整 28 行在 agent-log 2026-10-10 记录中。
 
 ### 4.2 主干必须与 ICLR 版一致（阻塞问题）
 
