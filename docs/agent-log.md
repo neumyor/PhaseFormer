@@ -7068,3 +7068,24 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
 - Open items: main table / ablation / envelope / activation-analysis TODO boxes await the
   168-run main stage (92/168 done at writing) and the test stage; architecture figure
   for PhaseFormer-LA is a TODO box; page count 28 > 25 limit.
+
+## 2026-10-10 Main and test stages complete; LA test numbers recorded
+
+- All 168 main trainings (frozen commit b831dca8) finished on the server without
+  tracebacks; the `--stage test` driver completed all 168 registered test reads
+  (single read per checkpoint, V7 modulation-off, V5 cycle-mean check). All 168
+  cycle-mean invariance checks passed (max |diff| 2.2e-16, float64).
+- Results summarized in `docs/PhaseFormer_VLDBJ_M1_test_stage_results.md`; artifacts
+  synced to `research_runs/vldbj_m1_pilot/` (gitignored, not committed).
+- Headline: LA improves test MSE on 13/28 settings vs the retrained b0 under the same
+  protocol (mostly within +-0.6%; ETTh1-336 -5.8%, Traffic-336 -1.3%); the centered
+  modulation beats its own modulation-off read on 27/28 settings. Against the ICLR
+  published PhaseFormer column, the horizon-averaged LA is -0.6% (Weather) to +2.2%
+  (ETTm1) — the retrained b0 is itself +0.2-1.0% above the ICLR numbers on
+  ETTh1/ETTm1/Traffic, so the paper compares LA against b0 for component effects and
+  reports the ICLR column as the conference result.
+- Test stage ops note: launching the driver over ssh without `setsid` gets the whole
+  session killed on disconnect; relaunch with `VLDBJ_E14_ROOT=/home/yyk/yyk03/niuyiming/PhaseFormer`
+  (E14 baseline csv lives in the older PhaseFormer bundle).
+- Pending: user-approved test-set tuning round (modulation width k, modulation LR
+  multiplier, fusion init) not yet launched; envelope/activation analyses not yet run.
