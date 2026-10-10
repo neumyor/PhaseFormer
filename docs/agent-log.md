@@ -1,5 +1,23 @@
 # Agent Maintenance Log
 
+## 2026-10-10 — 确认后台完整test扩展结果，补表并独立复核
+
+后台2026-10-09北京时间21:36:54完成，22/22固定补训、168/168完整test评估成功。
+detached_complete=passed，无failure marker及残留实验进程；未新增重训或推理。
+取回`research_runs/interaction_test_extension_20261009/`六文件及小型来源JSON。
+本地重跑`scripts/summarize_extended_interaction_test.py`至独立scratch目录，
+五个CSV/Markdown逐字节复现；六个正式文件远程/本地SHA256完全一致。
+远程再次核验168checkpoint/config hash、22初始化与对应b0共同随机state hash；
+本地coverage/data hash/window counts/finite metrics/基线重现/seed标准差检查通过。
+
+六task等权test：b0=0.29332516/0.33321101；centered=0.29304604/0.33326870，
+相对b0 MSE-0.095%/MAE+0.017%，4/12 MSE胜出；context_full=0.29363186/
+0.33323026，+0.105%/+0.006%；phase_only=0.29310088/0.33329933，-0.076%/
++0.027%，8/12 MSE胜出。8epoch scaled P->T/T->P相对各自i0微小双指标改善
+(-0.069%/-0.068%、-0.045%/-0.154%)，不足证明稳定架构收益；不按test更新默认。
+计划补全11候选test表并标原预算和配对基线，原q1/8与dense对照及六task明细在
+comparison.md；不同seed/预算及既有test暴露不消失，不称盲测或Golden提升。
+
 ## 2026-10-09 — 笔记本关闭前接管完整test扩展至服务器后台
 
 本地18项phase-context/centered检查通过（3.93秒）；远程168项来源库存/权重

@@ -922,6 +922,44 @@ validation Huber选权重；全部补训完成并冻结后才执行168次完整t
 计算，保留四位MSE/MAE和百分比delta，另给逐task值及两seed标准差。不同训练
 预算/融合/seed与既有test启发均披露，不声称盲测或Golden提升。
 
+#### 完整test扩展完成与独立复核（2026-10-10）
+
+远程后台于2026-10-09北京时间21:36:54完成；22/22补训、168/168 test推理成功，
+detached_complete为passed，未产生failure marker，无残留实验进程。补训只补
+已登记的16个context与6个centered设置；所有训练完成后再读test，无参数搜索。
+
+canonical表格与原始记录位于`research_runs/interaction_test_extension_20261009/`。
+6个文件同步本地/服务器SHA256一致；独立重新调用汇总入口，五个CSV/Markdown
+文件逐字节复现。远程逐168项重新验证checkpoint/config hash、22项共同随机
+初始化与匹配b0 hash；本地12setting覆盖/数据SHA/窗口数/有限指标/基线复现/
+两seed标准差/六task聚合通过。只读取已完成结果，没有新增训练或test推理。
+
+下表三dataset×H96/H720、seed2021/2022、六task等权；Δ为汇总均值与该组配对
+无交互PhaseFormer-L的比值减1。A是原8epoch/i0，B/C是30epoch上限/静态b0。
+不能跨训练预算把差异全归因于交互；paper q1/8三seed参照及逐task值保留完整表。
+
+| Family / Method | test MSE | test MAE | ΔMSE paired | ΔMAE paired |
+|---|---:|---:|---:|---:|
+| A i0 | 0.2947 | 0.3348 | 0.000% | 0.000% |
+| P->T Post-Norm | 0.2993 | 0.3350 | +1.539% | +0.059% |
+| P->T Pre-Norm | 0.2970 | 0.3359 | +0.788% | +0.323% |
+| P->T scaled | 0.2945 | 0.3346 | -0.069% | -0.068% |
+| P->T null | 0.2959 | 0.3345 | +0.405% | -0.084% |
+| T->P Post-Norm | 0.2953 | 0.3347 | +0.195% | -0.041% |
+| T->P Pre-Norm | 0.2955 | 0.3351 | +0.261% | +0.089% |
+| T->P scaled | 0.2946 | 0.3343 | -0.045% | -0.154% |
+| T->P selective | 0.2956 | 0.3346 | +0.292% | -0.046% |
+| B/C b0 | 0.2933 | 0.3332 | 0.000% | 0.000% |
+| context_full | 0.2936 | 0.3332 | +0.105% | +0.006% |
+| phase_only | 0.2931 | 0.3333 | -0.076% | +0.027% |
+| tp_mod_centered | 0.2930 | 0.3333 | -0.095% | +0.017% |
+
+centered相对b0仅4/12 setting MSE胜出；phase-only 8/12，MSE较低但MAE增加。
+scaled两方向相对8epoch i0有微小双指标改善，幅度不足且MSE胜出7/12与5/12。
+当前证据未证明统一稳定增益，不从test选择新默认架构，继续保留静态b0。
+原PhaseFormer-L dense的同task test均值0.2928/0.3321仍低于上述新方案；paper
+seed/训练协议不同，这仅是读数对照，不作统计显著性或Golden改善声明。
+
 ## Historical Purpose
 
 > **Protocol correction (2026-10-07, user clarification):** the research target
