@@ -31,10 +31,10 @@ CORR_THRESHOLD = 0.3
 
 # (root relative to resources/all_datasets, file, value columns, train fraction)
 DATASETS = {
-    'ETTh1': ('ETT-small', 'ETTh1.csv', 0.6),
-    'ETTh2': ('ETT-small', 'ETTh2.csv', 0.6),
-    'ETTm1': ('ETT-small', 'ETTm1.csv', 0.6),
-    'ETTm2': ('ETT-small', 'ETTm2.csv', 0.6),
+    'ETTh1': ('ETT', 'ETTh1.csv', 0.6),
+    'ETTh2': ('ETT', 'ETTh2.csv', 0.6),
+    'ETTm1': ('ETT', 'ETTm1.csv', 0.6),
+    'ETTm2': ('ETT', 'ETTm2.csv', 0.6),
     'Weather': ('weather', 'weather.csv', 0.7),
     'Electricity': ('electricity', 'electricity.csv', 0.7),
     'Traffic': ('traffic', 'traffic.csv', 0.7),
@@ -113,13 +113,16 @@ def synthetic(alpha, length=24 * 4000, seed=2021):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--data-root', type=Path, default=None,
+                        help='resources/all_datasets location; defaults to the repo copy')
     parser.add_argument('--output', type=Path,
                         default=ROOT / 'research_runs/vldbj_m1_coupling')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     rows = []
+    data_root = (args.data_root or ROOT / 'resources/all_datasets').resolve()
     for name, (folder, file, train_fraction) in DATASETS.items():
-        path = ROOT / 'resources/all_datasets' / folder / file
+        path = data_root / folder / file
         frame = pd.read_csv(path)
         values = frame.drop(columns=[frame.columns[0]]).to_numpy(dtype='float64')
         rows += dataset_rows(name, values, split_fractions(train_fraction))
