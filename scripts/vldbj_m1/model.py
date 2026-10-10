@@ -78,10 +78,26 @@ class ProfileLevelHead(nn.Module):
         return self.decode_latent(*self.encode_latent(x))
 
 
-def prepare_config(source, arm, head, shared_gate):
-    """Derive one registered config from an E14 phase-only source config."""
+TUNE_FIELDS = ('communication_width', 'extension_lr_mult', 'gate_init')
+
+
+def prepare_config(source, arm, head, shared_gate, variant=None):
+    """Derive one registered config from an E14 phase-only source config.
+
+    ``variant`` tunes only the extension (width, gate init, extension learning
+    rate multiplier); the backbone protocol is untouched and the main-stage
+    variant is recovered exactly with ``variant=None``.
+    """
     if arm not in ARMS or head not in HEADS:
         raise ValueError((arm, head))
+    variant = dict(variant or {})
+    if set(variant) - set(TUNE_FIELDS):
+        raise ValueError(variant)
+    width = int(variant.get('communication_width', 2))
+    lr_mult = float(variant.get('extension_lr_mult', 1.0))
+    gate_init = float(variant.get('gate_init', 0.2))
+    if width not in (2, 3, 4) or not 1e-4 < gate_init < 1.0 or not 0 < lr_mult:
+        raise ValueError(variant)
     if source.get('mechanism') != 'no_residual' or source.get('init_checkpoint'):
         raise ValueError('Source must be an E14 from-scratch phase-only config')
     cfg = copy.deepcopy(source)
@@ -100,13 +116,14 @@ def prepare_config(source, arm, head, shared_gate):
         weak_period_residual_head_type='pooled_lowrank',
         weak_period_residual_pool_factor=HEADS[head]['pool_factor'],
         weak_period_residual_rank=RANK, weak_period_residual_smooth_ratio=0.0,
-        weak_period_residual_gate_init=0.2, trend_interaction_mode='none',
+        weak_period_residual_gate_init=gate_init, trend_interaction_mode='none',
         lowrank_fusion_mode='components_static', lowrank_update_style='post_norm',
         lowrank_null_read=False, lowrank_selective_write=False, lowrank_content_mode='none')
     cfg.update(mechanism='vldbj_m1', checkpoint='', init_checkpoint='', evaluate_test=False)
     cfg['vldbj_m1'] = {'arm': arm, 'head': head, 'rank': RANK, 'shared_gate': bool(shared_gate),
                        'communication': 'tp_mod_centered' if arm == 'm1' else 'none',
-                       'communication_width': 2, 'zero_init_exit': True,
+                       'communication_width': width, 'extension_lr_mult': lr_mult,
+                       'gate_init': gate_init, 'zero_init_exit': True,
                        'source_config_hash': source.get('config_hash')}
     return cfg
 
@@ -132,6 +149,8 @@ def construct(config, workers=0):
         raise AssertionError('The low-rank interaction branch was disabled by the config')
     if model.predictor.use_mlp:
         raise ValueError('Cycle-mean constraint requires the shared linear predictor')
+    if protocol.get('communication_width', 2) not in (2, 3, 4):
+        raise ValueError('Unregistered communication width')
     branch = model.lowrank_interaction_branch
     if HEADS[protocol['head']]['decoder'] == 'legendre':
         branch.lowrank_head = ProfileLevelHead(model.seq_len, model.pred_len,
@@ -139,17 +158,22 @@ def construct(config, workers=0):
     if protocol['shared_gate']:
         _share_gates(model)
     if protocol['arm'] == 'm1':
-        model.lowrank_interaction_branch = IsolatedBranch(branch, model.latent_dim, 'tp_mod_centered')
+        model.lowrank_interaction_branch = IsolatedBranch(branch, model.latent_dim, 'tp_mod_centered',
+                                                         width=protocol.get('communication_width', 2))
     return model, args
 
 
-def paired_models(source, arm, head, shared_gate):
-    """Build ``arm`` with every b0 parameter copied from a same-seed b0."""
+def paired_models(source, arm, head, shared_gate, variant=None):
+    """Build ``arm`` with every b0 parameter copied from a same-seed b0.
+
+    A ``gate_init`` variant re-initializes only the two fusion logits after the
+    copy; every other parameter stays exactly the b0 parameter of the same seed.
+    """
     import pytorch_lightning as pl
     pl.seed_everything(source['seed'], workers=True)
     reference, args = construct(prepare_config(source, 'b0', head, shared_gate))
     common = {k: v.detach().clone() for k, v in reference.state_dict().items()}
-    config = prepare_config(source, arm, head, shared_gate)
+    config = prepare_config(source, arm, head, shared_gate, variant)
     pl.seed_everything(source['seed'], workers=True)
     model, _ = construct(config)
     current = model.state_dict()
@@ -159,6 +183,11 @@ def paired_models(source, arm, head, shared_gate):
         if current[name].shape != value.shape:
             raise AssertionError(name)
         current[name].copy_(value)
+    gate_init = float(config['vldbj_m1']['gate_init'])
+    if arm == 'm1' and gate_init != 0.2:
+        logit = float(torch.logit(torch.tensor(gate_init)))
+        model.lowrank_interaction_gate.data.fill_(logit)
+        model.lowrank_dynamic_fusion.shape_bias_delta.data.zero_()
     return model, reference, args, config, state_hash(common)
 
 

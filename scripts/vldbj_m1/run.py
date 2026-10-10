@@ -7,6 +7,9 @@ Stages (each refuses to run out of order):
   main   -- b0 and m1 with the selected spec, 28 settings x 3 seeds
   test   -- one test read per finished main checkpoint, plus modulation-off
             and cycle-mean invariance checks
+  tune   -- test-set tuning round (user decision 2026-10-10): six extension
+            variants over five datasets, one seed; each job trains and reads
+            its test split once, recording the variant with its test number
 """
 from __future__ import annotations
 
@@ -39,6 +42,18 @@ GATES = (False, True)
 HEAD_PREFERENCE = ('S2', 'S1', 'S3')
 HEAD_TIE = 0.005
 GATE_TIE = 0.001
+# Test-set tuning round (user decision 2026-10-10): one seed over the high-coupling
+# and lagging datasets, six extension variants; selection happens on test reads.
+TUNE_DATASETS = ('Traffic', 'Electricity', 'Weather', 'ETTm1', 'ETTm2')
+TUNE_SEED = 2021
+TUNE_GRID = (
+    {'communication_width': 2, 'extension_lr_mult': 10.0, 'gate_init': 0.2},
+    {'communication_width': 2, 'extension_lr_mult': 1.0, 'gate_init': 0.5},
+    {'communication_width': 4, 'extension_lr_mult': 1.0, 'gate_init': 0.2},
+    {'communication_width': 4, 'extension_lr_mult': 10.0, 'gate_init': 0.2},
+    {'communication_width': 2, 'extension_lr_mult': 10.0, 'gate_init': 0.5},
+    {'communication_width': 4, 'extension_lr_mult': 10.0, 'gate_init': 0.5},
+)
 E14 = 'research_runs/phaseformer_L_e14_main_v1/results.csv'
 # E14 runs live in the original server checkout; experiments run in a frozen copy.
 E14_ROOT = Path(os.environ.get('VLDBJ_E14_ROOT', ROOT))
@@ -80,8 +95,11 @@ def e14_sources():
 
 
 def name(job):
-    return (f"{job['dataset']}_H{job['horizon']}_S{job['seed']}__{job['arm']}"
+    base = (f"{job['dataset']}_H{job['horizon']}_S{job['seed']}__{job['arm']}"
             f"__{job['head']}__{'shared' if job['shared_gate'] else 'perC'}")
+    if job.get('variant_id') is not None:
+        return f"{base}__t{job['variant_id']}"
+    return base
 
 
 def write_immutable(path, value):
@@ -268,6 +286,123 @@ def cycle_mean_check(model, loader, device):
             'passed': cycle_gap <= 1e-9 * max(1.0, native.abs().max().item())}
 
 
+EXTENSION_PREFIXES = ('lowrank_interaction_branch.', 'lowrank_interaction_gate', 'lowrank_dynamic_fusion.')
+
+
+def _attach_extension_lr_multiplier(model, mult):
+    """Split Adam into backbone and extension groups with a scaled extension lr."""
+    import types
+    import torch
+    base_lr = float(model.args.training_args.learning_rate)
+
+    def configure_optimizers(self):
+        backbone, extension = [], []
+        for pname, p in self.named_parameters():
+            if not p.requires_grad:
+                continue
+            (extension if pname.startswith(EXTENSION_PREFIXES) else backbone).append(p)
+        optimizer = torch.optim.Adam([
+            {'params': backbone, 'lr': base_lr},
+            {'params': extension, 'lr': base_lr * mult}])
+        if self.args.training_args.lr_schedule_config.type == 'cos':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=self.args.training_args.lr_schedule_config.tmax, eta_min=1e-8)
+            return [optimizer], [scheduler]
+        return optimizer
+
+    model.configure_optimizers = types.MethodType(configure_optimizers, model)
+
+
+def tune_job(path):
+    """Train one m1 tuning variant and read its test split once.
+
+    Tuning selects on the test split by user decision (2026-10-10, time-boxed);
+    every variant, its configuration and its test number are recorded here, so
+    the selection is auditable and must be labelled test-based in any report.
+    """
+    os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+    import torch
+    import pytorch_lightning as pl
+    from src.dataset.data_factory import data_provider
+    from src.training.runner import build_logger, build_trainer, restore_best_checkpoint
+    from scripts.search_phaseformer import evaluate
+    from scripts.vldbj_m1.model import parameter_breakdown, paired_models
+
+    job = json.loads(Path(path).read_text())
+    out = Path(job['output'])
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / 'worker.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if (out / 'tune_result.json').exists():
+            return
+        if (out / 'checkpoints').exists():
+            raise RuntimeError(f'Incomplete run requires a new directory: {out}')
+        if job['code_commit'] != commit() or job['source_hashes'] != provenance():
+            raise ValueError('Worker source differs from frozen protocol')
+        torch.set_num_threads(2)
+        torch.set_float32_matmul_precision('medium')
+        if not torch.cuda.is_available():
+            raise RuntimeError('CUDA is required')
+        original_load = torch.load
+        def forbid_load(*args, **kwargs):
+            raise AssertionError('No pretrained weight loading during initialization')
+        torch.load = forbid_load
+        try:
+            model, reference, args, cfg, common_hash = paired_models(
+                job['source']['config'], job['arm'], job['head'], job['shared_gate'],
+                job['variant'])
+        finally:
+            torch.load = original_load
+        del reference
+        lr_mult = float(job['variant']['extension_lr_mult'])
+        if lr_mult != 1.0:
+            _attach_extension_lr_multiplier(model, lr_mult)
+        _, train_loader = data_provider(args.dataset_args, 'train')
+        val_set, val_loader = data_provider(args.dataset_args, 'val')
+        hp = cfg['hyperparams']
+        trainer, checkpoint = build_trainer(max_epochs=1 if job['smoke'] else cfg['max_epochs'],
+            logger=build_logger(str(out / 'lightning'), version='train'),
+            patience=int(hp.get('patience', 8)), checkpoint_dir=str(out / 'checkpoints'), progress=False)
+        if job['smoke']:
+            trainer.limit_train_batches = 4
+            trainer.limit_val_batches = 2
+        pl.seed_everything(cfg['seed'], workers=True)
+        model.train()
+        started = time.monotonic()
+        trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        elapsed = time.monotonic() - started
+        restore_best_checkpoint(model, checkpoint)
+        device = torch.device('cuda:0')
+        model.to(device).eval()
+        metrics = evaluate(model, val_loader, val_set, 'val', cfg['horizon'], out)
+        _, test_loader = data_provider(args.dataset_args, 'test')
+        branch = model.lowrank_interaction_branch
+        sums = {m: [0.0, 0.0, 0] for m in ('native', 'off')}
+        with torch.inference_mode():
+            for batch in test_loader:
+                bx, by, bxm, bym = [v.float().to(device) for v in batch]
+                true = by[:, -model.pred_len:]
+                for mode in ('native', 'off'):
+                    branch.intervention = mode
+                    pred = model(bx, bxm, model._build_decoder_input(by), bym)[0][:, -model.pred_len:]
+                    err = pred - true
+                    sums[mode][0] += err.square().sum().item()
+                    sums[mode][1] += err.abs().sum().item()
+                    sums[mode][2] += err.numel()
+        branch.intervention = 'native'
+        save_json(out / 'tune_result.json', {
+            'name': name(job), 'stage': 'tune', 'variant': job['variant'],
+            **metrics,
+            'test_mse': sums['native'][0] / sums['native'][2],
+            'test_mae': sums['native'][1] / sums['native'][2],
+            'test_mse_modulation_off': sums['off'][0] / sums['off'][2],
+            'test_mae_modulation_off': sums['off'][1] / sums['off'][2],
+            'best_val_loss': float(checkpoint.best_model_score),
+            'parameters': parameter_breakdown(model), 'common_random_state_sha256': common_hash,
+            'code_commit': commit(), 'elapsed_sec': elapsed, 'epochs': trainer.current_epoch,
+            'smoke': job['smoke']})
+
+
 def plan_jobs(stage, scratch, sources, selection, smoke):
     base = {'code_commit': commit(), 'source_hashes': provenance(), 'smoke': smoke, 'stage': stage}
     specs = []
@@ -276,6 +411,12 @@ def plan_jobs(stage, scratch, sources, selection, smoke):
             for head in HEADS:
                 for gate in GATES:
                     specs.append((dataset, horizon, PILOT_SEED, 'm1', head, gate))
+    elif stage == 'tune':
+        for dataset in TUNE_DATASETS:
+            for horizon in HORIZONS:
+                for vid, variant in enumerate(TUNE_GRID):
+                    specs.append((dataset, horizon, TUNE_SEED, 'm1', selection['head'],
+                                  selection['shared_gate'][dataset], vid, dict(variant)))
     else:
         for dataset in DATASETS:
             for horizon in HORIZONS:
@@ -284,9 +425,12 @@ def plan_jobs(stage, scratch, sources, selection, smoke):
                         specs.append((dataset, horizon, seed, arm, selection['head'],
                                       selection['shared_gate'][dataset]))
     jobs = []
-    for dataset, horizon, seed, arm, head, gate in specs:
+    for spec in specs:
+        dataset, horizon, seed, arm, head, gate = spec[:6]
         job = dict(base, dataset=dataset, horizon=horizon, seed=seed, arm=arm, head=head,
                    shared_gate=gate, source=sources[(dataset, horizon, seed)])
+        if len(spec) > 6:
+            job.update(variant_id=spec[6], variant=spec[7])
         job['output'] = str(scratch / stage / 'runs' / name(job))
         path = scratch / stage / 'jobs' / f'{name(job)}.json'
         write_immutable(path, job)
@@ -363,7 +507,7 @@ def run_jobs(jobs, gpus, worker_flag):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--stage', choices=('pilot', 'select', 'main', 'test'))
+    parser.add_argument('--stage', choices=('pilot', 'select', 'main', 'test', 'tune'))
     parser.add_argument('--scratch-dir', type=Path)
     parser.add_argument('--gpus', default='0,1,2,3,4,5,6,7')
     parser.add_argument('--slots-per-gpu', type=int, default=1)
@@ -371,11 +515,14 @@ def main():
     parser.add_argument('--prepare-only', action='store_true')
     parser.add_argument('--job', type=Path)
     parser.add_argument('--test-job', type=Path)
+    parser.add_argument('--tune-job', type=Path)
     args = parser.parse_args()
     if args.job:
         return train_job(args.job)
     if args.test_job:
         return test_job(args.test_job)
+    if args.tune_job:
+        return tune_job(args.tune_job)
     if args.stage is None or args.scratch_dir is None:
         parser.error('--stage and --scratch-dir are required')
     scratch = args.scratch_dir.resolve()
@@ -388,7 +535,7 @@ def main():
             return
         sources = e14_sources()
         selection = None
-        if args.stage in ('main', 'test'):
+        if args.stage in ('main', 'test', 'tune'):
             selection = json.loads((scratch / 'selection.json').read_text())
         jobs = plan_jobs('main' if args.stage == 'test' else args.stage, scratch, sources, selection, args.smoke)
         write_immutable(scratch / f'{args.stage}_manifest.json', {
@@ -402,6 +549,8 @@ def main():
             if missing:
                 raise RuntimeError(f'Test read refused: {len(missing)} main runs unfinished')
             run_jobs(jobs, gpus, '--test-job')
+        elif args.stage == 'tune':
+            run_jobs(jobs, gpus, '--tune-job')
         else:
             run_jobs(jobs, gpus, '--job')
 
