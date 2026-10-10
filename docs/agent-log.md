@@ -7020,3 +7020,11 @@ mechanism check, not the benchmark protocol); full run launched locally in backg
 
 Pending: pilot completion -> --stage select -> 168-run main stage -> single registered test
 read; V1 results; V3/V4 need the main-stage checkpoints.
+
+V1 synthetic mechanism check completed (local CPU, scripts/vldbj_m1/synthetic.py, results in
+research_runs/vldbj_m1_synthetic/synthetic.json): paired val-MSE gap M1-b0 by coupling alpha,
+seeds 2021/2022: alpha=0: -0.26%/-0.31%; alpha=0.25: -4.57%/-2.01%; alpha=0.5: -7.77%/-1.92%;
+alpha=1.0: +0.34%/-3.19%. Matches the pre-registered reading: no advantage without
+multiplicative coupling, growing advantage with moderate coupling; alpha=1.0 is a degenerate
+generator regime (1+alpha*l flips the shape sign) and is not evidence about strong coupling.
+This is a mechanism check with a plain torch loop, not the benchmark protocol.
