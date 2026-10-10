@@ -88,6 +88,13 @@ def prepare_config(source, arm, head, shared_gate):
     hp = cfg['hyperparams']
     if any(k.startswith('use_') and v and k not in {'use_huber_loss', 'use_revin'} for k, v in hp.items()):
         raise ValueError('Source enables an unrelated mechanism')
+    # E14 phase-only sources carry ``use_residual_head=False``, which PhaseFormer
+    # interprets as "disable every residual slot" and silently forces the
+    # low-rank interaction branch off.  The extension re-enables the slot; the
+    # mutually exclusive ``use_weak_period_residual``/``use_trend_token`` stay off.
+    if hp.get('use_residual_head', True):
+        raise ValueError('Expected a phase-only source with use_residual_head disabled')
+    hp['use_residual_head'] = True
     hp.update(
         scheme_name='vldbj_m1', use_lowrank_interaction=True,
         weak_period_residual_head_type='pooled_lowrank',
@@ -121,6 +128,8 @@ def construct(config, workers=0):
     model, args = legacy_construct(config, workers=workers)
     if not model.use_revin or model.period_len != 24 or args.training_args.loss_func != 'huber':
         raise AssertionError('Effective protocol changed')
+    if not model.use_lowrank_interaction or model.lowrank_interaction_branch is None:
+        raise AssertionError('The low-rank interaction branch was disabled by the config')
     if model.predictor.use_mlp:
         raise ValueError('Cycle-mean constraint requires the shared linear predictor')
     branch = model.lowrank_interaction_branch

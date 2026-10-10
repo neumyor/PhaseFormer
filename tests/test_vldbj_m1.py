@@ -11,7 +11,7 @@ from src.models.phaseformer_presets import get_base_hyperparams
 def e14_source(dataset='ETTh1', horizon=96, seed=2021, batch=4):
     hp = get_base_hyperparams(dataset, horizon)
     hp.update(seed=seed, scheme_name='no_residual', period_len=24, loss_func='huber',
-              use_huber_loss=True, train_epochs=30)
+              use_huber_loss=True, train_epochs=30, use_residual_head=False)
     return dict(dataset=dataset, horizon=horizon, lookback=720, mechanism='no_residual', period=24,
                 percent=100, max_epochs=30, seed=seed, loss='huber', batch_size=batch,
                 evaluate_test=False, input_hypothesis='none', input_variant='full',
