@@ -7028,3 +7028,18 @@ alpha=1.0: +0.34%/-3.19%. Matches the pre-registered reading: no advantage witho
 multiplicative coupling, growing advantage with moderate coupling; alpha=1.0 is a degenerate
 generator regime (1+alpha*l flips the shape sign) and is not evidence about strong coupling.
 This is a mechanism check with a plain torch loop, not the benchmark protocol.
+
+## 2026-10-10: Pilot complete, spec selected, 168-run main stage launched
+
+Pilot finished 42/42 with zero failures. The pre-registered validation-only rule selected:
+- Head S2 (fixed displacement/tilt/curvature profiles, 105 params, horizon-independent).
+  All three heads were within 0.13% of each other (scores S1 1.0107, S2 1.0115, S3 1.0102),
+  inside the 0.5% tie band, so the fewest-parameters preference (S2 > S1 > S3) applied.
+  The near-tie is itself evidence the branch needs no more than the theory-specified capacity.
+- Shared fusion gates for ETTh2/ETTm1/ETTm2 (two scalars); per-channel gates retained for
+  ETTh1/Weather/Electricity/Traffic.
+
+selection.json is immutable under the controller. Main stage launched at 2026-10-10 13:14 CST
+from the same frozen commit b831dca8: 28 settings x 3 seeds x {b0, m1} = 168 trainings,
+16 slots on 8 A800s, E14-matched protocol, test not read until --stage test after all runs.
+Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pilot/.
