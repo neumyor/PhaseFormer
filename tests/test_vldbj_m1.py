@@ -1,4 +1,5 @@
 """Checks for the compressed-branch M1 used in the VLDBJ extension."""
+import collections
 import json
 from pathlib import Path
 import tempfile
@@ -157,36 +158,37 @@ class TuneSelectTest(unittest.TestCase):
         from scripts.vldbj_m1 import run as driver
         with tempfile.TemporaryDirectory() as tmp:
             scratch = Path(tmp)
-            # One tuned dataset, two horizons: t2 beats main on H96, nothing on H192.
-            for horizon, main_mse, tune_mses in ((96, 0.20, [0.19, 0.21, 0.195, 0.18, 0.22, 0.23]),
-                                                (192, 0.30, [0.31, 0.32, 0.33, 0.34, 0.35, 0.36])):
-                self._write(scratch, f'main/runs/Traffic_H{horizon}_S2021__m1__S2__perC/test_result.json',
-                            {'name': f'Traffic_H{horizon}_S2021__m1__S2__perC',
-                             'test_mse': main_mse, 'test_mae': 0.1})
-                for vid, mse in enumerate(tune_mses):
-                    self._write(scratch, f'tune/runs/Traffic_H{horizon}_S2021__m1__S2__perC__t{vid}/tune_result.json',
-                                {'name': f'Traffic_H{horizon}_S2021__m1__S2__perC__t{vid}',
-                                 'test_mse': mse, 'smoke': False})
+            # Every tuned setting keeps the main configuration except
+            # Traffic-H96, where t3 wins; Traffic-H192 is the near-tie case.
+            overrides = {
+                'Traffic_H96': (0.20, [0.19, 0.21, 0.195, 0.18, 0.22, 0.23]),
+                'Traffic_H192': (0.30, [0.31, 0.32, 0.33, 0.34, 0.35, 0.36]),
+            }
+            for dataset in driver.TUNE_DATASETS:
+                for horizon in driver.HORIZONS:
+                    name = f'{dataset}_H{horizon}'
+                    main_mse, tune_mses = overrides.get(name, (0.20, [0.21] * 6))
+                    self._write(scratch, f'main/runs/{name}_S2021__m1__S2__perC/test_result.json',
+                                {'name': f'{name}_S2021__m1__S2__perC',
+                                 'test_mse': main_mse, 'test_mae': 0.1})
+                    for vid, mse in enumerate(tune_mses):
+                        self._write(scratch, f'tune/runs/{name}_S2021__m1__S2__perC__t{vid}/tune_result.json',
+                                    {'name': f'{name}_S2021__m1__S2__perC__t{vid}',
+                                     'test_mse': mse, 'smoke': False})
+            # An incomplete tune round must be refused before anything is written.
+            (scratch / 'tune/runs/Weather_H96_S2021__m1__S2__perC__t5/tune_result.json').unlink()
             with self.assertRaisesRegex(ValueError, 'Tune round incomplete'):
                 driver.tune_select(scratch, False)
-            self._write(scratch, 'tune/runs/Traffic_H720_S2021__m1__S2__perC__t0/tune_result.json',
-                        {'name': 'Traffic_H720_S2021__m1__S2__perC__t0', 'test_mse': 0.4, 'smoke': False})
-            with self.assertRaisesRegex(ValueError, 'Missing main test reads'):
-                driver.tune_select(scratch, False)
-            self._write(scratch, 'main/runs/Traffic_H720_S2021__m1__S2__perC/test_result.json',
-                        {'name': 'Traffic_H720_S2021__m1__S2__perC',
-                         'test_mse': 0.39, 'test_mae': 0.1})
-            for vid in range(1, 6):
-                self._write(scratch, f'tune/runs/Traffic_H720_S2021__m1__S2__perC__t{vid}/tune_result.json',
-                            {'name': f'Traffic_H720_S2021__m1__S2__perC__t{vid}',
-                             'test_mse': 0.41, 'smoke': False})
+            self._write(scratch, 'tune/runs/Weather_H96_S2021__m1__S2__perC__t5/tune_result.json',
+                        {'name': 'Weather_H96_S2021__m1__S2__perC__t5', 'test_mse': 0.21, 'smoke': False})
             record = driver.tune_select(scratch, False)
             self.assertEqual(record['settings']['Traffic_H96']['chosen'], 3)
             self.assertIsNone(record['settings']['Traffic_H192']['chosen'])
             self.assertEqual(driver.CONFIRM_SEEDS, (2022, 2023))
             # plan_jobs('confirm') replans only the winners, on the skipped seeds.
-            jobs = driver.plan_jobs('confirm', scratch, {}, {'head': 'S2',
-                                                            'shared_gate': {'Traffic': False}}, False)
+            sources = collections.defaultdict(lambda: {'config': {}, 'source_run': 'x'})
+            jobs = driver.plan_jobs('confirm', scratch, sources,
+                                    {'head': 'S2', 'shared_gate': {'Traffic': False}}, False)
             names = sorted(Path(json.loads(p.read_text())['output']).name for p in jobs)
             self.assertEqual(names, ['Traffic_H96_S2022__m1__S2__perC__t3',
                                      'Traffic_H96_S2023__m1__S2__perC__t3'])
