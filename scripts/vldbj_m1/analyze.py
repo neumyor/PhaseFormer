@@ -248,7 +248,7 @@ def plan_jobs(runs_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--runs-dir', type=Path, required=True,
+    parser.add_argument('--runs-dir', type=Path,
                         help='main/runs directory of the vldbj_m1 scratch')
     parser.add_argument('--gpus', default='0,1,2,3,4,5,6,7')
     parser.add_argument('--job', type=Path)
