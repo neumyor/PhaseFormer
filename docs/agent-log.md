@@ -7325,3 +7325,16 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   (gates/q) not run; optional follow-up.
 - Paper untouched (user decision pending): main-table PhaseFormer stays Golden; LA stays
   the from-scratch row.
+
+## 2026-10-11 Experiment 3 drafted (wide LA-only search), awaiting confirmation
+
+- User approved Exp3 in principle: wider LA-only tuning, test-set selection, extreme
+  settings allowed, including fully disabling components; budget unlimited, only
+  time-limited: the last experiment-launch command no later than 2026-10-12 09:00.
+- Draft: docs/PhaseFormer_VLDBJ_LA_wide_search_plan.md. From-scratch E14 protocol,
+  all 28 settings, R1 fixed 12-variant grid (gate 1e-4..0.9, ext lr 0.1..30, w2/w4)
+  -> R2 adaptive refinement (pre-registered neighbor rule, extremes: lr 100, gate
+  0.99, backbone_lr_mult 0.3/3) -> select (seed-2021 test argmin incl. mod-off reads)
+  -> confirm (seeds 2022/2023, 0.2% switch rule) -> collect. Driver enforces a
+  08:30 launch deadline so nothing starts after the cutoff. Head fixed S2 and current
+  per-dataset gate sharing to preserve the paper's parameter claims. Nothing launched.
