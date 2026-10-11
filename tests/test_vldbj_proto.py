@@ -12,7 +12,28 @@ import torch
 
 from scripts.vldbj_m1 import proto, protocol
 from scripts.vldbj_m1.run import TUNE_GRID
-from tests.test_vldbj_m1 import e14_source, forward
+from src.models.phaseformer_presets import get_base_hyperparams
+
+
+def e14_source(dataset='ETTh1', horizon=96, seed=2021, batch=4):
+    """Phase-only source config in the E14 schema (as in tests/test_vldbj_m1.py)."""
+    hp = get_base_hyperparams(dataset, horizon)
+    hp.update(seed=seed, scheme_name='no_residual', period_len=24, loss_func='huber',
+              use_huber_loss=True, train_epochs=30, use_residual_head=False)
+    return dict(dataset=dataset, horizon=horizon, lookback=720, mechanism='no_residual', period=24,
+                percent=100, max_epochs=30, seed=seed, loss='huber', batch_size=batch,
+                evaluate_test=False, input_hypothesis='none', input_variant='full',
+                intervention_seed=9102, input_d1_period=0.0, input_d1_sigma=0.0,
+                input_d2_recent_length=0, input_d3_component='', init_checkpoint='',
+                hyperparams=hp, config_hash='test')
+
+
+def forward(model, x):
+    b = x.shape[0]
+    marks = torch.zeros(b, x.shape[1], 4)
+    dec = torch.zeros(b, model.pred_len, x.shape[2])
+    out, _, _ = model(x, marks, dec, torch.zeros(b, model.pred_len, 4))
+    return out[:, -model.pred_len:]
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS = [(d, h) for d in proto.DATASETS for h in proto.HORIZONS]
