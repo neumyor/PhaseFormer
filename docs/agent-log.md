@@ -7243,3 +7243,20 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   (competing interests, funding, code repo) awaiting user; cover-letter numeric
   claims re-check after this update (all still consistent: 28 settings, three
   seeds, about half new content).
+
+## 2026-10-11 Experiments 1/2 reviewed and planned (not started)
+
+- User approved Exp1 (LA under the conference training protocol) and Exp2
+  (warm-start LA from the trained PhaseFormer), with confirmation required
+  before any run. Plan: `docs/PhaseFormer_VLDBJ_LA_protocol_warmstart_plan.md`.
+- Review finding: the conference code is the per-dataset `run_*.py` scripts at
+  `d9cb0b3` (ETTh1-H720 from `ff14c16`). Architecture, data pipeline, loss
+  (Huber, identical at delta=1) and constant-LR Adam match E14, but batch sizes
+  differ (conference 16 on ETTm1/ETTm2/Weather/Electricity/Traffic vs E14
+  256/256/64/64/8), three learning rates differ (Electricity-96, Weather-96,
+  ETTm2-96), ETTh1-720 used 70 epochs, and the conference test read the
+  last-epoch weights (single seed 2021) with a per-epoch test callback.
+- Plan: Stage 0 PF reproduction (28 runs, seed 2021) with a pre-registered,
+  test-based adoption rule; Stage 1 PF/L/LA x 3 seeds (224 runs); Exp2 probe
+  (56) and LA-warm/L-warm x 3 seeds (140). All seeds reported (mean +- std);
+  test-based choices labelled as test-set selection. No run launched.

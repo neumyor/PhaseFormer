@@ -1,0 +1,176 @@
+# PhaseFormer-LA 实验 1/2 计划：会议训练协议复现 + 从 PhaseFormer 热启动
+
+状态：**计划，未启动**（2026-10-11）。用户批准实验 1 和实验 2，并要求“实验开始前先确认”；
+本文件中的任何 run 均须在用户确认后才启动。
+
+## 0. 目的与约束
+
+- 首要目标（用户 2026-10-11）：证明 PhaseFormer-LA 强于会议版 PhaseFormer（Golden，
+  `docs/PhaseFormer_gold_standard.md`）。PhaseFormer-L 只服务于 LA-vs-L 消融，可以弱。
+  最重要的是主表与消融表。
+- 报告口径：论文写 “averaged over three seeds”，因此所有臂一律报告 seeds 2021–2023 的
+  均值 ± 标准差，三个 seed 全部计入；不做 best-of-N seed 报告（见 memory
+  `test-set-selection-disclosure` 的 Limit 条款）。
+- 允许按 test 选择协议与配置（用户决定 2026-10-10），但本文件和结果文档必须标注为
+  **test-set selection**，保留完整搜索轨迹；论文只写 “small grid search”，不得写 blind/unbiased。
+- Golden 不被任何重跑替换；重跑的 PhaseFormer 一律标为 matched rerun。
+
+## 1. Review 结论（为什么做这两个实验）
+
+### 1.1 现有差距
+
+E14 协议重训的 PhaseFormer（论文消融表中的 “retrained PhaseFormer”）在全部 7 个数据集上
+都比 Golden 差（数据集平均 MSE：ETTh1 .408/.403，ETTh2 .354/.346，ETTm1 .352/.346，
+ETTm2 .258/.250，Weather .227/.223，Electricity .161/.160，Traffic .392/.386）。LA 在同协议
+下相对重训 PhaseFormer 有提升，但相对 Golden 只在 Weather 上胜出（.220 vs .223）。
+即 LA 的劣势主要来自骨干训练协议，而不是扩展组件。
+
+### 1.2 会议代码与 E14 协议的实际差异（本次 review 新发现）
+
+会议代码是仓库早期的逐数据集脚本 `run_{dataset}.py`（commit `d9cb0b3`，2025-10-05；
+ETTh1-H720 配置来自 `ff14c16`，2026-03-25）。逐项比对 `get_best_config_for_horizon`
+与 E14 源配置（服务器 `research_runs/phaseformer_L_e14_main_v1/`，seed 2021）：
+
+| 项目 | 会议代码 | E14 协议（现 LA/L/重训 PF 全部使用） |
+|---|---|---|
+| 结构（layers/latent/hidden/routers/heads） | 28 setting 全部相同 | 相同 |
+| 数据管线、划分、RevIN、test loader（drop_last=False） | 相同 | 相同 |
+| Huber 损失 | 自写 Huber = `nn.HuberLoss/δ`（δ=1 时完全相同） | `nn.HuberLoss` |
+| 优化器/学习率调度 | Adam，`type3` = 常数学习率 | 相同 |
+| max epochs / patience | 30 / 8（ETTh1-720：70 / 14） | 30 / 8（ETTh1-720：30 / 14） |
+| **batch size** | ETTh1/ETTh2 256；**ETTm1/ETTm2/Weather/Electricity/Traffic 16** | ETTh 256；ETTm1/ETTm2 **256**；Weather/Electricity **64**；Traffic **8** |
+| **学习率** | Electricity-96 0.002；Weather-96、ETTm2-96 0.001 | Electricity-96 0.001；Weather-96、ETTm2-96 0.0003 |
+| **测试所用权重** | 早停结束时的**最后一个 epoch** 权重（`trainer.test(model)`，无 ckpt） | best-validation checkpoint |
+| 每 epoch 测试 | `EpochTestCallback` 每个 epoch 记录 test MSE/MAE | 无 |
+| seed | 脚本固定 2021（单 seed） | 2021–2023 |
+
+结论：ETTm1/ETTm2 的 batch 相差 16 倍、Weather/Electricity 相差 4 倍，是解释“重训 PF 比
+Golden 差”的首要候选，也是 LA 至今没有在会议条件下训练过的原因。另外两点需要如实记录：
+(a) 会议代码单 seed，而论文正文写 PhaseFormer “average results over three random seeds”；
+(b) 会议代码每个 epoch 都读 test，Golden 是否是逐 epoch 中的最好值无法从代码判定。
+Stage 0 用诊断方式回答 (b)，但诊断值**不进入任何报告数值**。
+
+## 2. 实验 1：会议训练协议下的 PF / L / LA
+
+### Stage 0：协议复现诊断（PF only，seed 2021，28 run）
+
+- 臂：`pf`，会议协议（上表左列：batch、学习率、ETTh1-720 epochs 全部取自会议脚本）。
+- 同一次训练记录三个 test 数：best-val checkpoint、last-epoch 权重（会议口径）、
+  逐 epoch test 轨迹（**仅诊断**：判断 Golden 是否落在轨迹范围内，不用于选择或报告）。
+- 对照：E14 协议 PF seed 2021（已有，不重跑）。
+- 采纳规则（预注册；以 test 对比 Golden，属于 **test-set selection**）：
+  1. 若会议协议 PF 的 28 setting 平均相对 MSE 差距（相对 Golden）≤ 1.0%，且在 ≥ 5/7 个
+     数据集上数据集平均 MSE 优于 E14 PF seed 2021 → 采纳会议协议，进入 Stage 1。
+  2. checkpoint 规则（best-val 或 last-epoch）在 Stage 0 一次性冻结，选 28 setting 平均更
+     接近 Golden 者；两者差 < 0.2% 时取 best-val。冻结后对 PF/L/LA 三臂完全相同。
+     两种规则都符合论文“early stopping on the validation loss (patience 8)”的表述。
+  3. 若不满足 1 → 会议协议在当前环境不可复现：停止实验 1，结果如实写入结果文档；
+     实验 2 改为在 E14 协议的 PF checkpoint 上进行（见 §3）。
+- 每个数据集按 batch 调整后的单 run 耗时也在本阶段实测，用于修正 Stage 1 排期。
+
+### Stage 1：三臂、三 seed（224 个新 run）
+
+- setting：28；seeds：2021/2022/2023。
+- 臂（均在冻结的会议协议下训练，同一 runner、同一份冻结代码）：
+  - `pf`：PhaseFormer（seed 2021 复用 Stage 0，新跑 56）；
+  - `b0` = PhaseFormer-L（84）；
+  - `m1` = PhaseFormer-LA（84）。
+- L/LA 的扩展超参：沿用当前论文的最终配置（主配置 + 2026-10-11 confirm round 的 8 个
+  per-setting 切换），不重新调参；`b0` 与 `m1` 共享同 seed 的骨干随机状态（现有
+  `paired_models` 机制）。
+- 骨干学习率取会议协议值；扩展学习率乘子沿用最终配置。
+
+### 实验 1 预注册目标（目标，不是结论；无论成败全部报告）
+
+- PF matched rerun（3-seed 均值）与 Golden 的差距写入结果文档。
+- LA（3-seed 均值）在 ≥ 4/7 个数据集上数据集平均 MSE 优于 Golden；
+- LA 相对同协议 PF 在 ≥ 17/28 个 setting 上 MSE 改善（当前 E14 协议下为 17/28）。
+
+## 3. 实验 2：从训练好的 PhaseFormer 热启动 LA（及 L）
+
+依据：LA 精确嵌套 PhaseFormer —— `V2=0` 且 `g_ℓ=g_s=0` 时 LA 的输出等于 PhaseFormer。
+因此可从同 seed 的 PF checkpoint 出发，令扩展初始近似关闭，再在验证集早停下训练，
+使 LA 的起点就是 PF 的解。
+
+- 来源 checkpoint：实验 1 采纳会议协议时，用 Stage 0/1 的 `pf` checkpoint（同 seed、
+  同协议、同 checkpoint 规则）；否则用 E14 协议 PF checkpoint（启动前核实服务器上
+  checkpoint 完整，sha256 入记录）。
+- 初始化：骨干参数全部从 PF checkpoint 严格加载（缺失/多余的非扩展键即报错）；扩展参数用
+  同 seed 随机状态初始化；`zero_init_exit=True`（`V2=0`，即 q=0）；level/shape 门
+  `gate_init=1e-3`；`shape_bias_delta=0`。启动断言：初始 val loss 与 PF best val loss 的
+  相对差 ≤ 0.5%。
+- 训练：同协议（Huber、≤30 epoch、patience 8、同 batch），扩展学习率乘子沿用最终配置；
+  骨干学习率乘子 `backbone_lr_mult ∈ {0.1, 1.0}`。
+- Stage 2a（LA，seed 2021，28 × 2 = 56 run）：按 seed-2021 test MSE 为每个 setting 选
+  `backbone_lr_mult`（**test-set selection**，标注）。
+- Stage 2b（seeds 2021–2023，LA-warm 与 L-warm 两臂，共 140 个新 run）：L-warm 用同样的
+  热启动与该 setting 选中的 `backbone_lr_mult`。**L-warm 是必需的**：若 LA 热启动而 L 从
+  零训练，消融表中 L→LA 一步就混入了热启动效应，消融结论失效。
+- 论文披露：采纳实验 2 时，`experiments.tex` 中 “trained from scratch” 必须改为
+  “initialized from the trained PhaseFormer checkpoint of the same seed”，并说明总训练预算
+  （PF 训练 + 微调 epoch 数）；该文字改动用 `\blue{}` 标出。
+
+### 实验 2 预注册目标
+
+- LA-warm 相对同 seed、同协议 PF 的 3-seed 均值 MSE 在 ≥ 22/28 个 setting 上改善；
+- LA-warm 在 ≥ 4/7 个数据集上数据集平均 MSE 优于 Golden；
+- LA-warm 优于 L-warm 的 setting 数（消融主结论）。
+
+## 4. Bad case 分析（HOW_TO_DO_RESEARCH 要求）
+
+两个实验完成后，对 LA 相对同协议 PF 退化最大的 5 个 setting，以及相对 Golden 差距最大的
+3 个数据集，读取 seed-2021 checkpoint 的逐样本误差：按窗口 MSE 排序取 top-1% 窗口，统计
+其输入周期均值漂移幅度、level 门值与 q 的范数，判断退化来自 level 分支误触发、modulation
+放大还是骨干本身。分析记录写入结果文档。本轮是训练协议与初始化实验，不是新模型设想，
+因此不触发 `/experiment-and-error-analysis` Skill，但保留同等的样本级证据。
+
+## 5. 代码改动（全部先提交、单元测试通过，再打 bundle）
+
+1. `scripts/vldbj_m1/protocol.py`（新）：会议协议表（28 setting 的 batch、学习率、epochs、
+   patience），从 `d9cb0b3`/`ff14c16` 的脚本抽取并入库，附来源脚本的 git blob 哈希；
+   `conference_source(e14_source)` 只覆盖上述字段，其余保持 E14 源配置。
+2. `scripts/vldbj_m1/model.py`：
+   - `ARMS` 增加 `pf`（训练源配置本身，无扩展）；单元测试断言 `pf` 初始参数与同 seed
+     `b0` 的骨干子集逐元素相同。
+   - `prepare_config` 接受协议标签 `e14`/`conference`；新增 `init_checkpoint` 热启动路径
+     （骨干严格加载 + 上述门初始化）；`TUNE_FIELDS` 增加 `backbone_lr_mult`，
+     `gate_init` 下界保持 `1e-4 < gate_init`。
+3. `scripts/vldbj_m1/run.py`：新 stage `proto0`（PF，带 last-epoch 保存与诊断用逐 epoch test
+   记录）、`proto_main`、`warm_probe`、`warm_main`，以及对应的单次 test read；
+   `ModelCheckpoint(save_last=True)`；优化器拆分支持 backbone/extension 两个乘子。
+4. `tests/test_vldbj_m1.py`：协议表与会议脚本一致；`pf` 臂参数一致性；热启动后初始输出
+   与 PF 输出最大差 ≤ gate_init 量级、val loss 断言；默认参数下 E14 主配置哈希不变
+   （保证已有结果可复现）。
+
+## 6. 服务器执行（遵守 REMOTE_SERVER.md）
+
+- 新建冻结 clone `~/niuyiming/PhaseFormer_vldbj_proto_20261011`（bundle 上行，
+  `reset --hard FETCH_HEAD`），运行期间不同步代码；输出写
+  `research_runs/vldbj_proto_v1/{stage0,main,warm}`。
+- 服务器当前 8 张 A800 空闲。单 trainer GPU 利用率低，每卡并发 3 个 job（24 并发）。
+- 规模与耗时估计（以 E14 实测 epoch 时间按 batch 换算，Stage 0 后修正）：
+
+| 阶段 | 新 run 数 | 估计 GPU 时 | 估计墙钟 |
+|---|---:|---:|---:|
+| Stage 0（PF，seed 2021） | 28 | ~20 | ~2–3 h（Electricity/ETTm1 最长） |
+| Stage 1（PF/L/LA × 3 seed） | 224 | ~160 | ~7–9 h |
+| Stage 2a（LA-warm 探测） | 56 | ~35 | ~2–3 h |
+| Stage 2b（LA-warm/L-warm × 3 seed） | 140 | ~90 | ~4–5 h |
+| 合计 | 448 | ~305 | ~15–20 h |
+
+  Stage 2a 只依赖 Stage 0 的 seed-2021 PF checkpoint，可与 Stage 1 并行。
+
+## 7. 产出与记录
+
+- 结果文档 `docs/PhaseFormer_VLDBJ_LA_protocol_warmstart_results.md`：每个 stage 的全部
+  run（含未被选中的）、每 setting 3-seed 均值 ± std、相对 Golden 和同协议 PF 的变化、
+  checkpoint 规则与 `backbone_lr_mult` 的选择轨迹（标注 test-set selection）、bad case 分析。
+- `docs/agent-log.md` 追加每个阶段的启动、完成和决策。
+- 论文：只有在用户看过结果并确认采纳后才改主表/消融表；PhaseFormer 主表行仍为 Golden。
+
+## 8. 需要用户确认的事项
+
+1. 是否批准启动 Stage 0（28 run，约 2–3 小时）。
+2. Stage 0 满足 §2 的采纳规则后，是否允许直接继续 Stage 1 和实验 2（按本文件预注册规则
+   自动推进），还是每个阶段结束后再确认一次。
+3. 实验 2 包含 L-warm 臂（为保证消融有效）是否同意。
