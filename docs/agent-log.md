@@ -7282,3 +7282,22 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   window=12/pos_embed=False never reached the model -- the conference protocol uses the
   effective values. The PF arm shares the same-seed L/LA backbone draw so the
   PF->L->LA ladder has one initialization.
+
+## 2026-10-11 Stage 0 decision: conference protocol NOT adopted; experiment 2 continues from E14 checkpoints
+
+- Stage 0 finished 28/28 (conference protocol PhaseFormer, seed 2021, ~3 h). Pre-registered
+  rule: mean relative MSE gap to Golden <= 1.0% AND dataset-average MSE below E14 seed 2021
+  on >= 5/7 datasets.
+- Result: checkpoint rule = best-val (last-epoch mean ratio 1.0178 vs 1.0129); mean relative
+  gap to Golden +1.29% (> 1.0%); only 3/7 datasets beat E14 (ETTh2, ETTm2, Electricity).
+  -> adopt_conference = false. Experiment 1 stops at Stage 0 (28 runs), as pre-registered;
+  the 224-run main stage was skipped by the controller.
+- Notables (seed 2021, best-val): ETTh1-720 0.4134 beats Golden 0.431 and E14 0.4217;
+  ETTh2-192 0.3391 beats Golden 0.341; Electricity-96 0.1288 beats Golden 0.129;
+  Traffic all four horizons worse than both E14 and Golden. So the batch/lr/epoch
+  differences alone do not reproduce the Golden; the remaining gap is not explained by
+  the identified protocol differences (consistent with the Golden being a single-seed,
+  per-epoch-test-read protocol). Full record: protocol_decision.json on the server.
+- Controller proceeded automatically: warm-probe (56 runs, warm start from the E14
+  phase-only checkpoints, backbone lr multiplier 0.1/1.0, seed 2021) 52/56 done ~90 min
+  after Stage 0. Next: warm-select -> warm-main (56) -> collect.
