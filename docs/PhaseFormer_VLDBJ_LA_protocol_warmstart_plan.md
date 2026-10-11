@@ -124,29 +124,45 @@ Stage 0 用诊断方式回答 (b)，但诊断值**不进入任何报告数值**�
 放大还是骨干本身。分析记录写入结果文档。本轮是训练协议与初始化实验，不是新模型设想，
 因此不触发 `/experiment-and-error-analysis` Skill，但保留同等的样本级证据。
 
-## 5. 代码改动（全部先提交、单元测试通过，再打 bundle）
+## 5. 代码改动（已实现，2026-10-11；单元测试 `tests/test_vldbj_proto.py` 14 项 + 原有 10 项通过）
 
-1. `scripts/vldbj_m1/protocol.py`（新）：会议协议表（28 setting 的 batch、学习率、epochs、
-   patience），从 `d9cb0b3`/`ff14c16` 的脚本抽取并入库，附来源脚本的 git blob 哈希；
-   `conference_source(e14_source)` 只覆盖上述字段，其余保持 E14 源配置。
-2. `scripts/vldbj_m1/model.py`：
-   - `ARMS` 增加 `pf`（训练源配置本身，无扩展）；单元测试断言 `pf` 初始参数与同 seed
-     `b0` 的骨干子集逐元素相同。
-   - `prepare_config` 接受协议标签 `e14`/`conference`；新增 `init_checkpoint` 热启动路径
-     （骨干严格加载 + 上述门初始化）；`TUNE_FIELDS` 增加 `backbone_lr_mult`，
-     `gate_init` 下界保持 `1e-4 < gate_init`。
-3. `scripts/vldbj_m1/run.py`：新 stage `proto0`（PF，带 last-epoch 保存与诊断用逐 epoch test
-   记录）、`proto_main`、`warm_probe`、`warm_main`，以及对应的单次 test read；
-   `ModelCheckpoint(save_last=True)`；优化器拆分支持 backbone/extension 两个乘子。
-4. `tests/test_vldbj_m1.py`：协议表与会议脚本一致；`pf` 臂参数一致性；热启动后初始输出
-   与 PF 输出最大差 ≤ gate_init 量级、val loss 断言；默认参数下 E14 主配置哈希不变
-   （保证已有结果可复现）。
+现有 `scripts/vldbj_m1/model.py` 与 `run.py` 不改动（保证已完成的 M1 结果可按原代码复现），
+新增两个模块：
+
+1. `scripts/vldbj_m1/protocol.py`：
+   - `CONFERENCE`：28 setting 的会议**有效**配置（结构、batch、学习率、epochs、patience、
+     Huber δ、attention dropout/window、位置编码）。review 补充发现：会议脚本的
+     `PhaseFormerConfig` 硬编码 `phase_attn_dropout=0.1`、`phase_attn_window=None`、
+     `phase_use_pos_embed=True`（ff14c16 的 ETTh1 脚本从字典读取 dropout 与位置编码），
+     因此 Traffic-96 字典中的 `window=12, pos_embed=False` 实际未生效；E14 使用了
+     `window=12, pos_embed=False`，会议协议改回有效值。单元测试从 git 中的会议脚本
+     重新推导该表并逐项比对，同时校验脚本 blob 哈希。
+   - `conference_source(e14_source)`：结构字段必须与会议一致（否则报错），只覆盖训练字段与
+     上述有效字段，记录 `protocol_changes`，重算 `config_hash`。seed 仍为 2021–2023。
+   - `FINAL_HEAD/FINAL_SHARED_GATE/FINAL_VARIANTS`：论文最终配置（pilot 选择 + confirm round
+     的 8 个切换），已与服务器上的 `selection.json`/`tune_selection.json` 核对一致。
+   - `golden()`：从金标准文档解析 28 个 Golden。
+2. `scripts/vldbj_m1/proto.py`（控制器，阶段 `stage0/decide/main/warm-probe/warm-select/
+   warm-main/collect/all`）：
+   - `pf` 臂：PhaseFormer 采用同 seed L/LA 的骨干随机抽样（扩展模块先构造，直接构造的
+     PhaseFormer 抽样会不同），使 PF→L→LA 三步共享同一初始化。
+   - 每个 run 同一次训练记录 best-val 与 last-epoch 两组 val/test（LA 另含 modulation-off），
+     保存 `last.pt` 与逐窗口 test MSE；Stage 0 另记录逐 epoch test 轨迹（仅诊断，测试前后
+     保存/恢复全部 RNG 状态，训练不受影响）。
+   - 热启动：骨干从 PF checkpoint 严格加载（缺失键只允许是扩展参数，sha256 校验），
+     `gate_init=1e-3`、调制出口零初始化，保留最终配置的 width 与扩展学习率乘子；启动断言
+     初始 val MSE 与 PF val MSE 相对差 ≤ 0.5%；骨干/扩展学习率分组。
+   - `decide`、`warm-select` 按 §2/§3 的预注册规则写不可变 JSON（记录全部候选数值与
+     test-set selection 标注）；`collect` 输出 `results.csv` 与 `summary.json`。
+   - `all`：stage0 → decide → main 与 warm-probe 同队列 → warm-select → warm-main → collect；
+     未采纳会议协议时跳过 main，热启动改用 E14 checkpoint（`attempts/*/checkpoints/best.ckpt`）。
 
 ## 6. 服务器执行（遵守 REMOTE_SERVER.md）
 
 - 新建冻结 clone `~/niuyiming/PhaseFormer_vldbj_proto_20261011`（bundle 上行，
-  `reset --hard FETCH_HEAD`），运行期间不同步代码；输出写
-  `research_runs/vldbj_proto_v1/{stage0,main,warm}`。
+  `reset --hard FETCH_HEAD`），运行期间不同步代码；`VLDBJ_E14_ROOT=~/niuyiming/PhaseFormer`；
+  输出写 `research_runs/vldbj_proto_v1/`。启动命令（获批后）：
+  `python scripts/vldbj_m1/proto.py --stage all --scratch-dir research_runs/vldbj_proto_v1 --slots-per-gpu 3`。
 - 服务器当前 8 张 A800 空闲。单 trainer GPU 利用率低，每卡并发 3 个 job（24 并发）。
 - 规模与耗时估计（以 E14 实测 epoch 时间按 batch 换算，Stage 0 后修正）：
 
