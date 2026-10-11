@@ -38,7 +38,8 @@ Stage 0 与探测为单 seed 2021）。Golden 为 `docs/PhaseFormer_gold_standar
    退化来自微调后的骨干/level 分支，不是调制误触发。
 
 ## 2. Stage 0：会议协议未被采纳
-：会议协议 PhaseFormer（seed 2021）
+
+PhaseFormer 每 setting 单 seed 2021 训练一次，同时记录 best-val 与 last-epoch 两组 test。
 
 | setting | Golden MSE | 会议PF best-val | 会议PF last-epoch | E14 PF (seed 2021) |
 |---|---:|---:|---:|---:|
@@ -93,7 +94,7 @@ Traffic-96、Weather-96，共 **10/28**；其余 18 个 setting 整条训练轨�
 - 未跑 L-warm（用户决定 2026-10-11），因此热启动 LA 只可用于主表对比叙事，
   不能替换消融表（PF→L→LA 阶梯仍需同协议从零训练的三臂）。
 
-：LA-warm 每 setting 结果（3 seed 均值 ± 标准差）
+LA-warm 每 setting 结果（3 seed 均值 ± 标准差）：
 
 | setting | bb lr | PF(E14) | LA-warm MSE ± std | vs PF | vs Golden | mod-off | LA-warm MAE |
 |---|---|---:|---|---:|---:|---:|---|
