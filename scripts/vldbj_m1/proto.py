@@ -80,10 +80,11 @@ def e14_records():
                 continue
             run_dir = Path(row['run_dir'])
             run_dir = run_dir if run_dir.is_absolute() else E14_ROOT / run_dir
+            # Rows reused from earlier rounds carry only the recorded validation MSE.
             ckpts = sorted(run_dir.glob('attempts/*/checkpoints/best.ckpt'))
             rows[(row['dataset'], int(row['horizon']), int(row['seed']))] = {
                 'test_mse': float(row['test_mse']), 'test_mae': float(row['test_mae']),
-                'val_mse': float(row['val_mse']), 'checkpoint': str(ckpts[-1]) if ckpts else ''}
+                'val_mse': float(row['val_mse'] or row['recorded_val_mse']), 'checkpoint': str(ckpts[-1]) if ckpts else ''}
     return rows
 
 
