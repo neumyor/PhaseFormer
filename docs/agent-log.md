@@ -7338,3 +7338,15 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   -> confirm (seeds 2022/2023, 0.2% switch rule) -> collect. Driver enforces a
   08:30 launch deadline so nothing starts after the cutoff. Head fixed S2 and current
   per-dataset gate sharing to preserve the paper's parameter claims. Nothing launched.
+
+## 2026-10-11 Experiment 3 confirmed and launched (wide LA-only search)
+
+- User confirmed the three open questions: architecture-internal off (gate_init=1e-4 +
+  per-setting modulation-off reads selectable; no PF/L arm switching), one launch command
+  with an autonomous driver (no job starts after 08:30), head S2 and gate sharing fixed.
+- Implementation: scripts/vldbj_m1/wide.py (stages r1/r2/select/confirm/collect/all,
+  pre-registered r2 neighbor rule with wall-clock shrink, launch-deadline guard, full
+  candidate audit trail); model.py gate_init lower bound relaxed to inclusive 1e-4;
+  tests/test_vldbj_wide.py (30 tests total pass locally). The current paper configuration
+  (main + 8 switched variants, native and mod-off reads) enters the candidate set without
+  retraining; R1 skips the two grid points already measured by the 2026-10-10 tune round.

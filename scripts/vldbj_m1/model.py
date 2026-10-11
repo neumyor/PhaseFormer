@@ -96,7 +96,7 @@ def prepare_config(source, arm, head, shared_gate, variant=None):
     width = int(variant.get('communication_width', 2))
     lr_mult = float(variant.get('extension_lr_mult', 1.0))
     gate_init = float(variant.get('gate_init', 0.2))
-    if width not in (2, 3, 4) or not 1e-4 < gate_init < 1.0 or not 0 < lr_mult:
+    if width not in (2, 3, 4) or not 1e-4 <= gate_init < 1.0 or not 0 < lr_mult:
         raise ValueError(variant)
     if source.get('mechanism') != 'no_residual' or source.get('init_checkpoint'):
         raise ValueError('Source must be an E14 from-scratch phase-only config')
