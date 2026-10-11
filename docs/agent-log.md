@@ -7350,3 +7350,9 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   tests/test_vldbj_wide.py (30 tests total pass locally). The current paper configuration
   (main + 8 switched variants, native and mod-off reads) enters the candidate set without
   retraining; R1 skips the two grid points already measured by the 2026-10-10 tune round.
+  - Launched 22:05 on the server: frozen clone PhaseFormer_vldbj_wide_20261011
+    (commit fb3ee90), `wide.py --stage all --scratch-dir research_runs/vldbj_wide_v1
+    --gpus 0-7 --slots-per-gpu 3`, log ~/niuyiming/vldbj_wide_v1.log,
+    VLDBJ_PILOT_ROOT points at the pilot scratch for the current-configuration reads.
+    R1 planned 276 jobs (12-variant grid minus the 3 variants already measured by the
+    2026-10-10 tune round on the 20 tuned settings); launch deadline 2026-10-12 08:30.
