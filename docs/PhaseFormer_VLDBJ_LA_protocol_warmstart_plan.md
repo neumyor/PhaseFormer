@@ -103,9 +103,10 @@ Stage 0 用诊断方式回答 (b)，但诊断值**不进入任何报告数值**�
   骨干学习率乘子 `backbone_lr_mult ∈ {0.1, 1.0}`。
 - Stage 2a（LA，seed 2021，28 × 2 = 56 run）：按 seed-2021 test MSE 为每个 setting 选
   `backbone_lr_mult`（**test-set selection**，标注）。
-- Stage 2b（seeds 2021–2023，LA-warm 与 L-warm 两臂，共 140 个新 run）：L-warm 用同样的
-  热启动与该 setting 选中的 `backbone_lr_mult`。**L-warm 是必需的**：若 LA 热启动而 L 从
-  零训练，消融表中 L→LA 一步就混入了热启动效应，消融结论失效。
+- Stage 2b（seeds 2022/2023，LA-warm 一臂，56 个新 run；seed 2021 复用 Stage 2a 的选中
+  run）。用户决定（2026-10-11）不跑 L-warm。后果：热启动 LA 只能进入主表；消融表
+  （PF→L→LA）必须继续使用同一协议下从零训练的 L 与 LA，否则 L→LA 一步混入热启动效应。
+  若主表采用热启动 LA，论文需说明主表 LA 与消融表 LA 的初始化不同。
 - 论文披露：采纳实验 2 时，`experiments.tex` 中 “trained from scratch” 必须改为
   “initialized from the trained PhaseFormer checkpoint of the same seed”，并说明总训练预算
   （PF 训练 + 微调 epoch 数）；该文字改动用 `\blue{}` 标出。
@@ -114,7 +115,6 @@ Stage 0 用诊断方式回答 (b)，但诊断值**不进入任何报告数值**�
 
 - LA-warm 相对同 seed、同协议 PF 的 3-seed 均值 MSE 在 ≥ 22/28 个 setting 上改善；
 - LA-warm 在 ≥ 4/7 个数据集上数据集平均 MSE 优于 Golden；
-- LA-warm 优于 L-warm 的 setting 数（消融主结论）。
 
 ## 4. Bad case 分析（HOW_TO_DO_RESEARCH 要求）
 
@@ -155,8 +155,8 @@ Stage 0 用诊断方式回答 (b)，但诊断值**不进入任何报告数值**�
 | Stage 0（PF，seed 2021） | 28 | ~20 | ~2–3 h（Electricity/ETTm1 最长） |
 | Stage 1（PF/L/LA × 3 seed） | 224 | ~160 | ~7–9 h |
 | Stage 2a（LA-warm 探测） | 56 | ~35 | ~2–3 h |
-| Stage 2b（LA-warm/L-warm × 3 seed） | 140 | ~90 | ~4–5 h |
-| 合计 | 448 | ~305 | ~15–20 h |
+| Stage 2b（LA-warm，seeds 2022/2023） | 56 | ~35 | ~2–3 h |
+| 合计 | 364 | ~250 | ~13–17 h |
 
   Stage 2a 只依赖 Stage 0 的 seed-2021 PF checkpoint，可与 Stage 1 并行。
 
@@ -168,9 +168,9 @@ Stage 0 用诊断方式回答 (b)，但诊断值**不进入任何报告数值**�
 - `docs/agent-log.md` 追加每个阶段的启动、完成和决策。
 - 论文：只有在用户看过结果并确认采纳后才改主表/消融表；PhaseFormer 主表行仍为 Golden。
 
-## 8. 需要用户确认的事项
+## 8. 用户决定与待确认事项（2026-10-11）
 
-1. 是否批准启动 Stage 0（28 run，约 2–3 小时）。
-2. Stage 0 满足 §2 的采纳规则后，是否允许直接继续 Stage 1 和实验 2（按本文件预注册规则
-   自动推进），还是每个阶段结束后再确认一次。
-3. 实验 2 包含 L-warm 臂（为保证消融有效）是否同意。
+1. Stage 0 启动：**暂不批准**，计划需先修订；修订后再次确认才可启动。
+2. 阶段推进：Stage 0 一旦获批并满足 §2 采纳规则，按本文件预注册规则自动进入 Stage 1 与
+   实验 2，各阶段完成后汇报。
+3. 实验 2 只跑 LA-warm，不跑 L-warm（见 §3 Stage 2b 的后果说明）。
