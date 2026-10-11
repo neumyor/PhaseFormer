@@ -4,7 +4,7 @@
 
 %To address this limitation, we adopt a complementary phase-centric perspective, treating intra-patch positions as tokens, a strategy we term \emph{phase tokenization}.Intuitively, the impact of cycle drift on phase tokens is confined to only a subset of phases. Even within this subset, the effect manifests primarily as a uniform amplitude shift, which is comparatively easier to accommodate. Moreover, phase-based averaging across patches tends to be more robust to local perturbations. These observations motivate the exploration of phase tokenization.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
   %  subfigure
   \begin{subfigure}[t]{0.59\textwidth}
@@ -25,7 +25,7 @@
   (a) Phase tokenization yields more stable representations than patch-based embeddings.
   (b) Phase tokens exhibit clear low-dimensionality compared with patch tokens.}  
   \label{fig:phase_token_comparison}
-\end{figure}
+\end{figure*}
 
 
 To motivate our approach, we conduct a comparative analysis of the geometric structures of patch and phase tokens across three widely used datasets. 

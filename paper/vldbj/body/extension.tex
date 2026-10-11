@@ -6,6 +6,7 @@
 
 \begin{figure*}[t]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
   font=\scriptsize,
   box/.style={draw, rounded corners=2pt, align=center, inner sep=3.5pt, minimum height=17pt},
@@ -35,7 +36,8 @@
 \draw[arrnew] (pool.east) -- node[lab, pos=0.5, above]{$t$} (jt) -- (prof.west);
 \draw[arrnew] (jt) -- node[lab, pos=0.5, right]{$q=V_2V_1t$} (mod.south);
 \draw[arrnew] (prof.east) -| node[lab, pos=0.25, above]{$R$} (fusion.south);
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{\sysLA. The \sysname backbone (gray) is unchanged. A rank-3 level branch (blue) reads the anchored cycle means and writes onto three fixed horizon profiles; its state $t$ drives a centered modulation of the final phase latents; the two forecasts are fused with separate level and shape gates.}
 \label{fig:la_overview}
 \end{figure*}
@@ -56,9 +58,10 @@ where $\Psi_H\in\mathbb R^{H\times3}$ holds the displacement, tilt and curvature
 
 Let $F$ be the phase forecast and $R$ the branch forecast, both in normalized units. For every future cycle, the level of the fused forecast and its within-cycle shape are mixed with separate gates,
 \begin{equation}
-M_c\hat{\tilde y}=(1-g_\ell)M_cF+g_\ell M_cR,
-\qquad
+\begin{gathered}
+M_c\hat{\tilde y}=(1-g_\ell)M_cF+g_\ell M_cR,\\
 J_c\hat{\tilde y}=(1-g_s)J_cF+g_sJ_cR,
+\end{gathered}
 \label{eq:fusion}
 \end{equation}
 with $g_\ell=\operatorname{sigmoid}(\omega)$ and $g_s=\operatorname{sigmoid}(\omega+\delta)$. Both gates start at $0.2$ ($\delta=0$). Separate gates let the level be handed to the branch, as Theorem~\ref{thm:complement}(c) prescribes, without forcing the branch's smooth profiles into the phase shape. The gates are static: they depend on neither the input nor the time step. They are learned either per channel ($2C$ parameters) or shared across channels (two parameters); Section~\ref{sec:ext_setup} gives the rule that selects between the two for each dataset.

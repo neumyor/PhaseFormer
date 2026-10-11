@@ -30,7 +30,7 @@ and assess \textbf{efficiency} in terms of floating-point operations (FLOPs) and
 We evaluate our approach against eight competitive baselines, following the standard non-pretraining setting where all models are trained and evaluated directly on domain-specific datasets. 
 The baselines span both state-of-the-art Transformer-based architectures and recent parameter-efficient forecasting models.
 }
-We compare our method with {PatchTST}\citeyearpar{nie2023patchtst}, {iTransformer}\citeyearpar{liu2023itransformer}, {Crossformer}\citeyearpar{zhang2023crossformer}, {FEDformer}\citeyearpar{zhou2022fedformer}, {TimeBase}\citeyearpar{huang2025timebase}, {SparseTSF}\citeyearpar{lin2024sparsetsf}, {FITS}\citeyearpar{fits2024}, and {TimeMixer}\citeyearpar{timemixer24}.
+We compare our method with PatchTST \citeyearpar{nie2023patchtst}, iTransformer \citeyearpar{liu2023itransformer}, Crossformer \citeyearpar{zhang2023crossformer}, FEDformer \citeyearpar{zhou2022fedformer}, TimeBase \citeyearpar{huang2025timebase}, SparseTSF \citeyearpar{lin2024sparsetsf}, FITS \citeyearpar{fits2024}, and TimeMixer \citeyearpar{timemixer24}.
 Among these, PatchTST, Crossformer, and TimeMixer are patch-based; SparseTSF is phase-based; TimeBase integrates patch and phase paradigms; FITS and FEDformer are frequency-domain; and iTransformer models the full sequence directly.
 For all baselines, we adopt the recommended configurations provided in their official implementations\revised{, keeping hyperparameters aligned with ~\cite{huang2025timebase}.}
 The model is optimized using the Adam optimizer with a fixed learning rate of $1 \times 10^{-3}$.  
@@ -259,9 +259,9 @@ As summarized in \tabref{tab:ablation_phase}, \sysname consistently outperforms 
 \sysname automatically determines the phase length through frequency-domain analysis (see \secref{sec:dataset_details}), extracting salient periodic components directly from the data. 
 To assess its sensitivity to phase length, we conduct experiments on the Traffic dataset. Its frequency spectrum contains several clear periodic components (see \figref{fig:spectrum_traffic}). Based on spectral amplitudes, we select the top five candidate phase lengths and run \sysname for forecasting. The results are shown in \tabref{tab:phase_length}.
 
-\begin{figure}
+\begin{figure}[t]
     \centering
-    \includegraphics[width=0.75\linewidth]{figures/spectrum_traffic.png}
+    \includegraphics[width=\linewidth]{figures/spectrum_traffic.pdf}
     \caption{The spectrum calculated on the Traffic dataset. The top-5 phase length is 24, 12, 8, 28, 21.}
     \label{fig:spectrum_traffic}
 \end{figure}

@@ -50,9 +50,11 @@ The construction makes the LayerNorms transparent by a large offset $c$ along on
 
 Let $A=\Phi\operatorname{diag}(\gamma_2)$ and $o=\Phi\beta_2+c_\Phi$ be read from the last unit, and define
 \begin{equation}
+\begin{gathered}
 c_0=\tfrac{1}{K'}\one^\top o,\quad
-C_1=\tfrac{\sqrt d}{K'}\big\|J_dA^\top\one_{K'}\big\|,\quad
+C_1=\tfrac{\sqrt d}{K'}\big\|J_dA^\top\one_{K'}\big\|,\\
 \mathcal I_\varphi=(c_0-C_1,\,c_0+C_1),
+\end{gathered}
 \label{eq:envelope_constants}
 \end{equation}
 and $C_\varphi=|c_0|+C_1$.
@@ -140,16 +142,24 @@ The two halves of this section are symmetric. Table~\ref{tab:two_envelopes} summ
 \label{tab:two_envelopes}
 \footnotesize
 \setlength{\tabcolsep}{3pt}
-\begin{tabular}{p{1.55cm}p{3.05cm}p{3.05cm}}
+\def\tcA#1{\parbox[t]{47pt}{\raggedright #1}}
+\def\tcB#1{\parbox[t]{91pt}{\raggedright #1}}
+\def\tcC#1{\parbox[t]{89pt}{\raggedright #1}}
+\begin{tabular}{@{}lll@{}}
 \toprule
- & Level & Amplitude \\
+ & \tcB{Level} & \tcC{Amplitude} \\
 \midrule
-Change & $X+\ell\one^\top$ & $\operatorname{diag}(\one+\alpha\ell)X$ \\
-Demand & $\Lambda=\lev(\tilde y)$ & $\Omega=\|\Pi\tilde y\|/\sqrt H$ \\
-Envelope & $\mathcal I_\varphi$, half-width $C_1$ (Thm.~\ref{thm:level_envelope}) & $(1-g_s)B_\varphi$ (Thm.~\ref{thm:amplitude}a) \\
-Structure beyond it & rank $\le m$ on fixed profiles (Thm.~\ref{thm:complement}) & bilinear in level and shape (Thm.~\ref{thm:amplitude}b) \\
-Complement & rank-3 cycle-mean branch & centered modulation~\equref{eq:modulation} \\
-Interference & -- & none on cycle means (Thm.~\ref{thm:amplitude}c) \\
+\tcA{Change} & \tcB{$X+\ell\one^\top$} & \tcC{$\operatorname{diag}(\one+\alpha\ell)X$} \\
+\addlinespace[2pt]
+\tcA{Demand} & \tcB{$\Lambda=\lev(\tilde y)$} & \tcC{$\Omega=\|\Pi\tilde y\|/\sqrt H$} \\
+\addlinespace[2pt]
+\tcA{Envelope} & \tcB{$\mathcal I_\varphi$, half-width $C_1$ (Thm.~\ref{thm:level_envelope})} & \tcC{$(1-g_s)B_\varphi$ (Thm.~\ref{thm:amplitude}a)} \\
+\addlinespace[2pt]
+\tcA{Structure beyond it} & \tcB{rank $\le m$ on fixed profiles (Thm.~\ref{thm:complement})} & \tcC{bilinear in level and shape (Thm.~\ref{thm:amplitude}b)} \\
+\addlinespace[2pt]
+\tcA{Complement} & \tcB{rank-3 cycle-mean branch} & \tcC{centered modulation~\equref{eq:modulation}} \\
+\addlinespace[2pt]
+\tcA{Interference} & \tcB{--} & \tcC{none on cycle means (Thm.~\ref{thm:amplitude}c)} \\
 \bottomrule
 \end{tabular}
 }

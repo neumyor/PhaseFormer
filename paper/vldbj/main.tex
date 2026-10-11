@@ -7,6 +7,7 @@
 
 \usepackage[T1]{fontenc}
 \usepackage{times}
+\usepackage[protrusion=true,expansion=true]{microtype}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \usepackage{multirow}
@@ -17,6 +18,7 @@
 \usepackage{subcaption}
 \usepackage{url}
 \usepackage[hidelinks]{hyperref}
+\usepackage{xurl}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,fit,calc}
 
@@ -82,6 +84,9 @@
 \spnewtheorem{assumption}{Assumption}{\bfseries}{\itshape}
 
 \journalname{The VLDB Journal}
+
+% Narrow two-column measure: allow extra interword stretch before overfull lines.
+\setlength{\emergencystretch}{1.5em}
 
 \begin{document}
 

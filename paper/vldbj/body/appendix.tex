@@ -34,6 +34,8 @@ In our experiments, we incorporated a diverse set of time series forecasting mod
 
 \begin{table}[ht]
 \centering
+\small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccc}
 \hline
 Dataset     & Var & Length & $T$ & $L$       & Freq   & Scale  \\
@@ -370,7 +372,7 @@ We conducted comparative experiments on three variants of the \sysname model wit
 
 Overall, the effect of model scale on performance is not consistent. On the Traffic dataset, larger models yield slight improvements, whereas on the Electricity and Weather datasets, the smaller and medium-sized models perform better. These findings indicate that \sysname achieves a favorable balance between computational efficiency and predictive accuracy at relatively small parameter scales, and increasing model size does not lead to uniform gains across all tasks.
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
 \caption{Comparison of \sysname variants. Each cell reports MSE, MAE, and FLOPs. The input length is fixed as 720 steps and the output length is fixed as 96 steps. The best results are marked with \best{Bold}, and the second-best results are marked with \second{Underlined}.}
 \label{tab:phaseformer_params_variants}
@@ -400,7 +402,7 @@ Weather
 & 0.174 & 0.217 & 14.46M \\
 \hline
 \end{tabular}
-\end{table}
+\end{table*}
 
 \subsubsection{Impact of Input Length on Performance}
 
@@ -469,12 +471,12 @@ To examine whether Phase Tokenization preserves essential intra-cycle dynamics a
 \fakeparagraph{Setup}
 We evaluate the retention of fine-grained information by computing the reconstruction residual and analyzing it in both the time and frequency domains. In particular, we estimate the power spectral density (PSD) of the residual to detect whether certain frequency components, especially those associated with short-term or high-frequency dynamics, are systematically diminished.
 
-\begin{figure}
+\begin{figure*}
     \centering
-    \includegraphics[width=0.75\linewidth]{figures/reconstruction_analysis.png}
+    \includegraphics[width=0.75\textwidth]{figures/reconstruction_analysis.png}
     \caption{Time-domain and power-spectrum visualizations of the reconstruction residuals when \sysname reconstructs 720 input time steps on the Traffic dataset.}
     \label{fig:reconstruction_analysis}
-\end{figure}
+\end{figure*}
 
 \fakeparagraph{Frequency Analysis of the Residual}
 The PSD analysis in \figref{fig:reconstruction_analysis} shows that residual energy is evenly distributed across the spectrum, with no noticeable concentration or suppression in any frequency band. This indicates that Phase Tokenization does not introduce frequency-dependent information loss. Despite compressing each cycle into a compact phase representation, the model retains the ability to capture fine-grained intra-cycle dynamics, supporting the effectiveness of phase-based temporal abstraction for long-sequence forecasting.
@@ -636,16 +638,20 @@ Assume $\operatorname{rank}(S G)=r$ and $\delta,\delta’>0$. Then:
 \begin{enumerate}
 \item For phase tokenization,
 \[
-d\big(\mathcal U_r(X), \mathcal U_r(X’)\big) \;\le\;
-C\Big(\tfrac{\|N\|_2}{\delta}+\tfrac{\|N’\|_2}{\delta’}\Big)
-\;\le\; C\frac{\|N\|_2+\|N’\|_2}{\delta_{\min}}.
+\begin{aligned}
+d\big(\mathcal U_r(X), \mathcal U_r(X’)\big) &\;\le\;
+C\Big(\tfrac{\|N\|_2}{\delta}+\tfrac{\|N’\|_2}{\delta’}\Big)\\
+&\;\le\; C\frac{\|N\|_2+\|N’\|_2}{\delta_{\min}}.
+\end{aligned}
 \]
 In the noiseless case, Lemma~1 ensures exact invariance, so the distance is $0$.
 
 \item For patch tokenization,
 \[
+\begin{aligned}
 d\big(\mathcal V_r(X), \mathcal V_r(X’)\big) \;\ge\;
 d_0 - C\Big(\tfrac{\|N\|_2}{\delta}+\tfrac{\|N’\|_2}{\delta’}\Big),
+\end{aligned}
 \]
 where $d_0 := d(\mathrm{Col}(G),\mathrm{Col}(S G))$. If $S(\mathrm{Col}(G))\neq\mathrm{Col}(G)$, then $d_0>0$.
 \end{enumerate}
@@ -654,19 +660,23 @@ where $d_0 := d(\mathrm{Col}(G),\mathrm{Col}(S G))$. If $S(\mathrm{Col}(G))\neq\
 \begin{proof}
 For phase tokenization, apply the triangle inequality:
 \[
-d(\mathcal U_r(X),\mathcal U_r(X'))
-\le d(\mathcal U_r(X),\mathcal U_r(M))
-+ d(\mathcal U_r(M),\mathcal U_r(MS^\top))
-+ d(\mathcal U_r(MS^\top),\mathcal U_r(X')).
+\begin{aligned}
+&d(\mathcal U_r(X),\mathcal U_r(X'))\\
+&\quad\le d(\mathcal U_r(X),\mathcal U_r(M))\\
+&\qquad + d(\mathcal U_r(M),\mathcal U_r(MS^\top))\\
+&\qquad + d(\mathcal U_r(MS^\top),\mathcal U_r(X')).
+\end{aligned}
 \]
 By Lemma~1 the middle term vanishes, and the two boundary terms are bounded by Wedin’s theorem, yielding the stated inequality.  
 
 For patch tokenization, we have
 \[
-d(\mathcal V_r(X),\mathcal V_r(X'))
-\ge d(\mathcal V_r(M),\mathcal V_r(MS^\top))
-- d(\mathcal V_r(M),\mathcal V_r(X))
-- d(\mathcal V_r(MS^\top),\mathcal V_r(X')).
+\begin{aligned}
+&d(\mathcal V_r(X),\mathcal V_r(X'))\\
+&\quad\ge d(\mathcal V_r(M),\mathcal V_r(MS^\top))\\
+&\qquad - d(\mathcal V_r(M),\mathcal V_r(X))\\
+&\qquad - d(\mathcal V_r(MS^\top),\mathcal V_r(X')).
+\end{aligned}
 \]
 By Lemma~2 the first term equals $d_0$, and the other two are controlled by Wedin’s theorem, proving the bound.
 \end{proof}
@@ -679,8 +689,10 @@ X’ = X S^\top + R, \qquad R_{d,:}=X_{d,:}\Delta_d^\top.
 \]
 Bounding row by row gives $\|R_{d,:}\|_2 \le \varepsilon\|X_{d,:}\|_2$, hence
 \[
-\|R\|_F \le \varepsilon \|X\|_F \quad \Rightarrow \quad 
-\|R\|_2 \le \varepsilon(\|M\|_F+\|N\|_F).
+\begin{aligned}
+\|R\|_F &\le \varepsilon \|X\|_F \quad \Rightarrow \quad \\
+\|R\|_2 &\le \varepsilon(\|M\|_F+\|N\|_F).
+\end{aligned}
 \]
 
 \revised{
@@ -703,14 +715,14 @@ Then there exists an absolute constant $C\in[2,2\sqrt2]$ such that:
 \item \textbf{Phase tokenization (left $r$-subspace):}
 \[
 \begin{aligned}
-d\big(\mathcal U_r(X), \mathcal U_r(X')\big)
-&\;\le\;
+&d\big(\mathcal U_r(X), \mathcal U_r(X')\big)\\
+&\quad\le\;
 C\Bigg(
    \frac{\|N\|_2}{\delta}
  + \frac{\|N'\|_2}{\delta'}
  + \frac{\|R\|_2}{\delta'}
 \Bigg) \\
-&\;\le\;
+&\quad\le\;
 C\,\frac{\varepsilon(\|M\|_F+\|N\|_F)
    + \|N\|_2
    + \|N'\|_2}{\delta_{\min}}.
@@ -720,15 +732,15 @@ C\,\frac{\varepsilon(\|M\|_F+\|N\|_F)
 \item \textbf{Patch tokenization (right $r$-subspace):}
 \[
 \begin{aligned}
-d\big(\mathcal V_r(X), \mathcal V_r(X')\big)
-&\;\ge\;
+&d\big(\mathcal V_r(X), \mathcal V_r(X')\big)\\
+&\quad\ge\;
 d_0 \;-\;
 C\Bigg(
    \frac{\|N\|_2}{\delta}
  + \frac{\|N'\|_2}{\delta'}
  + \frac{\|R\|_2}{\delta'}
 \Bigg) \\
-&\;\ge\;
+&\quad\ge\;
 d_0 \;-\;
 C\,\frac{\varepsilon(\|M\|_F+\|N\|_F)
    + \|N\|_2
@@ -745,24 +757,28 @@ $\kappa=\sigma_{\min}(S|_{\mathrm{Col}(G)})>0$ makes the role of signal strength
 By row-wise control,
 $\|R_{d,:}\|_2\le \varepsilon\|X_{d,:}\|_2$, hence
 \[
-\|R\|_F\le \varepsilon\|X\|_F\le \varepsilon(\|M\|_F+\|N\|_F),
-\qquad
-\|R\|_2\le \|R\|_F\le \varepsilon(\|M\|_F+\|N\|_F).
+\begin{aligned}
+\|R\|_F&\le \varepsilon\|X\|_F\le \varepsilon(\|M\|_F+\|N\|_F),\\
+\|R\|_2&\le \|R\|_F\le \varepsilon(\|M\|_F+\|N\|_F).
+\end{aligned}
 \]
 
 Insert the chain
 \[
-X \;\to\; M \;\to\; MS^\top \;\to\; MS^\top+N' \;\to\; X'=MS^\top+N'+R.
+\begin{aligned}
+X \;\to\; M \;\to\; MS^\top \;\to\; MS^\top+N' \;\to\;{}& X'\\
+&=MS^\top+N'+R.
+\end{aligned}
 \]
 
 For phase subspace $\mathcal U_r$, according to the triangle inequality,
 \[
 \begin{aligned}
-d\big(\mathcal U_r(X),\mathcal U_r(X')\big)
-&\le d\big(\mathcal U_r(X),\mathcal U_r(M)\big)
-+ d\big(\mathcal U_r(M),\mathcal U_r(MS^\top)\big)\\
-&\quad + d\big(\mathcal U_r(MS^\top),\mathcal U_r(MS^\top+N')\big)
-+ d\big(\mathcal U_r(MS^\top+N'),\mathcal U_r(X')\big).
+&d\big(\mathcal U_r(X),\mathcal U_r(X')\big)\\
+&\quad\le d\big(\mathcal U_r(X),\mathcal U_r(M)\big)\\
+&\qquad + d\big(\mathcal U_r(M),\mathcal U_r(MS^\top)\big)\\
+&\qquad + d\big(\mathcal U_r(MS^\top),\mathcal U_r(MS^\top+N')\big)\\
+&\qquad + d\big(\mathcal U_r(MS^\top+N'),\mathcal U_r(X')\big).
 \end{aligned}
 \]
 The middle term vanishes by Column space preservation (Lemma~1).
@@ -774,11 +790,11 @@ Use $\delta_{\min}\le\delta,\delta'$ and Step~1 to obtain Item~1.
 For patch subspace $\mathcal V_r$, we use the reverse triangle inequality:
 \[
 \begin{aligned}
-d\big(\mathcal V_r(X),\mathcal V_r(X')\big)
-&\ge d\big(\mathcal V_r(M),\mathcal V_r(MS^\top)\big)
-- d\big(\mathcal V_r(M),\mathcal V_r(X)\big)\\
-&\quad - d\big(\mathcal V_r(MS^\top),\mathcal V_r(MS^\top+N')\big)
-- d\big(\mathcal V_r(MS^\top+N'),\mathcal V_r(X')\big).
+&d\big(\mathcal V_r(X),\mathcal V_r(X')\big)\\
+&\quad\ge d\big(\mathcal V_r(M),\mathcal V_r(MS^\top)\big)\\
+&\qquad - d\big(\mathcal V_r(M),\mathcal V_r(X)\big)\\
+&\qquad - d\big(\mathcal V_r(MS^\top),\mathcal V_r(MS^\top+N')\big)\\
+&\qquad - d\big(\mathcal V_r(MS^\top+N'),\mathcal V_r(X')\big).
 \end{aligned}
 \]
 The first term equals $d_0$ by Row space change (Lemma~2).

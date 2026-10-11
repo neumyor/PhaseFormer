@@ -55,11 +55,11 @@ Table~\ref{tab:ladder} adds the components one at a time, on all 28 settings wit
 \centering
 \caption{Ablation ladder, test MSE/MAE averaged over the four horizons and three seeds. \sysname is retrained under the protocol of this section; \sysLA (mod.\ off) is \sysLA with the modulation disabled on the trained checkpoint.}
 \label{tab:ladder}
-\footnotesize
+\scriptsize
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{lcccc}
 \toprule
-Dataset & \sysname & \sysL & \sysLA & \sysLA (mod.\ off) \\
+Dataset & \sysname & \sysL & \sysLA & \begin{tabular}[c]{@{}c@{}}\sysLA\\(mod.\ off)\end{tabular} \\
 \midrule
 ETTh1 & 0.408/0.419 & 0.412/0.425 & \textbf{0.405}/\textbf{0.421} & 0.414/0.429 \\
 ETTh2 & 0.354/0.396 & \textbf{0.347}/\textbf{0.393} & 0.348/\textbf{0.393} & 0.352/0.396 \\
