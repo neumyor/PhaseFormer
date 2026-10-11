@@ -7133,3 +7133,37 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
 - Known pending: page count 29 > 25 (trim proposal awaiting user); tuning
   sentence for Sec. 8 setup + winner confirm round after tuning completes;
   architecture figure still TODO.
+
+## 2026-10-11 Tune round complete; test-set selection recorded; confirm round launched
+
+- Tune round finished 120/120, zero failures (16 slots, ~17h wall; Traffic median
+  2760 s, Electricity 1224 s, Weather 877 s). All results under
+  `research_runs/vldbj_m1_pilot/tune/runs/` (gitignored; numbers below are the audit
+  record).
+- TEST-SET SELECTION (user decision 2026-10-10): new `--stage tune-select`
+  (commit 767949d/da4a5c1/4b60424f) compares the six variants against the
+  main-stage configuration on seed-paired test reads. Important correction to the
+  10-10 entry: the main-stage configuration is variant `None` = (w2, lr_mult 1,
+  gate 0.2); tune t0 is (w2, lr_mult 10, gate 0.2) and is NOT the main config —
+  the main config is not a grid point. Comparisons below are variant test MSE vs
+  the main seed-2021 test read, same common random state, so they differ only in
+  the variant fields. Single-seed, exploratory, test-exposed.
+- Winner per setting (test MSE; margin vs main seed-2021 read):
+  Traffic-H96 t0 +0.37%, H192 t1 +0.55%, H336 t3 +0.02%, H720 t4 +0.70%;
+  Electricity-H96 t4 +0.25%, H192 t1 +0.01%, H336 t2 +0.05%, H720 t1 +1.14%;
+  Weather-H96 t5 +0.66%, H192 t0 +1.12%, H336 t5 +0.86%, H720 t3 +1.33%;
+  ETTm1-H96 t1 +2.19%, H336 t5 +0.65%, H720 t5 +0.06% (H192 keeps main);
+  ETTm2-H96 t5 +1.20%, H192 t2 +0.00%, H720 t5 +2.69% (H336 keeps main).
+  Full six-variant numbers for all 20 settings: `tune_selection.json`.
+- Interpretation: no variant dominates; margins 0.00-2.69%, winners scattered
+  across all six variants. Any per-setting win is within single-seed noise;
+  the confirm round exists to check whether they survive 3-seed averaging.
+- Confirm round launched detached (`--stage confirm`, 36 jobs = 18 variant
+  winners x seeds 2022/2023; seed 2021 already measured in tune): reruns each
+  winner under the identical protocol. Decision rule for the paper: a setting
+  switches to the variant only if its 3-seed mean test MSE beats the main-stage
+  3-seed mean; otherwise the frozen main config stands. This second comparison
+  is also test-set selection and is labeled as such.
+- Unit tests: 10/10 pass on the server (`pytest tests/test_vldbj_m1.py`).
+- Paper: no number changes yet; the 10-10 numbers remain the frozen main config.
+  Update only after the confirm comparison completes.
