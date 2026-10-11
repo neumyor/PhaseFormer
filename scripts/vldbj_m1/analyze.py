@@ -12,6 +12,11 @@ Measures on trained checkpoints, per theory Section 5 and Appendix B:
 
 Each job writes ``analysis.json`` and ``analysis_windows.npz`` into the run
 directory.  Window-level joins for gain stratification are done offline.
+
+``--selected-variants`` analyzes the seed-2021 tune runs of the variants chosen
+by ``run.py --stage tune-select``: those run directories keep their best
+checkpoint in ``checkpoints/best.ckpt`` and their job spec (source config,
+variant) in the stage's ``jobs/`` directory, from which the config is rebuilt.
 """
 from __future__ import annotations
 
@@ -70,14 +75,28 @@ def analysis_job(path):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if (run_dir / 'analysis.json').exists():
             return
-        result = json.loads((run_dir / 'result.json').read_text())
-        cfg = json.loads((run_dir / 'config.json').read_text())
-        if digest(result['checkpoint']) != result['checkpoint_sha256']:
-            raise ValueError('Checkpoint changed after training')
+        variant = None
+        if (run_dir / 'result.json').exists():
+            result = json.loads((run_dir / 'result.json').read_text())
+            cfg = json.loads((run_dir / 'config.json').read_text())
+            if digest(result['checkpoint']) != result['checkpoint_sha256']:
+                raise ValueError('Checkpoint changed after training')
+            checkpoint = result['checkpoint']
+        else:
+            # Tune/confirm run of a tuning variant: rebuild the config from the
+            # stage's job spec and read the best checkpoint Lightning kept.
+            result = json.loads((run_dir / 'tune_result.json').read_text())
+            stage_dir = run_dir.parent.parent
+            spec = json.loads((stage_dir / 'jobs' / f'{run_dir.name}.json').read_text())
+            from scripts.vldbj_m1.model import prepare_config
+            cfg = prepare_config(spec['source']['config'], spec['arm'], spec['head'],
+                                 spec['shared_gate'], spec.get('variant'))
+            checkpoint = str(run_dir / 'checkpoints' / 'best.ckpt')
+            variant = spec.get('variant')
         torch.set_num_threads(2)
         torch.set_float32_matmul_precision('medium')
         model, args = construct({**cfg, 'checkpoint': ''})
-        state = torch.load(result['checkpoint'], map_location='cpu', weights_only=False)['state_dict']
+        state = torch.load(checkpoint, map_location='cpu', weights_only=False)['state_dict']
         model.load_state_dict(state, strict=True)
         device = torch.device('cuda:0')
         model.to(device).eval()
@@ -171,7 +190,7 @@ def analysis_job(path):
         lam, dist, mse, sigma = base['lam'], base['dist'], base['mse'], base['sigma']
         levF, omega = base['levF'], base['omega']
         lam_flat = lam.flatten().numpy()
-        record = {'name': result['name'], 'arm': arm, 'seed': ANALYSIS_SEED,
+        record = {'name': result['name'], 'arm': arm, 'seed': ANALYSIS_SEED, 'variant': variant,
                   'code_commit': commit(),
                   'constants': {'c0': c0, 'C1': C1, 'C_phi': C_phi, 'B_phi': B_phi,
                                 'd': d, 'K_prime': k_primes},
@@ -223,6 +242,10 @@ def analysis_job(path):
                        mse_native=native['mse'].numpy(),
                        branch_lev_native=native['branch_lev'].numpy())
         np.savez_compressed(run_dir / 'analysis_windows.npz', **npz)
+        if is_m1:
+            # Invariance check last: it promotes the model to double precision.
+            from scripts.vldbj_m1.run import cycle_mean_check
+            record['cycle_mean_check'] = cycle_mean_check(model, loader, device)
         save_json(run_dir / 'analysis.json', record)
 
 
@@ -246,16 +269,45 @@ def plan_jobs(runs_dir):
     return out
 
 
+def plan_selected_variants(scratch):
+    """Analyze the seed-2021 tune runs of the variants chosen by tune-select."""
+    selection = json.loads((scratch / 'selection.json').read_text())
+    chosen = json.loads((scratch / 'tune_selection.json').read_text())['settings']
+    head = selection['head']
+    jobs = []
+    for name, record in sorted(chosen.items()):
+        if record['chosen'] is None:
+            continue
+        dataset, horizon = name.split('_H')
+        gate = 'shared' if selection['shared_gate'][dataset] else 'perC'
+        run_dir = scratch / 'tune' / 'runs' / f'{name}_S{ANALYSIS_SEED}__m1__{head}__{gate}__t{record["chosen"]}'
+        jobs.append({'run_dir': str(run_dir), 'arm': 'm1', 'dataset': dataset,
+                     'horizon': int(horizon)})
+    out = []
+    for job in jobs:
+        path = scratch / 'analysis' / 'variant_jobs' / f"{Path(job['run_dir']).name}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        save_json(path, job)
+        out.append(path)
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--runs-dir', type=Path,
                         help='main/runs directory of the vldbj_m1 scratch')
+    parser.add_argument('--selected-variants', type=Path,
+                        help='vldbj_m1 scratch dir with tune_selection.json; analyzes '
+                             'the seed-2021 tune runs of every chosen variant')
     parser.add_argument('--gpus', default='0,1,2,3,4,5,6,7')
     parser.add_argument('--job', type=Path)
     args = parser.parse_args()
     if args.job:
         return analysis_job(args.job)
-    jobs = plan_jobs(args.runs_dir)
+    if args.selected_variants:
+        jobs = plan_selected_variants(args.selected_variants)
+    else:
+        jobs = plan_jobs(args.runs_dir)
     print(json.dumps({'analysis_jobs': len(jobs), 'code': commit()}), flush=True)
     tasks = queue.Queue()
     for path in jobs:
