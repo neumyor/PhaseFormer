@@ -49,35 +49,37 @@ More implementation details are provided in \secref{sec:dataset_details}.
 Main results for long-term forecasting.
 The input sequence length is $L_{\text{input}} = 720$, and results are averaged over forecast horizons $L_{\text{out}} \in \{96, 192, 336, 720\}$.
 The best results are shown in \best{bold}, and the second-best in \second{underline}.
-\blue{The \sysname column is the conference result. \sysLA results are averaged over three seeds; bold and underline marks are assigned among the baselines and \sysname.}
+\blue{The \sysname row is the conference result. \sysLA results are averaged over three seeds; bold and underline marks are assigned among the baselines and \sysname.}
 }
 \label{tab:main_results}
-\resizebox{\textwidth}{!}{
-\begin{tabular}{c|cc|cc|cc|cc|cc|cc|cc|cc|cc|cc}
+\footnotesize
+\setlength{\tabcolsep}{3.6pt}
+\begin{tabular}{l|cc|cc|cc|cc|cc|cc|cc}
 \hline
-\multirow{2}{*}{Dataset}
-& \multicolumn{2}{c|}{\blue{\sysLA}}
-& \multicolumn{2}{c|}{\sysname} 
-& \multicolumn{2}{c|}{PatchTST} 
-& \multicolumn{2}{c|}{iTransformer} 
-& \multicolumn{2}{c|}{Crossformer}
-& \multicolumn{2}{c|}{FEDformer}
-& \multicolumn{2}{c|}{TimeBase} 
-& \multicolumn{2}{c|}{SparseTSF} 
-& \multicolumn{2}{c|}{FITS} 
-& \multicolumn{2}{c}{TimeMixer} \\ 
-\cline{2-21}
- & \blue{MSE} & \blue{MAE} & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
+\multirow{2}{*}{Model}
+& \multicolumn{2}{c|}{ETTh1}
+& \multicolumn{2}{c|}{ETTh2}
+& \multicolumn{2}{c|}{ETTm1}
+& \multicolumn{2}{c|}{ETTm2}
+& \multicolumn{2}{c|}{Electricity}
+& \multicolumn{2}{c|}{Traffic}
+& \multicolumn{2}{c}{Weather} \\
+\cline{2-15}
+ & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
 \hline
-ETTh1 & \blue{0.405} & \blue{0.421} & \best{0.403} & \best{0.415} & 0.420 & 0.439 & 0.453 & 0.467 & 0.517 & 0.512 & 0.523 & 0.523 & \second{0.404} & \second{0.416} & 0.406 & 0.418 & 0.419 & 0.435 & 0.452 & 0.474 \\
-ETTh2 & \blue{0.348} & \blue{0.393} & 0.346 & 0.388 & 0.344 & 0.390 & 0.392 & 0.422 & 1.468 & 0.867 & 0.428 & 0.469 & 0.347 & 0.397 & \second{0.345} & \second{0.383} & \best{0.334} & \best{0.382} & 0.386 & 0.425 \\
-ETTm1 & \blue{0.353} & \blue{0.380} & \best{0.346} & \best{0.374} & \second{0.354} & 0.383 & 0.370 & 0.401 & 0.390 & 0.417 & 0.438 & 0.465 & 0.356 & \second{0.380} & 0.362 & 0.383 & 0.359 & 0.382 & 0.383 & 0.413 \\
-ETTm2 & \blue{0.253} & \blue{0.315} & \best{0.250} & \best{0.313} & 0.251 & 0.319 & 0.278 & 0.337 & 0.392 & 0.426 & 0.401 & 0.452 & \best{0.250} & \second{0.314} & 0.252 & 0.316 & 0.285 & 0.336 & 0.314 & 0.367 \\
-Electricity & \blue{0.160} & \blue{0.251} & \best{0.160} & \best{0.250} & 0.169 & 0.265 & \second{0.165} & 0.263 & 0.180 & 0.273 & 0.235 & 0.348 & 0.167 & \second{0.258} & 0.168 & 0.263 & 0.172 & 0.270 & 0.171 & 0.273 \\
-Traffic & \blue{0.393} & \blue{0.252} & \best{0.386} & \best{0.249} & \second{0.394} & \second{0.266} & 0.406 & 0.290 & 0.545 & 0.282 & 0.638 & 0.400 & 0.418 & 0.278 & 0.413 & 0.280 & 0.410 & 0.290 & 0.421 & 0.298 \\
-Weather & \blue{0.220} & \blue{0.257} & \best{0.223} & \best{0.260} & \second{0.223} & 0.264 & 0.233 & 0.273 & 0.255 & 0.304 & 0.354 & 0.393 & 0.227 & \second{0.262} & 0.243 & 0.285 & 0.241 & 0.283 & 0.237 & 0.281 \\
+\blue{\sysLA} & \blue{0.405} & \blue{0.421} & \blue{0.348} & \blue{0.393} & \blue{0.353} & \blue{0.380} & \blue{0.253} & \blue{0.315} & \blue{0.160} & \blue{0.251} & \blue{0.393} & \blue{0.252} & \blue{0.220} & \blue{0.257} \\
 \hline
-\end{tabular}}
+\sysname & \best{0.403} & \best{0.415} & 0.346 & 0.388 & \best{0.346} & \best{0.374} & \best{0.250} & \best{0.313} & \best{0.160} & \best{0.250} & \best{0.386} & \best{0.249} & \best{0.223} & \best{0.260} \\
+PatchTST & 0.420 & 0.439 & 0.344 & 0.390 & \second{0.354} & 0.383 & 0.251 & 0.319 & 0.169 & 0.265 & \second{0.394} & \second{0.266} & \second{0.223} & 0.264 \\
+iTransformer & 0.453 & 0.467 & 0.392 & 0.422 & 0.370 & 0.401 & 0.278 & 0.337 & \second{0.165} & 0.263 & 0.406 & 0.290 & 0.233 & 0.273 \\
+Crossformer & 0.517 & 0.512 & 1.468 & 0.867 & 0.390 & 0.417 & 0.392 & 0.426 & 0.180 & 0.273 & 0.545 & 0.282 & 0.255 & 0.304 \\
+FEDformer & 0.523 & 0.523 & 0.428 & 0.469 & 0.438 & 0.465 & 0.401 & 0.452 & 0.235 & 0.348 & 0.638 & 0.400 & 0.354 & 0.393 \\
+TimeBase & \second{0.404} & \second{0.416} & 0.347 & 0.397 & 0.356 & \second{0.380} & \best{0.250} & \second{0.314} & 0.167 & \second{0.258} & 0.418 & 0.278 & 0.227 & \second{0.262} \\
+SparseTSF & 0.406 & 0.418 & \second{0.345} & \second{0.383} & 0.362 & 0.383 & 0.252 & 0.316 & 0.168 & 0.263 & 0.413 & 0.280 & 0.243 & 0.285 \\
+FITS & 0.419 & 0.435 & \best{0.334} & \best{0.382} & 0.359 & 0.382 & 0.285 & 0.336 & 0.172 & 0.270 & 0.410 & 0.290 & 0.241 & 0.283 \\
+TimeMixer & 0.452 & 0.474 & 0.386 & 0.425 & 0.383 & 0.413 & 0.314 & 0.367 & 0.171 & 0.273 & 0.421 & 0.298 & 0.237 & 0.281 \\
+\hline
+\end{tabular}
 \end{table*}
 
 \begin{figure*}[t]
@@ -187,7 +189,7 @@ More detailed results are provided in \secref{sec:all_results_router_numbers}.
 \centering
 \caption{Cross-Phase Routing layer ablation. Each cell reports MSE, MAE, and FLOPs. Lower is better for all metrics. FLOPs are reported in millions (MFLOPs). The best results are highlighted with \best{Bold}, and the second-best results with \second{Underlined}.}
 \label{tab:ablation_phase}
-\resizebox{\textwidth}{!}{
+\footnotesize
 \begin{tabular}{c|ccc|ccc|ccc|ccc}
 \hline
 \multirow{2}{*}{Dataset}
@@ -219,7 +221,7 @@ Traffic
 & 0.3842 & 0.2532 & \second{37.776}
 & 0.3892 & 0.2584 & \best{32.149}  \\
 \hline
-\end{tabular}}
+\end{tabular}
 \end{table*}
 
 

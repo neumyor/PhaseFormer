@@ -50,28 +50,30 @@ Table~\ref{tab:coupling} shows that every benchmark lies well above the additive
 
 Table~\ref{tab:ladder} adds the components one at a time, on all 28 settings with three seeds. Because \sysL and \sysLA share the random state of their \sysname backbone, the steps are not confounded by initialization. The first column retrains the conference \sysname under the identical protocol of this section, so the ladder isolates the components; the conference numbers of Table~\ref{tab:main_results} are discussed at the end.
 
-\begin{table}[t]
+\begin{table*}[t]
 \blue{
 \centering
 \caption{Ablation ladder, test MSE/MAE averaged over the four horizons and three seeds. \sysname is retrained under the protocol of this section; \sysLA (mod.\ off) is \sysLA with the modulation disabled on the trained checkpoint.}
 \label{tab:ladder}
-\scriptsize
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{lcccc}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lcccccccc}
 \toprule
-Dataset & \sysname & \sysL & \sysLA & \begin{tabular}[c]{@{}c@{}}\sysLA\\(mod.\ off)\end{tabular} \\
+Dataset & \multicolumn{2}{c}{\sysname} & \multicolumn{2}{c}{\sysL} & \multicolumn{2}{c}{\sysLA} & \multicolumn{2}{c}{\begin{tabular}[c]{@{}c@{}}\sysLA\\(mod.\ off)\end{tabular}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+ & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
 \midrule
-ETTh1 & 0.408/0.419 & 0.412/0.425 & \textbf{0.405}/\textbf{0.421} & 0.414/0.429 \\
-ETTh2 & 0.354/0.396 & \textbf{0.347}/\textbf{0.393} & 0.348/\textbf{0.393} & 0.352/0.396 \\
-ETTm1 & \textbf{0.352}/\textbf{0.377} & 0.354/0.380 & 0.353/0.380 & 0.355/0.381 \\
-ETTm2 & 0.258/0.319 & \textbf{0.253}/\textbf{0.315} & \textbf{0.253}/\textbf{0.315} & 0.257/0.318 \\
-Weather & 0.227/0.262 & 0.221/0.257 & \textbf{0.220}/\textbf{0.257} & 0.220/0.257 \\
-Electricity & 0.161/0.251 & \textbf{0.160}/\textbf{0.251} & \textbf{0.160}/\textbf{0.251} & 0.162/0.254 \\
-Traffic & \textbf{0.392}/\textbf{0.248} & 0.395/0.251 & 0.393/0.252 & 0.400/0.256 \\
+ETTh1 & 0.408 & 0.419 & 0.412 & 0.425 & \textbf{0.405} & \textbf{0.421} & 0.414 & 0.429 \\
+ETTh2 & 0.354 & 0.396 & \textbf{0.347} & \textbf{0.393} & 0.348 & \textbf{0.393} & 0.352 & 0.396 \\
+ETTm1 & \textbf{0.352} & \textbf{0.377} & 0.354 & 0.380 & 0.353 & 0.380 & 0.355 & 0.381 \\
+ETTm2 & 0.258 & 0.319 & \textbf{0.253} & \textbf{0.315} & \textbf{0.253} & \textbf{0.315} & 0.257 & 0.318 \\
+Weather & 0.227 & 0.262 & 0.221 & 0.257 & \textbf{0.220} & \textbf{0.257} & 0.220 & 0.257 \\
+Electricity & 0.161 & 0.251 & \textbf{0.160} & \textbf{0.251} & \textbf{0.160} & \textbf{0.251} & 0.162 & 0.254 \\
+Traffic & \textbf{0.392} & \textbf{0.248} & 0.395 & 0.251 & 0.393 & 0.252 & 0.400 & 0.256 \\
 \bottomrule
 \end{tabular}
 }
-\end{table}
+\end{table*}
 
 The two steps contribute differently, and the difference follows the theory. The level branch improves the settings whose level envelope binds (Section~\ref{sec:exp_theory}): by 2.7\% on Weather, 2.0\% on ETTh2 and 1.8\% on ETTm2, and it improves 17 of the 28 settings. On ETTh1 the branch alone costs 1.0\%, and here the modulation carries the recovery: \sysLA ends 0.7\% below \sysname, and disabling the modulation on the trained checkpoint gives back the entire difference (0.414 against 0.405). Across all 28 settings, the modulation improves its own checkpoint in 27 cases, and the full \sysLA improves 17 of the 28 settings. The modulation-off column is an inference-time ablation of a checkpoint trained with the modulation; the resulting ladder \sysname $\to$ \sysL $\to$ \sysLA is the sequence of Section~\ref{sec:extension}.
 

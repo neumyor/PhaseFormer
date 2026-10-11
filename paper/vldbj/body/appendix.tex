@@ -77,7 +77,7 @@ Please refer to the released code for complete training details at \url{\codeurl
 
 \subsubsection{The Detailed Forecasting Accuracy Results}
 \label{sec:accuracy_details}
-We present detailed forecasting results across all prediction horizons on the test sets in \tabref{tab:full_results}, with the input length fixed to 720.
+We present detailed forecasting results across all prediction horizons on the test sets in \tabref{tab:full_results}\blue{ and Table~\ref{tab:full_results_b}}, with the input length fixed to 720.
 \sysname consistently delivers strong and stable performance across most datasets and forecasting lengths. 
 \revised{
 Starting from the general observations, \sysname shows clear advantages in a wide range of real-world scenarios. In particular, when compared with CycleNet (an advanced model designed for periodic structures), \sysname achieves 28 Top-1 results versus CycleNet’s 15. This substantial difference directly highlights the expressive power and potential of phase representations in time series modeling.
@@ -123,108 +123,176 @@ Overall, these results suggest that the model does not require a large number of
 \centering
 \caption{Parameters and FLOPS across models for different datasets.}
 \label{tab:params_flops_details}
-\resizebox{\textwidth}{!}{
-\begin{tabular}{c|cc|cc|cc|cc|cc|cc|cc}
+\footnotesize
+\begin{tabular}{l|cc|cc|cc}
 \hline
-\multirow{2}{*}{Model}  & \multicolumn{2}{c|}{Traffic} & \multicolumn{2}{c|}{Weather} & \multicolumn{2}{c|}{Electricity} & \multicolumn{2}{c|}{ETTh1} & \multicolumn{2}{c|}{ETTh2} & \multicolumn{2}{c|}{ETTm1} & \multicolumn{2}{c}{ETTm2} \\
-\cline{2-15}
- & Params & FLOPS & Params & FLOPS & Params & FLOPS & Params & FLOPS & Params & FLOPS & Params & FLOPS & Params & FLOPS \\
+\multirow{2}{*}{Model} & \multicolumn{2}{c|}{Traffic} & \multicolumn{2}{c|}{Weather} & \multicolumn{2}{c}{Electricity} \\
+\cline{2-7}
+ & Params & FLOPS & Params & FLOPS & Params & FLOPS \\
 \hline
-\sysname   & 1.156K & 13.9 & 308 & 0.15 & 1.156K & 5.18 & 1.156K & 0.11 & 1.156K & 0.11 & 1.156K & 0.11 & 1.156K & 0.11 \\
-PatchTST      & 7.589M & 498{,}577.49 & 1.373M & 1{,}054.77 & 1.373M & 16{,}122.93 & 587.68K & 51.29 & 587.68K & 51.29 & 587.68K & 51.29 & 587.68K & 51.29 \\
-iTransformer  & 6.731M & 11{,}652.34 & 5.153M & 257.54 & 5.153M & 3{,}347.97 & 369.9K & 8.12 & 304.1K & 6.68 & 304.1K & 7.29 & 304.1K & 7.29 \\
-Crossformer   & 22.954M & 259{,}209.90 & 158.34K & 84.09 & 13.537M & 96{,}564.63 & 2.069M & 544.20 & 2.069M & 544.20 & 2.069M & 544.20 & 2.069M & 544.20 \\
-FEDformer     & 21.206M & 13{,}679.70 & 5.828M & 2{,}757.24 & 11.861M & 6{,}904.61 & 5.792M & 2{,}734.51 & 5.792M & 2{,}734.51 & 5.793M & 2{,}734.95 & 5.793M & 2{,}734.95 \\
-TimeBase      & 214 & 8.44 & 214 & 0.21 & 214 & 3.14 & 214 & 0.07 & 214 & 0.07 & 704 & 0.23 & 704 & 0.23 \\
-SparseTSF     & 17.949K & 751.31 & 4.509K & 5.14 & 4.509K & 78.61 & 4.509K & 1.71 & 4.509K & 1.71 & 4.509K & 1.71 & 4.509K & 1.71 \\
-FITS          & 1.054K & 1.76 & 272 & 0.01 & 462 & 0.28 & 272 & 0.004 & 272 & 0.004 & 2.646K & 0.04 & 2.646K & 0.04 \\
-TimeMixer     & 5.697M & 2{,}026.53 & 5.562M & 205.40 & 5.584M & 739.64 & 4.024M & 125.91 & 4.024M & 125.91 & 4.024M & 125.95 & 4.024M & 125.95 \\
-\revised{CycleNet} & 563.216K & 720.27M & 421.928K & 17.55M & 472.328K & 268.22M & 419.576K & 5.85M & 419.576K & 5.85M & 419.576K & 5.85M & 419.576K & 5.85M \\
-\revised{PatchMLP} & 3.937M & 7{,}311.92M & 2.450M & 105.79M & 2.656M & 2{,}011.57M & 2.449M & 34.86M & 2.449M & 34.86M & 2.449M & 34.86M & 2.449M & 34.86M \\
+\sysname & 1.156K & 13.9 & 308 & 0.15 & 1.156K & 5.18 \\
+PatchTST & 7.589M & 498{,}577.49 & 1.373M & 1{,}054.77 & 1.373M & 16{,}122.93 \\
+iTransformer & 6.731M & 11{,}652.34 & 5.153M & 257.54 & 5.153M & 3{,}347.97 \\
+Crossformer & 22.954M & 259{,}209.90 & 158.34K & 84.09 & 13.537M & 96{,}564.63 \\
+FEDformer & 21.206M & 13{,}679.70 & 5.828M & 2{,}757.24 & 11.861M & 6{,}904.61 \\
+TimeBase & 214 & 8.44 & 214 & 0.21 & 214 & 3.14 \\
+SparseTSF & 17.949K & 751.31 & 4.509K & 5.14 & 4.509K & 78.61 \\
+FITS & 1.054K & 1.76 & 272 & 0.01 & 462 & 0.28 \\
+TimeMixer & 5.697M & 2{,}026.53 & 5.562M & 205.40 & 5.584M & 739.64 \\
+\revised{CycleNet} & 563.216K & 720.27M & 421.928K & 17.55M & 472.328K & 268.22M \\
+\revised{PatchMLP} & 3.937M & 7{,}311.92M & 2.450M & 105.79M & 2.656M & 2{,}011.57M \\
+\hline
+\end{tabular}
 
+\vspace{3mm}
+\begin{tabular}{l|cc|cc|cc|cc}
 \hline
-\end{tabular}}
+\multirow{2}{*}{Model} & \multicolumn{2}{c|}{ETTh1} & \multicolumn{2}{c|}{ETTh2} & \multicolumn{2}{c|}{ETTm1} & \multicolumn{2}{c}{ETTm2} \\
+\cline{2-9}
+ & Params & FLOPS & Params & FLOPS & Params & FLOPS & Params & FLOPS \\
+\hline
+\sysname & 1.156K & 0.11 & 1.156K & 0.11 & 1.156K & 0.11 & 1.156K & 0.11 \\
+PatchTST & 587.68K & 51.29 & 587.68K & 51.29 & 587.68K & 51.29 & 587.68K & 51.29 \\
+iTransformer & 369.9K & 8.12 & 304.1K & 6.68 & 304.1K & 7.29 & 304.1K & 7.29 \\
+Crossformer & 2.069M & 544.20 & 2.069M & 544.20 & 2.069M & 544.20 & 2.069M & 544.20 \\
+FEDformer & 5.792M & 2{,}734.51 & 5.792M & 2{,}734.51 & 5.793M & 2{,}734.95 & 5.793M & 2{,}734.95 \\
+TimeBase & 214 & 0.07 & 214 & 0.07 & 704 & 0.23 & 704 & 0.23 \\
+SparseTSF & 4.509K & 1.71 & 4.509K & 1.71 & 4.509K & 1.71 & 4.509K & 1.71 \\
+FITS & 272 & 0.004 & 272 & 0.004 & 2.646K & 0.04 & 2.646K & 0.04 \\
+TimeMixer & 4.024M & 125.91 & 4.024M & 125.91 & 4.024M & 125.95 & 4.024M & 125.95 \\
+\revised{CycleNet} & 419.576K & 5.85M & 419.576K & 5.85M & 419.576K & 5.85M & 419.576K & 5.85M \\
+\revised{PatchMLP} & 2.449M & 34.86M & 2.449M & 34.86M & 2.449M & 34.86M & 2.449M & 34.86M \\
+\hline
+\end{tabular}
 \end{table*}
 
 
 \begin{table*}[t]
 \centering
 \caption{Full results across datasets and prediction lengths. 
-Each entry reports MAE and MSE. The input length is set to 720. The best results are marked with \best{Bold}, and the second-best results are marked with \second{Underlined}.}
+Each entry reports MAE and MSE. The input length is set to 720. The best results are marked with \best{Bold}, and the second-best results are marked with \second{Underlined}.
+\blue{The comparison continues in Table~\ref{tab:full_results_b}.}}
 \label{tab:full_results}
-\resizebox{\textwidth}{!}{
-\begin{tabular}{c|c|cc|cc|cc|cc|cc|cc|cc|cc|cc|cc|cc}
+\footnotesize
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{c|c|cc|cc|cc|cc|cc|cc}
 \hline
-\multirow{2}{*}{Dataset} & \multirow{2}{*}{Horizon} 
-& \multicolumn{2}{c|}{\sysname} 
-& \multicolumn{2}{c|}{PatchTST} 
-& \multicolumn{2}{c|}{iTransformer} 
+\multirow{2}{*}{Dataset} & \multirow{2}{*}{Horizon}
+& \multicolumn{2}{c|}{\sysname}
+& \multicolumn{2}{c|}{PatchTST}
+& \multicolumn{2}{c|}{iTransformer}
 & \multicolumn{2}{c|}{Crossformer}
 & \multicolumn{2}{c|}{FEDformer}
-& \multicolumn{2}{c|}{TimeBase} 
-& \multicolumn{2}{c|}{SparseTSF} 
-& \multicolumn{2}{c|}{FITS} 
-& \multicolumn{2}{c|}{TimeMixer} 
-& \multicolumn{2}{c|}{\revised{CycleNet}} 
-& \multicolumn{2}{c}{\revised{PatchMLP}} \\ 
-\cline{3-24}
- & & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
+& \multicolumn{2}{c}{TimeBase} \\
+\cline{3-14}
+ & & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
 \hline
-\multirow{4}{*}{ETTh1} 
- & 96  & \best{0.359} & \best{0.382} & 0.377 & 0.408 & 0.389 & 0.421 & 0.408 & 0.442 & 0.485 & 0.500 & 0.365 & \second{0.387} & \second{0.362} & 0.389 & 0.380 & 0.402 & 0.410 & 0.441 & 0.379 & 0.403 & 0.417 & 0.44 \\
- & 192 & \best{0.397} & \best{0.404} & 0.413 & 0.431 & 0.424 & 0.446 & 0.472 & 0.496 & 0.481 & 0.498 & \second{0.403} & \second{0.409} & 0.404 & 0.412 & 0.415 & 0.424 & 0.448 & 0.465 & 0.416 & 0.425 & 0.454 & 0.465\\
- & 336 & \second{0.425} & \second{0.424} & 0.436 & 0.444 & 0.456 & 0.469 & 0.480 & 0.486 & 0.522 & 0.521 & \best{0.409} & \best{0.419} & 0.435 & 0.426 & 0.449 & 0.460 & 0.475 & 0.490 & 0.447 & 0.445 & 0.514 & 0.503\\
- & 720 & \second{0.431} & 0.450 & 0.455 & 0.475 & 0.545 & 0.532 & 0.710 & 0.616 & 0.604 & 0.575 & 0.440 & \best{0.448} & \best{0.426} & \second{0.448} & 0.433 & 0.457 & 0.475 & 0.500 & 0.477 & 0.483 & 0.548 & 0.531 \\
+\multirow{4}{*}{ETTh1}
+ & 96 & \best{0.359} & \best{0.382} & 0.377 & 0.408 & 0.389 & 0.421 & 0.408 & 0.442 & 0.485 & 0.500 & 0.365 & \second{0.387} \\
+ & 192 & \best{0.397} & \best{0.404} & 0.413 & 0.431 & 0.424 & 0.446 & 0.472 & 0.496 & 0.481 & 0.498 & \second{0.403} & \second{0.409} \\
+ & 336 & \second{0.425} & \second{0.424} & 0.436 & 0.444 & 0.456 & 0.469 & 0.480 & 0.486 & 0.522 & 0.521 & \best{0.409} & \best{0.419} \\
+ & 720 & \second{0.431} & 0.450 & 0.455 & 0.475 & 0.545 & 0.532 & 0.710 & 0.616 & 0.604 & 0.575 & 0.440 & \best{0.448} \\
 \hline
-\multirow{4}{*}{ETTh2} 
- & 96  & 0.275 & 0.338 & 0.276 & 0.339 & 0.305 & 0.361 & 1.164 & 0.744 & 0.401 & 0.451 & 0.292 & 0.350 & 0.294 & 0.346 & \best{0.271} & \best{0.336} & 0.315 & 0.380 & \best{0.271} & \second{0.337} & 0.324 & 0.382\\
- & 192 & 0.341 & \second{0.376} & 0.342 & 0.385 & 0.405 & 0.421 & 1.414 & 0.830 & 0.425 & 0.464 & 0.339 & 0.387 & 0.340 & 0.377 & \best{0.332} & \best{0.374} & 0.383 & 0.415 & \best{0.332} & 0.38 & 0.381 & 0.418\\
- & 336 & 0.369 & 0.405 & 0.364 & 0.405 & 0.411 & 0.436 & 1.220 & 0.794 & 0.427 & 0.471 & 0.394 & 0.420 & \second{0.360} & \second{0.398} & \best{0.355} & \best{0.396} & 0.415 & 0.436 & 0.362 & 0.408 & 0.408 & 0.44\\
- & 720 & 0.402 & 0.436 & 0.395 & 0.434 & 0.448 & 0.470 & 2.074 & 1.103 & 0.462 & 0.493 & 0.400 & 0.448 & \second{0.383} & \second{0.425} & \best{0.378} & \best{0.423} & 0.432 & 0.471 & 0.415 & 0.449 & 0.454 & 0.469\\
+\multirow{4}{*}{ETTh2}
+ & 96 & 0.275 & 0.338 & 0.276 & 0.339 & 0.305 & 0.361 & 1.164 & 0.744 & 0.401 & 0.451 & 0.292 & 0.350 \\
+ & 192 & 0.341 & \second{0.376} & 0.342 & 0.385 & 0.405 & 0.421 & 1.414 & 0.830 & 0.425 & 0.464 & 0.339 & 0.387 \\
+ & 336 & 0.369 & 0.405 & 0.364 & 0.405 & 0.411 & 0.436 & 1.220 & 0.794 & 0.427 & 0.471 & 0.394 & 0.420 \\
+ & 720 & 0.402 & 0.436 & 0.395 & 0.434 & 0.448 & 0.470 & 2.074 & 1.103 & 0.462 & 0.493 & 0.400 & 0.448 \\
 \hline
-\multirow{4}{*}{ETTm1} 
- & 96  & \best{0.293} & \best{0.344} & \second{0.298} & \second{0.352} & 0.315 & 0.369 & 0.306 & 0.353 & 0.406 & 0.441 & 0.311 & 0.351 & 0.314 & 0.359 & 0.313 & 0.357 & 0.332 & 0.384 & 0.307 & 0.353 & 0.319 & 0.367\\
- & 192 & \best{0.323} & \best{0.361} & \second{0.335} & 0.373 & 0.349 & 0.388 & 0.341 & 0.385 & 0.450 & 0.477 & 0.338 & 0.371 & 0.348 & 0.376 & 0.339 & \second{0.369} & 0.362 & 0.398 & 0.337 & 0.371 & 0.353 & 0.385\\
- & 336 & \best{0.358} & \best{0.381} & 0.366 & 0.389 & 0.381 & 0.409 & 0.383 & 0.420 & 0.436 & 0.466 & \second{0.364} & \second{0.386} & 0.368 & 0.386 & 0.367 & 0.385 & 0.386 & 0.413 & \second{0.364} & 0.387 & 0.381 & 0.401\\
- & 720 & \second{0.412} & \best{0.410} & 0.420 & 0.421 & 0.437 & 0.439 & 0.532 & 0.512 & 0.462 & 0.479 & 0.413 & 0.414 & 0.419 & 0.413 & 0.417 & 0.417 & 0.452 & 0.457 & \best{0.41} & \second{0.411} & 0.436 & 0.432\\
+\multirow{4}{*}{ETTm1}
+ & 96 & \best{0.293} & \best{0.344} & \second{0.298} & \second{0.352} & 0.315 & 0.369 & 0.306 & 0.353 & 0.406 & 0.441 & 0.311 & 0.351 \\
+ & 192 & \best{0.323} & \best{0.361} & \second{0.335} & 0.373 & 0.349 & 0.388 & 0.341 & 0.385 & 0.450 & 0.477 & 0.338 & 0.371 \\
+ & 336 & \best{0.358} & \best{0.381} & 0.366 & 0.389 & 0.381 & 0.409 & 0.383 & 0.420 & 0.436 & 0.466 & \second{0.364} & \second{0.386} \\
+ & 720 & \second{0.412} & \best{0.410} & 0.420 & 0.421 & 0.437 & 0.439 & 0.532 & 0.512 & 0.462 & 0.479 & 0.413 & 0.414 \\
 \hline
-% \multirow{4}{*}{ETTm2} 
-%  & 96  & \second{0.163} & \best{0.256} & 0.165 & 0.260 & 0.179 & 0.274 & 0.244 & 0.338 & 0.339 & 0.406 & \best{0.162} & \best{0.256} & 0.167 & 0.259 & 0.166 & \best{0.256} & 0.192 & 0.285 & 0.159 & 0.249 & 0.186 & 0.272\\
-%  & 192 & \second{0.219} & \best{0.293} & \second{0.219} & \second{0.298} & 0.239 & 0.314 & 0.350 & 0.412 & 0.397 & 0.452 & \best{0.218} & \best{0.293} & \second{0.219} & 0.297 & 0.271 & 0.328 & 0.307 & 0.362 & 0.214 & 0.289 & 0.25 & 0.315 \\
-%  & 336 & \second{0.269} & \best{0.326} & \best{0.268} & 0.333 & 0.309 & 0.356 & 0.400 & 0.431 & 0.418 & 0.452 & 0.270 & \second{0.328} & 0.271 & 0.330 & 0.352 & 0.380 & 0.380 & 0.412 & 0.268 & 0.326 & 0.298 & 0.347\\
-%  & 720 & \best{0.351} & \best{0.379} & \second{0.352} & 0.386 & 0.387 & 0.407 & 0.574 & 0.525 & 0.451 & 0.499 & \second{0.352} & \second{0.380} & 0.353 & 0.380 & \second{0.352} & \second{0.380} & 0.380 & 0.412 & 0.353 & 0.384 & 0.38 & 0.398\\
-% \hline
-\multirow{4}{*}{ETTm2} 
- & 96  & 0.163 & \second{0.256} & 0.165 & 0.260 & 0.179 & 0.274 & 0.244 & 0.338 & 0.339 & 0.406 & \second{0.162} & \second{0.256} & 0.167 & 0.259 & 0.166 & \second{0.256} & 0.192 & 0.285 & \best{0.159} & \best{0.249} & 0.186 & 0.272\\
- & 192 & 0.219 & \second{0.293} & 0.219 & 0.298 & 0.239 & 0.314 & 0.350 & 0.412 & 0.397 & 0.452 & \second{0.218} & \second{0.293} & 0.219 & 0.297 & 0.271 & 0.328 & 0.307 & 0.362 & \best{0.214} & \best{0.289} & 0.25 & 0.315 \\
- & 336 & \second{0.269} & \best{0.326} & \best{0.268} & 0.333 & 0.309 & 0.356 & 0.400 & 0.431 & 0.418 & 0.452 & 0.270 & \second{0.328} & 0.271 & 0.330 & 0.352 & 0.380 & 0.380 & 0.412 & \best{0.268} & \best{0.326} & 0.298 & 0.347\\
- & 720 & \best{0.351} & \best{0.379} & \second{0.352} & 0.386 & 0.387 & 0.407 & 0.574 & 0.525 & 0.451 & 0.499 & \second{0.352} & \second{0.380} & 0.353 & \second{0.380} & \second{0.352} & \second{0.380} & 0.380 & 0.412 & 0.353 & 0.384 & 0.38 & 0.398\\
+\multirow{4}{*}{ETTm2}
+ & 96 & 0.163 & \second{0.256} & 0.165 & 0.260 & 0.179 & 0.274 & 0.244 & 0.338 & 0.339 & 0.406 & \second{0.162} & \second{0.256} \\
+ & 192 & 0.219 & \second{0.293} & 0.219 & 0.298 & 0.239 & 0.314 & 0.350 & 0.412 & 0.397 & 0.452 & \second{0.218} & \second{0.293} \\
+ & 336 & \second{0.269} & \best{0.326} & \best{0.268} & 0.333 & 0.309 & 0.356 & 0.400 & 0.431 & 0.418 & 0.452 & 0.270 & \second{0.328} \\
+ & 720 & \best{0.351} & \best{0.379} & \second{0.352} & 0.386 & 0.387 & 0.407 & 0.574 & 0.525 & 0.451 & 0.499 & \second{0.352} & \second{0.380} \\
 \hline
- \multirow{4}{*}{Weather} 
- & 96  & \second{0.148} & \best{0.195} & 0.149 & 0.199 & 0.159 & 0.212 & 0.151 & 0.210 & 0.289 & 0.342 & \best{0.146} & \second{0.198} & 0.174 & 0.231 & 0.176 & 0.232 & 0.163 & 0.223 & 0.164 & 0.220 & 0.152 & 0.205\\
- & 192 & \second{0.193} & \best{0.237} & \second{0.193} & 0.243 & 0.203 & 0.252 & 0.220 & 0.273 & 0.340 & 0.403 & \best{0.185} & \second{0.241} & 0.216 & 0.267 & 0.203 & 0.256 & 0.201 & 0.255 & 0.209 & 0.258 & 0.197 & 0.247\\
- & 336 & \second{0.242} & \best{0.278} & \best{0.240} & \second{0.281} & 0.253 & 0.291 & 0.287 & 0.342 & 0.370 & 0.408 & \second{0.263} & \second{0.281} & 0.260 & 0.299 & 0.261 & 0.299 & 0.258 & 0.300 & 0.255 & 0.292 & 0.248 & 0.287\\
- & 720 & \best{0.309} & \second{0.332} & \second{0.312} & 0.334 & 0.317 & 0.337 & 0.362 & 0.393 & 0.420 & 0.421 & 0.314 & \best{0.331} & 0.325 & 0.345 & 0.325 & 0.346 & 0.329 & 0.348 & 0.320 & 0.338 & 0.324 & 0.340\\
+\multirow{4}{*}{Weather}
+ & 96 & \second{0.148} & \best{0.195} & 0.149 & 0.199 & 0.159 & 0.212 & 0.151 & 0.210 & 0.289 & 0.342 & \best{0.146} & \second{0.198} \\
+ & 192 & \second{0.193} & \best{0.237} & \second{0.193} & 0.243 & 0.203 & 0.252 & 0.220 & 0.273 & 0.340 & 0.403 & \best{0.185} & \second{0.241} \\
+ & 336 & \second{0.242} & \best{0.278} & \best{0.240} & \second{0.281} & 0.253 & 0.291 & 0.287 & 0.342 & 0.370 & 0.408 & \second{0.263} & \second{0.281} \\
+ & 720 & \best{0.309} & \second{0.332} & \second{0.312} & 0.334 & 0.317 & 0.337 & 0.362 & 0.393 & 0.420 & 0.421 & 0.314 & \best{0.331} \\
 \hline
-% \multirow{4}{*}{Electricity} 
-%  & 96  & \best{0.129} & \best{0.221} & 0.141 & 0.240 & \second{0.135} & 0.233 & 0.140 & 0.237 & 0.226 & 0.341 & 0.139 & \second{0.231} & 0.139 & 0.239 & 0.147 & 0.253 & 0.142 & 0.247 & 0.128 & 0.223 & 0.141 & 0.243\\
-%  & 192 & \best{0.148} & \best{0.238} & 0.156 & 0.256 & 0.155 & 0.253 & 0.165 & 0.259 & 0.220 & 0.336 & \second{0.153} & \second{0.245} & 0.155 & 0.250 & 0.159 & 0.256 & 0.164 & 0.273 & 0.143 & 0.237 & 0.163 & 0.265\\
-%  & 336 & \best{0.165} & \best{0.257} & 0.172 & 0.267 & \second{0.169} & 0.267 & 0.190 & 0.286 & 0.224 & 0.337 & \second{0.169} & 0.262 & 0.171 & 0.265 & \second{0.169} & 0.270 & 0.171 & \second{0.260} & 0.159 & 0.254 & 0.186 & 0.29\\
-%  & 720 & \best{0.201} & \best{0.285} & 0.208 & 0.299 & \second{0.204} & 0.301 & 0.227 & 0.312 & 0.271 & 0.378 & 0.207 & \second{0.294} & 0.208 & 0.300 & 0.214 & 0.302 & 0.209 & 0.313 & 0.197 & 0.287 & 0.221 & 0.32\\
-%  \hline
- \multirow{4}{*}{Electricity} 
- & 96  & \second{0.129} & \best{0.221} & 0.141 & 0.240 & 0.135 & 0.233 & 0.140 & 0.237 & 0.226 & 0.341 & 0.139 & 0.231 & 0.139 & 0.239 & 0.147 & 0.253 & 0.142 & 0.247 & \best{0.128} & \second{0.223} & 0.141 & 0.243\\
- & 192 & \second{0.148} & \second{0.238} & 0.156 & 0.256 & 0.155 & 0.253 & 0.165 & 0.259 & 0.220 & 0.336 & 0.153 & 0.245 & 0.155 & 0.250 & 0.159 & 0.256 & 0.164 & 0.273 & \best{0.143} & \best{0.237} & 0.163 & 0.265\\
- & 336 & \second{0.165} & \second{0.257} & 0.172 & 0.267 & 0.169 & 0.267 & 0.190 & 0.286 & 0.224 & 0.337 & 0.169 & 0.262 & 0.171 & 0.265 & 0.169 & 0.270 & 0.171 & 0.260 & \best{0.159} & \best{0.254} & 0.186 & 0.290\\
- & 720 & \second{0.201} & \best{0.285} & 0.208 & 0.299 & 0.204 & 0.301 & 0.227 & 0.312 & 0.271 & 0.378 & 0.207 & 0.294 & 0.208 & 0.300 & 0.214 & 0.302 & 0.209 & 0.313 & \best{0.197} & \second{0.287} & 0.221 & 0.320\\
+\multirow{4}{*}{Electricity}
+ & 96 & \second{0.129} & \best{0.221} & 0.141 & 0.240 & 0.135 & 0.233 & 0.140 & 0.237 & 0.226 & 0.341 & 0.139 & 0.231 \\
+ & 192 & \second{0.148} & \second{0.238} & 0.156 & 0.256 & 0.155 & 0.253 & 0.165 & 0.259 & 0.220 & 0.336 & 0.153 & 0.245 \\
+ & 336 & \second{0.165} & \second{0.257} & 0.172 & 0.267 & 0.169 & 0.267 & 0.190 & 0.286 & 0.224 & 0.337 & 0.169 & 0.262 \\
+ & 720 & \second{0.201} & \best{0.285} & 0.208 & 0.299 & 0.204 & 0.301 & 0.227 & 0.312 & 0.271 & 0.378 & 0.207 & 0.294 \\
 \hline
- \multirow{4}{*}{Traffic} 
- & 96  & \best{0.361} & \best{0.238} & \second{0.363} & \second{0.250} & 0.374 & 0.273 & 0.512  & 0.265  & 0.664 & 0.431 & 0.394 & 0.267 & 0.389 & 0.272 & 0.374 & 0.273 & 0.404 & 0.293 & 0.381 & 0.266 & 0.402 & 0.302\\
- & 192 & \best{0.373} & \best{0.243} & \second{0.382} & \second{0.258} & 0.393 & 0.283 & 0.528  & 0.271  & 0.613 & 0.382 & 0.407 & 0.270 & 0.399 & 0.272 & 0.393 & 0.282 & 0.404 & 0.292 & 0.394 & 0.273 & 0.419 & 0.309\\
- & 336 & \best{0.385} & \best{0.248} & \second{0.399} & \second{0.268} & 0.409 & 0.292 & 0.543  & 0.281  & 0.612 & 0.379 & 0.417 & 0.278 & 0.417 & 0.279 & 0.423 & 0.292 & 0.425 & 0.293 & 0.406 & 0.279 & 0.437 & 0.317\\
- & 720 & \best{0.428} & \best{0.270} & \second{0.432} & \second{0.289} & 0.450 & 0.314 & 0.598  & 0.314  & 0.664 & 0.410 & 0.456 & 0.298 & 0.449 & 0.299 & 0.450 & 0.314 & 0.453 & 0.314 & 0.441 & 0.300 & 0.479 & 0.342\\
- \hline
-\end{tabular}}
+\multirow{4}{*}{Traffic}
+ & 96 & \best{0.361} & \best{0.238} & \second{0.363} & \second{0.250} & 0.374 & 0.273 & 0.512 & 0.265 & 0.664 & 0.431 & 0.394 & 0.267 \\
+ & 192 & \best{0.373} & \best{0.243} & \second{0.382} & \second{0.258} & 0.393 & 0.283 & 0.528 & 0.271 & 0.613 & 0.382 & 0.407 & 0.270 \\
+ & 336 & \best{0.385} & \best{0.248} & \second{0.399} & \second{0.268} & 0.409 & 0.292 & 0.543 & 0.281 & 0.612 & 0.379 & 0.417 & 0.278 \\
+ & 720 & \best{0.428} & \best{0.270} & \second{0.432} & \second{0.289} & 0.450 & 0.314 & 0.598 & 0.314 & 0.664 & 0.410 & 0.456 & 0.298 \\
+\hline
+\end{tabular}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{\blue{Full results (continued from Table~\ref{tab:full_results}).}}
+\label{tab:full_results_b}
+\footnotesize
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{c|c|cc|cc|cc|cc|cc|cc}
+\hline
+\multirow{2}{*}{Dataset} & \multirow{2}{*}{Horizon}
+& \multicolumn{2}{c|}{\sysname}
+& \multicolumn{2}{c|}{SparseTSF}
+& \multicolumn{2}{c|}{FITS}
+& \multicolumn{2}{c|}{TimeMixer}
+& \multicolumn{2}{c|}{\revised{CycleNet}}
+& \multicolumn{2}{c}{\revised{PatchMLP}} \\
+\cline{3-14}
+ & & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
+\hline
+\multirow{4}{*}{ETTh1}
+ & 96 & \best{0.359} & \best{0.382} & \second{0.362} & 0.389 & 0.380 & 0.402 & 0.410 & 0.441 & 0.379 & 0.403 & 0.417 & 0.44 \\
+ & 192 & \best{0.397} & \best{0.404} & 0.404 & 0.412 & 0.415 & 0.424 & 0.448 & 0.465 & 0.416 & 0.425 & 0.454 & 0.465 \\
+ & 336 & \second{0.425} & \second{0.424} & 0.435 & 0.426 & 0.449 & 0.460 & 0.475 & 0.490 & 0.447 & 0.445 & 0.514 & 0.503 \\
+ & 720 & \second{0.431} & 0.450 & \best{0.426} & \second{0.448} & 0.433 & 0.457 & 0.475 & 0.500 & 0.477 & 0.483 & 0.548 & 0.531 \\
+\hline
+\multirow{4}{*}{ETTh2}
+ & 96 & 0.275 & 0.338 & 0.294 & 0.346 & \best{0.271} & \best{0.336} & 0.315 & 0.380 & \best{0.271} & \second{0.337} & 0.324 & 0.382 \\
+ & 192 & 0.341 & \second{0.376} & 0.340 & 0.377 & \best{0.332} & \best{0.374} & 0.383 & 0.415 & \best{0.332} & 0.38 & 0.381 & 0.418 \\
+ & 336 & 0.369 & 0.405 & \second{0.360} & \second{0.398} & \best{0.355} & \best{0.396} & 0.415 & 0.436 & 0.362 & 0.408 & 0.408 & 0.44 \\
+ & 720 & 0.402 & 0.436 & \second{0.383} & \second{0.425} & \best{0.378} & \best{0.423} & 0.432 & 0.471 & 0.415 & 0.449 & 0.454 & 0.469 \\
+\hline
+\multirow{4}{*}{ETTm1}
+ & 96 & \best{0.293} & \best{0.344} & 0.314 & 0.359 & 0.313 & 0.357 & 0.332 & 0.384 & 0.307 & 0.353 & 0.319 & 0.367 \\
+ & 192 & \best{0.323} & \best{0.361} & 0.348 & 0.376 & 0.339 & \second{0.369} & 0.362 & 0.398 & 0.337 & 0.371 & 0.353 & 0.385 \\
+ & 336 & \best{0.358} & \best{0.381} & 0.368 & 0.386 & 0.367 & 0.385 & 0.386 & 0.413 & \second{0.364} & 0.387 & 0.381 & 0.401 \\
+ & 720 & \second{0.412} & \best{0.410} & 0.419 & 0.413 & 0.417 & 0.417 & 0.452 & 0.457 & \best{0.41} & \second{0.411} & 0.436 & 0.432 \\
+\hline
+\multirow{4}{*}{ETTm2}
+ & 96 & 0.163 & \second{0.256} & 0.167 & 0.259 & 0.166 & \second{0.256} & 0.192 & 0.285 & \best{0.159} & \best{0.249} & 0.186 & 0.272 \\
+ & 192 & 0.219 & \second{0.293} & 0.219 & 0.297 & 0.271 & 0.328 & 0.307 & 0.362 & \best{0.214} & \best{0.289} & 0.25 & 0.315 \\
+ & 336 & \second{0.269} & \best{0.326} & 0.271 & 0.330 & 0.352 & 0.380 & 0.380 & 0.412 & \best{0.268} & \best{0.326} & 0.298 & 0.347 \\
+ & 720 & \best{0.351} & \best{0.379} & 0.353 & \second{0.380} & \second{0.352} & \second{0.380} & 0.380 & 0.412 & 0.353 & 0.384 & 0.38 & 0.398 \\
+\hline
+\multirow{4}{*}{Weather}
+ & 96 & \second{0.148} & \best{0.195} & 0.174 & 0.231 & 0.176 & 0.232 & 0.163 & 0.223 & 0.164 & 0.220 & 0.152 & 0.205 \\
+ & 192 & \second{0.193} & \best{0.237} & 0.216 & 0.267 & 0.203 & 0.256 & 0.201 & 0.255 & 0.209 & 0.258 & 0.197 & 0.247 \\
+ & 336 & \second{0.242} & \best{0.278} & 0.260 & 0.299 & 0.261 & 0.299 & 0.258 & 0.300 & 0.255 & 0.292 & 0.248 & 0.287 \\
+ & 720 & \best{0.309} & \second{0.332} & 0.325 & 0.345 & 0.325 & 0.346 & 0.329 & 0.348 & 0.320 & 0.338 & 0.324 & 0.340 \\
+\hline
+\multirow{4}{*}{Electricity}
+ & 96 & \second{0.129} & \best{0.221} & 0.139 & 0.239 & 0.147 & 0.253 & 0.142 & 0.247 & \best{0.128} & \second{0.223} & 0.141 & 0.243 \\
+ & 192 & \second{0.148} & \second{0.238} & 0.155 & 0.250 & 0.159 & 0.256 & 0.164 & 0.273 & \best{0.143} & \best{0.237} & 0.163 & 0.265 \\
+ & 336 & \second{0.165} & \second{0.257} & 0.171 & 0.265 & 0.169 & 0.270 & 0.171 & 0.260 & \best{0.159} & \best{0.254} & 0.186 & 0.290 \\
+ & 720 & \second{0.201} & \best{0.285} & 0.208 & 0.300 & 0.214 & 0.302 & 0.209 & 0.313 & \best{0.197} & \second{0.287} & 0.221 & 0.320 \\
+\hline
+\multirow{4}{*}{Traffic}
+ & 96 & \best{0.361} & \best{0.238} & 0.389 & 0.272 & 0.374 & 0.273 & 0.404 & 0.293 & 0.381 & 0.266 & 0.402 & 0.302 \\
+ & 192 & \best{0.373} & \best{0.243} & 0.399 & 0.272 & 0.393 & 0.282 & 0.404 & 0.292 & 0.394 & 0.273 & 0.419 & 0.309 \\
+ & 336 & \best{0.385} & \best{0.248} & 0.417 & 0.279 & 0.423 & 0.292 & 0.425 & 0.293 & 0.406 & 0.279 & 0.437 & 0.317 \\
+ & 720 & \best{0.428} & \best{0.270} & 0.449 & 0.299 & 0.450 & 0.314 & 0.453 & 0.314 & 0.441 & 0.300 & 0.479 & 0.342 \\
+\hline
+\end{tabular}
 \end{table*}
 
 
@@ -344,7 +412,7 @@ These results indicate that \sysname's phase-aware design provides substantially
 \centering
 \caption{Comparison of MSE (Mean) Across Four Forecasting Models on Web/CloudOps Datasets provided in GIFT-Eval.}
 \label{tab:model_mse_comparison}
-\resizebox{\textwidth}{!}{
+\footnotesize
 \begin{tabular}{lcccc|c}
 \hline
 \textbf{Dataset} & \textbf{\sysname} & \textbf{Moirai-2} & \textbf{Moirai-base} & \textbf{Chronos-base} & \textbf{Best Model} \\
@@ -359,7 +427,6 @@ bitbrains\_fast\_storage/5T/short& \textbf{1,887,398} & 2,142,125     & 25,400,0
 bizitobs\_service/10S/short      & 26,523       & \textbf{4,798}     & 51,900         & 37,100         & Moirai-2 \\
 \hline
 \end{tabular}
-}
 \end{table*}
 }
 

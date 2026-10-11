@@ -127,13 +127,13 @@ The level branch of \sysL is affine in the window, and its within-cycle output i
 
 Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the identical protocol. The parameter increments of the extension over the backbone are horizon-independent: the level branch contributes 105 parameters, the modulation $k(3+d)$ with $k=\min(w,3,d)$ (Section~\ref{sec:ext_modulation}), between 14 and 262 parameters, and the fusion two gates per channel or two shared gates, giving between 119 and 367 parameters in total across the seven datasets (Section~\ref{sec:ext_properties}).
 
-\begin{table}[t]
+\begin{table*}[t]
 \blue{
 \centering
 \caption{Per-horizon test results of \sysLA (mean $\pm$ standard deviation over three seeds) and the \sysname backbone retrained under the identical protocol, on all 28 settings. The conference numbers of \sysname are in Table~\ref{tab:main_results}; the ladder of Section~\ref{sec:exp_ladder} uses this same-protocol column.}
 \label{tab:la_full}
-\scriptsize
-\setlength{\tabcolsep}{2.5pt}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
 \begin{tabular}{llcccc}
 \toprule
 Dataset & $H$ & \multicolumn{2}{c}{\sysname (same protocol)} & \multicolumn{2}{c}{\sysLA} \\
@@ -176,5 +176,5 @@ Weather & 96 & 0.150 & 0.197 & 0.1448{\scriptsize$\pm$0.0001} & 0.1920{\scriptsi
 \bottomrule
 \end{tabular}
 }
-\end{table}
+\end{table*}
 }
