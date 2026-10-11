@@ -1,7 +1,7 @@
 """Build spectrum_traffic.pptx (native XY chart) from spectrum_traffic_data.csv.
 
     python make_spectrum_traffic.py [data.csv] [out.pptx]
-Then: soffice --headless --convert-to pdf spectrum_traffic.pptx ; pdfcrop
+Then (with FONTCONFIG_FILE=/opt/homebrew/etc/fonts/fonts.conf and FONTCONFIG_PATH=/opt/homebrew/etc/fonts exported so LibreOffice finds Arial): soffice --headless --convert-to pdf spectrum_traffic.pptx ; pdfcrop
 """
 import csv, sys, os
 from pptx import Presentation
