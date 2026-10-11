@@ -204,7 +204,7 @@ def analysis_job(path):
                       'share_outside_interval': (dist > 0).float().mean().item(),
                       'mean_dist': dist.mean().item(),
                       'floor_share_of_mse': float((sigma.square() * dist.square()).sum()
-                                                  / (mse * pred_len).sum()),
+                                                  / mse.sum()),
                       'mean_abs_levF_miss': (levF - lam).abs().mean().item()},
                   'amplitude': {
                       'share_demand_over_budget': (base['budget_excess'] > 0).float().mean().item(),

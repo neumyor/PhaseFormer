@@ -7167,3 +7167,79 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
 - Unit tests: 10/10 pass on the server (`pytest tests/test_vldbj_m1.py`).
 - Paper: no number changes yet; the 10-10 numbers remain the frozen main config.
   Update only after the confirm comparison completes.
+
+## 2026-10-11 Confirm round complete; final configurations selected; paper updated
+
+- Confirm round finished 36/36, zero failures (18 tune winners x seeds 2022/2023;
+  Traffic median ~46 min, Electricity ~20, Weather ~15). Decision rule (recorded
+  2026-10-11, consistent with the pilot tie conventions): a setting switches to
+  its variant only if the variant 3-seed mean test MSE beats the main 3-seed mean
+  by more than 0.2%; near-ties keep the frozen main config. TEST-SET SELECTION
+  (user decision 2026-10-10) at both layers; numbers below are the audit record.
+- FINAL SWITCHES (8 settings, 3-seed mean test MSE, main -> variant):
+  ETTm1-96 0.3042 -> 0.3022 t1 (+0.66%); ETTm2-96 0.1670 -> 0.1645 t5 (+1.53%);
+  Electricity-720 0.1987 -> 0.1983 t1 (+0.25%); Traffic-720 0.4340 -> 0.4328 t4
+  (+0.29%); Weather-96 0.1465 -> 0.1448 t5 (+1.18%); Weather-192 0.1864 -> 0.1855
+  t0 (+0.46%); Weather-336 0.2393 -> 0.2357 t5 (+1.49%); Weather-720 0.3148 ->
+  0.3118 t3 (+0.94%). Kept main: ETTm1-336/720, ETTm2-192 (+0.01% tie)/336/720,
+  Electricity-96/192/336 (+0.02% tie), Traffic-96 (-0.14%)/192 (-0.83%)/336 (-0.75%).
+  Full comparison: ~/niuyiming/analysis_tmp/confirm_compare.py output (18 rows,
+  all seeds). Weather improves on all four horizons with consistent signs; the
+  single-seed tune margins that did not survive 3 seeds kept the main config.
+- Effective modulation width is k = min(w, 3, d) (Communication caps width at
+  the branch rank 3): the w4 grid points give k=3 on the d=8 datasets (mod 33
+  params). Branch+modulation increments stay within 119-367 across all 28
+  settings (max = Traffic/Electricity k=2 d=128 mod 262); the paper claim holds.
+- FLOOR BUG found and fixed: analysis.json's floor_share_of_mse divided by
+  pred_len once too often (per-step floor vs per-window total), and the 10-10
+  paper table multiplied the stored value by 100; the two errors partially
+  cancelled. Correct floor share (sum sigma^2 d^2 / sum mse, recomputed from
+  analysis_windows.npz, final configuration, seed 2021): ETTh1 0.08%, ETTh2
+  5.0%, ETTm1 0.27%, ETTm2 10.6%, Weather 11.6%, Electricity 0.5%, Traffic
+  0.0%. analyze.py formula fixed in this commit; existing analysis.json floor
+  values underestimate by a factor of pred_len and must not be quoted.
+- Variant checkpoint analyses: analyze.py --selected-variants (commit dcf196d)
+  analyzed all 18 seed-2021 tune winners (config rebuilt from the stage job
+  spec, checkpoints/best.ckpt, cycle-mean check added to the record). Invariance
+  also verified on all 16 confirm checkpoints (worst 8.9e-16, all pass; script
+  ~/niuyiming/analysis_tmp/confirm_checks.py). The paper's 84-checkpoint claim
+  (60 main + 8 tune + 16 confirm) holds with unchanged numbers (8.9e-16, 1.8
+  window std).
+- Paper updates, all under the final configuration (build: 30 pages, 0
+  undefined references, 0 errors):
+  - Main table LA column: ETTm1 0.354 -> 0.353, Traffic MAE 0.251 -> 0.252,
+    Weather 0.222/0.258 -> 0.220/0.257 (bold marks unchanged; they exclude LA).
+  - Results paragraph: within 1.1% of conference PhaseFormer on ETTh1/ETTh2/
+    ETTm2/Electricity; worst average degradation 2.0% (ETTm1); "full LA improves
+    17 of 28" (was 18: Weather-720 drops out, Traffic-720 enters).
+  - Ladder: LA and LA-mod-off columns updated (ETTm1 0.355/0.381 off, ETTm2
+    0.257/0.318, Weather LA 0.220/0.257 now bold over L, Traffic 0.393/0.252 and
+    off 0.400/0.256); improvements now 0.4-3.3% per dataset (Weather 3.3% is the
+    largest); largest degradation 0.3%; modulation-on beats off on 27/28
+    (exception ETTh1-720, unchanged).
+  - Envelope table fully recomputed (C1, B_phi, g_s, outside share, corrected
+    floor, Omega-over-budget): ETTm1 1.86/1.99/0.35/3.5%/0.27%/2.2%, ETTm2
+    1.39/1.47/0.26/12.5%/10.6%/5.7%, Weather 1.41/1.61/0.68/20.7%/11.6%/27.6%,
+    Electricity 3.80/3.81/0.27/0.1%/0.5%/0.2%, Traffic 5.23/5.25/0.21/0%/0%/0%.
+    Text: outside shares 12-21%, floor 5.0-11.6% of MSE, Weather horizon trend
+    C1 1.86->0.96 / outside 10->34%, sensor-network C1 3.8-5.2, max envelope
+    utilization 0.74 (unchanged), hand-over corr 0.03 (Electricity) / -0.01
+    (Traffic), level gate 0.20-0.26.
+  - Mechanism: activation paragraph rewritten for the final configuration --
+    ETTh2-96 0.54 (100% channels >0.3), Weather-96 0.46 (86%, consistently
+    negative sign), Electricity-96 0.30 (166/166 same sign), ETTm1-96 0.27 and
+    ETTm2-96 0.02 (static-correction dominated); horizon-avg |corr| 0.12-0.37;
+    q-vs-Omega <= 0.20; gain stratification 12 of the 17 improving settings
+    (top |Lambda| quintile beats bottom), quintile gap 0.002 MSE, Weather-96
+    -0.0031 -> +0.0080 added as an example. Invariance numbers unchanged.
+  - Appendix C: 8 rows updated (mean +- sd of the switched settings); k formula
+    reworded to min(w,3,d) in Sec. 6.3 and the appendix intro.
+  - Setup: grid sentence now states the per-setting grid covers the five
+    datasets other than ETTh1/ETTh2, which keep defaults.
+- Analysis scripts (server ~/niuyiming/analysis_tmp/): confirm_compare.py,
+  final_numbers.py, final_analysis2.py, q_final.py, misc_numbers.py,
+  win_list.py, strat17.py, floor_check.py, confirm_checks.py.
+- Known pending: page count 30 > 25 (trim proposal awaiting user); declarations
+  (competing interests, funding, code repo) awaiting user; cover-letter numeric
+  claims re-check after this update (all still consistent: 28 settings, three
+  seeds, about half new content).
