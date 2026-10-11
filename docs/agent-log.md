@@ -7301,3 +7301,27 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
 - Controller proceeded automatically: warm-probe (56 runs, warm start from the E14
   phase-only checkpoints, backbone lr multiplier 0.1/1.0, seed 2021) 52/56 done ~90 min
   after Stage 0. Next: warm-select -> warm-main (56) -> collect.
+
+## 2026-10-11 Experiments 1/2 complete: conference protocol not adopted; warm start 25/28 over PF, 2/7 over Golden
+
+- Run finished in ~7 h, 140 runs (28 stage0 + 56 warm-probe + 56 warm-main), zero failures.
+  Results doc: docs/PhaseFormer_VLDBJ_LA_protocol_warmstart_results.md; artifacts pulled to
+  research_runs/vldbj_proto_v1/ (results.csv, protocol_decision.json, warm_selection.json,
+  summary.json, e14_pf.csv, warm_vs_pf.json).
+- Stage 0 (pre-registered, test-based): conference protocol PF is +1.29% from Golden on
+  average (best-val rule; last-epoch +1.78%) and beats E14 on only 3/7 datasets -> NOT
+  adopted; the 224-run main stage was skipped. Diagnostic: taking the best epoch of the
+  per-epoch test trajectory (the conference read-out), Golden is reachable in only 10/28
+  settings -- the remaining gap is not explained by the identified protocol differences.
+- Experiment 2 (warm start from E14 phase-only checkpoints, near-zero gates): LA-warm
+  improves on its PhaseFormer start on 25/28 settings (goal >=22 met; 3-seed means,
+  initial-val reproduction 8e-4..1.2e-3), but beats Golden on only 2/7 datasets
+  (Weather +0.92%, Electricity +0.88%; goal >=4 missed; ETTh2-192 ties). vs the paper's
+  current from-scratch LA: within +-1.1% per dataset, mixed signs -> no reason to replace
+  the paper's LA row.
+- Traffic bad case (the only degrading dataset, <=0.8%): window-level attribution shows the
+  modulation is better than modulation-off on >90% of windows (H192/H336) and on the worst
+  1% windows; the degradation is not modulation misfiring. Checkpoint-level attribution
+  (gates/q) not run; optional follow-up.
+- Paper untouched (user decision pending): main-table PhaseFormer stays Golden; LA stays
+  the from-scratch row.
