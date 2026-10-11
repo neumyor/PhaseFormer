@@ -7260,3 +7260,25 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   test-based adoption rule; Stage 1 PF/L/LA x 3 seeds (224 runs); Exp2 probe
   (56) and LA-warm/L-warm x 3 seeds (140). All seeds reported (mean +- std);
   test-based choices labelled as test-set selection. No run launched.
+
+## 2026-10-11 Experiments 1/2 launched (user-approved)
+
+- User approved the formal launch. Frozen clone `~/niuyiming/PhaseFormer_vldbj_proto_20261011`
+  at commit 9a1d8d9 (bundle `phaseformer_vldbj_proto.bundle`), resources symlinked read-only
+  from the main checkout, `VLDBJ_E14_ROOT=~/niuyiming/PhaseFormer`.
+- `python scripts/vldbj_m1/proto.py --stage all --scratch-dir research_runs/vldbj_proto_v1
+  --gpus 0-7 --slots-per-gpu 3` started under nohup (controller + 24 slots), log
+  `~/niuyiming/vldbj_proto_v1.log`. Stage 0 = 28 conference-protocol PhaseFormer runs
+  (seed 2021, per-epoch diagnostic test reads). Auto-continues per the pre-registered rules:
+  decide -> main (224) + warm-probe (56) -> warm-select -> warm-main (56) -> collect.
+- Pre-launch checks: server idle (8x A800 free); unit tests 24/24 pass locally and on the
+  server; end-to-end 3-setting smoke passed on the server (warm-start initial val gap
+  8.3e-4..1.17e-3 < 5e-3 gate, all cycle-mean checks passed, protocol_changes show
+  batch/lr swapped to the conference values, per-epoch diagnostic recorded).
+  The smoke clone was deleted after launch.
+- Implementation notes recorded with the code (commit f64167d): the conference scripts'
+  config class hardcodes phase_attn_dropout=0.1 / window=None / pos_embed=True (ff14c16's
+  ETTh1 reads dropout and pos_embed from its dict), so Traffic-96's dict entries
+  window=12/pos_embed=False never reached the model -- the conference protocol uses the
+  effective values. The PF arm shares the same-seed L/LA backbone draw so the
+  PF->L->LA ladder has one initialization.

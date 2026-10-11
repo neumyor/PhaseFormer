@@ -1,7 +1,10 @@
 # PhaseFormer-LA 实验 1/2 计划：会议训练协议复现 + 从 PhaseFormer 热启动
 
-状态：**计划，未启动**（2026-10-11）。用户批准实验 1 和实验 2，并要求“实验开始前先确认”；
-本文件中的任何 run 均须在用户确认后才启动。
+状态：**运行中**（2026-10-11 用户批准启动）。冻结 clone `PhaseFormer_vldbj_proto_20261011`
+（commit `9a1d8d9`），`--stage all`，输出 `research_runs/vldbj_proto_v1/`，日志
+`~/niuyiming/vldbj_proto_v1.log`；服务器原 checkout 保持只读（`VLDBJ_E14_ROOT`）。
+单元测试 24/24 通过（本地与服务器）；3-setting 1-epoch smoke 全流程通过（热启动初始
+val 差 <0.12%、全部 cycle-mean 检查通过、batch/lr 正确替换为会议值）。
 
 ## 0. 目的与约束
 
