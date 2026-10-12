@@ -7356,3 +7356,26 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
     VLDBJ_PILOT_ROOT points at the pilot scratch for the current-configuration reads.
     R1 planned 276 jobs (12-variant grid minus the 3 variants already measured by the
     2026-10-10 tune round on the 20 tuned settings); launch deadline 2026-10-12 08:30.
+
+## 2026-10-12 Experiment 3 complete: wide search switches 16/28; 4/7 datasets beat Golden
+
+- All stages finished: R1 276/276, R2 256/256 unique (15 duplicate-queue launches failed
+  harmlessly on the run-directory flock; root cause was write_jobs not deduplicating paths
+  when the r2 gate neighbour clamps to 0.99 and equals the extreme probe -- fixed in
+  commit 2ceff95), confirm 42/42 (user-approved past the 09:00 cutoff), collect done.
+  A ~6 h network outage between this machine and the server did not affect the runs
+  (server uptime 128 days).
+- Final configuration: 16/28 settings switch (3-seed confirm margin +0.23%..+2.23%);
+  5 provisional winners failed the 3-seed confirm and reverted. 28-setting mean MSE
+  improves 0.33% over the current paper configuration; every dataset is at least as good.
+- vs Golden: 4/7 datasets below Golden on MSE (ETTh1 +0.40%, ETTh2 +0.74%,
+  Electricity +0.98%, Weather +1.62%), ETTm2 ties (-0.03%), ETTm1 -1.55% and
+  Traffic -1.46% remain behind. MAE: 2/7.
+- Selected configs are polarized: extension-dominated extremes (g=0.99, lr x30),
+  near-off gates (g=0.001), backbone lr groups (x0.3/x3, 4 settings), and 4 settings
+  select the modulation-off read (architecture-internal off, user-approved scope).
+- Artifacts: research_runs/vldbj_wide_v1/ locally (results.csv 574 runs,
+  wide_provisional.json, wide_selection.json, current_records.json, manifests);
+  results doc docs/PhaseFormer_VLDBJ_LA_wide_search_results.md. Paper untouched;
+  adoption (main table + recomputing ladder/envelope/mechanism from the new
+  checkpoints + mod-off disclosure) awaits the user's decision.
