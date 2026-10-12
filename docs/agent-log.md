@@ -7438,3 +7438,63 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   e.g. Traffic-720 modulation 262, fusion 1724). PDF rebuilt with latexmk -pdf:
   32 pages, 0 overfull, no undefined references; main-table row and appendix tables
   verified via PyMuPDF text extraction.
+
+## 2026-10-12 P0+P1 submission-hardening batch (three-reviewer audit)
+
+Three independent reviewer agents (methodology / VLDBJ editor / LTSF benchmark expert)
+audited the experiments chapter; user approved P0+P1 only (no GPU reruns, P2 deferred).
+Six worker agents executed in two waves plus direct integration; all verified against
+the paper's own tables and the recorded artifacts before writing.
+
+P0 (writing, 0 GPU):
+- Filled all 9 red \tbd placeholders (abstract + intro) with table-traceable claims;
+  conclusion parameter wording now gate-inclusive (119-679 branch+modulation, gates
+  2/2C, <=~2.1K total incl. gates on Traffic).
+- Fixed two 6.2 factual errors: Traffic gains restated in MSE (2.0%/7.7%, the old
+  6.3%/10.4% were MAE); ETTh2 ranking corrected (PF is third behind FITS/SparseTSF).
+- ETTm1/Traffic attribution paragraph: same-protocol retrained PF is +1.6% on both,
+  extension costs <=0.3% under the shared protocol -> the main-table gap is the
+  training protocol, not the extension. Huber reason sentence added.
+- Two-configuration design principle written into sec:ext_setup ("instrument vs
+  deployment"), delta quantified (0.3-2% on dataset averages); tab:envelope /
+  tab:ladder captions marked (protocol configuration); main-table caption states the
+  LA row carries no marks by design; tab:la_full caption and app text disambiguated
+  (LA column = main-table config, PF column = protocol retrain).
+- CycleNet concession sentence in 6.2 (lower Electricity average at 472K/563K params);
+  capacity 0.13% vs ETTm2-192 learned-decoder win reconciled in 6.4.3.
+- 11 math-mode textquoteright bugs fixed (appendix proofs, U+2019 -> ^\prime);
+  config index paragraph added to app:la_config.
+- Cover letter rewritten against current facts (LA now Section 4.4; 3 theorems +
+  2 propositions + 1 corollary; 119-679; per-setting config appendix mentioned; no
+  hardcoded appendix letters). ~2/3 of main-text words are blue-marked.
+- Appendix A (conference supplement, 8pp) moved to a new ESM document
+  (supplementary.tex, 11pp); all main-text references reworded to plain text;
+  extension appendices relabelled A/B/C. Main PDF 34 -> 25 pages (blue and clean
+  builds), 0 overfull, no undefined references.
+
+P1 (measurement, server, read-only):
+- Measured PF vs final-config LA on 5 settings (A800, fp32, batch 32): Traffic/
+  Electricity FLOPs +0.09..0.23% (matmul-only +0.02..0.07%), latency +3.9..10.5%
+  (memory-bound elementwise ops); smallest backbone ETTh2-720 +37% FLOPs/+71%
+  latency (<2ms absolute). Written into 6.3.
+- parameter_breakdown of all five final configs matches the run records exactly;
+  Traffic-96 backbone arch difference (windowed attention / no positional embedding
+  vs conference effective options) disclosed in one sentence in app:la_config.
+- val metrics fully retained: every result.json has best.val_mse/val_mae,
+  904/904 checkpoints present -> validation re-selection (deferred P2) is feasible
+  from the archive whenever needed.
+- OPEN ISSUE (user decision pending): the conference-inherited efficiency table
+  (PF 1.156K params / 13.9 FLOPs on Traffic) is inconsistent with the real models
+  by 1-2 orders of magnitude (measured conference-config Traffic-96: 38,690 params,
+  1,169 MFLOPs/window at L=720); tab:ablation_phase's 113.356 MFLOPs is ~10x off
+  too. Inherited verbatim from the ICLR original; repo docs note the original FLOP
+  convention was never reproduced. Options: trace the original convention, re-measure
+  all models under one convention, or accept the risk.
+- Internal doc fix: stale "[mod-off]" tag on the ETTh2-720 row of the R3 results
+  table (the R3 winner is a native read; R2's was mod-off) corrected.
+
+Files: main.tex, body/{experiments,appendix,appendix_theory,introduction,motivations,
+statements}.tex, supplementary.tex (new), cover_letter/*, main.pdf, supplementary.pdf,
+docs/PhaseFormer_VLDBJ_LA_wide_search_results.md. Concurrent edits from the user's
+other session (Section 4/5 revisions, commits 9eea223/f2b7901) were preserved
+throughout; two of its commits swept in earlier parts of this batch.

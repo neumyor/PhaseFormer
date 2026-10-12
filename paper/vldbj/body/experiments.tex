@@ -18,7 +18,7 @@ Experiments are performed on seven widely used long-term time series forecasting
 \textit{Electricity}\footnote{\url{https://archive.ics.uci.edu/ml/datasets}}, 
 and \textit{Traffic}\footnote{\url{https://pems.dot.ca.gov/}}, 
 covering a diverse range of real-world scenarios.
-The details of the datasets are provided in \appref{sec:dataset_details}. 
+The details of the datasets are provided in \blue{the electronic supplement}.
 Following prior works~\citep{nie2023patchtst, zhang2023crossformer, huang2025timebase}, we adopt a 6:2:2 split for the ETT datasets and a 7:1:2 split for the other datasets. 
 For \sysname, we report the average results over three random seeds, while for the other baselines we follow their official implementations and released code. 
 We evaluate the forecasting \textbf{accuracy} of all tested models using mean squared error (MSE) and mean absolute error (MAE), 
@@ -35,7 +35,7 @@ Among these, PatchTST, Crossformer, and TimeMixer are patch-based; SparseTSF is 
 For all baselines, we adopt the recommended configurations provided in their official implementations\revised{, keeping hyperparameters aligned with ~\cite{huang2025timebase}.}
 The model is optimized using the Adam optimizer with a fixed learning rate of $1 \times 10^{-3}$.  
 Following the settings from efficiency-oriented works~\citep{huang2025timebase, lin2024sparsetsf, fits2024}, the look-back length is set to 720 time steps.
-More implementation details are provided in \appref{sec:dataset_details}.
+More implementation details are provided in \blue{the electronic supplement}.
 
 \blue{
 \fakeparagraph{Setup for \sysLA}
@@ -127,12 +127,12 @@ TimeMixer & 0.452 & 0.474 & 0.386 & 0.425 & 0.383 & 0.413 & 0.314 & 0.367 & 0.17
 
 
 We evaluate the predictive accuracy of \sysname and the baseline methods on seven datasets. 
-\tabref{tab:main_results} reports the average prediction errors across four forecasting horizons, with detailed results provided in \appref{sec:accuracy_details}. 
+\tabref{tab:main_results} reports the average prediction errors across four forecasting horizons, with detailed results provided in \blue{the electronic supplement}.
 Overall, \sysname consistently achieves superior performance on nearly all datasets, with particularly notable gains on complex and dynamic benchmarks such as Weather, Electricity, and Traffic.
 \blue{For example, on the largest dataset, Traffic, \sysname reduces the MSE by 2.0\% relative to the second-best method, PatchTST, and by 7.7\% relative to TimeBase, underscoring its robustness on large-scale and heterogeneous data.}
 \blue{The only exception is ETTh2, where \sysname ranks third in MSE, behind FITS (0.334) and SparseTSF (0.345), while still maintaining highly competitive accuracy.}
 A closer examination reveals that patch-based baselines, including PatchTST, Crossformer, and TimeMixer, exhibit performance degradation on the Electricity, likely due to stronger distributional shifts.
-\blue{The online supplement adds CycleNet to the comparison: on Electricity it attains a lower dataset average than both \sysname and \sysLA (0.157 against 0.160 and 0.159, Table~\ref{tab:full_results_b}). We position this as a point on the efficiency trade-off rather than a like-for-like gap: CycleNet carries 472K parameters on Electricity and 563K on Traffic against the 1.16K of \sysname on both --- several hundred times more, a cost that grows with the number of channels through its learnable per-channel recurrent cycles (Table~\ref{tab:params_flops_details}).}
+\blue{The electronic supplement adds CycleNet to the comparison: on Electricity it attains a lower dataset average than both \sysname and \sysLA (0.157 against 0.160 and 0.159 in the full per-horizon tables of the supplement). We position this as a point on the efficiency trade-off rather than a like-for-like gap: CycleNet carries 472K parameters on Electricity and 563K on Traffic against the 1.16K of \sysname on both --- several hundred times more, a cost that grows with the number of channels through its learnable per-channel recurrent cycles (see the per-model parameter and FLOPs comparison in the electronic supplement).}
 
 \blue{
 \fakeparagraph{Results of \sysLA}
@@ -142,7 +142,7 @@ Table~\ref{tab:main_results} adds \sysLA, averaged over three seeds; per-horizon
 \subsection{\blue{Efficiency}}
 \label{sec:exp_efficiency}
 
-We evaluate the computational overhead of all models, with detailed results in \appref{sec:efficiency_details}.
+We evaluate the computational overhead of all models, with detailed results in \blue{the electronic supplement}.
 \figref{fig:flops_params_visualization} shows the FLOPs and the number of parameters of all tested models on the Electricity and Traffic.
 Overall, phase-based models incur lower overhead than patch-based ones.
 On the Traffic dataset, \sysname achieves an extraordinary FLOPs reduction of about 99.99\% over PatchTST and Crossformer.
@@ -150,6 +150,7 @@ Beyond patch-based baselines, it also outperforms other phase-based models like 
 This stems from the lower variety of phase tokens over time (\secref{sec:mot_stability}), making them inherently more efficient to process. 
 Taken together with the previous accuracy evaluations, these results clearly demonstrate that \sysname provides an efficient yet effective solution, delivering superior performance on complex datasets.
 \blue{The extension keeps this efficiency profile. Over \sysname, \sysLA adds between 119 and 679 parameters for the level branch and the modulation in all 28 settings of the main-table configuration, independent of the forecast horizon, plus the fusion gates: two where they are shared, or two per channel where they are per-channel (1{,}724 on Traffic). The gates are the only component of the extension whose size grows with the number of sensors; including them, the total increment of the extension remains at most about 2.1K parameters, the largest being on Traffic (Section~\ref{sec:complexity} and Appendix~\ref{app:la_config}). Its added computation is linear in the input length and is dominated by the cost of the backbone.}
+\blue{Measured on a single A800 GPU (fp32, batch 32, $L{=}720$), the extension adds between $0.09\%$ and $0.23\%$ to the FLOPs of the \sysname backbone on Traffic and Electricity, and between $3.9\%$ and $10.5\%$ to its latency: the added operations --- gates, fusions and pooling --- are element-wise and therefore memory-bound rather than compute-bound. The ratio falls as the backbone grows; on the smallest backbone (ETTh2-720, 718 parameters) the same absolute overhead amounts to about $37\%$ of its FLOPs and $71\%$ of its latency, the forward pass remaining below $2$\,ms.}
 
 \blue{
 \subsection{Validating the Theory}
@@ -215,7 +216,7 @@ We systematically evaluate the impact of different number of routers $M$ on mode
 The experiments indicate that across three datasets, the model’s prediction error generally decreases as the number of routers $M$ increases, before eventually stabilizing or slightly rising.
 It is worth noting that the best performance is usually achieved when $M \in \{4,8\}$, which is much smaller compared to the actual number of phase tokens, $L_{\text{phase}} = 24$.
 This observation indicates that the phase token spans an inherently low-dimensional space, so only a small number of routers is sufficient to effectively capture and represent its underlying structure.
-More detailed results are provided in \appref{sec:all_results_router_numbers}.
+More detailed results are provided in \blue{the electronic supplement}.
 
 \begin{figure*}[t]
     \centering
@@ -357,7 +358,7 @@ If the modulation carries the level-dependent amplitude, the per-window gains of
 \caption{Comparison of forecasting performance under different phase lengths on the Traffic dataset (lookback=720, horizon=96).}
 \label{tab:phase_length}
 \end{table}
-\sysname automatically determines the phase length through frequency-domain analysis (see \appref{sec:dataset_details}), extracting salient periodic components directly from the data. 
+\sysname automatically determines the phase length through frequency-domain analysis (see \blue{the electronic supplement}), extracting salient periodic components directly from the data.
 To assess its sensitivity to phase length, we conduct experiments on the Traffic dataset. Its frequency spectrum contains several clear periodic components (see \figref{fig:spectrum_traffic}). Based on spectral amplitudes, we select the top five candidate phase lengths and run \sysname for forecasting. The results are shown in \tabref{tab:phase_length}.
 
 \begin{figure}[t]

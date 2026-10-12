@@ -1,0 +1,119 @@
+% Electronic Supplementary Material (ESM) of the VLDB Journal submission of
+% PhaseFormer. It collects the supplementary material of the ICLR 2026
+% conference version (formerly Appendix A of the main PDF), moved out of the
+% main manuscript to meet the 25-page limit. Build like the main PDF:
+%   latexmk -pdf supplementary.tex
+\RequirePackage{fix-cm}
+% VLDBJ requires numbered citations in square brackets.
+\PassOptionsToPackage{numbers,sort&compress}{natbib}
+\documentclass[twocolumn,natbib]{svjour3}
+\bibpunct{[}{]}{,}{n}{}{,}
+% The supplement writes ``Model~\citeyearpar{key}''; render it as a numbered citation.
+\renewcommand{\citeyearpar}{\unskip~\citep}
+\smartqed
+
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage[protrusion=true,expansion=true]{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{xspace}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{subcaption}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xurl}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+% ---------------------------------------------------------------------------
+% The ESM is not change-marked: every passage renders in black. body/appendix.tex
+% contains \blue{...} wrappers copied from the main manuscript; they are no-ops
+% here.
+% ---------------------------------------------------------------------------
+\newcommand{\blue}[1]{#1}
+
+% Macros inherited from the conference version (kept in sync with main.tex).
+\newcommand{\eg}{\textit{e.g.}\xspace}
+\newcommand{\ie}{\textit{i.e.}\xspace}
+\newcommand{\etc}{etc.\xspace}
+\newcommand{\aka}{\textit{a.k.a.}\xspace}
+\newcommand{\versus}{\emph{vs.}\xspace}
+
+\newcommand\tabref[1]{Table~\ref{#1}}
+\renewcommand\secref[1]{Section~\ref{#1}}
+\renewcommand\figref[1]{Fig.~\ref{#1}}
+\newcommand\appref[1]{Appendix~\ref{#1}}
+\newcommand\equref[1]{Eq.~(\ref{#1})}
+\newcommand\thmref[1]{Theorem~\ref{#1}}
+\newcommand\lemmaref[1]{Lemma~\ref{#1}}
+
+\newcommand{\fakeparagraph}[1]{\vspace{1mm}\noindent\textbf{#1.}}
+\newcommand{\sysname}{PhaseFormer\xspace}
+\newcommand{\sysL}{PhaseFormer-L\xspace}
+\newcommand{\sysLA}{PhaseFormer-LA\xspace}
+\newcommand{\codeurl}{https://github.com/neumyor/PhaseFormer_TSL}
+
+% Best / second-best marks of the conference tables.
+\definecolor{secondcolor}{RGB}{0,90,160}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\best}[1]{\red{\textbf{#1}}}
+\newcommand{\second}[1]{\textcolor{secondcolor}{\underline{#1}}}
+% Passages revised during the ICLR rebuttal are ordinary text here.
+\newcommand{\revised}[1]{#1}
+\newcommand{\TODO}[1]{\textbf{\color{red}{[TODO: #1]}}}
+\newcommand{\tbd}[1]{{\color{red}[#1]}}
+
+% Notation of the extension (kept for parity with main.tex).
+\newcommand{\Lp}{L_{\text{phase}}}
+\newcommand{\Pin}{P_{\text{in}}}
+\newcommand{\Pout}{P_{\text{out}}}
+\newcommand{\lev}{\operatorname{lev}}
+\newcommand{\LN}{\operatorname{LN}}
+\newcommand{\one}{\mathbf 1}
+
+% svjour3 provides theorem, lemma, corollary, proposition, definition,
+% remark and the proof environment. Only the missing ones are added.
+\spnewtheorem{assumption}{Assumption}{\bfseries}{\itshape}
+
+\journalname{The VLDB Journal}
+
+% Narrow two-column measure: allow extra interword stretch before overfull lines.
+\setlength{\emergencystretch}{1.5em}
+
+\begin{document}
+
+\title{Electronic Supplementary Material for ``PhaseFormer: Efficient Phase-Based Forecasting for Spatio-Temporal Data Beyond Stable Cycles''%
+\thanks{This document is the electronic supplementary material (ESM) of the manuscript ``PhaseFormer: Efficient Phase-Based Forecasting for Spatio-Temporal Data Beyond Stable Cycles'' submitted to The VLDB Journal. The manuscript extends the conference paper ``PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting'' published at ICLR 2026~\citep{niu2026phaseformer}. This ESM collects the supplementary material of the conference version, previously its Appendix~A; the appendices of the journal extension --- the proofs of Section~5, the extended results and the per-setting configurations --- remain in the main manuscript.}}
+
+\author{Yiming Niu \and Jinliang Deng \and Yongxin Tong}
+
+\authorrunning{Y. Niu, J. Deng, Y. Tong}
+
+\institute{Yiming Niu and Jinliang Deng contributed equally to this work. Yongxin Tong is the corresponding author. \at
+Yiming Niu, Yongxin Tong \at
+State Key Laboratory of Complex \& Critical Software Environment, Beihang University, Beijing, China \\
+\email{\{yimingniu, yxtong\}@buaa.edu.cn}
+\and
+Jinliang Deng \at
+State Key Laboratory of Complex \& Critical Software Environment, Beihang University, Beijing, China; Research Institute of Trustworthy Autonomous Systems, Southern University of Science and Technology, Shenzhen, China \\
+\email{jinliangdeng9588@gmail.com}}
+
+\date{Received: date / Accepted: date}
+
+\maketitle
+
+\begin{abstract}
+This electronic supplementary material collects the supplementary material of the conference version~\citep{niu2026phaseformer}: the baseline descriptions and the implementation details, the full forecasting results across all prediction horizons, the per-model efficiency comparison in parameters and FLOPs, the PCA visualizations of the token spaces, the studies of the number of routers, the model scale and the input length, the reconstruction analysis of fine-grained temporal information retention, the comparison with time series foundation models, the forecasting showcases, and the theoretical analysis of phase tokenization. It accompanies the main manuscript, which contains the article and the appendices of the journal extension.
+\end{abstract}
+
+\input{body/appendix}
+
+\bibliographystyle{spmpsci}
+\bibliography{references}
+
+\end{document}
