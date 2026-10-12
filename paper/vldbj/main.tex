@@ -2,7 +2,12 @@
 % Springer svjour3 class, two-column option, as required by the VLDBJ
 % submission rules (two-column template, at most 25 pages).
 \RequirePackage{fix-cm}
+% VLDBJ requires numbered citations in square brackets.
+\PassOptionsToPackage{numbers,sort&compress}{natbib}
 \documentclass[twocolumn,natbib]{svjour3}
+\bibpunct{[}{]}{,}{n}{}{,}
+% Some sections write ``Model~\citeyearpar{key}''; render it as a numbered citation.
+\renewcommand{\citeyearpar}{\unskip~\citep}
 \smartqed
 
 \usepackage[T1]{fontenc}
@@ -126,7 +131,7 @@ State Key Laboratory of Complex \& Critical Software Environment, Beihang Univer
 \input{body/conclusion}
 \input{body/statements}
 
-\bibliographystyle{spbasic}
+\bibliographystyle{spmpsci}
 \bibliography{references}
 
 \clearpage
