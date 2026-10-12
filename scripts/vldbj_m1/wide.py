@@ -91,11 +91,13 @@ def make_job(base, sources, dataset, horizon, seed, variant, backbone_mult):
 
 
 def write_jobs(scratch, stage, jobs):
-    paths = []
+    paths, seen = [], set()
     for job in jobs:
         path = scratch / stage / 'jobs' / f"{Path(job['output']).name}.json"
         write_immutable(path, job)
-        paths.append(path)
+        if path not in seen:
+            seen.add(path)
+            paths.append(path)
     order = {'Traffic': 0, 'Electricity': 1, 'Weather': 2, 'ETTm1': 3, 'ETTm2': 4}
     return sorted(paths, key=lambda p: (order.get(p.name.split('_')[0], 9), p.name))
 
