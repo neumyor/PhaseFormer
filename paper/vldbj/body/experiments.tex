@@ -39,7 +39,7 @@ More implementation details are provided in \secref{sec:dataset_details}.
 
 \blue{
 \fakeparagraph{Setup for \sysLA}
-\sysLA uses the \sysname backbone of each setting with the components of Section~\ref{sec:extension}. It is trained from scratch with the Huber loss, at most 30 epochs with early stopping on the validation loss (patience 8), with three seeds (2021--2023). Its configuration is described in Section~\ref{sec:ext_setup}.
+\sysLA uses the \sysname backbone of each setting with the components of Section~\ref{sec:extension}. It is trained from scratch with the Huber loss, at most 30 epochs with early stopping on the validation loss (patience 8), with three seeds (2021--2023). Its configuration is described in Section~\ref{sec:ext_setup} and Appendix~\ref{app:la_config}.
 }
 
 
@@ -67,7 +67,7 @@ The best results are shown in \best{bold}, and the second-best in \second{underl
 \cline{2-15}
  & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
 \hline
-\blue{\sysLA} & \blue{0.405} & \blue{0.421} & \blue{0.348} & \blue{0.393} & \blue{0.353} & \blue{0.380} & \blue{0.253} & \blue{0.315} & \blue{0.160} & \blue{0.251} & \blue{0.393} & \blue{0.252} & \blue{0.220} & \blue{0.257} \\
+\blue{\sysLA} & \blue{0.401} & \blue{0.418} & \blue{0.341} & \blue{0.387} & \blue{0.351} & \blue{0.379} & \blue{0.248} & \blue{0.313} & \blue{0.159} & \blue{0.250} & \blue{0.392} & \blue{0.252} & \blue{0.219} & \blue{0.256} \\
 \hline
 \sysname & \best{0.403} & \best{0.415} & 0.346 & 0.388 & \best{0.346} & \best{0.374} & \best{0.250} & \best{0.313} & \best{0.160} & \best{0.250} & \best{0.386} & \best{0.249} & \best{0.223} & \best{0.260} \\
 PatchTST & 0.420 & 0.439 & 0.344 & 0.390 & \second{0.354} & 0.383 & 0.251 & 0.319 & 0.169 & 0.265 & \second{0.394} & \second{0.266} & \second{0.223} & 0.264 \\
@@ -130,7 +130,7 @@ A closer examination reveals that patch-based baselines, including PatchTST, Cro
 
 \blue{
 \fakeparagraph{Results of \sysLA}
-Table~\ref{tab:main_results} adds \sysLA, averaged over three seeds, to the comparison; per-horizon results with standard deviations are in Table~\ref{tab:la_full}, and the component analysis is in Section~\ref{sec:ext_exp}. \sysLA improves both MSE and MAE over the conference \sysname on Weather, and its accuracy on ETTh1, ETTh2, ETTm2 and Electricity stays within $1.1\%$ of a model that has none of the extension's components, at an added cost of 119 to 367 parameters. The extension is not bought with accuracy: its average degradation on the remaining datasets is at most $2.0\%$ (ETTm1), and Section~\ref{sec:exp_ladder} shows that under the identical training protocol the level branch alone already improves 17 of the 28 settings and the full \sysLA 17 of 28. Where the cycle-axis changes of Section~\ref{sec:exp_coupling} bind, \sysLA turns them into gains; where they do not, the phase path alone remains the better part of the model and the extension is neutral.
+Table~\ref{tab:main_results} adds \sysLA, averaged over three seeds, to the comparison; per-horizon results with standard deviations are in Table~\ref{tab:la_full}, and the component analysis is in Section~\ref{sec:ext_exp}. \sysLA improves the MSE over the conference \sysname on 17 of the 28 settings and on five of the seven dataset averages (every dataset but ETTm1 and Traffic), with the largest average gain $1.6\%$ (Weather) and the largest average degradation $1.5\%$; the MAE improves on 12 settings and four dataset averages. The extension is not bought with accuracy: Section~\ref{sec:exp_ladder} shows that under the identical training protocol the level branch alone already improves 17 of the 28 settings and the full \sysLA 17 of 28. Where the cycle-axis changes of Section~\ref{sec:exp_coupling} bind, \sysLA turns them into gains; where they do not, the phase path alone remains the better part of the model and the extension is neutral.
 }
 
 
@@ -142,7 +142,7 @@ On the Traffic dataset, \sysname achieves an extraordinary FLOPs reduction of ab
 Beyond patch-based baselines, it also outperforms other phase-based models like SparseTSF, consistently delivering high efficiency.
 This stems from the lower variety of phase tokens over time (\secref{sec:motivations}), making them inherently more efficient to process. 
 Taken together with the previous accuracy evaluations, these results clearly demonstrate that \sysname provides an efficient yet effective solution, delivering superior performance on complex datasets.
-\blue{The extension keeps this efficiency profile. Over \sysname, \sysLA adds a level branch of 105 parameters and a modulation of at most 262 parameters, together between 119 and 367 parameters in all 28 settings and independent of the forecast horizon, plus two fusion gates per channel, or two in total where the gates are shared (Section~\ref{sec:ext_properties}). Its added computation is linear in the input length and is dominated by the cost of the backbone.}
+\blue{The extension keeps this efficiency profile. Over \sysname, \sysLA adds between 119 and 679 parameters in all 28 settings, independent of the forecast horizon, plus two fusion gates per channel, or two in total where the gates are shared (Section~\ref{sec:ext_properties} and Appendix~\ref{app:la_config}). Its added computation is linear in the input length and is dominated by the cost of the backbone.}
 
 
 

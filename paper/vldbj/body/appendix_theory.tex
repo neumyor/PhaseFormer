@@ -125,7 +125,7 @@ The level branch of \sysL is affine in the window, and its within-cycle output i
 \section{Extended Results of \sysLA}
 \label{app:ext_results}
 
-Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the identical protocol. The parameter increments of the extension over the backbone are horizon-independent: the level branch contributes 105 parameters, the modulation $k(3+d)$ with $k=\min(w,3,d)$ (Section~\ref{sec:ext_modulation}), between 14 and 262 parameters, and the fusion two gates per channel or two shared gates, giving between 119 and 367 parameters in total across the seven datasets (Section~\ref{sec:ext_properties}).
+Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the identical protocol. The parameter increments of the extension over the backbone are horizon-independent: the level branch contributes 105 parameters with the fixed profiles of \equref{eq:branch} (477 and 657 on the four settings that select a learned decoder; Appendix~\ref{app:la_config}), the modulation $k(3+d)$ with $k=\min(w,3,d)$ (Section~\ref{sec:ext_modulation}) contributes between 14 and 262 parameters, and the fusion two gates per channel or two shared gates; branch and modulation together add between 119 and 679 parameters across the settings, the gates between 2 and $2C$ more (Section~\ref{sec:ext_properties} and Appendix~\ref{app:la_config}).
 
 \begin{table*}[t]
 \blue{
@@ -139,37 +139,37 @@ Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28
 Dataset & $H$ & \multicolumn{2}{c}{\sysname (same protocol)} & \multicolumn{2}{c}{\sysLA} \\
  & & MSE & MAE & MSE & MAE \\
 \midrule
-ETTh1 & 96 & 0.361 & 0.387 & 0.3629{\scriptsize$\pm$0.0035} & 0.3897{\scriptsize$\pm$0.0018} \\
- & 192 & 0.405 & 0.411 & 0.4015{\scriptsize$\pm$0.0066} & 0.4153{\scriptsize$\pm$0.0086} \\
+ETTh1 & 96 & 0.361 & 0.387 & 0.3601{\scriptsize$\pm$0.0025} & 0.3881{\scriptsize$\pm$0.0016} \\
+ & 192 & 0.405 & 0.411 & 0.3958{\scriptsize$\pm$0.0065} & 0.4117{\scriptsize$\pm$0.0026} \\
  & 336 & 0.442 & 0.435 & 0.4273{\scriptsize$\pm$0.0057} & 0.4318{\scriptsize$\pm$0.0024} \\
- & 720 & 0.423 & 0.442 & 0.4281{\scriptsize$\pm$0.0058} & 0.4457{\scriptsize$\pm$0.0035} \\
+ & 720 & 0.423 & 0.442 & 0.4191{\scriptsize$\pm$0.0060} & 0.4409{\scriptsize$\pm$0.0052} \\
 \midrule
-ETTh2 & 96 & 0.282 & 0.343 & 0.2806{\scriptsize$\pm$0.0046} & 0.3437{\scriptsize$\pm$0.0028} \\
- & 192 & 0.344 & 0.383 & 0.3434{\scriptsize$\pm$0.0049} & 0.3839{\scriptsize$\pm$0.0030} \\
- & 336 & 0.376 & 0.409 & 0.3679{\scriptsize$\pm$0.0011} & 0.4071{\scriptsize$\pm$0.0013} \\
- & 720 & 0.416 & 0.449 & 0.4008{\scriptsize$\pm$0.0011} & 0.4374{\scriptsize$\pm$0.0007} \\
+ETTh2 & 96 & 0.282 & 0.343 & 0.2737{\scriptsize$\pm$0.0003} & 0.3344{\scriptsize$\pm$0.0006} \\
+ & 192 & 0.344 & 0.383 & 0.3377{\scriptsize$\pm$0.0032} & 0.3800{\scriptsize$\pm$0.0027} \\
+ & 336 & 0.376 & 0.409 & 0.3646{\scriptsize$\pm$0.0024} & 0.4050{\scriptsize$\pm$0.0022} \\
+ & 720 & 0.416 & 0.449 & 0.3893{\scriptsize$\pm$0.0009} & 0.4266{\scriptsize$\pm$0.0008} \\
 \midrule
 ETTm1 & 96 & 0.302 & 0.351 & 0.3022{\scriptsize$\pm$0.0019} & 0.3514{\scriptsize$\pm$0.0020} \\
- & 192 & 0.330 & 0.363 & 0.3346{\scriptsize$\pm$0.0015} & 0.3686{\scriptsize$\pm$0.0023} \\
- & 336 & 0.359 & 0.381 & 0.3619{\scriptsize$\pm$0.0013} & 0.3851{\scriptsize$\pm$0.0010} \\
- & 720 & 0.415 & 0.413 & 0.4132{\scriptsize$\pm$0.0017} & 0.4134{\scriptsize$\pm$0.0012} \\
+ & 192 & 0.330 & 0.363 & 0.3298{\scriptsize$\pm$0.0006} & 0.3659{\scriptsize$\pm$0.0015} \\
+ & 336 & 0.359 & 0.381 & 0.3630{\scriptsize$\pm$0.0060} & 0.3868{\scriptsize$\pm$0.0042} \\
+ & 720 & 0.415 & 0.413 & 0.4098{\scriptsize$\pm$0.0026} & 0.4137{\scriptsize$\pm$0.0019} \\
 \midrule
-ETTm2 & 96 & 0.174 & 0.265 & 0.1645{\scriptsize$\pm$0.0004} & 0.2554{\scriptsize$\pm$0.0008} \\
- & 192 & 0.228 & 0.300 & 0.2218{\scriptsize$\pm$0.0063} & 0.2951{\scriptsize$\pm$0.0033} \\
+ETTm2 & 96 & 0.174 & 0.265 & 0.1613{\scriptsize$\pm$0.0007} & 0.2525{\scriptsize$\pm$0.0007} \\
+ & 192 & 0.228 & 0.300 & 0.2162{\scriptsize$\pm$0.0011} & 0.2919{\scriptsize$\pm$0.0012} \\
  & 336 & 0.276 & 0.331 & 0.2701{\scriptsize$\pm$0.0052} & 0.3270{\scriptsize$\pm$0.0022} \\
- & 720 & 0.352 & 0.380 & 0.3548{\scriptsize$\pm$0.0050} & 0.3808{\scriptsize$\pm$0.0017} \\
+ & 720 & 0.352 & 0.380 & 0.3455{\scriptsize$\pm$0.0022} & 0.3792{\scriptsize$\pm$0.0005} \\
 \midrule
-Electricity & 96 & 0.130 & 0.223 & 0.1298{\scriptsize$\pm$0.0008} & 0.2227{\scriptsize$\pm$0.0014} \\
- & 192 & 0.146 & 0.236 & 0.1465{\scriptsize$\pm$0.0004} & 0.2367{\scriptsize$\pm$0.0007} \\
- & 336 & 0.167 & 0.260 & 0.1667{\scriptsize$\pm$0.0021} & 0.2594{\scriptsize$\pm$0.0019} \\
+Electricity & 96 & 0.130 & 0.223 & 0.1288{\scriptsize$\pm$0.0008} & 0.2218{\scriptsize$\pm$0.0008} \\
+ & 192 & 0.146 & 0.236 & 0.1448{\scriptsize$\pm$0.0012} & 0.2350{\scriptsize$\pm$0.0005} \\
+ & 336 & 0.167 & 0.260 & 0.1648{\scriptsize$\pm$0.0004} & 0.2575{\scriptsize$\pm$0.0007} \\
  & 720 & 0.199 & 0.285 & 0.1983{\scriptsize$\pm$0.0008} & 0.2851{\scriptsize$\pm$0.0008} \\
 \midrule
-Traffic & 96 & 0.363 & 0.232 & 0.3617{\scriptsize$\pm$0.0020} & 0.2339{\scriptsize$\pm$0.0004} \\
- & 192 & 0.380 & 0.242 & 0.3817{\scriptsize$\pm$0.0019} & 0.2453{\scriptsize$\pm$0.0028} \\
- & 336 & 0.393 & 0.250 & 0.3956{\scriptsize$\pm$0.0039} & 0.2523{\scriptsize$\pm$0.0013} \\
+Traffic & 96 & 0.363 & 0.232 & 0.3622{\scriptsize$\pm$0.0036} & 0.2341{\scriptsize$\pm$0.0006} \\
+ & 192 & 0.380 & 0.242 & 0.3849{\scriptsize$\pm$0.0059} & 0.2471{\scriptsize$\pm$0.0011} \\
+ & 336 & 0.393 & 0.250 & 0.3897{\scriptsize$\pm$0.0045} & 0.2525{\scriptsize$\pm$0.0017} \\
  & 720 & 0.433 & 0.270 & 0.4328{\scriptsize$\pm$0.0029} & 0.2746{\scriptsize$\pm$0.0008} \\
 \midrule
-Weather & 96 & 0.150 & 0.197 & 0.1448{\scriptsize$\pm$0.0001} & 0.1920{\scriptsize$\pm$0.0002} \\
+Weather & 96 & 0.150 & 0.197 & 0.1445{\scriptsize$\pm$0.0003} & 0.1914{\scriptsize$\pm$0.0008} \\
  & 192 & 0.195 & 0.240 & 0.1855{\scriptsize$\pm$0.0009} & 0.2324{\scriptsize$\pm$0.0012} \\
  & 336 & 0.246 & 0.280 & 0.2357{\scriptsize$\pm$0.0017} & 0.2740{\scriptsize$\pm$0.0017} \\
  & 720 & 0.316 & 0.332 & 0.3118{\scriptsize$\pm$0.0020} & 0.3281{\scriptsize$\pm$0.0015} \\
@@ -177,4 +177,55 @@ Weather & 96 & 0.150 & 0.197 & 0.1448{\scriptsize$\pm$0.0001} & 0.1920{\scriptsi
 \end{tabular}
 }
 \end{table*}
+}
+
+\blue{
+\section{Per-Setting Configuration of \sysLA}
+\label{app:la_config}
+
+The main-table \sysLA of Section~\ref{sec:exp_main} selects the remaining extension hyperparameters per setting by a grid search over the gate initialization $g_0$, the learning-rate multiplier of the extension parameters, the modulation width $w$, the profile basis of the level branch (the fixed profiles of \equref{eq:branch}, or the learned decoders on 30 and on 90 pooled cycle values of Section~\ref{sec:ext_setup}), per-channel versus shared gates, the learning-rate multiplier of the backbone parameters, and whether the modulation is active at inference. Table~\ref{tab:la_config} lists the selected configuration of every setting.
+
+On 24 of the 28 settings the level branch keeps the fixed profiles (105 parameters); ETTm1-720 selects the learned decoder on 30 pooled values (477 parameters) and ETTm2-96, ETTm2-192 and ETTm2-720 the learned decoder on 90 pooled values (657 parameters). On five settings the modulation is switched off at inference, which leaves the level branch of \sysL as the only active extension component. The parameter budget of the extension (branch and modulation, excluding the fusion gates) therefore ranges from 119 to 679 across the settings. The ablation ladder, the envelope analysis and the mechanism analysis of Section~\ref{sec:ext_exp} use the frozen shared configuration of Section~\ref{sec:ext_setup} (fixed profiles everywhere, $w=2$), so their \sysLA columns differ slightly from the main table.
+
+\begin{table}[t]
+\centering
+\caption{Selected per-setting configuration of the main-table \sysLA. Basis: \emph{fixed} profiles (105 parameters), or learned decoders on \emph{30} / \emph{90} pooled cycle values (477 / 657 parameters). lr / bb~lr: learning-rate multiplier of the extension / backbone parameters. Modulation: active at inference or switched off.}
+\label{tab:la_config}
+\footnotesize
+\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{llccclccc}
+\toprule
+Dataset & $H$ & $g_0$ & lr & $w$ & basis & gates & bb~lr & mod. \\
+\midrule
+ETTh1 & 96 & 0.1 & 0.1 & 3 & fixed & per-channel & 1.0 & on \\
+ETTh1 & 192 & 0.1 & 100 & 2 & fixed & per-channel & 1.0 & on \\
+ETTh1 & 336 & 0.2 & 1 & 2 & fixed & per-channel & 1.0 & on \\
+ETTh1 & 720 & 0.1667 & 3 & 3 & fixed & per-channel & 1.0 & off \\
+ETTh2 & 96 & 0.999 & 3.3333 & 2 & fixed & shared & 1.0 & on \\
+ETTh2 & 192 & 0.1 & 0.1 & 2 & fixed & shared & 0.3 & on \\
+ETTh2 & 336 & 0.5 & 1 & 2 & fixed & shared & 1.0 & off \\
+ETTh2 & 720 & 0.999 & 3 & 2 & fixed & shared & 1.0 & on \\
+ETTm1 & 96 & 0.5 & 1 & 2 & fixed & shared & 1.0 & on \\
+ETTm1 & 192 & 0.001 & 0.3 & 2 & fixed & shared & 1.0 & on \\
+ETTm1 & 336 & 0.2 & 1 & 2 & fixed & shared & 1.0 & on \\
+ETTm1 & 720 & 0.0333 & 10 & 2 & 30 & per-channel & 1.0 & off \\
+ETTm2 & 96 & 0.99 & 30 & 2 & 90 & per-channel & 1.0 & on \\
+ETTm2 & 192 & 0.2 & 1 & 2 & 90 & per-channel & 1.0 & on \\
+ETTm2 & 336 & 0.2 & 1 & 2 & fixed & shared & 1.0 & on \\
+ETTm2 & 720 & 0.99 & 30 & 2 & 90 & shared & 1.0 & off \\
+Electricity & 96 & 0.001 & 10 & 2 & fixed & per-channel & 3.0 & on \\
+Electricity & 192 & 0.001 & 0.1 & 2 & fixed & per-channel & 3.0 & on \\
+Electricity & 336 & 0.1 & 3.3333 & 2 & fixed & per-channel & 1.0 & on \\
+Electricity & 720 & 0.5 & 1 & 2 & fixed & per-channel & 1.0 & on \\
+Traffic & 96 & 0.2 & 1 & 2 & fixed & per-channel & 1.0 & on \\
+Traffic & 192 & 0.2 & 1 & 2 & fixed & per-channel & 1.0 & on \\
+Traffic & 336 & 0.5 & 0.1 & 2 & fixed & per-channel & 3.0 & off \\
+Traffic & 720 & 0.5 & 10 & 2 & fixed & per-channel & 1.0 & on \\
+Weather & 96 & 0.5 & 30 & 2 & fixed & per-channel & 1.0 & on \\
+Weather & 192 & 0.2 & 10 & 2 & fixed & per-channel & 1.0 & on \\
+Weather & 336 & 0.5 & 10 & 4 & fixed & per-channel & 1.0 & on \\
+Weather & 720 & 0.2 & 10 & 4 & fixed & per-channel & 1.0 & on \\
+\bottomrule
+\end{tabular}
+\end{table}
 }

@@ -7412,3 +7412,29 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
 - Artifacts: wide_provisional_r3.json, wide_selection_r3.json, results_r3.csv
   (904 runs total across rounds) pulled to research_runs/vldbj_wide_v1/. Round-3
   section appended to docs/PhaseFormer_VLDBJ_LA_wide_search_results.md. Paper untouched.
+
+## 2026-10-12 Paper updated with the round-3 wide-search results
+
+- Main table (tab:main_results): new PhaseFormer-LA row = 3-seed means of the 28 final
+  per-setting selections from wide_selection_r3.json (17/28 MSE settings better than the
+  conference PhaseFormer; 5/7 dataset averages; largest gain Weather 1.6%, largest loss
+  1.5%; MAE 12/28 and 4/7 averages - all verified against the JSON).
+- tab:la_full: LA columns replaced with the final 3-seed mean +- std on all 28 settings;
+  same-protocol PhaseFormer columns unchanged.
+- New appendix section app:la_config (Per-Setting Configuration of PhaseFormer-LA) with
+  tab:la_config listing g0 / lr / w / basis / gates / bb lr / modulation for every
+  setting: 24/28 fixed profiles, ETTm1-720 learned-30 (477), ETTm2-96/192/720
+  learned-90 (657); modulation off at inference on five settings; branch+modulation
+  budget 119-679 parameters, gates 2..2C extra. The ladder/envelope/mechanism analyses
+  still use the frozen shared configuration, disclosed there.
+- Main text keeps only neutral statements and pointers ("configuration ... in
+  Appendix app:la_config", "between 119 and 679 parameters ... plus two fusion gates");
+  per-setting structure (learned decoders, mod-off reads, per-setting hyperparameters)
+  is disclosed only in the appendix, per user instruction.
+- Verification pass against the artifacts: three gate cells in tab:la_config were wrong
+  (ETTm1-720, ETTm2-96, ETTm2-192 said shared; server confirm3 manifests show
+  per-channel) and rounded values 0.17/0.033/3.3 corrected to 0.1667/0.0333/3.3333;
+  appendix modulation range corrected 14-105 -> 14-262 (recorded parameter_breakdown,
+  e.g. Traffic-720 modulation 262, fusion 1724). PDF rebuilt with latexmk -pdf:
+  32 pages, 0 overfull, no undefined references; main-table row and appendix tables
+  verified via PyMuPDF text extraction.
