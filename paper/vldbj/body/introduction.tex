@@ -47,13 +47,13 @@ We make five contributions; the last three are new in this article:
 
 \item We characterize how far \sysname can follow changes across cycles: in principle it can follow level drift, but for fixed weights its forecast level and within-cycle amplitude are confined to two envelopes computable from the weights, and the forecast error has a floor wherever a window needs a level or an amplitude outside them (Section~\ref{sec:theory}).
 
-\item From the structure of what the envelopes exclude, we derive \sysLA: a gated low-rank level branch on cycle means, and a level-driven modulation of the cycle shape that provably leaves every future cycle mean unchanged (Sections~\ref{sec:theory} and~\ref{sec:extension}).
+\item From the structure of what the envelopes exclude, we derive \sysLA: a gated low-rank level branch on cycle means, and a level-driven modulation of the cycle shape that provably leaves every future cycle mean unchanged (Sections~\ref{sec:extension} and~\ref{sec:theory}).
 
-\item We evaluate the theory and the extension on seven benchmarks: we measure level-dependent amplitude in the data, compare what windows need with the envelopes of trained models, ablate each component, and \tbd{report the result of \sysLA} (Section~\ref{sec:ext_exp}).
+\item We evaluate the theory and the extension on seven benchmarks: we measure level-dependent amplitude in the data, compare what windows need with the envelopes of trained models, ablate each component, and \tbd{report the result of \sysLA} (Sections~\ref{sec:mot_changes} and~\ref{sec:exp}).
 \end{enumerate}
 }
 
 \blue{
 \fakeparagraph{Relation to the conference version}
-Sections~\ref{sec:motivations}, \ref{sec:method} and~\ref{sec:exp_main}--\ref{sec:exp_case} follow the conference version~\citep{niu2026phaseformer}, with editorial changes, except for the new discussion of changes across cycles at the end of Section~\ref{sec:motivations}. Sections~\ref{sec:theory}, \ref{sec:extension} and~\ref{sec:ext_exp}, Appendices~\ref{app:proofs}--\ref{app:ext_results}, the extended related work and the discussion of limitations are new. All changes relative to the conference version are marked in blue in this manuscript.
+The new material is integrated into the structure of the conference version~\citep{niu2026phaseformer}. New are: Section~\ref{sec:mot_changes}, on changes across cycles and their presence in the benchmarks; the description of the routing unit and the predictor in Section~\ref{subsec:phase-network}; \sysLA in Section~\ref{sec:extension} and its cost in Section~\ref{sec:complexity}; Section~\ref{sec:theory}; in Section~\ref{sec:exp}, the setup and results of \sysLA, the validation of the theory (Section~\ref{sec:exp_theory}) and the component ablation (Section~\ref{sec:exp_ladder}); Appendices~\ref{app:proofs}--\ref{app:la_config}; the extended related work; and the discussion of limitations. The rest follows the conference version, with editorial changes. All changes relative to the conference version are marked in blue in this manuscript.
 }
