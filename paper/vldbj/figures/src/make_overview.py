@@ -215,7 +215,7 @@ def step_panel(x0, x1, title, fill):
 
 
 def wbox(cx, sub, sup):
-    box(cx - 0.4, 1.3, 0.8, 0.46, [f'$\\b{{W}}_{sub}^{{({sup})}}$'], size=TITLE)
+    box(cx - 0.4, 1.3, 0.8, 0.46, [f'$\\b{{W}}_{sub}^{{\\r{{{sup}}}}}$'], size=TITLE)
 
 
 YT, YB_ = 1.96, 2.11           # token bars
@@ -227,12 +227,12 @@ A0, A1 = 4.86, 8.36
 step_panel(A0, A1, 'Phase-to-Router Aggregation', BLUE_PANEL)
 box(5.0, 0.52, 1.96, 0.58, fill=WHITE)
 token_row(5.98, 0.59, 4, TOKEN_GREEN)
-label(5.0, 0.76, 1.96, 0.3, ['Phase Tokens $\\b{Z}$'])
+label(5.0, 0.76, 1.96, 0.3, ['Phase Tokens $\\b{Z̃}$'])
 kx, vx, qx = 5.52, 6.44, 7.7
 chip(qx, 0.66)
 label(qx - 0.6, 0.82, 1.2, 0.28, ['__Routers__ **R**'])
 for cx, sub in ((kx, 'K'), (vx, 'V'), (qx, 'Q')):
-    wbox(cx, sub, 'a')
+    wbox(cx, sub, 'agg')
 down(kx, 1.1, 1.3)
 down(vx, 1.1, 1.3)
 down(qx, 1.12, 1.3)
@@ -256,10 +256,10 @@ token_row(9.53, 0.59, 3, TOKEN_BLUE)
 label(8.62, 0.76, 1.82, 0.3, ['Contextualized $\\b{R}′$'])
 box(10.56, 0.52, 1.38, 0.58, fill=WHITE)
 token_row(11.25, 0.59, 4, TOKEN_GREEN, w=0.24, gap=0.08)
-label(10.56, 0.76, 1.38, 0.3, ['Phase Tokens $\\b{Z}$'])
+label(10.56, 0.76, 1.38, 0.3, ['Phase Tokens $\\b{Z̃}$'])
 kx, vx, qx = 9.08, 9.98, 11.25
 for cx, sub in ((kx, 'K'), (vx, 'V'), (qx, 'Q')):
-    wbox(cx, sub, 'd')
+    wbox(cx, sub, 'dist')
 for cx in (kx, vx, qx):
     down(cx, 1.1, 1.3)
 for cx, n, col, name in ((kx, 3, TOKEN_BLUE, '$K_r$'), (vx, 3, TOKEN_BLUE, '$V_r$'),
@@ -272,7 +272,7 @@ box(8.62, YM0, 3.32, YM1 - YM0, ['Multi-Head Attention'])
 down(10.28, YM1, YO0)
 box(8.62, YO0, 3.32, YO1 - YO0, fill=WHITE)
 token_row(10.28, YO0 + 0.06, 4, TOKEN_GREEN)
-label(8.62, YO0 + 0.21, 3.32, 0.3, ['Enhanced Phase Tokens $\\b{Z}_{attn}$'])
+label(8.62, YO0 + 0.21, 3.32, 0.3, ['Enhanced Phase Tokens $\\b{Z}_{\\r{attn}}$'])
 
 # Curved hand-over of H from aggregation to distribution.
 p0, p1, p2, p3 = (8.22, 3.1), (8.56, 3.04), (8.3, 0.8), (8.62, 0.7)

@@ -636,7 +636,7 @@ Patch tokenization corresponds to the row space $\mathrm{Row}(X)$ (the right sin
 
 A shared transformation applies $S\in\mathbb{R}^{H\times H}$ on the hourly dimension:
 \[
-X’ = X S^\top = A (S G)^\top + N’.
+\blue{X^{\prime}} = X S^\top = A (S G)^\top + \blue{N^{\prime}}.
 \]
 
 \revised{
@@ -700,15 +700,15 @@ Here $C$ is an absolute constant (often $C\in[2,2\sqrt2]$). The condition $\delt
 \end{lemma}
 
 \begin{theorem}
-Assume $\operatorname{rank}(S G)=r$ and $\delta,\delta’>0$. Then:
+Assume $\operatorname{rank}(S G)=r$ and $\delta,\blue{\delta^{\prime}}>0$. Then:
 
 \begin{enumerate}
 \item For phase tokenization,
 \[
 \begin{aligned}
-d\big(\mathcal U_r(X), \mathcal U_r(X’)\big) &\;\le\;
-C\Big(\tfrac{\|N\|_2}{\delta}+\tfrac{\|N’\|_2}{\delta’}\Big)\\
-&\;\le\; C\frac{\|N\|_2+\|N’\|_2}{\delta_{\min}}.
+d\big(\mathcal U_r(X), \mathcal U_r(\blue{X^{\prime}})\big) &\;\le\;
+C\Big(\tfrac{\|N\|_2}{\delta}+\tfrac{\|\blue{N^{\prime}}\|_2}{\blue{\delta^{\prime}}}\Big)\\
+&\;\le\; C\frac{\|N\|_2+\|\blue{N^{\prime}}\|_2}{\delta_{\min}}.
 \end{aligned}
 \]
 In the noiseless case, Lemma~1 ensures exact invariance, so the distance is $0$.
@@ -716,8 +716,8 @@ In the noiseless case, Lemma~1 ensures exact invariance, so the distance is $0$.
 \item For patch tokenization,
 \[
 \begin{aligned}
-d\big(\mathcal V_r(X), \mathcal V_r(X’)\big) \;\ge\;
-d_0 - C\Big(\tfrac{\|N\|_2}{\delta}+\tfrac{\|N’\|_2}{\delta’}\Big),
+d\big(\mathcal V_r(X), \mathcal V_r(\blue{X^{\prime}})\big) \;\ge\;
+d_0 - C\Big(\tfrac{\|N\|_2}{\delta}+\tfrac{\|\blue{N^{\prime}}\|_2}{\blue{\delta^{\prime}}}\Big),
 \end{aligned}
 \]
 where $d_0 := d(\mathrm{Col}(G),\mathrm{Col}(S G))$. If $S(\mathrm{Col}(G))\neq\mathrm{Col}(G)$, then $d_0>0$.
@@ -752,7 +752,7 @@ In real-world scenarios, slight variations in timing or conditions occur from da
 We model this systematic inconsistency by introducing a small perturbation $\Delta_d$, which captures the mismatch between the ideal linear transformation $S$ and the actual data-generating process.
 Suppose each day’s transform is $S_d=S+\Delta_d$ with $\|\Delta_d\|_2\le\varepsilon$. Then
 \[
-X’ = X S^\top + R, \qquad R_{d,:}=X_{d,:}\Delta_d^\top.
+\blue{X^{\prime}} = X S^\top + R, \qquad R_{d,:}=X_{d,:}\Delta_d^\top.
 \]
 Bounding row by row gives $\|R_{d,:}\|_2 \le \varepsilon\|X_{d,:}\|_2$, hence
 \[

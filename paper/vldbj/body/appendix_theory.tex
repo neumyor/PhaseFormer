@@ -2,7 +2,7 @@
 \section{Proofs for Section~\ref{sec:theory}}
 \label{app:proofs}
 
-Throughout, $\tilde X\in\mathbb R^{K\times P}$ is the folded normalized window with phase tokens $\tilde x_p$ and cycle means $\bar r$, $\one^\top\tilde x=0$, $\|\tilde x\|^2\le L$, $\one^\top\bar r=0$ and $\|\bar r\|^2\le K$. A routing unit, one routing layer of Section~\ref{subsec:phase-network}, maps tokens $h_1,\dots,h_P\in\mathbb R^d$ as
+Throughout, $\tilde X\in\mathbb R^{K\times P}$ is the folded normalized window with phase tokens $\tilde x_p$ and cycle means $\bar r$, $\one^\top\tilde x=0$, $\|\tilde x\|^2\le L$, $\one^\top\bar r=0$ and $\|\bar r\|^2\le K$. One routing layer (Section~\ref{subsec:phase-network}) maps tokens $h_1,\dots,h_P\in\mathbb R^d$ as
 \begin{equation*}
 \begin{gathered}
 u_p=h_p+\pi_p,\quad
@@ -13,7 +13,7 @@ m_p=\operatorname{Attn}_r(u_p;\rho'_{1:M}),
 \begin{equation*}
 o_p=\LN_1(u_p+m_p),\qquad h_p^+=\LN_2\big(o_p+\operatorname{MLP}(o_p)\big),
 \end{equation*}
-with routers $\rho_j$, positional embeddings $\pi_p$, and $\operatorname{Attn}(z;s_{1:n})=W_o\operatorname{concat}_{\text{heads}}\big(\sum_i\alpha_i(W_vs_i+c_v)\big)+c_o$, where the weights $\alpha_i$ are a softmax over $i$ of $\langle W_qz+c_q,W_ks_i+c_k\rangle$ per head. The first unit receives the embedding $h^{(0)}_p=\LN_e(W_e\tilde x_p+c_e)$. In a multi-unit stack, the residual from the previous unit is added before routing, so the last operation of every unit is $\LN_2$.
+with routers $\rho_j$, positional embeddings $\pi_p$, and $\operatorname{Attn}(z;s_{1:n})=W_o\operatorname{concat}_{\text{heads}}\big(\sum_i\alpha_i(W_vs_i+c_v)\big)+c_o$, where the weights $\alpha_i$ are a softmax over $i$ of $\langle W_qz+c_q,W_ks_i+c_k\rangle$ per head. The first layer receives the embedding $h^{(0)}_p=\LN_e(W_e\tilde x_p+b_e)$. In a stack of $N_r$ layers, layer $l+1$ receives $h^{(l)}_p+\LN'_l\big(W'_l(U_lh^{(l)}_p+c_{U,l})+c'_l\big)$, the previous output plus a re-embedding of its projection $U_lh^{(l)}_p+c_{U,l}\in\mathbb R^{\Pin}$, so the last operation of every layer is $\LN_2$.
 
 \subsection{The seasonal random-walk forecaster}
 
@@ -42,7 +42,7 @@ The cycle means $r_k=\tfrac1P\sum_pX_{kp}=\ell_k+\bar e_k$ and the phase deviati
 
 \begin{lemma}[Common-shift pass-through]
 \label{lem:shift}
-If every input token of a routing unit is shifted by the same vector, $u_p\mapsto u_p+v$, then every sender weight is unchanged, every router buffer shifts by $V_sv$ with $V_s=W^s_oW^s_v$, and every receiver output shifts by $V_rV_sv$ plus the effect of the receiver re-weighting the unshifted buffers, with $V_r=W^r_oW^r_v$.
+If every input token of a routing layer is shifted by the same vector, $u_p\mapsto u_p+v$, then every sender weight is unchanged, every router buffer shifts by $V_sv$ with $V_s=W^s_oW^s_v$, and every receiver output shifts by $V_rV_sv$ plus the effect of the receiver re-weighting the unshifted buffers, with $V_r=W^r_oW^r_v$.
 \end{lemma}
 
 \begin{proof}
@@ -59,7 +59,7 @@ $J_d(ce_0+w)=ce_0+w$ and $\|ce_0+w\|^2/d=c^2+\|w\|^2/d$, so the LayerNorm scale 
 \end{proof}
 
 \begin{proof}[of Proposition~\ref{prop:capability}]
-(a) RevIN maps $ax+c\one$ to the same $\tilde x$, and de-normalization restores $a\sigma$ and $a\mu+c$. (b) A cycle-level trajectory $\ell\in\mathbb R^K$ adds $\ell$ to every phase token, hence $W_e\ell$ to every embedding pre-activation; Lemma~\ref{lem:shift} applies to any common shift of the inputs of a unit.
+(a) RevIN maps $ax+c\one$ to the same $\tilde x$, and de-normalization restores $a\sigma$ and $a\mu+c$. (b) A cycle-level trajectory $\ell\in\mathbb R^K$ adds $\ell$ to every phase token, hence $W_e\ell$ to every embedding pre-activation; Lemma~\ref{lem:shift} applies to any common shift of the inputs of a routing layer.
 
 (c) Choose orthogonal $e_0,e_1,e_2\perp\one_d$ with $\|e_i\|^2=d$, which is possible because $d\ge4$. Let $\alpha_1=\tfrac1K\one_K$, $\alpha_2=b-\tfrac1K\one_K$, $f_p=(\alpha_1-\alpha_2)^\top\tilde x_p$ and $g_p=\alpha_2^\top\tilde x_p$. Set $W_e=e_1(\alpha_1-\alpha_2)^\top+e_2\alpha_2^\top$, $c_e=ce_0$, all LayerNorm gains one and biases zero, no positional embeddings, $W^s_q=0$ (uniform sender weights), $W^s_oW^s_v=\tfrac1de_2e_2^\top$, $W^r_oW^r_v=I$, all attention biases zero, a zero MLP output layer, and $\Phi=\tfrac{c_*}{d}\one_{K'}(e_1+e_2)^\top$, $c_\Phi=0$, where $c_*=c(1+O(\epsilon))$ makes the map exact at zero content. The embedding gives $h_p=(ce_0+f_pe_1+g_pe_2)/n_p$ with $n_p=(c^2+f_p^2+g_p^2+\epsilon)^{1/2}$. Uniform sender weights make every router buffer equal to $\bar g_he_2$ with $\bar g_h=\tfrac1P\sum_qg_q/n_q$, and since all buffers are equal, every receiver output equals this buffer for any receiver weights. The predictor reads the $e_1+e_2$ coordinate and returns $\one_{K'}(c_*/M_p)(f_p+g_p+n_p\bar g_h)$, where $M_p$ collects the LayerNorm scales. Since $f_p+g_p=\alpha_1^\top\tilde x_p$ and $\tfrac1P\sum_qg_q=\alpha_2^\top\bar r$, the zero-error limit is $G_b(\tilde X)_p$. For the error, $\|\alpha_1-\alpha_2\|^2=\|b\|^2\le1$, $\|\alpha_2\|^2\le1$ and $\|\tilde x_p\|\le\sqrt L$, so $|f_p|,|g_p|,|\bar g_h|\le\sqrt L$ and every scale argument is at most $5L/c^2$. The three LayerNorm factors and the ratios $n_p/n_q$ each contribute a relative error of at most half of this by Lemma~\ref{lem:ln_linear}, and multiplying by the target magnitude $3\sqrt L$ gives the bound with $\kappa_0\le30$. With Lemma~\ref{lem:bayes}, \sysname approximates the Bayes forecast. \qed
 \end{proof}
@@ -69,14 +69,14 @@ A direct numerical implementation of the construction with $K=30$, $P=24$, $d=8$
 \subsection{Proof of Theorem~\ref{thm:level_envelope} and Its Corollaries}
 
 \fakeparagraph{Full statement} For every parameter value of \sysname and every input window:
-(a) every normalized phase forecast lies in the fixed ellipsoid $\mathcal E_\theta=\{o+A\varsigma:\ \varsigma\perp\one_d,\ \|\varsigma\|<\sqrt d\}$;
+(a) every normalized phase forecast lies in the fixed ellipsoid $\mathcal E_\theta=\{o_\varphi+A\varsigma:\ \varsigma\perp\one_d,\ \|\varsigma\|<\sqrt d\}$;
 (b) the forecast level lies in the envelope, $\lev(\hat{\tilde y})\in\mathcal I_\varphi$, so that $|\mu_{\hat y}-\mu|<(|c_0|+C_1)\sigma$ for the mean $\mu_{\hat y}$ of the forecast in original units;
 (c) every window with level demand $\Lambda$ satisfies~\equref{eq:level_floor};
 (d) the level and the shape of a phase compete for the same coordinates: as the level of phase $p$ approaches the boundary of $\mathcal I_\varphi$, the input-dependent part of its forecast is forced onto the single profile $AJ_dA^\top\one$.
 Parts~(b) and~(c) are Theorem~\ref{thm:level_envelope}.
 
 \begin{proof}
-Every unit ends with $\LN_2$, so $h^{(N_r)}_p=\gamma_2\odot\varsigma_p+\beta_2$ with $\varsigma_p\perp\one_d$ and $\|\varsigma_p\|^2=d\|J_dz\|^2/(\|J_dz\|^2+d\epsilon)<d$. Substituting into~\equref{eq:predictor} gives $\hat{\tilde y}_p=o+A\varsigma_p$, which is (a). For a functional $a\in\mathbb R^{K'}$, $\langle a,A\varsigma_p\rangle=\langle J_dA^\top a,\varsigma_p\rangle$ is bounded by $\sqrt d\|J_dA^\top a\|$. With $a=\one/K'$, the level $\ell_p=\one^\top\hat{\tilde y}_p/K'$ of phase $p$ lies in $\mathcal I_\varphi$, and the forecast level is the average of the $\ell_p$, which gives (b). For (c), the Cauchy--Schwarz inequality gives $\tfrac1H\|e\|^2\ge\lev(e)^2$ for the normalized error $e=\hat{\tilde y}-\tilde y$, and $\lev(e)^2=(\lev(\hat{\tilde y})-\Lambda)^2\ge\operatorname{dist}(\Lambda,\mathcal I_\varphi)^2$; de-normalization multiplies by $\sigma^2$. For (d), let $v=J_dA^\top\one_{K'}/K'$, so that $C_1=\sqrt d\|v\|$, and decompose $\varsigma_p$ along $v$ and its complement: $\hat{\tilde y}_p=o+\tfrac{\ell_p-c_0}{\|v\|^2}Av+A\varsigma_\perp$ with $\|\varsigma_\perp\|^2<d\big(1-((\ell_p-c_0)/C_1)^2\big)$. \qed
+Every routing layer ends with $\LN_2$, so $h^{(N_r)}_p=\gamma_2\odot\varsigma_p+\beta_2$ with $\varsigma_p\perp\one_d$ and $\|\varsigma_p\|^2=d\|J_dz\|^2/(\|J_dz\|^2+d\epsilon)<d$. Substituting into~\equref{eq:predictor} gives $F_p=o_\varphi+A\varsigma_p$, and $\hat{\tilde y}=F$ for \sysname, which is (a). For a functional $a\in\mathbb R^{K'}$, $\langle a,A\varsigma_p\rangle=\langle J_dA^\top a,\varsigma_p\rangle$ is bounded by $\sqrt d\|J_dA^\top a\|$. With $a=\one/K'$, the level $\ell_p=\one^\top F_p/K'$ of phase $p$ lies in $\mathcal I_\varphi$, and the forecast level is the average of the $\ell_p$, which gives (b). For (c), the Cauchy--Schwarz inequality gives $\tfrac1H\|e\|^2\ge\lev(e)^2$ for the normalized error $e=\hat{\tilde y}-\tilde y$, and $\lev(e)^2=(\lev(\hat{\tilde y})-\Lambda)^2\ge\operatorname{dist}(\Lambda,\mathcal I_\varphi)^2$; de-normalization multiplies by $\sigma^2$. For (d), let $v=J_dA^\top\one_{K'}/K'$, so that $C_1=\sqrt d\|v\|$, and decompose $\varsigma_p$ along $v$ and its complement: $F_p=o_\varphi+\tfrac{\ell_p-c_0}{\|v\|^2}Av+A\varsigma_\perp$ with $\|\varsigma_\perp\|^2<d\big(1-((\ell_p-c_0)/C_1)^2\big)$. \qed
 \end{proof}
 
 \begin{proof}[of Corollary~\ref{cor:capability_cost}]
@@ -111,14 +111,14 @@ with innovation $\nu=\tilde y-\mathbb E[\tilde y\mid\tilde x]$ and $|\psi_1|\ge\
 \end{proof}
 
 \fakeparagraph{The cycle-mean branch contains the construction}
-Under model \equref{eq:mult_model} with $\alpha=0$, Lemma~\ref{lem:bayes} gives $\lambda_1=b^\top\bar r=w^\top\tilde x$ with $w=\tfrac1Pb\otimes\one_P$, which is constant within cycles, and so is $u$ in part~(c). Then $u^\top(\tilde x-\tilde x_L\one)=P\,u_{\mathrm c}^\top\bar z$, where $u_{\mathrm c}\in\mathbb R^K$ holds the per-cycle values of $u$ and $\bar z$ the cycle means of the anchored window. The branch~\equref{eq:branch} with first row of $E$ equal to $Pu_{\mathrm c}^\top$, $e=0$, $\Gamma=e_1e_1^\top$ and $c_\Gamma=0$ outputs $\tilde x_L\one_H+\one_Hu^\top(\tilde x-\tilde x_L\one)$, because the first column of $\Psi_H$ is $\one_H$. The construction of part~(c) is therefore realized exactly, for any gates of the fusion~\equref{eq:fusion}.
+Under model \equref{eq:mult_model} with $\alpha=0$, Lemma~\ref{lem:bayes} gives $\lambda_1=b^\top\bar r=w^\top\tilde x$ with $w=\tfrac1Pb\otimes\one_P$, which is constant within cycles, and so is $u$ in part~(c). Then $u^\top(\tilde x-\tilde x_L\one)=P\,u_{\mathrm c}^\top(\bar r-\tilde x_L\one_K)$, where $u_{\mathrm c}\in\mathbb R^K$ holds the per-cycle values of $u$ and $\bar r-\tilde x_L\one_K$ are the cycle means of the anchored window. The branch~\equref{eq:branch} with first row of $E$ equal to $Pu_{\mathrm c}^\top$, $c_E=0$, $\Gamma=e_1e_1^\top$ and $c_\Gamma=0$ outputs $\tilde x_L\one_H+\one_Hu^\top(\tilde x-\tilde x_L\one)$, because the first column of $\Psi_H$ is $\one_H$. The construction of part~(c) is therefore realized exactly, for any gates of the fusion~\equref{eq:fusion}.
 
 \subsection{Proof of Theorem~\ref{thm:amplitude}}
 
 Index the forecast by future cycle $k'$ and phase $p$. The projection $M_c$ replaces every entry by the mean of its future cycle, and $J_c=I-M_c$. Since $\one_H$ is constant within cycles, $J_c\one_H=0$. Since $U=J_c\operatorname{span}\{a_2,a_3\}\subseteq\operatorname{range}(J_c)$, the operator $\Pi=J_c-P_U$ is the orthogonal projection onto $\operatorname{range}(J_c)\cap U^\perp$, and $\Pi J_c=\Pi$.
 
 \begin{proof}
-(a) By part~(a) of the full statement of Theorem~\ref{thm:level_envelope}, the phase forecast of phase $p$ is $F_p=o+A\varsigma_p$ with $\varsigma_p\perp\one_d$ and $\|\varsigma_p\|^2<d$. The common term $o$ cancels in the within-cycle deviations, so, as a $K'\times P$ array, $J_cF=A\,[\varsigma_1-\bar\varsigma,\dots,\varsigma_P-\bar\varsigma]=AJ_d\,\Sigma_c$ with $\bar\varsigma=\tfrac1P\sum_p\varsigma_p$ and centered columns $\Sigma_c$. Then $\|\Sigma_c\|_F^2=\sum_p\|\varsigma_p\|^2-P\|\bar\varsigma\|^2<Pd$, so $\|J_cF\|^2\le\|AJ_d\|_2^2\|\Sigma_c\|_F^2<Pd\|AJ_d\|_2^2$ and $\tfrac1{\sqrt H}\|J_cF\|<\sqrt{d/K'}\,\|AJ_d\|_2=B_\varphi$, which is the claim for \sysname, whose forecast is $\hat{\tilde y}=F$. The branch output~\equref{eq:branch} is $F_{\mathrm b}=\tilde x_L\one_H+\Psi_H(\Gamma t+c_\Gamma)$; its within-cycle part lies in $J_c\operatorname{span}\{\one_H,a_2,a_3\}=U$, so $\Pi F_{\mathrm b}=0$. By~\equref{eq:fusion}, $\Pi\hat{\tilde y}=\Pi J_c\hat{\tilde y}=(1-g_s)\Pi F+g_s\Pi F_{\mathrm b}=(1-g_s)\Pi F$, and $\|\Pi F\|\le\|J_cF\|$. For the error, $\tfrac1H\|\hat y-y\|^2\ge\tfrac{\sigma^2}{H}\|\Pi(\hat{\tilde y}-\tilde y)\|^2$ because $\Pi$ is a projection that annihilates $\mu\one_H$, and the reverse triangle inequality gives $\|\Pi(\hat{\tilde y}-\tilde y)\|/\sqrt H\ge\Omega-(1-g_s)B_\varphi$.
+(a) By part~(a) of the full statement of Theorem~\ref{thm:level_envelope}, the phase forecast of phase $p$ is $F_p=o_\varphi+A\varsigma_p$ with $\varsigma_p\perp\one_d$ and $\|\varsigma_p\|^2<d$. The common term $o_\varphi$ cancels in the within-cycle deviations, so, as a $K'\times P$ array, $J_cF=A\,[\varsigma_1-\bar\varsigma,\dots,\varsigma_P-\bar\varsigma]=AJ_d\,\Sigma_c$ with $\bar\varsigma=\tfrac1P\sum_p\varsigma_p$ and centered columns $\Sigma_c$. Then $\|\Sigma_c\|_F^2=\sum_p\|\varsigma_p\|^2-P\|\bar\varsigma\|^2<Pd$, so $\|J_cF\|^2\le\|AJ_d\|_2^2\|\Sigma_c\|_F^2<Pd\|AJ_d\|_2^2$ and $\tfrac1{\sqrt H}\|J_cF\|<\sqrt{d/K'}\,\|AJ_d\|_2=B_\varphi$, which is the claim for \sysname, whose forecast is $\hat{\tilde y}=F$. The branch output~\equref{eq:branch} is $F_{\mathrm b}=\tilde x_L\one_H+\Psi_H(\Gamma t+c_\Gamma)$; its within-cycle part lies in $J_c\operatorname{span}\{\one_H,a_2,a_3\}=U$, so $\Pi F_{\mathrm b}=0$. By~\equref{eq:fusion}, $\Pi\hat{\tilde y}=\Pi J_c\hat{\tilde y}=(1-g_s)\Pi F+g_s\Pi F_{\mathrm b}=(1-g_s)\Pi F$, and $\|\Pi F\|\le\|J_cF\|$. For the error, $\tfrac1H\|\hat y-y\|^2\ge\tfrac{\sigma^2}{H}\|\Pi(\hat{\tilde y}-\tilde y)\|^2$ because $\Pi$ is a projection that annihilates $\mu\one_H$, and the reverse triangle inequality gives $\|\Pi(\hat{\tilde y}-\tilde y)\|/\sqrt H\ge\Omega-(1-g_s)B_\varphi$.
 
 (b) In raw units the window is $X_{kp}=\ell_k+(1+\alpha\ell_k)s_p$ with $\sum_ps_p=0$, so the cycle means are $\ell_k$ and the window mean is $\mu=\tfrac1K\sum_k\ell_k$. The window's average within-cycle shape in normalized units is $\tfrac1K\sum_k(X_{kp}-\ell_k)/\sigma=(1+\alpha\mu)s_p/\sigma$; denote it, tiled over the horizon, by $\bar s$. With a persistent future level $\ell_f$, the future is $y_{k'p}=\ell_f+(1+\alpha\ell_f)s_p$, so $\Lambda=(\ell_f-\mu)/\sigma$ and
 \begin{equation*}
@@ -134,7 +134,7 @@ with $\alpha_w=\alpha\sigma/(1+\alpha\mu)$, assuming $1+\alpha\mu>0$. Applying $
 \begin{proof}
 (a) $\sum_p(h_p-\bar h)\odot q=\big(\sum_ph_p-P\bar h\big)\odot q=0$. The predictor is affine and shared, so $\tfrac1P\sum_p(\Phi h'_p+c_\Phi)=\tfrac1P\sum_p(\Phi h_p+c_\Phi)$ for every future cycle. The fusion~\equref{eq:fusion} uses the phase forecast only through $M_cF$ in its level part, so the level of the fused forecast is unchanged as well. The level envelope applies because the modulated forecast has the same level as the unmodulated forecast computed from the same latents, which lies in $\mathcal I_\varphi$, and Theorem~\ref{thm:complement} depends on the phase path only through its level and its shape error.
 
-(b) With $h_p=\gamma_2\odot\varsigma_p+\beta_2$, the modulated deviations are $(h_p-\bar h)\odot(\one+q)=\operatorname{diag}(\gamma_2\odot(\one+q))J_d(\varsigma_p-\bar\varsigma)$, and the argument of Theorem~\ref{thm:amplitude}(a) gives the envelope $B_\varphi(q)=\sqrt{d/K'}\,\|\Phi\operatorname{diag}(\gamma_2\odot(\one+q))J_d\|_2$; for $q=q_1\one_d$ the diagonal factor is the scalar $1+q_1$, so $B_\varphi(q)=|1+q_1|B_\varphi$. If $q=\alpha_w\one_d\,\xi^\top t=\alpha_w\hat\Lambda\one_d$, then the modulated phase forecast $F^{q}$ satisfies $J_cF^{q}=(1+\alpha_w\hat\Lambda)J_cF$ and, with $\Pi F=\Pi\bar s/(1-g_s)$, $\Pi\hat{\tilde y}=(1-g_s)\Pi F^{q}=(1+\alpha_w\hat\Lambda)\Pi\bar s$. The modulation~\equref{eq:la_modulation} realizes this $q$ with $k=1$, $V_1=\xi^\top$ and $V_2=\alpha_w\one_d$. \qed
+(b) With $h_p=\gamma_2\odot\varsigma_p+\beta_2$, the modulated deviations are $(h_p-\bar h)\odot(\one+q)=\operatorname{diag}(\gamma_2\odot(\one+q))J_d(\varsigma_p-\bar\varsigma)$, and the argument of Theorem~\ref{thm:amplitude}(a) gives the envelope $B_\varphi(q)=\sqrt{d/K'}\,\|\Phi\operatorname{diag}(\gamma_2\odot(\one+q))J_d\|_2$; for $q=q_1\one_d$ the diagonal factor is the scalar $1+q_1$, so $B_\varphi(q)=|1+q_1|B_\varphi$. If $q=\alpha_w\one_d\,\xi^\top t=\alpha_w\hat\Lambda\one_d$, then the modulated phase forecast $F^{q}$ satisfies $J_cF^{q}=(1+\alpha_w\hat\Lambda)J_cF$ and, with $\Pi F=\Pi\bar s/(1-g_s)$, $\Pi\hat{\tilde y}=(1-g_s)\Pi F^{q}=(1+\alpha_w\hat\Lambda)\Pi\bar s$. The modulation~\equref{eq:la_modulation} realizes this $q$ with $w=k_q=1$ (and hence with any $k_q\ge1$), $V_1=\xi^\top$ and $V_2=\alpha_w\one_d$. \qed
 \end{proof}
 
 The modulation thus removes the constant amplitude envelope along exactly the required direction without touching the level.
@@ -147,7 +147,7 @@ Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28
 \begin{table*}[t]
 \blue{
 \centering
-\caption{Per-horizon test results of \sysLA (mean $\pm$ standard deviation over three seeds) and the \sysname backbone retrained under the identical protocol, on all 28 settings. The conference numbers of \sysname are in Table~\ref{tab:main_results}; the ladder of Section~\ref{sec:exp_ladder} uses this same-protocol column.}
+\caption{Per-horizon test results of \sysLA (mean $\pm$ standard deviation over three seeds) and of the \sysname backbone, on all 28 settings. The \sysLA column uses the per-setting-tuned main-table configuration of Table~\ref{tab:main_results}, listed in Appendix~\ref{app:la_config}; the \sysname column is the backbone retrained under the protocol configuration of Section~\ref{sec:ext_setup}, without the per-setting search. The conference numbers of \sysname are in Table~\ref{tab:main_results}; the ladder of Section~\ref{sec:exp_ladder} uses this same-protocol \sysname column.}
 \label{tab:la_full}
 \footnotesize
 \setlength{\tabcolsep}{6pt}
@@ -245,4 +245,6 @@ Weather & 720 & 0.2 & 10 & 4 & fixed & per-channel & 1.0 & on \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\fakeparagraph{Configuration index} The per-setting configuration listed in \tabref{tab:la_config} is used by Table~\ref{tab:main_results} and by the \sysLA column of Table~\ref{tab:la_full}. The protocol configuration of Section~\ref{sec:ext_setup} is used by the envelope, mechanism and ladder analyses of Sections~\ref{sec:exp_theory} and~\ref{sec:exp_ladder} (Tables~\ref{tab:envelope} and~\ref{tab:ladder}); the \sysname column of Table~\ref{tab:la_full} is the backbone retrained under it. The split is deliberate: controlled attribution of each effect to a single component requires one configuration held fixed across all settings.
 }
