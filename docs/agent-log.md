@@ -7394,3 +7394,21 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
 - Launched 11:20 as ~/niuyiming/wide_r3_chain.sh (nohup): r3 (310 jobs) -> select ->
   confirm -> collect, log ~/niuyiming/vldbj_wide_r3.log. Same scratch dir
   research_runs/vldbj_wide_v1; 24 workers.
+
+## 2026-10-12 Round 3 complete: 5/7 datasets beat Golden
+
+- r3 310/310 runs done; 7 more settings switch after 3-seed confirm (margins +0.64%..+2.52%),
+  20 new confirm runs plus 8 reused identical round-2 confirm results. Two
+  write_immutable collisions (confirm job spec and manifest vs round-2 files, and stale
+  half-written specs from a retry) were fixed by moving round-3 confirm to confirm3/
+  (commits b4b9a61, 32f9a4d); no existing results touched.
+- Dataset averages vs Golden (MSE): ETTh1 +0.61%, ETTh2 +1.57%, ETTm2 +0.89% (flipped
+  from -0.03% via the S3 head), Electricity +0.98%, Weather +1.62% -> 5/7 below Golden.
+  ETTm1 -1.36% and Traffic -1.46% remain behind, consistent with the experiment-1
+  trajectory diagnosis (backbone-level gap).
+- Four settings confirmed with non-S2 heads: ETTm1-720 (S1), ETTm2-96/192/720 (S3).
+  Parameter cost: level branch 477 (S1) / 657 (S3) vs 105 (S2) -- the paper's
+  parameter claim needs rewriting if adopted; user to decide.
+- Artifacts: wide_provisional_r3.json, wide_selection_r3.json, results_r3.csv
+  (904 runs total across rounds) pulled to research_runs/vldbj_wide_v1/. Round-3
+  section appended to docs/PhaseFormer_VLDBJ_LA_wide_search_results.md. Paper untouched.
