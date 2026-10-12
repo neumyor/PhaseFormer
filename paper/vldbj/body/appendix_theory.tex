@@ -37,7 +37,7 @@ The cycle means $r_k=\tfrac1P\sum_pX_{kp}=\ell_k+\bar e_k$ and the phase deviati
 
 \fakeparagraph{Full statement} Consider \sysname with one routing layer, latent width $d\ge4$, and any number of routers and heads.
 (a) It is exactly equivariant to the level and scale of the window: $F(ax+c\one)=aF(x)+c\one$ for $a>0$.
-(b) A cycle-level trajectory enters every phase token as a common shift, and router attention transmits a common shift exactly: sender weights are unchanged and every router buffer shifts by the same vector.
+(b) A cycle-level trajectory enters every phase token as a common shift, and router attention passes a common shift of its inputs on: sender weights are unchanged and every router buffer shifts by the same vector (Lemma~\ref{lem:shift}). The LayerNorms preserve a common shift only approximately, which part~(c) controls with a large offset.
 (c) For every weight vector $b$ with $\one^\top b=1$ and $\|b\|\le1$, there are parameters $\theta_c$, $c^2\ge5L$, whose forecast approximates $G_b$ uniformly over all normalized windows, with error at most $\kappa_0L^{3/2}/c^2$ for an absolute constant $\kappa_0$. By Lemma~\ref{lem:bayes}, \sysname can therefore approximate the Bayes forecast of model~\equref{eq:mult_model} with $\alpha=0$ to any accuracy.
 
 \begin{lemma}[Common-shift pass-through]
@@ -46,7 +46,7 @@ If every input token of a routing unit is shifted by the same vector, $u_p\mapst
 \end{lemma}
 
 \begin{proof}
-The sender score of router $j$ and token $p$ changes by $\langle W_q\rho_j+c_q,W_kv\rangle$ in every head, which does not depend on $p$ and cancels in the softmax over $p$. The buffer is a convex combination of $W_v(u_p+v)+c_v$ followed by $W_o$, which gives the buffer shift. The receiver weights may change, but they are convex and every value is shifted by the same vector, so the shift passes through unchanged. \qed
+The sender score of router $j$ and token $p$ changes by $\langle W_q\rho_j+c_q,W_kv\rangle$ in every head, which does not depend on $p$ and cancels in the softmax over $p$. The buffer is a convex combination of $W_v(u_p+v)+c_v$ followed by $W_o$, which gives the buffer shift. The receiver weights may change, but they are convex and every buffer is shifted by the same vector, so the output shifts by $V_rV_sv$, while the re-weighting acts only on the unshifted buffers. \qed
 \end{proof}
 
 \begin{lemma}[Large-offset linearization of LayerNorm]
@@ -59,7 +59,7 @@ $J_d(ce_0+w)=ce_0+w$ and $\|ce_0+w\|^2/d=c^2+\|w\|^2/d$, so the LayerNorm scale 
 \end{proof}
 
 \begin{proof}[of Proposition~\ref{prop:capability}]
-(a) RevIN maps $ax+c\one$ to the same $\tilde x$, and de-normalization restores $a\sigma$ and $a\mu+c$. (b) A cycle-level trajectory $\ell\in\mathbb R^K$ adds $\ell$ to every phase token, hence $W_e\ell$ to every embedding pre-activation; Lemma~\ref{lem:shift} applies.
+(a) RevIN maps $ax+c\one$ to the same $\tilde x$, and de-normalization restores $a\sigma$ and $a\mu+c$. (b) A cycle-level trajectory $\ell\in\mathbb R^K$ adds $\ell$ to every phase token, hence $W_e\ell$ to every embedding pre-activation; Lemma~\ref{lem:shift} applies to any common shift of the inputs of a unit.
 
 (c) Choose orthogonal $e_0,e_1,e_2\perp\one_d$ with $\|e_i\|^2=d$, which is possible because $d\ge4$. Let $\alpha_1=\tfrac1K\one_K$, $\alpha_2=b-\tfrac1K\one_K$, $f_p=(\alpha_1-\alpha_2)^\top\tilde x_p$ and $g_p=\alpha_2^\top\tilde x_p$. Set $W_e=e_1(\alpha_1-\alpha_2)^\top+e_2\alpha_2^\top$, $c_e=ce_0$, all LayerNorm gains one and biases zero, no positional embeddings, $W^s_q=0$ (uniform sender weights), $W^s_oW^s_v=\tfrac1de_2e_2^\top$, $W^r_oW^r_v=I$, all attention biases zero, a zero MLP output layer, and $\Phi=\tfrac{c_*}{d}\one_{K'}(e_1+e_2)^\top$, $c_\Phi=0$, where $c_*=c(1+O(\epsilon))$ makes the map exact at zero content. The embedding gives $h_p=(ce_0+f_pe_1+g_pe_2)/n_p$ with $n_p=(c^2+f_p^2+g_p^2+\epsilon)^{1/2}$. Uniform sender weights make every router buffer equal to $\bar g_he_2$ with $\bar g_h=\tfrac1P\sum_qg_q/n_q$, and since all buffers are equal, every receiver output equals this buffer for any receiver weights. The predictor reads the $e_1+e_2$ coordinate and returns $\one_{K'}(c_*/M_p)(f_p+g_p+n_p\bar g_h)$, where $M_p$ collects the LayerNorm scales. Since $f_p+g_p=\alpha_1^\top\tilde x_p$ and $\tfrac1P\sum_qg_q=\alpha_2^\top\bar r$, the zero-error limit is $G_b(\tilde X)_p$. For the error, $\|\alpha_1-\alpha_2\|^2=\|b\|^2\le1$, $\|\alpha_2\|^2\le1$ and $\|\tilde x_p\|\le\sqrt L$, so $|f_p|,|g_p|,|\bar g_h|\le\sqrt L$ and every scale argument is at most $5L/c^2$. The three LayerNorm factors and the ratios $n_p/n_q$ each contribute a relative error of at most half of this by Lemma~\ref{lem:ln_linear}, and multiplying by the target magnitude $3\sqrt L$ gives the bound with $\kappa_0\le30$. With Lemma~\ref{lem:bayes}, \sysname approximates the Bayes forecast. \qed
 \end{proof}
@@ -70,7 +70,7 @@ A direct numerical implementation of the construction with $K=30$, $P=24$, $d=8$
 
 \fakeparagraph{Full statement} For every parameter value of \sysname and every input window:
 (a) every normalized phase forecast lies in the fixed ellipsoid $\mathcal E_\theta=\{o+A\varsigma:\ \varsigma\perp\one_d,\ \|\varsigma\|<\sqrt d\}$;
-(b) the forecast level lies in the envelope, $\lev(\hat{\tilde y})\in\mathcal I_\varphi$, so that $|m_{\hat y}-\mu|<(|c_0|+C_1)\sigma$ in original units;
+(b) the forecast level lies in the envelope, $\lev(\hat{\tilde y})\in\mathcal I_\varphi$, so that $|\mu_{\hat y}-\mu|<(|c_0|+C_1)\sigma$ for the mean $\mu_{\hat y}$ of the forecast in original units;
 (c) every window with level demand $\Lambda$ satisfies~\equref{eq:level_floor};
 (d) the level and the shape of a phase compete for the same coordinates: as the level of phase $p$ approaches the boundary of $\mathcal I_\varphi$, the input-dependent part of its forecast is forced onto the single profile $AJ_dA^\top\one$.
 Parts~(b) and~(c) are Theorem~\ref{thm:level_envelope}.
@@ -85,7 +85,7 @@ $\lev(G_b)=b^\top\bar r$ is maximized over $\one^\top\bar r=0$, $\|\bar r\|^2\le
 
 \begin{corollary}[Steps and trends]
 \label{cor:steps}
-A persistent step that occurred $fL$ samples before the forecast origin has level demand tending to $\sqrt{(1-f)/f}$ as the step grows relative to the background, and a linear trend that continues through the horizon has $\Lambda=\sqrt3(L+H)/\sqrt{L^2-1}$. Any step more recent than $L/(1+(|c_0|+C_1)^2)$ samples therefore demands a level outside $\mathcal I_\varphi$, and at $L=720$ a continued trend demands $\Lambda=1.96$ to $3.46$ for $H=96$ to $720$.
+A persistent step that occurred $fL$ samples before the forecast origin has level demand tending to $\sqrt{(1-f)/f}$ as the step grows relative to the background, and a pure linear trend that continues through the horizon has $\Lambda=\sqrt3(L+H)/\sqrt{L^2-1}$. Any step more recent than $L/(1+(|c_0|+C_1)^2)$ samples therefore demands a level outside $\mathcal I_\varphi$, and at $L=720$ a continued trend demands $\Lambda=1.96$ to $3.46$ for $H=96$ to $720$.
 \end{corollary}
 
 \begin{proof}
@@ -107,11 +107,11 @@ with innovation $\nu=\tilde y-\mathbb E[\tilde y\mid\tilde x]$ and $|\psi_1|\ge\
 
 (b) For $\zeta\sim\mathcal N(0,\Sigma)$, Stein's lemma gives $\beta_1=\mathbb E[\nabla_\zeta\psi_1]$. If $\lambda_1=w^\top\zeta+\text{const}$ and the phase path clips its level to $\mathcal I_\varphi$, $\psi_1$ is the soft-threshold excess of $\lambda_1$ over $\mathcal I_\varphi$, whose gradient is $\mathbb 1\{\lambda_1\notin\mathcal I_\varphi\}w$ almost everywhere, so $\beta_1=P(\lambda_1\notin\mathcal I_\varphi)\,w$.
 
-(c) Let $\lambda_1=w^\top\tilde x$ with $\one^\top w=1$, let the backbone produce $F'=S/(1-g)$, whose level is zero, and set $W=\one_Hu^\top$ with $u=(w-(1-g)L^{-1}\one_L)/g$. Since $\one^\top u=1$, the anchor cancels, $g(\tilde x_L+u^\top(\tilde x-\tilde x_L\one))=gu^\top\tilde x$, and $\one^\top\tilde x=0$ gives $gu^\top\tilde x=w^\top\tilde x$. Hence $(1-g)F'+gF_{\mathrm b}=S+\one_H\lambda_1=\mathbb E[\tilde y\mid\tilde x]$. For any other split of the level between the two paths, the branch must supply $[\mathbb E[\tilde y\mid\tilde x]-(1-g)F']/g-\tilde x_L\one$, which lies in $\operatorname{span}\{a_j\}$ when $F'$ carries the shape, so the rank is at most $m$. \qed
+(c) Let $\lambda_1=w^\top\tilde x$; since $\one^\top\tilde x=0$, we may take $\one^\top w=1$. Set $W=\one_Hu^\top$ with $u=(w-(1-g_\ell)L^{-1}\one_L)/g_\ell$, so that $\one^\top u=1$. The anchor cancels, $F_{\mathrm b}=\tilde x_L\one_H+\one_H(u^\top\tilde x-\tilde x_L)=\one_Hu^\top\tilde x$, and $\one^\top\tilde x=0$ gives $g_\ell u^\top\tilde x=w^\top\tilde x$. The branch output is constant over the horizon, so $M_cF_{\mathrm b}=F_{\mathrm b}$ and $J_cF_{\mathrm b}=0$. By~\equref{eq:fusion} with $F'=M_cS/(1-g_\ell)+J_cS/(1-g_s)$, $M_c\hat{\tilde y}=M_cS+\one_H\lambda_1$ and $J_c\hat{\tilde y}=J_cS$, so $\hat{\tilde y}=S+\one_H\lambda_1=\mathbb E[\tilde y\mid\tilde x]$ for any gates. With equal gates $g$ and any other split of the level between the two paths, the branch must supply $[\mathbb E[\tilde y\mid\tilde x]-(1-g)F']/g-\tilde x_L\one$, which lies in $\operatorname{span}\{a_j\}$ when $F'$ carries the shape, so the rank is at most $m$. \qed
 \end{proof}
 
 \fakeparagraph{The cycle-mean branch contains the construction}
-Under model \equref{eq:mult_model} with $\alpha=0$, Lemma~\ref{lem:bayes} gives $\lambda_1=b^\top\bar r=w^\top\tilde x$ with $w=\tfrac1Pb\otimes\one_P$, which is constant within cycles, and so is $u$ in part~(c). Then $u^\top(\tilde x-\tilde x_L\one)=P\,u_{\mathrm c}^\top\bar z$, where $u_{\mathrm c}\in\mathbb R^K$ holds the per-cycle values of $u$ and $\bar z$ the cycle means of the anchored window. The branch~\equref{eq:branch} with first row of $E$ equal to $Pu_{\mathrm c}^\top$, $e=0$, $\Gamma=e_1e_1^\top$ and $c_\Gamma=0$ outputs $\tilde x_L\one_H+\one_Hu^\top(\tilde x-\tilde x_L\one)$, because the first column of $\Psi_H$ is $\one_H$. With equal gates $g_\ell=g_s=g$ the fusion~\equref{eq:fusion} is the scalar fusion of part~(c), so the construction is realized exactly.
+Under model \equref{eq:mult_model} with $\alpha=0$, Lemma~\ref{lem:bayes} gives $\lambda_1=b^\top\bar r=w^\top\tilde x$ with $w=\tfrac1Pb\otimes\one_P$, which is constant within cycles, and so is $u$ in part~(c). Then $u^\top(\tilde x-\tilde x_L\one)=P\,u_{\mathrm c}^\top\bar z$, where $u_{\mathrm c}\in\mathbb R^K$ holds the per-cycle values of $u$ and $\bar z$ the cycle means of the anchored window. The branch~\equref{eq:branch} with first row of $E$ equal to $Pu_{\mathrm c}^\top$, $e=0$, $\Gamma=e_1e_1^\top$ and $c_\Gamma=0$ outputs $\tilde x_L\one_H+\one_Hu^\top(\tilde x-\tilde x_L\one)$, because the first column of $\Psi_H$ is $\one_H$. The construction of part~(c) is therefore realized exactly, for any gates of the fusion~\equref{eq:fusion}.
 
 \subsection{Proof of Theorem~\ref{thm:amplitude}}
 
@@ -129,14 +129,12 @@ J_c\tilde y=\frac{(1+\alpha\ell_f)\,s}{\sigma}
 with $\alpha_w=\alpha\sigma/(1+\alpha\mu)$, assuming $1+\alpha\mu>0$. Applying $\Pi=\Pi J_c$ gives $\Omega=|1+\alpha_w\Lambda|\,\|\Pi\bar s\|/\sqrt H$. \qed
 \end{proof}
 
-The level branch of \sysL is affine in the window, and its within-cycle output is confined to $U$, so in the fused forecast only the phase path can supply the level-dependent amplitude $(1+\alpha_w\Lambda)\Pi\bar s$ required by part~(b). By part~(a), the phase path supplies it only up to the constant envelope $(1-g_s)B_\varphi$, whereas the demand grows linearly in $|\Lambda|$.
-
 \subsection{Proof of Proposition~\ref{prop:modulation}}
 
 \begin{proof}
 (a) $\sum_p(h_p-\bar h)\odot q=\big(\sum_ph_p-P\bar h\big)\odot q=0$. The predictor is affine and shared, so $\tfrac1P\sum_p(\Phi h'_p+c_\Phi)=\tfrac1P\sum_p(\Phi h_p+c_\Phi)$ for every future cycle. The fusion~\equref{eq:fusion} uses the phase forecast only through $M_cF$ in its level part, so the level of the fused forecast is unchanged as well. The level envelope applies because the modulated forecast has the same level as the unmodulated forecast computed from the same latents, which lies in $\mathcal I_\varphi$, and Theorem~\ref{thm:complement} depends on the phase path only through its level and its shape error.
 
-(b) With $h_p=\gamma_2\odot\varsigma_p+\beta_2$, the modulated deviations are $(h_p-\bar h)\odot(\one+q)=\operatorname{diag}(\gamma_2\odot(\one+q))J_d(\varsigma_p-\bar\varsigma)$, and the argument of Theorem~\ref{thm:amplitude}(a) gives the envelope $B_\varphi(q)=\sqrt{d/K'}\,\|\Phi\operatorname{diag}(\gamma_2\odot(\one+q))J_d\|_2$; for $q=q_1\one_d$ the diagonal factor is the scalar $1+q_1$, so $B_\varphi(q)=|1+q_1|B_\varphi$. If $q=\alpha_w\one_d\,\xi^\top t=\alpha_w\hat\Lambda\one_d$, then $J_cF'=(1+\alpha_w\hat\Lambda)J_cF$ and, with $\Pi F=\Pi\bar s/(1-g_s)$, $\Pi\hat{\tilde y}=(1-g_s)\Pi F'=(1+\alpha_w\hat\Lambda)\Pi\bar s$. The modulation~\equref{eq:la_modulation} realizes this $q$ with $k=1$, $V_1=\xi^\top$ and $V_2=\alpha_w\one_d$. \qed
+(b) With $h_p=\gamma_2\odot\varsigma_p+\beta_2$, the modulated deviations are $(h_p-\bar h)\odot(\one+q)=\operatorname{diag}(\gamma_2\odot(\one+q))J_d(\varsigma_p-\bar\varsigma)$, and the argument of Theorem~\ref{thm:amplitude}(a) gives the envelope $B_\varphi(q)=\sqrt{d/K'}\,\|\Phi\operatorname{diag}(\gamma_2\odot(\one+q))J_d\|_2$; for $q=q_1\one_d$ the diagonal factor is the scalar $1+q_1$, so $B_\varphi(q)=|1+q_1|B_\varphi$. If $q=\alpha_w\one_d\,\xi^\top t=\alpha_w\hat\Lambda\one_d$, then the modulated phase forecast $F^{q}$ satisfies $J_cF^{q}=(1+\alpha_w\hat\Lambda)J_cF$ and, with $\Pi F=\Pi\bar s/(1-g_s)$, $\Pi\hat{\tilde y}=(1-g_s)\Pi F^{q}=(1+\alpha_w\hat\Lambda)\Pi\bar s$. The modulation~\equref{eq:la_modulation} realizes this $q$ with $k=1$, $V_1=\xi^\top$ and $V_2=\alpha_w\one_d$. \qed
 \end{proof}
 
 The modulation thus removes the constant amplitude envelope along exactly the required direction without touching the level.
