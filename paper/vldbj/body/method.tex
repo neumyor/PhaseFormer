@@ -2,7 +2,7 @@
 \section{Methodology}
 \label{sec:method}
 
-Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear} and omit the channel dimension throughout the remainder of this paper. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following sections, we describe the data preprocessing procedure, present the proposed network architecture\blue{ and its level--amplitude extension}, and finally analyze the computational complexity of the method.
+Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear} and omit the channel dimension throughout the remainder of this paper. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following sections, we describe the data preprocessing procedure, present the proposed network architecture \blue{and its level--amplitude extension}, and finally analyze the computational complexity of the method \blue{and discuss the periodicity assumption}.
 
 %In the following section, we introduce phase tokenization, which reorganize time steps according to their positions within recurring cycles. Building on this concept, we propose \sysname, a lightweight forecasting model comprising an embedding layer, a cross-phase routing layer, and a predictor. This design is tailored to capture temporal dynamics at the phase level and to efficiently extrapolate future dynamics. The subsequent sections provide a detailed exposition of the architecture and methodological innovations underlying \sysname.
 
@@ -17,7 +17,7 @@ Conversely, phase de-tokenization reconstructs the predicted phase--period matri
 \revised{Let $L_{\text{phase}}$ denotes the period length, which can be estimated using frequency analysis as we further illustrated in \secref{sec:phase_length}, and remain fixed during the process}. 
 
 To ensure that the input sequence length is a multiple of $L_{\text{phase}}$, we circularly pad the sequence to length $P_{\text{in}}* L_{\text{phase}}$, where $P_{\text{in}} = \left\lceil \frac{L_{\text{in}}}{L_{\text{phase}}} \right\rceil.$ 
-As illustrated in \figref{fig:overview}, the padded sequence $\mathbf{X}$ is then reshaped into a phase--period matrix $\mathbf{X}_{\text{phase}} \in \mathbb{R}^{L_{\text{phase}} \times P_{\text{in}}}$, where each entry $\mathbf{X}_{\text{phase}}[\ell, p]$ corresponds to the observation at the $\ell^\text{th}$ phase of the $p^\text{th}$ period. 
+As illustrated in \figref{fig:overview}, the padded sequence $\mathbf{X}$ is then reshaped into a phase--period matrix $\mathbf{X}_{\text{phase}} \in \mathbb{R}^{L_{\text{phase}} \times P_{\text{in}}}$, where each entry \blue{$\mathbf{X}_{\text{phase}}[p, k]$ corresponds to the observation at the $p^\text{th}$ phase of the $k^\text{th}$ period}. 
 In the de-tokenization process, the predicted phase–period matrix is mapped back to the temporal domain by reversing the transformation, thereby reconstructing the final one-dimensional forecast sequence.
 
 % --------------------------------------------------------------------
@@ -60,7 +60,7 @@ As illustrated in \figref{fig:overview}, \sysname first applies an embedding lay
 \subsubsection{Embedding Layer}
 \label{subsubsec:phase-embedding}
 The embedding layer projects the phase tokens $\mathbf{X}_{\text{phase}}$ into a low-dimensional representation space, allowing the informative components to be extracted from raw observations that are often contaminated by perturbations. 
-Formally, for each phase index $\ell \in \{1,\dots,L_{\text{phase}}\}$, the corresponding phase token $\mathbf{X}_{\text{phase}}[\ell, :]$ is mapped into a $d$-dimensional representation through a linear function $f_{\theta}$, parameterized by $\theta \in \mathbb{R}^{P_{\text{in}}\times d}$:
+Formally, for each phase index \blue{$p \in \{1,\dots,L_{\text{phase}}\}$, the corresponding phase token $\mathbf{X}_{\text{phase}}[p, :]$} is mapped into a $d$-dimensional representation through a linear function $f_{\theta}$, parameterized by $\theta \in \mathbb{R}^{P_{\text{in}}\times d}$:
 \begin{equation}
 \mathbf{Z} 
 = f_{\theta}\!\left(\mathbf{X}_{\text{phase}}\right)\in \mathbb{R}^{L_{\text{phase}}\times d}
@@ -121,20 +121,19 @@ The aggregated information in the routers is subsequently redistributed to the p
 \end{equation}
 This mechanism restores phase-level resolution while simultaneously enforcing coherence across phases through the contextualized routers. 
 Ultimately, each phase representation attends to all others through a two-stage routing pathway.
-\blue{The two steps are wrapped in residual connections, two LayerNorms and an MLP: writing $\mathbf z_p$ and $\mathbf m_p$ for the $p$-th rows of $\tilde{\mathbf Z}$ and $\mathbf Z_{\text{attn}}$, a routing layer outputs $\mathbf o_p=\LN_1(\mathbf z_p+\mathbf m_p)$ and $\mathbf h_p=\LN_2\big(\mathbf o_p+\mathrm{MLP}(\mathbf o_p)\big)$~\citep{ba2016layernorm}. Every phase latent that reaches the predictor has therefore passed through the final LayerNorm $\LN_2$; Appendix~\ref{app:proofs} states the full unit.}
+\blue{The two steps are wrapped in residual connections, two LayerNorms and an MLP: writing $\mathbf z_p$ and $\mathbf m_p$ for the $p$-th rows of $\tilde{\mathbf Z}$ and $\mathbf Z_{\text{attn}}$, a routing layer outputs $\mathbf o_p=\LN_1(\mathbf z_p+\mathbf m_p)$ and $\mathbf h_p=\LN_2\big(\mathbf o_p+\mathrm{MLP}(\mathbf o_p)\big)$. Each LayerNorm~\citep{ba2016layernorm} maps $u\in\mathbb R^d$ to $\LN_i(u)=\gamma_i\odot\varsigma+\beta_i$ with $\varsigma=J_du/(\|J_du\|^2/d+\epsilon)^{1/2}$ and $J_d=I_d-\tfrac1d\one\one^\top$, so every phase latent that reaches the predictor has passed through the final LayerNorm $\LN_2$ of the last layer. Appendix~\ref{app:proofs} states the full unit.}
 
 
 % ---------------- predictor ----------------
 \subsubsection{Predictor}
 \label{subsubsec:phase-predictor}
 
-The predictor produces multi-step forecasts of length $P_{\text{out}}$ for all phases simultaneously, based on their refined representations. Taking as input the refined phase representations $\mathbf{Z}_{\text{attn}} \in \mathbb{R}^{L_{\text{phase}}\times d}$ from the final cross-phase routing layer, the predictor is realized as a linear mapping $g_{\phi}$, parameterized by $\phi \in \mathbb{R}^{d \times P_{\text{out}}}$:  
+The predictor produces multi-step forecasts of length $P_{\text{out}}$ for all phases simultaneously, based on their refined representations. Taking as input the \blue{final phase latents $\mathbf H=[\mathbf h_1;\dots;\mathbf h_{L_{\text{phase}}}]\in\mathbb{R}^{L_{\text{phase}}\times d}$ of the last} cross-phase routing layer, the predictor is realized as \blue{an affine} mapping $g_{\phi}$, parameterized by \blue{a weight $\Phi\in\mathbb{R}^{P_{\text{out}}\times d}$ and a bias $c_\Phi\in\mathbb{R}^{P_{\text{out}}}$}:  
 \begin{equation}
-\mathbf{Y}_{\text{phase}} = g_{\phi}(\mathbf{Z}_{\text{attn}}) 
+\mathbf{Y}_{\text{phase}} = g_{\phi}(\blue{\mathbf{H}}) 
 \in \mathbb{R}^{L_{\text{phase}}\times P_{\text{out}}}.
 \label{eq:phase-predictor}
 \end{equation}
-\blue{The mapping is affine, $g_\phi(\mathbf h)=\Phi\mathbf h+c_\Phi$ with $\phi=(\Phi,c_\Phi)$, and is applied to the final latent of every phase.}
 All phases share the same predictor parameters, which enforces consistency across phases and reduces the number of trainable parameters. This not only improves efficiency but also regularizes learning, thereby enhancing generalization. Finally, the predicted phase--period matrix $\mathbf{Y}_{\text{phase}}$ is passed through de-tokenization and de-normalization to produce the final forecast $\mathbf{Y}$.
 
 
@@ -143,7 +142,7 @@ All phases share the same predictor parameters, which enforces consistency acros
 \subsection{\sysLA: Supplying the Missing Level and Amplitude}
 \label{sec:extension}
 
-The backbone of Sections~\ref{subsec:phase-embedding} and~\ref{subsec:phase-network} is built for a common shape change, not for the changes across cycles of Section~\ref{sec:mot_changes}. Section~\ref{sec:theory} shows that a trained \sysname can in principle follow level drift, but that its forecast level and its within-cycle amplitude are confined to two envelopes fixed by its weights; that the level it cannot reach is a combination of a few fixed profiles over the forecast horizon, predictable from the cycle means of the window; and that the amplitude it cannot reach is the cycle shape scaled with the level. \sysLA (Level--Amplitude) supplies these two parts with two components and keeps the backbone unchanged: phase tokenization, embedding, cross-phase routing and the shared predictor are exactly those of \sysname. Figure~\ref{fig:la_overview} shows where the components attach.
+The backbone of Sections~\ref{subsec:phase-embedding} and~\ref{subsec:phase-network} does not address the changes across cycles of Section~\ref{sec:mot_changes}. \sysLA (Level--Amplitude) adds two components for them, a level branch with a gated fusion for level drift and a centered modulation for level-dependent amplitude, and keeps the backbone unchanged: phase tokenization, embedding, cross-phase routing and the shared predictor are exactly those of \sysname. Section~\ref{sec:theory} shows how far the backbone alone can follow the two changes and why the components take this form. Fig.~\ref{fig:la_overview} shows where they attach.
 
 \begin{figure*}[t]
 \centering
@@ -153,7 +152,7 @@ The backbone of Sections~\ref{subsec:phase-embedding} and~\ref{subsec:phase-netw
 \end{figure*}
 
 \fakeparagraph{Notation}
-For one channel we write $P=\Lp$ for the period, $K=\Pin$ for the number of input cycles, $K'=\Pout$ for the number of output cycles, $L=KP$ and $H=K'P$. In the main configuration $L=720$, $P=24$ and $K=30$, and every horizon $H\in\{96,192,336,720\}$ is a whole number of cycles. Let $x\in\mathbb R^L$ be the input window, $\mu$ and $\sigma$ its RevIN mean and standard deviation, and $\tilde x=(x-\mu\one)/\sigma$, so that $\one^\top\tilde x=0$ and $\|\tilde x\|^2\le L$. The folded window $\tilde X\in\mathbb R^{K\times P}$ is the transpose of the phase--period matrix of Section~\ref{subsec:phase-embedding}, with one row per cycle as in Theorem~\ref{thm:stability}; it has phase tokens $\tilde x_p=\tilde Xe_p\in\mathbb R^K$ and cycle means $\bar r=\tfrac1P\tilde X\one_P$, with $\one^\top\bar r=0$. The shared predictor maps the final latent $h_p\in\mathbb R^d$ of phase $p$ to its $K'$ future values,
+For one channel we write $P=\Lp$ for the period, $K=\Pin$ for the number of input cycles, $K'=\Pout$ for the number of output cycles, $L=KP$ and $H=K'P$. In the main configuration $L=720$, $P=24$ and $K=30$, and every horizon $H\in\{96,192,336,720\}$ is a whole number of cycles. Let $x\in\mathbb R^L$ be the input window, $\mu$ and $\sigma$ its RevIN mean and standard deviation, and $\tilde x=(x-\mu\one)/\sigma$, so that $\one^\top\tilde x=0$ and $\|\tilde x\|^2\le L$. The folded window $\tilde X\in\mathbb R^{K\times P}$ is the transpose of the phase--period matrix of Section~\ref{subsec:phase-embedding}, with one row per cycle as in Section~\ref{sec:mot_changes}; it is the matrix $X$ of Theorem~\ref{thm:stability} with $D=K$ and $H=P$, and from here on $H$ denotes the forecast length. It has phase tokens $\tilde x_p=\tilde Xe_p\in\mathbb R^K$ and cycle means $\bar r=\tfrac1P\tilde X\one_P$, with $\one^\top\bar r=0$. The shared predictor of Section~\ref{subsubsec:phase-predictor} maps the final latent $h_p\in\mathbb R^d$ of phase $p$ to its $K'$ future values,
 \begin{equation}
 \hat{\tilde y}_p=\Phi h_p+c_\Phi\in\mathbb R^{K'},
 \qquad
@@ -168,22 +167,22 @@ where $\hat{\tilde y}\in\mathbb R^H$ unfolds the phases cycle by cycle; we write
 Level drift shifts every phase token by the same amount, so the level of a window is carried by its cycle means, and the level of the future changes slowly over the horizon. The branch therefore reads only the cycle means and writes onto a few smooth profiles. Let $\tilde x_L$ be the last value of the normalized window. The branch pools the anchored window $\tilde x-\tilde x_L\one_L$ to its $K$ cycle means $\bar z\in\mathbb R^K$ and maps them to a rank-3 state,
 \begin{equation}
 t=E\bar z+e\in\mathbb R^3,\qquad
-R=\tilde x_L\one_H+\Psi_H\,(Nt+n),
+F_{\mathrm b}=\tilde x_L\one_H+\Psi_H\,(\Gamma t+c_\Gamma),
 \label{eq:branch}
 \end{equation}
-where $\Psi_H\in\mathbb R^{H\times3}$ holds the displacement, tilt and curvature profiles, the discrete orthogonal polynomials of degree $0,1,2$ on the forecast grid, normalized to unit root mean square, so that its first column is $\one_H$ and the other two are horizon-centered. $\Psi_H$ is fixed; only $E\in\mathbb R^{3\times K}$, $e$, $N\in\mathbb R^{3\times3}$ and $n$ are learned. The anchor gives the branch an exactly shift-equivariant level channel that, unlike the phase path's, is not confined to an envelope. $N$ and $n$ are initialized to zero, so the branch initially forecasts the last value. The branch has $3K+3+9+3=105$ parameters at $K=30$, \emph{independently of the horizon}.
+where $\Psi_H=[\one_H,a_2,a_3]\in\mathbb R^{H\times3}$ holds the displacement, tilt and curvature profiles, the discrete orthogonal polynomials of degree $0,1,2$ on the forecast grid, normalized to unit root mean square, so that its first column is $\one_H$ and the other two are horizon-centered. $\Psi_H$ is fixed; only $E\in\mathbb R^{3\times K}$, $e$, $\Gamma\in\mathbb R^{3\times3}$ and $c_\Gamma$ are learned. The anchor makes the branch exactly equivariant to a shift of the window. $\Gamma$ and $c_\Gamma$ are initialized to zero, so the branch initially forecasts the last value.
 
 \fakeparagraph{Gated fusion}
 \label{sec:ext_fusion}
-Let $R$ be the branch forecast in normalized units. For every future cycle, the level of the fused forecast and its within-cycle shape are mixed with separate gates,
+Let $F_{\mathrm b}$ be the branch forecast in normalized units. For every future cycle, the level of the fused forecast and its within-cycle shape are mixed with separate gates,
 \begin{equation}
 \begin{gathered}
-M_c\hat{\tilde y}=(1-g_\ell)M_cF+g_\ell M_cR,\\
-J_c\hat{\tilde y}=(1-g_s)J_cF+g_sJ_cR,
+M_c\hat{\tilde y}=(1-g_\ell)M_cF+g_\ell M_cF_{\mathrm b},\\
+J_c\hat{\tilde y}=(1-g_s)J_cF+g_sJ_cF_{\mathrm b},
 \end{gathered}
 \label{eq:fusion}
 \end{equation}
-with $g_\ell=\operatorname{sigmoid}(\omega)$ and $g_s=\operatorname{sigmoid}(\omega+\delta)$. Both gates start at $0.2$ ($\delta=0$). Separate gates let the branch take over the level while the phase path keeps the within-cycle shape, without forcing the branch's smooth profiles into it. The gates are static: they depend on neither the input nor the time step. They are learned either per channel ($2C$ parameters) or shared across channels (two parameters), and the choice is made per dataset on the validation split (Section~\ref{sec:ext_setup}). The fusion needs whole forecast cycles, which all benchmark horizons provide. We call \sysL the model with the branch and the fusion but without the modulation below.
+with $g_\ell=\operatorname{sigmoid}(\omega)$ and $g_s=\operatorname{sigmoid}(\omega+\delta)$. Both gates start at $0.2$ ($\delta=0$). The gates are static: they depend on neither the input nor the time step. They are learned either per channel or shared across the $C$ channels, and the choice is made per dataset on the validation split (Section~\ref{sec:ext_setup}). The fusion needs whole forecast cycles, which all benchmark horizons provide. We call \sysL the model with the branch and the fusion but without the modulation below.
 
 \subsubsection{Centered Amplitude Modulation}
 \label{sec:ext_modulation}
@@ -193,42 +192,43 @@ Level-dependent amplitude scales the cycle shape with the level. Let $h_1,\dots,
 h'_p=h_p+(h_p-\bar h)\odot q,\qquad \bar h=\tfrac1P\textstyle\sum_ph_p,\qquad q=V_2V_1\,t,
 \label{eq:la_modulation}
 \end{equation}
-with $V_1\in\mathbb R^{k\times3}$, $V_2\in\mathbb R^{d\times k}$, $k=\min(w,3,d)$, no biases, and $V_2$ initialized to zero; the width $w$ is $2$ by default, and the grid search of Section~\ref{sec:ext_setup} also tries $w=4$, which the branch rank caps at $k=3$. Because the deviations $h_p-\bar h$ sum to zero over the phases and the predictor~\equref{eq:predictor} is shared and affine, the modulation leaves every future cycle mean of the phase forecast unchanged, $\tfrac1P\sum_p\Phi h'_p=\tfrac1P\sum_p\Phi h_p$: it changes the amplitude of the forecast, never its level. The modulation has $k(3+d)$ parameters.
+with $V_1\in\mathbb R^{k\times3}$, $V_2\in\mathbb R^{d\times k}$, $k=\min(w,3,d)$, no biases, and $V_2$ initialized to zero; the width $w$ is $2$ by default, and the grid search of Section~\ref{sec:ext_setup} also tries $w=4$, which the branch rank caps at $k=3$. Because the deviations $h_p-\bar h$ sum to zero over the phases and the predictor~\equref{eq:predictor} is shared and affine, the modulation leaves every future cycle mean of the phase forecast unchanged (Theorem~\ref{thm:amplitude}(c)): it changes the amplitude of the forecast, never its level.
 
 \fakeparagraph{Exact nesting}
 \label{sec:ext_properties}
 With $V_2=0$ the modulation is the identity, so \sysLA reduces exactly to \sysL; with $g_\ell=g_s=0$ it reduces exactly to \sysname. Because $V_2$ is initialized to zero, \sysLA and \sysL have identical forecasts at initialization when they are built from the same random state, which our experiments use to pair them.
 }
 
-\subsection{Complexity of \sysname\blue{ and \sysLA}}
+\subsection{Complexity of \sysname{} \blue{and \sysLA}}
 \label{sec:complexity}
 
 For each variable, the overall complexity of \sysname\ can be summarized as follows:  
 the phase embedding layer requires $O(L_{\text{phase}} P_{\text{in}} d)$ time and $O(L_{\text{phase}} d)$ memory.  
-The cross-phase routing layer, which dominates computation, incurs $O((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d)$ time and $O(H M L_{\text{phase}} + (L_{\text{phase}}+M)d)$ memory.  
+The cross-phase routing layer, which dominates computation, incurs $O((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d)$ time and $O(\blue{d_h} M L_{\text{phase}} + (L_{\text{phase}}+M)d)$ memory.  
 Finally, the predictor costs $O(L_{\text{phase}} d P_{\text{out}})$ time and $O(L_{\text{phase}} P_{\text{out}})$ memory.  
-Aggregating across \(N\) blocks, the end-to-end time complexity is:
+Aggregating across \(\blue{N_r}\) \blue{routing layers}, the end-to-end time complexity is:
 \[
-O\Big(N\big((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d\big)
+O\Big(\blue{N_r}\big((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d\big)
 + L_{\text{phase}}d(P_{\text{in}}+P_{\text{out}})\Big).
 \]
 Substituting $P_{\text{in}}=\lceil L_{\text{in}}/L_{\text{phase}}\rceil$ and 
 $P_{\text{out}}=\lceil L_{\text{out}}/L_{\text{phase}}\rceil$ into the above expression gives:
 \[
-O\Big(N\big((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d\big)
+O\Big(\blue{N_r}\big((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d\big)
 + d(L_{\text{in}}+L_{\text{out}})\Big).
 \]
-As investigated in \secref{sec:motivations}, the phase token space exhibits a inherently low-dimensional structure, which allows $M$ and $d$ to be chosen as fixed and small numbers. 
+As investigated in \secref{sec:mot_stability}, the phase token space exhibits a inherently low-dimensional structure, which allows $M$ and $d$ to be chosen as fixed and small numbers. 
 Thus, the computational cost grows in a linear manner with both the input length $L_{\text{in}}$ and the output horizon $L_{\text{out}}$.
 
 \blue{
 \fakeparagraph{Cost of \sysLA}
 \label{sec:la_cost}
-The level branch adds $3K+3+9+3=105$ parameters with the fixed profiles of \equref{eq:branch}, the modulation $k(3+d)$, and the gates two per channel, or two in total when shared; none of these depends on the forecast horizon. The branch costs $O(L)$ per channel for pooling and $O(K+H)$ for the readout, and the modulation $O(Pd)$, against the $O\big(N((P+M)d^2+MPd)+d(L+H)\big)$ of \sysname, so the overall complexity remains linear in the input and output lengths and in the number of sensors.
+The level branch adds $3K+3+9+3=105$ parameters at $K=30$ with the fixed profiles of \equref{eq:branch}, the modulation $k(3+d)$, and the gates $2C$ for $C$ channels, or two in total when shared; none of these depends on the forecast horizon. The branch costs $O(L)$ per channel for pooling and $O(K+H)$ for the readout, and the modulation $O(Pd)$, against the $O\big(N_r((P+M)d^2+MPd)+d(L+H)\big)$ of \sysname, so the overall complexity remains linear in the input and output lengths and in the number of sensors.
 }
 
 \revised{
-\subsection{Discussion\blue{ of the Periodicity Assumption}}
+\subsection{Discussion \blue{of the Periodicity Assumption}}
+\label{sec:discussion}
 
 \fakeparagraph{Discussion on Periodic Alignment}
 Although PhaseFormer is built around a periodic alignment mechanism, it does not completely fail on weakly periodic or partially non-periodic time series. 

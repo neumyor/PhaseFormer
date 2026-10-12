@@ -1,5 +1,6 @@
 \section{Motivations}
 \label{sec:motivations}
+\blue{Section~\ref{sec:mot_stability} shows that phase tokens are stable and low-dimensional, and Section~\ref{sec:mot_changes} identifies the changes across cycles that this stability does not cover.}
 %Real-world sequences are inherently non-stationary, often exhibiting distributional shifts in their cyclical patterns. Recent forecasting models increasingly adopt patch-based representations, where sequences are segmented into cycles—either known or estimated—and each cycle is treated as a fundamental modeling unit. This inductive bias supports a variety of architectures, from patch-based Transformers that align tokens with seasonal XXXXXs (e.g., PatchTST) to models that explicitly encode seasonal components (e.g., TimeBase). However, these approaches implicitly assume distributional invariance across patches, effectively treating seasonal segments as temporally stable. In practice, non-stationarity induces cycle drifts through time-varying amplitudes or subtle frequency modulations. Such shifts distort the intra-patch distribution and undermine robustness when patches are the sole modeling unit.
 
 %To address this limitation, we adopt a complementary phase-centric perspective, treating intra-patch positions as tokens, a strategy we term \emph{phase tokenization}.Intuitively, the impact of cycle drift on phase tokens is confined to only a subset of phases. Even within this subset, the effect manifests primarily as a uniform amplitude shift, which is comparatively easier to accommodate. Moreover, phase-based averaging across patches tends to be more robust to local perturbations. These observations motivate the exploration of phase tokenization.
@@ -55,7 +56,7 @@ To measure the effective dimensionality of the token space, we perform principal
 We further establish, using perturbation theory, that phase tokenization remains stable under perturbations of cycle patterns, whereas patch tokenization exhibits structural drift. 
 To formalize this result, we represent a univariate periodic sequence as a two-dimensional matrix via delay embedding and analyze the structural properties of this embedded matrix.
 }
-Due to space limitations, only the core theorem is presented here, while the detailed proof is provided in \secref{sub:theoretical}.
+Due to space limitations, only the core theorem is presented here, while the detailed proof is provided in \blue{\appref{sub:theoretical}}.
 \begin{theorem}[Phase Tokenization Stability]
 \label{thm:stability}
 Let $X = A G^\top + N \in \mathbb{R}^{D\times H}$ with 
@@ -64,7 +65,7 @@ and consider the transformed data
 \begin{equation}
 X' = X S^\top + R,
 \end{equation}
-where $\|N'\|_2 \le \|S\|_2\|N\|_2$, 
+where \blue{$M=AG^\top$ is the signal and $N'=NS^\top$ the transformed noise, so that} $\|N'\|_2 \le \|S\|_2\|N\|_2$, 
 $\|R\|_2 \le \varepsilon(\|M\|_F+\|N\|_F)$, 
 and let $\delta_{\min} > 0$ denote the minimal spectral separation. 
 Then there exists a universal constant $C>0$ such that:
@@ -100,7 +101,7 @@ Hence, \emph{phase tokenization is more robust and consistent under cycle patter
 \label{sec:mot_changes}
 
 \fakeparagraph{What Theorem~\ref{thm:stability} does not cover}
-In the folded matrix $X\in\mathbb R^{D\times H}$ of the theorem, the rows index cycles and the columns index phases, so phase tokens correspond to $\operatorname{Col}(X)$. The transformation $X'=XS^\top$ acts \emph{along the phase axis}: every cycle is reshaped in the same way. Two other kinds of change are ubiquitous in sensor streams and act \emph{along the cycle axis}:
+In the folded matrix $X\in\mathbb R^{D\times H}$ of the theorem, the rows index cycles and the columns index phases, so phase tokens correspond to $\operatorname{Col}(X)$. The transformation $X'=XS^\top$ acts \emph{along the phase axis}: every cycle is reshaped in the same way, which we call a \emph{common shape change}. Two other kinds of change are ubiquitous in sensor streams and act \emph{along the cycle axis}, that is, across cycles:
 \begin{equation}
 \underbrace{X+\ell\,\mathbf 1^\top}_{\text{level drift}},
 \qquad
@@ -114,7 +115,7 @@ X_{kp}=\ell_k+(1+\alpha\ell_k)\,s_p+e_{kp},
 \ell_k=\ell_{k-1}+\eta_k,
 \label{eq:mult_model}
 \end{equation}
-with a zero-mean seasonal profile $s$, a random-walk level $\ell$ and Gaussian noise; with $\alpha=0$ it is the additive seasonal random-walk model.
+where $X_{kp}$ is the value at phase $p$ of cycle $k$, with a zero-mean seasonal profile $s$, a random-walk level $\ell$ and Gaussian noise; with $\alpha=0$ it is the additive seasonal random-walk model.
 
 \fakeparagraph{Insight 3: The within-cycle amplitude moves with the cycle level}
 In a multiplicative series~\equref{eq:mult_model}, the within-cycle amplitude of a window moves with its cycle level. We measure this directly on the data, independently of any model. For every channel and every window of length 720 (stride 24, 30 cycles of 24 samples), we compute the Pearson correlation between the 30 cycle means and the 30 within-cycle root-mean-square deviations. An additive series gives a correlation near zero, up to estimation noise, and a multiplicative series a positive or negative one. As anchors, we compute the same statistic on a synthetic additive series and on a synthetic multiplicative series with $\alpha=0.25$, both following \equref{eq:mult_model} with a random-walk level.
@@ -148,8 +149,7 @@ Multiplicative anchor & 0.75 & 0.74 & 0.79 & 0.99 & 1.00 \\
 }
 \end{table}
 
-\label{sec:exp_coupling}
 Table~\ref{tab:coupling} shows that every benchmark lies well above the additive floor of 0.12, on every split. The coupling is weakest in ETTm2 and ETTh2, at roughly twice the floor, and strongest in the two sensor networks: Electricity, with 321 meters, reaches 0.60, and Traffic, with 862 road sensors, reaches 0.87, above the multiplicative anchor, with 98\% of its windows above 0.3. On a road network, a busier week raises the cycle level and deepens the rush-hour peaks together; on a power grid, demand scales with consumption in the same way. The level-dependent amplitude of \equref{eq:cycle_axis_changes} is therefore not a corner case: it is strongest on the large spatio-temporal datasets, and it is stable across the train, validation and test periods. It is compatible with Insight~1, which compares the distribution of phase tokens across weeks: the coupling describes how the amplitude moves with the level within a window, and it recurs from week to week.
 
-Both changes across cycles are thus present in the benchmarks. How far can a forecaster with fixed weights follow them, and what must be added where it cannot? Section~\ref{sec:extension} adds two components to \sysname, and Section~\ref{sec:theory} shows why they take this form.
+Level-dependent amplitude is thus pronounced in every benchmark; how often a window also needs a level beyond the reach of a trained model is measured in Section~\ref{sec:exp_envelopes}. Section~\ref{sec:extension} adds two components to \sysname for the two changes, and Section~\ref{sec:theory} shows how far the backbone alone can follow them and why the components take this form.
 }
