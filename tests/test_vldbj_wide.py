@@ -64,14 +64,14 @@ class GridTests(unittest.TestCase):
         lrs = {c['extension_lr_mult'] for c in grid}
         widths = {c['communication_width'] for c in grid}
         bbs = {c['bb'] for c in grid}
-        self.assertEqual(gates, {wide.snap(0.1 / 3, 1e-4, 0.99), 0.1, 0.3, 0.99})
-        self.assertEqual(lrs, {10.0, 30.0, 90.0, 100.0})
+        self.assertEqual(gates, {wide.snap(0.1 / 3, 1e-4, wide.GATE_MAX), 0.1, 0.3, wide.GATE_MAX})
+        self.assertEqual(lrs, {10.0, 30.0, 90.0, 1000.0})
         self.assertEqual(widths, {2, 3, 4})
         self.assertEqual(bbs, {0.3, 1.0, 3.0})
         # Clamping at the boundaries of the registered ranges.
         low = wide.r2_variants({'gate_init': 1e-4, 'extension_lr_mult': 0.1,
                                 'communication_width': 4, 'backbone_lr_mult': 1.0})
-        self.assertTrue(all(c['gate_init'] >= 1e-4 and c['extension_lr_mult'] <= 100.0 for c in low))
+        self.assertTrue(all(c['gate_init'] >= 1e-4 and c['extension_lr_mult'] <= wide.LR_MAX for c in low))
 
     def test_r2_cap_shrinks_with_elapsed_time(self):
         import datetime as dt
@@ -85,14 +85,17 @@ class PipelineTests(unittest.TestCase):
     """select/confirm/collect on fabricated runs (no training)."""
 
     @staticmethod
-    def write_run(scratch, stage, dataset, horizon, seed, variant, bb, mse, off, smoke=False):
-        out = wide.name(dataset, horizon, seed, variant, bb)
+    def write_run(scratch, stage, dataset, horizon, seed, variant, bb, mse, off, smoke=False,
+                  head='S2', shared=None):
+        shared = wide.protocol.FINAL_SHARED_GATE[dataset] if shared is None else shared
+        out = wide.name(dataset, horizon, seed, variant, bb, head, shared)
         run = scratch / stage / 'runs' / out
         run.mkdir(parents=True, exist_ok=True)
         (run / 'config.json').write_text(json.dumps(
             {'vldbj_m1': {'gate_init': variant['gate_init'],
                           'extension_lr_mult': variant['extension_lr_mult'],
-                          'communication_width': variant['communication_width']}}))
+                          'communication_width': variant['communication_width'],
+                          'head': head, 'shared_gate': shared}}))
         (run / 'result.json').write_text(json.dumps(
             {'name': out, 'smoke': smoke, 'dataset': dataset, 'horizon': horizon, 'seed': seed,
              'backbone_lr_mult': bb, 'epochs': 20,
@@ -101,42 +104,45 @@ class PipelineTests(unittest.TestCase):
         return run
 
     @staticmethod
-    def fake_current():
-        out = {}
+    def fake_baseline(scratch):
+        """Fabricated exp3 final selection: every setting kept at 0.30 / 0.33."""
+        settings = {}
         for dataset, horizon in SETTINGS:
-            native = 0.30
-            out[(dataset, horizon)] = {
-                'per_seed': {str(s): {'native': native, 'native_mae': 0.33,
-                                      'off': native * 1.05, 'off_mae': 0.35}
-                             for s in (2021, 2022, 2023)},
-                'native_mean': native, 'mae_mean': 0.33,
-                'config': 'current (paper final configuration)'}
-        return out
+            settings[f'{dataset}_H{horizon}'] = {
+                'switched': False,
+                'final_config': 'exp3-final: current (paper final configuration)',
+                'final_read': 'native',
+                'final_seed_mse': {str(s): 0.30 for s in (2021, 2022, 2023)},
+                'final_seed_mae': {str(s): 0.33 for s in (2021, 2022, 2023)},
+                'provisional': None}
+        (scratch / 'wide_selection.json').write_text(json.dumps({'settings': settings}))
 
     def test_select_confirm_collect(self):
         with tempfile.TemporaryDirectory() as tmp:
             scratch = Path(tmp)
+            self.fake_baseline(scratch)
             win = {'gate_init': 0.001, 'extension_lr_mult': 10.0, 'communication_width': 2}
             near = {'gate_init': 0.5, 'extension_lr_mult': 1.0, 'communication_width': 2}
-            # ETTh1-96: the near-off gate wins clearly; ETTm2-96: a wide run wins only
-            # via its modulation-off read; Traffic-96: no wide run beats current.
+            # ETTh1-96: a wide run wins clearly; ETTm2-96: a wide run wins only via
+            # its modulation-off read; Traffic-96: no wide run beats the baseline.
             self.write_run(scratch, 'r1', 'ETTh1', 96, 2021, win, 1.0, 0.2850, 0.29)
             self.write_run(scratch, 'r1', 'ETTh1', 96, 2021, near, 1.0, 0.2999, 0.31)
             self.write_run(scratch, 'r1', 'ETTm2', 96, 2021, near, 1.0, 0.31, 0.2950)
             self.write_run(scratch, 'r1', 'Traffic', 96, 2021, near, 3.0, 0.2995, 0.32)
-            with mock.patch.object(wide, 'current_records', return_value=self.fake_current()), \
-                    mock.patch.object(wide, 'commit', return_value='c'), \
+            with mock.patch.object(wide, 'commit', return_value='c'), \
                     mock.patch.object(wide, 'provenance', return_value={}):
                 provisional = wide.select(scratch, False)['settings']
                 self.assertTrue(provisional['ETTh1_H96']['needs_confirm'])
                 self.assertEqual(provisional['ETTh1_H96']['best']['variant'], win)
+                self.assertEqual(provisional['ETTh1_H96']['best']['stage'], 'r1')
                 # The off-read candidate of ETTm2-96 wins over its native read.
                 self.assertEqual(provisional['ETTm2_H96']['best']['read'], 'off')
                 self.assertTrue(provisional['ETTm2_H96']['needs_confirm'])
-                # Below the 0.2% switch margin: keep the current configuration.
+                # Below the 0.2% switch margin: keep the baseline.
                 self.assertFalse(provisional['Traffic_H96']['needs_confirm'])
-                self.assertEqual(provisional['Weather_H96']['best']['stage'], 'current')
-                self.assertEqual(provisional['Weather_H96']['candidate_count'], 2)
+                # Settings without wide runs fall back to the baseline candidate.
+                self.assertEqual(provisional['Weather_H96']['best']['stage'], 'baseline')
+                self.assertEqual(provisional['Weather_H96']['candidate_count'], 1)
                 sources = {(d, h, s): {'config': {}} for d, h in SETTINGS for s in (2021, 2022, 2023)}
                 jobs = wide.confirm_jobs(scratch, sources, False)
                 names = sorted(Path(json.loads(p.read_text())['output']).name for p in jobs)
@@ -146,34 +152,69 @@ class PipelineTests(unittest.TestCase):
                 for seed in (2022, 2023):
                     self.write_run(scratch, 'confirm', 'ETTh1', 96, seed, win, 1.0, 0.286, 0.29)
                 selection = wide.collect(scratch, False)['settings']
+                self.assertTrue((scratch / 'wide_selection_r3.json').exists())
                 self.assertTrue(selection['ETTh1_H96']['switched'])
                 self.assertEqual(selection['ETTh1_H96']['final_read'], 'native')
                 self.assertAlmostEqual(selection['ETTh1_H96']['confirm']['mean'],
                                        (0.2850 + 0.286 + 0.286) / 3)
-                self.assertEqual(selection['ETTm2_H96']['confirm'], 'incomplete (deadline); current configuration kept')
+                self.assertEqual(selection['ETTm2_H96']['confirm'], 'incomplete (deadline); baseline kept')
                 self.assertFalse(selection['ETTm2_H96']['switched'])
                 self.assertFalse(selection['Traffic_H96']['switched'])
-                self.assertFalse(selection['Weather_H96']['switched'])
+                self.assertEqual(selection['Weather_H96']['final_config'],
+                               'exp3-final: current (paper final configuration)')
 
-    def test_current_modoff_switch_needs_no_retraining(self):
+    def test_r3_grid_boundary_probes_and_head_variants(self):
         with tempfile.TemporaryDirectory() as tmp:
             scratch = Path(tmp)
-            current = self.fake_current()
-            for (dataset, horizon), record in current.items():
-                record['per_seed'] = {s: {'native': 0.30, 'native_mae': 0.33,
-                                           'off': 0.29, 'off_mae': 0.32}
-                                      for s in ('2021', '2022', '2023')}
-            with mock.patch.object(wide, 'current_records', return_value=current), \
-                    mock.patch.object(wide, 'commit', return_value='c'), \
+            settings = json.loads((scratch / 'wide_selection.json').read_text()) if False else None
+            self.fake_baseline(scratch)
+            # One setting's baseline sits on the searched bounds: lr 100 and bb 3.
+            record = json.loads((scratch / 'wide_selection.json').read_text())
+            record['settings']['ETTh1_H96'].update(
+                switched=True,
+                final_config='wide: lr100',
+                provisional={'variant': {'gate_init': 0.1, 'extension_lr_mult': 100.0,
+                                         'communication_width': 2},
+                             'backbone_lr_mult': 3.0})
+            (scratch / 'wide_selection.json').write_text(json.dumps(record))
+            sources = {(d, h, s): {'config': {}} for d, h in SETTINGS for s in (2021, 2022, 2023)}
+            with mock.patch.object(wide, 'commit', return_value='c'), \
                     mock.patch.object(wide, 'provenance', return_value={}):
-                provisional = wide.select(scratch, False)['settings']
-                best = provisional['ETTh1_H96']['best']
-                self.assertEqual((best['stage'], best['read']), ('current', 'off'))
-                self.assertFalse(provisional['ETTh1_H96']['needs_confirm'])
-                selection = wide.collect(scratch, False)['settings']['ETTh1_H96']
-                self.assertTrue(selection['switched'])
-                self.assertEqual(selection['final_read'], 'off')
-                self.assertAlmostEqual(selection['final_seed_mse']['2022'], 0.29)
+                jobs = [json.loads(p.read_text()) for p in wide.stage_jobs(scratch, 'r3', sources, False)]
+            etth1 = [j for j in jobs if j['dataset'] == 'ETTh1' and j['horizon'] == 96]
+            names = {Path(j['output']).name for j in etth1}
+            self.assertIn('ETTh1_H96_S2021__m1__g0.1_lr1000_w2_bb3', names)
+            self.assertIn('ETTh1_H96_S2021__m1__g0.1_lr100_w2_bb10', names)
+            self.assertTrue(all(j['head'] == 'S2' for j in etth1))
+            heads = [j for j in jobs if j['dataset'] in wide.R3_DATASETS and j['head'] != 'S2']
+            self.assertEqual(len(heads), 12 * 4)
+            self.assertEqual(len({Path(j['output']).name for j in heads}), 12 * 4)
+            # Default names stay backward compatible with the round-2 layout.
+            self.assertEqual(wide.name('ETTh1', 96, 2021, None, 1.0),
+                             'ETTh1_H96_S2021__m1__g0.2_lr1_w2_bb1')
+            self.assertNotEqual(wide.name('ETTh1', 96, 2021, None, 1.0, 'S1', True),
+                                wide.name('ETTh1', 96, 2021, None, 1.0))
+
+    def test_baseline_records_parse_the_previous_round(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch = Path(tmp)
+            self.fake_baseline(scratch)
+            record = json.loads((scratch / 'wide_selection.json').read_text())
+            record['settings']['ETTh1_H96'].update(
+                switched=True, final_read='off',
+                provisional={'variant': {'gate_init': 0.5, 'extension_lr_mult': 1.0,
+                                         'communication_width': 3},
+                             'backbone_lr_mult': 0.3})
+            (scratch / 'wide_selection.json').write_text(json.dumps(record))
+            baseline = wide.baseline_records(scratch)
+            self.assertEqual(len(baseline), 28)
+            entry = baseline[('ETTh1', 96)]
+            self.assertEqual((entry['read'], entry['backbone_lr_mult']), ('off', 0.3))
+            self.assertEqual(entry['variant']['communication_width'], 3)
+            # Kept settings fall back to the pilot-tuned configuration.
+            kept = baseline[('ETTm1', 96)]  # FINAL_VARIANTS has a tune-grid entry here
+            self.assertEqual(kept['variant'], wide.TUNE_GRID[wide.protocol.FINAL_VARIANTS[('ETTm1', 96)]])
+            self.assertEqual(kept['read'], 'native')
 
 
 if __name__ == '__main__':

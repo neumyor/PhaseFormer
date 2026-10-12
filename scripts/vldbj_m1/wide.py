@@ -46,7 +46,7 @@ SEED = 2021
 CONFIRM_SEEDS = (2022, 2023)
 HEAD = protocol.FINAL_HEAD
 SWITCH_MARGIN = 0.002
-GATE_MIN, GATE_MAX, LR_MIN, LR_MAX = 1e-4, 0.99, 0.1, 100.0
+GATE_MIN, GATE_MAX, LR_MIN, LR_MAX = 1e-4, 0.999, 0.03, 1000.0
 WIDTHS = (2, 3, 4)
 # Round 1: fixed grid (gate_init, extension_lr_mult, communication_width).
 R1_GRID = tuple(
@@ -59,12 +59,23 @@ R2_CAP = 10
 # Pre-registered r2 shrink: fewer variants per setting when r1 ran late.
 R2_SHRINK = ((3.0, 10), (4.0, 6), (5.0, 3))
 PILOT_ROOT = Path(os.environ.get('VLDBJ_PILOT_ROOT', E14_ROOT / 'research_runs/vldbj_m1_pilot'))
+# Round 3: interaction refinement, boundary extrapolation, and a head/gate-sharing
+# probe on the three datasets still behind the Golden (head S1/S3 change the level
+# branch size; adopting them would rewrite the paper's parameter claims).
+R3_DATASETS = ('ETTm1', 'ETTm2', 'Traffic')
+R3_CAP = 12
+ROUND3_STAGES = ('r1', 'r2', 'r3', 'confirm')
 
 
-def name(dataset, horizon, seed, variant, backbone_mult):
+def name(dataset, horizon, seed, variant, backbone_mult, head=None, shared=None):
     v = variant or {}
     tag = (f"g{v.get('gate_init', 0.2):g}_lr{v.get('extension_lr_mult', 1.0):g}"
            f"_w{v.get('communication_width', 2):g}_bb{backbone_mult:g}")
+    default_shared = protocol.FINAL_SHARED_GATE[dataset]
+    head = head or HEAD
+    shared = default_shared if shared is None else shared
+    if head != HEAD or shared != default_shared:
+        tag += f"__{head}__{'shared' if shared else 'perC'}"
     return f"{dataset}_H{horizon}_S{seed}__m1__{tag}"
 
 
@@ -78,15 +89,16 @@ def variant_key(variant, backbone_mult=1.0, read='native'):
             float(backbone_mult), read)
 
 
-def make_job(base, sources, dataset, horizon, seed, variant, backbone_mult):
+def make_job(base, sources, dataset, horizon, seed, variant, backbone_mult, head=None, shared=None):
     job = dict(base, dataset=dataset, horizon=horizon, seed=seed, arm='m1', protocol='e14',
-               init='scratch', head=HEAD, shared_gate=protocol.FINAL_SHARED_GATE[dataset],
+               init='scratch', head=head or HEAD,
+               shared_gate=protocol.FINAL_SHARED_GATE[dataset] if shared is None else bool(shared),
                variant_id=None, variant=dict(variant) if variant else None,
                extension_lr_mult=float(variant['extension_lr_mult']) if variant else 1.0,
                backbone_lr_mult=float(backbone_mult), warm_source=None, epoch_test=False,
                source=sources[(dataset, horizon, seed)])
     job['output'] = str(Path(base['scratch']) / base['stage'] / 'runs' /
-                        name(dataset, horizon, seed, variant, backbone_mult))
+                        name(dataset, horizon, seed, variant, backbone_mult, head, shared))
     return job
 
 
@@ -157,6 +169,33 @@ def current_records():
     return out
 
 
+def baseline_records(scratch):
+    """Round-3 reference per setting: the exp3 final configuration and its
+    3-seed test reads (wide_selection.json of the previous round)."""
+    final = json.loads((scratch / 'wide_selection.json').read_text())['settings']
+    out = {}
+    for key, entry in final.items():
+        dataset, horizon = key.split('_H')
+        horizon = int(horizon)
+        if entry['switched']:
+            variant = entry['provisional']['variant']
+            bb = float(entry['provisional']['backbone_lr_mult'])
+            label = entry['final_config']
+        else:
+            vid = protocol.FINAL_VARIANTS.get((dataset, horizon))
+            variant = dict(TUNE_GRID[vid]) if vid is not None else None
+            bb = 1.0
+            label = 'exp3-final: current (paper final configuration)'
+        out[(dataset, horizon)] = {
+            'seed_mse': {k: float(v) for k, v in entry['final_seed_mse'].items()},
+            'seed_mae': {k: float(v) for k, v in entry['final_seed_mae'].items()},
+            'read': entry['final_read'], 'variant': variant, 'backbone_lr_mult': bb,
+            'config': label, 'head': HEAD, 'shared_gate': protocol.FINAL_SHARED_GATE[dataset]}
+    if len(out) != 28:
+        raise ValueError(f'Expected 28 baseline settings, found {len(out)}')
+    return out
+
+
 def wide_reads(scratch, stage, dataset, horizon, seed, smoke=False):
     """Every finished wide run of one setting as candidate records."""
     out = []
@@ -164,12 +203,13 @@ def wide_reads(scratch, stage, dataset, horizon, seed, smoke=False):
         r = json.loads(path.read_text())
         if r['smoke'] != smoke:
             continue
-        variant = json.loads((path.parent / 'config.json').read_text())['vldbj_m1']
+        meta = json.loads((path.parent / 'config.json').read_text())['vldbj_m1']
         record = {'run': f'{stage}/{path.parent.name}', 'stage': stage,
-                  'variant': {'gate_init': variant['gate_init'],
-                              'extension_lr_mult': variant['extension_lr_mult'],
-                              'communication_width': variant['communication_width']},
+                  'variant': {'gate_init': meta['gate_init'],
+                              'extension_lr_mult': meta['extension_lr_mult'],
+                              'communication_width': meta['communication_width']},
                   'backbone_lr_mult': r['backbone_lr_mult'], 'seed': seed,
+                  'head': meta['head'], 'shared_gate': meta['shared_gate'],
                   'native': r['best']['test_mse'], 'native_mae': r['best']['test_mae'],
                   'off': r['best'].get('test_mse_modulation_off'),
                   'off_mae': r['best'].get('test_mae_modulation_off')}
@@ -258,6 +298,59 @@ def stage_jobs(scratch, stage, sources, smoke):
                     continue
                 jobs.append(make_job(base, sources, dataset, horizon, SEED, variant, 1.0))
         return write_jobs(scratch, stage, jobs)
+    if stage == 'r3':
+        baseline = baseline_records(scratch)
+        jobs = []
+        for dataset, horizon in settings:
+            base_cfg = baseline[(dataset, horizon)]
+            v = base_cfg['variant'] or {'gate_init': 0.2, 'extension_lr_mult': 1.0,
+                                        'communication_width': 2}
+            g0, lr0 = float(v['gate_init']), float(v['extension_lr_mult'])
+            w0, bb0 = int(v['communication_width']), float(base_cfg['backbone_lr_mult'])
+            done = {variant_key(r['variant'], r['backbone_lr_mult'])
+                    for r in (wide_reads(scratch, 'r1', dataset, horizon, SEED, smoke)
+                              + wide_reads(scratch, 'r2', dataset, horizon, SEED, smoke)
+                              + wide_reads(scratch, 'r3', dataset, horizon, SEED, smoke))}
+            done.add(variant_key(v, bb0))
+            grid = []
+            # Interaction refinement: 3x3 (gate x lr) around the final configuration.
+            for gate in (snap(g0 / 3, GATE_MIN, GATE_MAX), g0, snap(g0 * 3, GATE_MIN, GATE_MAX)):
+                for lr in (snap(lr0 / 3, LR_MIN, LR_MAX), lr0, snap(lr0 * 3, LR_MIN, LR_MAX)):
+                    if (gate, lr) != (g0, lr0):
+                        grid.append({'gate_init': gate, 'extension_lr_mult': lr,
+                                     'communication_width': w0, 'bb': bb0})
+            # Boundary extrapolation where the final configuration sits on a searched bound.
+            if lr0 >= 100:
+                grid += [{'gate_init': g0, 'extension_lr_mult': lr, 'communication_width': w0, 'bb': bb0}
+                         for lr in (300.0, 1000.0)]
+            if g0 >= 0.99:
+                grid.append({'gate_init': 0.999, 'extension_lr_mult': lr0,
+                             'communication_width': w0, 'bb': bb0})
+            if bb0 >= 3.0:
+                grid.append({'gate_init': g0, 'extension_lr_mult': lr0,
+                             'communication_width': w0, 'bb': 10.0})
+            if bb0 <= 0.3:
+                grid.append({'gate_init': g0, 'extension_lr_mult': lr0,
+                             'communication_width': w0, 'bb': 0.1})
+            for width in WIDTHS:
+                if width != w0:
+                    grid.append({'gate_init': g0, 'extension_lr_mult': lr0,
+                                 'communication_width': width, 'bb': bb0})
+            planned = 0
+            for candidate in grid:
+                variant = {k: candidate[k] for k in ('gate_init', 'extension_lr_mult',
+                                                     'communication_width')}
+                if variant_key(variant, candidate['bb']) in done or planned >= R3_CAP:
+                    continue
+                jobs.append(make_job(base, sources, dataset, horizon, SEED, variant, candidate['bb']))
+                planned += 1
+            # Head / gate-sharing probe on the datasets still behind the Golden.
+            if dataset in R3_DATASETS:
+                for head in ('S1', 'S3'):
+                    for shared in (True, False):
+                        jobs.append(make_job(base, sources, dataset, horizon, SEED, v, bb0,
+                                             head=head, shared=shared))
+        return write_jobs(scratch, stage, jobs)
     if stage == 'r2':
         marker = scratch / 'all.started'
         if not marker.exists():
@@ -287,7 +380,8 @@ def wide_candidates(scratch, stage, dataset, horizon, smoke):
     out = []
     for r in wide_reads(scratch, stage, dataset, horizon, SEED, smoke):
         base = {'config': f"wide {r['variant']} bb{r['backbone_lr_mult']:g}", 'variant': r['variant'],
-                'backbone_lr_mult': r['backbone_lr_mult'], 'stage': stage, 'run': r['run']}
+                'backbone_lr_mult': r['backbone_lr_mult'], 'stage': stage, 'run': r['run'],
+                'head': r['head'], 'shared_gate': r['shared_gate']}
         out.append({**base, 'read': 'native', 'seed2021_mse': r['native'],
                     'seed2021_mae': r['native_mae']})
         if r['off'] is not None:
@@ -296,43 +390,47 @@ def wide_candidates(scratch, stage, dataset, horizon, smoke):
 
 
 def select(scratch, smoke):
-    """Provisional per-setting winners on the seed-2021 test split (test-set selection)."""
-    current = current_records()
+    """Round-3 provisional winners on the seed-2021 test split (test-set selection).
+
+    The reference is the round-3 baseline: the previous round's final configuration
+    (wide_selection.json), with its per-seed reads. Rounds accumulate on the same
+    test split; every candidate number is recorded here.
+    """
+    baseline = baseline_records(scratch)
     settings_out = {}
     for dataset in DATASETS:
         for horizon in HORIZONS:
             key = f'{dataset}_H{horizon}'
-            cur = current[(dataset, horizon)]
+            base = baseline[(dataset, horizon)]
             candidates = [{
-                'config': cur['config'], 'variant': None, 'backbone_lr_mult': 1.0,
-                'read': 'native', 'seed2021_mse': cur['per_seed']['2021']['native'],
-                'seed2021_mae': cur['per_seed']['2021']['native_mae'], 'stage': 'current'}]
-            if cur['per_seed']['2021']['off'] is not None:
-                candidates.append({**candidates[0], 'read': 'off',
-                                  'seed2021_mse': cur['per_seed']['2021']['off'],
-                                  'seed2021_mae': cur['per_seed']['2021']['off_mae']})
-            for stage in ('r1', 'r2'):
+                'config': base['config'], 'variant': base['variant'],
+                'backbone_lr_mult': base['backbone_lr_mult'], 'read': base['read'],
+                'head': base['head'], 'shared_gate': base['shared_gate'],
+                'seed2021_mse': base['seed_mse']['2021'], 'seed2021_mae': base['seed_mae']['2021'],
+                'stage': 'baseline'}]
+            for stage in ('r1', 'r2', 'r3'):
                 candidates += wide_candidates(scratch, stage, dataset, horizon, smoke)
             best = min(candidates, key=lambda r: r['seed2021_mse'])
             margin = (candidates[0]['seed2021_mse'] - best['seed2021_mse']) / candidates[0]['seed2021_mse']
             settings_out[key] = {
-                'current_seed2021_mse': candidates[0]['seed2021_mse'],
-                'best': best, 'margin_vs_current': margin,
-                'needs_confirm': (best['stage'] != 'current') and margin > SWITCH_MARGIN,
+                'baseline_seed2021_mse': candidates[0]['seed2021_mse'],
+                'best': best, 'margin_vs_baseline': margin,
+                'needs_confirm': (best['stage'] != 'baseline') and margin > SWITCH_MARGIN,
                 'candidate_count': len(candidates), 'candidates': candidates}
-    record = {'selection_basis': 'seed-2021 test split; test-set selection (user decision '
-                                '2026-10-10); every candidate number is recorded here',
+    record = {'selection_basis': 'seed-2021 test split; test-set selection (user decisions '
+                                '2026-10-10/11/12); every candidate number is recorded here',
               'rule': {'switch': f'seed-2021 margin > {SWITCH_MARGIN:.1%}, then 3-seed mean '
-                                 f'margin > {SWITCH_MARGIN:.1%} against the current paper '
-                                 'configuration', 'read': 'native and modulation-off reads are '
-                                 'both candidates (architecture-internal off, user 2026-10-11)'},
+                                 f'margin > {SWITCH_MARGIN:.1%} against the round-3 baseline '
+                                 '(the previous round final configuration)',
+                       'read': 'native and modulation-off reads are both candidates '
+                               '(architecture-internal off, user 2026-10-11)'},
               'settings': settings_out, 'smoke': smoke}
-    write_immutable(scratch / 'wide_provisional.json', record)
+    write_immutable(scratch / 'wide_provisional_r3.json', record)
     return record
 
 
 def confirm_jobs(scratch, sources, smoke):
-    provisional = json.loads((scratch / 'wide_provisional.json').read_text())
+    provisional = json.loads((scratch / 'wide_provisional_r3.json').read_text())
     base = {'code_commit': commit(), 'source_hashes': provenance(), 'smoke': smoke,
             'stage': 'confirm', 'scratch': str(scratch)}
     jobs = []
@@ -343,18 +441,18 @@ def confirm_jobs(scratch, sources, smoke):
         best = record['best']
         for seed in CONFIRM_SEEDS:
             jobs.append(make_job(base, sources, dataset, int(horizon), seed, best['variant'],
-                                 best['backbone_lr_mult']))
+                                 best['backbone_lr_mult'], best.get('head'), best.get('shared_gate')))
     return write_jobs(scratch, 'confirm', jobs)
 
 
 def collect(scratch, smoke):
-    provisional = json.loads((scratch / 'wide_provisional.json').read_text())
-    current = current_records()
+    provisional = json.loads((scratch / 'wide_provisional_r3.json').read_text())
+    baseline = baseline_records(scratch)
     fields = ['stage', 'dataset', 'horizon', 'seed', 'gate_init', 'extension_lr_mult',
-              'communication_width', 'backbone_lr_mult', 'test_mse', 'test_mae',
+              'communication_width', 'backbone_lr_mult', 'head', 'shared_gate', 'test_mse', 'test_mae',
               'test_mse_modulation_off', 'test_mae_modulation_off', 'epochs', 'run']
     rows = []
-    for stage in ('r1', 'r2', 'confirm'):
+    for stage in ('r1', 'r2', 'r3', 'confirm'):
         for path in sorted((scratch / stage / 'runs').glob('*/result.json')):
             r = json.loads(path.read_text())
             if r['smoke'] != smoke:
@@ -364,21 +462,22 @@ def collect(scratch, smoke):
                          'seed': r['seed'], 'gate_init': v['gate_init'],
                          'extension_lr_mult': v['extension_lr_mult'],
                          'communication_width': v['communication_width'],
-                         'backbone_lr_mult': r['backbone_lr_mult'],
+                         'backbone_lr_mult': r['backbone_lr_mult'], 'head': v['head'],
+                         'shared_gate': v['shared_gate'],
                          'test_mse': r['best']['test_mse'], 'test_mae': r['best']['test_mae'],
                          'test_mse_modulation_off': r['best'].get('test_mse_modulation_off'),
                          'test_mae_modulation_off': r['best'].get('test_mae_modulation_off'),
                          'epochs': r['epochs'], 'run': f'{stage}/{path.parent.name}'})
-    with (scratch / 'results.csv').open('w', newline='') as handle:
+    with (scratch / 'results_r3.csv').open('w', newline='') as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
 
-    def run_read(dataset, horizon, seed, variant, bb):
+    def run_read(dataset, horizon, seed, variant, bb, head=None, shared=None):
         """native/off test reads of one wide run, if it exists."""
-        for stage in ('r1', 'r2', 'confirm'):
+        for stage in ('r1', 'r2', 'r3', 'confirm'):
             path = (scratch / stage / 'runs' /
-                    name(dataset, horizon, seed, variant, bb) / 'result.json')
+                    name(dataset, horizon, seed, variant, bb, head, shared) / 'result.json')
             if path.exists():
                 r = json.loads(path.read_text())
                 return {'native': r['best']['test_mse'], 'native_mae': r['best']['test_mae'],
@@ -390,47 +489,46 @@ def collect(scratch, smoke):
     for key, record in sorted(provisional['settings'].items()):
         dataset, horizon = key.split('_H')
         horizon = int(horizon)
-        cur = current[(dataset, horizon)]
+        cur = baseline[(dataset, horizon)]
         best = record['best']
-        entry = {'provisional': best, 'margin_vs_current': record['margin_vs_current'],
+        entry = {'provisional': best, 'margin_vs_baseline': record['margin_vs_baseline'],
                  'candidate_count': record['candidate_count'],
                  'switched': False, 'final_config': cur['config'],
-                 'final_read': 'native',
-                 'final_seed_mse': {s: cur['per_seed'][s]['native'] for s in ('2021', '2022', '2023')},
-                 'final_seed_mae': {s: cur['per_seed'][s]['native_mae'] for s in ('2021', '2022', '2023')}}
+                 'final_read': cur['read'], 'head': cur['head'], 'shared_gate': cur['shared_gate'],
+                 'final_seed_mse': dict(cur['seed_mse']), 'final_seed_mae': dict(cur['seed_mae'])}
         if record['needs_confirm']:
-            reads = {str(seed): run_read(dataset, horizon, seed, best['variant'], best['backbone_lr_mult'])
+            reads = {str(seed): run_read(dataset, horizon, seed, best['variant'], best['backbone_lr_mult'],
+                                         best.get('head'), best.get('shared_gate'))
                      for seed in SEEDS}
             read = best['read']
             if all(reads.values()):
                 values = [reads[str(seed)][read] for seed in SEEDS]
                 mae_values = [reads[str(seed)][f'{read}_mae'] for seed in SEEDS]
                 mean = statistics.fmean(values)
-                margin3 = (cur['native_mean'] - mean) / cur['native_mean']
+                base_mean = statistics.fmean(cur['seed_mse'].values())
+                margin3 = (base_mean - mean) / base_mean
                 entry['confirm'] = {'seed_mse': {str(seed): reads[str(seed)][read] for seed in SEEDS},
                                     'mean': mean, 'mae_mean': statistics.fmean(mae_values),
-                                    'margin_vs_current_3seed': margin3}
+                                    'margin_vs_baseline_3seed': margin3}
                 if margin3 > SWITCH_MARGIN:
+                    head = best.get('head') or HEAD
+                    shared = best.get('shared_gate', protocol.FINAL_SHARED_GATE[dataset])
                     entry.update(switched=True,
-                                 final_config=f"wide: {best['variant']} bb{best['backbone_lr_mult']:g}",
-                                 final_read=read,
+                                 final_config=f"wide r3: {best['variant']} bb{best['backbone_lr_mult']:g}"
+                                              f" {head} {'shared' if shared else 'perC'}",
+                                 final_read=read, head=head, shared_gate=shared,
                                  final_seed_mse={str(seed): reads[str(seed)][read] for seed in SEEDS},
                                  final_seed_mae={str(seed): reads[str(seed)][f'{read}_mae'] for seed in SEEDS})
             else:
-                entry['confirm'] = 'incomplete (deadline); current configuration kept'
-        elif best['stage'] == 'current' and best['read'] == 'off':
-            # Current configuration with the modulation-off read: no retraining needed.
-            entry.update(switched=True, final_read='off',
-                         final_seed_mse={s: cur['per_seed'][s]['off'] for s in ('2021', '2022', '2023')},
-                         final_seed_mae={s: cur['per_seed'][s]['off_mae'] for s in ('2021', '2022', '2023')})
+                entry['confirm'] = 'incomplete (deadline); baseline kept'
         final[key] = entry
     switched = sum(1 for e in final.values() if e['switched'])
     record = {'selection_basis': 'test split (seed 2021 screen, 3-seed confirm); test-set '
-                                 'selection (user decisions 2026-10-10/11); all candidates '
+                                 'selection (user decisions 2026-10-10/11/12); all candidates '
                                  'in wide_provisional.json and results.csv',
               'switch_margin': SWITCH_MARGIN, 'switched_settings': switched,
               'settings': final, 'smoke': smoke}
-    save_json(scratch / 'wide_selection.json', record)
+    save_json(scratch / 'wide_selection_r3.json', record)
     return record
 
 
@@ -457,7 +555,7 @@ def run_all(scratch, gpus, smoke, deadline):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--stage', choices=('r1', 'r2', 'select', 'confirm', 'collect', 'all'))
+    parser.add_argument('--stage', choices=('r1', 'r2', 'r3', 'select', 'confirm', 'collect', 'all'))
     parser.add_argument('--scratch-dir', type=Path)
     parser.add_argument('--gpus', default='0,1,2,3,4,5,6,7')
     parser.add_argument('--slots-per-gpu', type=int, default=3)

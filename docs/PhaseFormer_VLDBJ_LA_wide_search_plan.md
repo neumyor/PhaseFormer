@@ -136,3 +136,21 @@ R1 → R2 → select → confirm → collect。
   保留 current，次日请示。
 - 宽域搜索找到的收益可能主要在少数 setting（Weather/ETTm2 类）；若整体收益
   <0.5%，建议论文维持现行配置，仅内部记录。
+
+## 8. R3 轮（2026-10-12 用户批准："全部三块"，不限时）
+
+在实验 3 结果（16/28 切换、4/7 胜 Golden）之上，基线切换为该轮最终配置（wide_selection.json）：
+
+- **边界外推**：lr 上界 100→1000（ETTh1-192 的胜者恰在旧上界）、gate 上界 0.99→0.999、
+  bb 补 {0.1, 10}、lr 下界 0.1→0.03；胜者顶边界的维度才触发探针。
+- **交互细化**：每 setting 的最终配置周围 3×3（gate × lr）交互小网格 + width 交替点
+  （与 r2 的坐标式邻域去重后约 4–6 个新点/setting）。
+- **固定维度探针**（仅 ETTm1/ETTm2/Traffic 共 12 setting）：head S1/S3 × 门共享/不共享
+  × 最终配置，共 48 run。注意：S1/S3 的 level branch 参数更多（最大 480 vs 105），
+  采用会改写论文参数声明，结果先测量、采用与否单独再议。
+- 选择规则不变：seed-2021 test MSE argmin（native/mod-off 均为候选）→ 胜基线 >0.2%
+  → 3-seed confirm 再胜 >0.2% 才切换。产出 `wide_provisional_r3.json` /
+  `wide_selection_r3.json` / `results_r3.csv`。同一 test 上的第三轮选择，
+  test-set selection 标注继续沿用。
+- 代码：`wide.py` 增加 `--stage r3`、round-3 基线/选择/汇总；`name()` 对非默认
+  head/门共享追加后缀（与 r1/r2 命名向后兼容）；单元测试 31 项通过。
