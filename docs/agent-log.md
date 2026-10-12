@@ -7379,3 +7379,18 @@ Pilot artifacts (results/configs/selection) rsynced to research_runs/vldbj_m1_pi
   results doc docs/PhaseFormer_VLDBJ_LA_wide_search_results.md. Paper untouched;
   adoption (main table + recomputing ladder/envelope/mechanism from the new
   checkpoints + mod-off disclosure) awaits the user's decision.
+
+## 2026-10-12 Round 3 of the wide search launched (user-approved, no time limit)
+
+- User approved extending the search: boundary extrapolation (lr to 1000, gate to 0.999,
+  bb 0.1/10, lr floor 0.03), 3x3 interaction grids around each setting's final
+  configuration, and an S1/S3 head + gate-sharing probe on ETTm1/ETTm2/Traffic
+  (48 runs; adopting a non-S2 head would rewrite the paper's parameter claims --
+  measure first, decide separately).
+- Baseline for round 3 = the round-2 final configuration (wide_selection.json);
+  same selection rules (seed-2021 argmin over native/off reads, 3-seed confirm with
+  the 0.2% margin). Round-3 artifacts: wide_provisional_r3.json, wide_selection_r3.json,
+  results_r3.csv. Code: commit e20126d, 31 tests pass (local and server).
+- Launched 11:20 as ~/niuyiming/wide_r3_chain.sh (nohup): r3 (310 jobs) -> select ->
+  confirm -> collect, log ~/niuyiming/vldbj_wide_r3.log. Same scratch dir
+  research_runs/vldbj_wide_v1; 24 workers.
