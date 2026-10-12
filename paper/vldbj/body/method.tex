@@ -192,7 +192,7 @@ Level-dependent amplitude scales the cycle shape with the level. Let $h_1,\dots,
 h'_p=h_p+(h_p-\bar h)\odot q,\qquad \bar h=\tfrac1P\textstyle\sum_ph_p,\qquad q=V_2V_1\,t,
 \label{eq:la_modulation}
 \end{equation}
-with $V_1\in\mathbb R^{k\times3}$, $V_2\in\mathbb R^{d\times k}$, $k=\min(w,3,d)$, no biases, and $V_2$ initialized to zero; the width $w$ is $2$ by default, and the grid search of Section~\ref{sec:ext_setup} also tries $w=4$, which the branch rank caps at $k=3$. Because the deviations $h_p-\bar h$ sum to zero over the phases and the predictor~\equref{eq:predictor} is shared and affine, the modulation leaves every future cycle mean of the phase forecast unchanged (Theorem~\ref{thm:amplitude}(c)): it changes the amplitude of the forecast, never its level.
+with $V_1\in\mathbb R^{k\times3}$, $V_2\in\mathbb R^{d\times k}$, $k=\min(w,3,d)$, no biases, and $V_2$ initialized to zero; the width $w$ is $2$ by default, and the grid search of Section~\ref{sec:ext_setup} also tries $w=4$, which the branch rank caps at $k=3$. Because the deviations $h_p-\bar h$ sum to zero over the phases and the predictor~\equref{eq:predictor} is shared and affine, the modulation leaves every future cycle mean of the phase forecast unchanged (Proposition~\ref{prop:modulation}(a)): it changes the amplitude of the forecast, never its level.
 
 \fakeparagraph{Exact nesting}
 \label{sec:ext_properties}
