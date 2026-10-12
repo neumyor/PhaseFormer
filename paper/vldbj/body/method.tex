@@ -60,10 +60,10 @@ As illustrated in \figref{fig:overview}, \sysname first applies an embedding lay
 \subsubsection{Embedding Layer}
 \label{subsubsec:phase-embedding}
 The embedding layer projects the phase tokens $\mathbf{X}_{\text{phase}}$ into a low-dimensional representation space, allowing the informative components to be extracted from raw observations that are often contaminated by perturbations. 
-Formally, for each phase index \blue{$p \in \{1,\dots,L_{\text{phase}}\}$, the corresponding phase token $\mathbf{X}_{\text{phase}}[p, :]$} is mapped into a $d$-dimensional representation through a linear function $f_{\theta}$, parameterized by $\theta \in \mathbb{R}^{P_{\text{in}}\times d}$:
+Formally, for each phase index \blue{$p \in \{1,\dots,L_{\text{phase}}\}$, the corresponding phase token $\mathbf{X}_{\text{phase}}[p, :]$} is mapped into a $d$-dimensional representation through a linear function $f_{\theta}$, parameterized by $\theta \in \mathbb{R}^{P_{\text{in}}\times d}$, \blue{followed by a LayerNorm $\LN_e$}:
 \begin{equation}
 \mathbf{Z} 
-= f_{\theta}\!\left(\mathbf{X}_{\text{phase}}\right)\in \mathbb{R}^{L_{\text{phase}}\times d}
+= \blue{\LN_e\big(}f_{\theta}\!\left(\mathbf{X}_{\text{phase}}\right)\blue{\big)}\in \mathbb{R}^{L_{\text{phase}}\times d}
 \label{eq:phase-embedding}
 \end{equation}
 
