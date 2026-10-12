@@ -2,7 +2,7 @@
 \section{Proofs for Section~\ref{sec:theory}}
 \label{app:proofs}
 
-Throughout, $\tilde X\in\mathbb R^{K\times P}$ is the folded normalized window with phase tokens $\tilde x_p$ and cycle means $\bar r$, $\one^\top\tilde x=0$, $\|\tilde x\|^2\le L$, $\one^\top\bar r=0$ and $\|\bar r\|^2\le K$. A routing unit maps tokens $h_1,\dots,h_P\in\mathbb R^d$ as
+Throughout, $\tilde X\in\mathbb R^{K\times P}$ is the folded normalized window with phase tokens $\tilde x_p$ and cycle means $\bar r$, $\one^\top\tilde x=0$, $\|\tilde x\|^2\le L$, $\one^\top\bar r=0$ and $\|\bar r\|^2\le K$. A routing unit, one routing layer of Section~\ref{subsec:phase-network}, maps tokens $h_1,\dots,h_P\in\mathbb R^d$ as
 \begin{equation*}
 \begin{gathered}
 u_p=h_p+\pi_p,\quad
@@ -142,7 +142,7 @@ The modulation thus removes the constant amplitude envelope along exactly the re
 \section{Extended Results of \sysLA}
 \label{app:ext_results}
 
-Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the identical protocol. The parameter increments of the extension over the backbone are horizon-independent: the level branch contributes 105 parameters with the fixed profiles of \equref{eq:branch} (477 and 657 on the four settings that select a learned decoder; Appendix~\ref{app:la_config}), the modulation $k(3+d)$ with $k=\min(w,3,d)$ (Section~\ref{sec:ext_modulation}) contributes between 14 and 262 parameters, and the fusion two gates per channel or two shared gates; branch and modulation together add between 119 and 679 parameters across the settings, the gates between 2 and $2C$ more (Section~\ref{sec:la_cost} and Appendix~\ref{app:la_config}).
+Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the identical protocol. The parameter increments of the extension over the backbone are horizon-independent: the level branch contributes 105 parameters with the fixed profiles of \equref{eq:branch} (477 and 657 on the four settings that select a learned decoder; Appendix~\ref{app:la_config}), the modulation $k_q(3+d)$ with $k_q=\min(w,3,d)$ (Section~\ref{sec:ext_modulation}) contributes between 14 and 262 parameters, and the fusion two gates per channel or two shared gates; branch and modulation together add between 119 and 679 parameters across the settings, the gates between 2 and $2C$ more (Section~\ref{sec:complexity} and Appendix~\ref{app:la_config}).
 
 \begin{table*}[t]
 \blue{

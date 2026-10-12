@@ -33,7 +33,7 @@ TEXT_FONT = 'Times New Roman'
 MATH_FONT = 'Times New Roman'         # math letters in italic Times, as in Fig. 3
 SYM_FONT = 'STIX Two Math'            # symbols missing in Times, accented letters
 SYMBOLS = set('∈ℝ⊙ℎ')
-MATH_ITALIC = {'h': 'ℎ', 'x': '𝑥', 'z': '𝑧', 'y': '𝑦'}
+MATH_ITALIC = {'h': 'ℎ', 'x': '𝑥', 'z': '𝑧', 'y': '𝑦', 'r': '𝑟'}
 ITALIC = re.compile(r'[A-Za-zα-ωℓ]')
 
 BLACK = RGBColor(0, 0, 0)
