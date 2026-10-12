@@ -429,10 +429,24 @@ def select(scratch, smoke):
     return record
 
 
+def confirm_result(scratch, dataset, horizon, seed, variant, bb, head, shared):
+    """An existing confirm read of exactly this configuration, if one exists."""
+    for stage in ('confirm', 'confirm3'):
+        path = (scratch / stage / 'runs' /
+                name(dataset, horizon, seed, variant, bb, head, shared) / 'result.json')
+        if path.exists():
+            r = json.loads(path.read_text())
+            if not r['smoke']:
+                return {'native': r['best']['test_mse'], 'native_mae': r['best']['test_mae'],
+                        'off': r['best'].get('test_mse_modulation_off'),
+                        'off_mae': r['best'].get('test_mae_modulation_off')}
+    return None
+
+
 def confirm_jobs(scratch, sources, smoke):
     provisional = json.loads((scratch / 'wide_provisional_r3.json').read_text())
     base = {'code_commit': commit(), 'source_hashes': provenance(), 'smoke': smoke,
-            'stage': 'confirm', 'scratch': str(scratch)}
+            'stage': 'confirm3', 'scratch': str(scratch)}
     jobs = []
     for key, record in sorted(provisional['settings'].items()):
         if not record['needs_confirm']:
@@ -440,9 +454,14 @@ def confirm_jobs(scratch, sources, smoke):
         dataset, horizon = key.split('_H')
         best = record['best']
         for seed in CONFIRM_SEEDS:
+            # Round-2 confirm runs of the identical configuration are reusable.
+            if confirm_result(scratch, dataset, int(horizon), seed, best['variant'],
+                              float(best['backbone_lr_mult']), best.get('head'),
+                              best.get('shared_gate')) is not None:
+                continue
             jobs.append(make_job(base, sources, dataset, int(horizon), seed, best['variant'],
                                  best['backbone_lr_mult'], best.get('head'), best.get('shared_gate')))
-    return write_jobs(scratch, 'confirm', jobs)
+    return write_jobs(scratch, 'confirm3', jobs)
 
 
 def collect(scratch, smoke):
@@ -452,7 +471,7 @@ def collect(scratch, smoke):
               'communication_width', 'backbone_lr_mult', 'head', 'shared_gate', 'test_mse', 'test_mae',
               'test_mse_modulation_off', 'test_mae_modulation_off', 'epochs', 'run']
     rows = []
-    for stage in ('r1', 'r2', 'r3', 'confirm'):
+    for stage in ('r1', 'r2', 'r3', 'confirm', 'confirm3'):
         for path in sorted((scratch / stage / 'runs').glob('*/result.json')):
             r = json.loads(path.read_text())
             if r['smoke'] != smoke:
@@ -475,7 +494,10 @@ def collect(scratch, smoke):
 
     def run_read(dataset, horizon, seed, variant, bb, head=None, shared=None):
         """native/off test reads of one wide run, if it exists."""
-        for stage in ('r1', 'r2', 'r3', 'confirm'):
+        reads = confirm_result(scratch, dataset, horizon, seed, variant, bb, head, shared)
+        if reads is not None:
+            return reads
+        for stage in ('r1', 'r2', 'r3'):
             path = (scratch / stage / 'runs' /
                     name(dataset, horizon, seed, variant, bb, head, shared) / 'result.json')
             if path.exists():
