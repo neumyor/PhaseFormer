@@ -601,11 +601,16 @@ def main():
         sources = e14_sources()
         if args.stage == 'confirm':
             jobs = confirm_jobs(scratch, sources, args.smoke)
+            # Round-3 confirm runs in confirm3/; its manifest must not collide with
+            # the round-2 confirm manifest.
+            write_immutable(scratch / 'confirm3_manifest.json', {
+                'stage': 'confirm3', 'jobs': [str(p) for p in jobs], 'code_commit': commit(),
+                'smoke': args.smoke})
         else:
             jobs = stage_jobs(scratch, args.stage, sources, args.smoke)
-        write_immutable(scratch / f'{args.stage}_manifest.json', {
-            'stage': args.stage, 'jobs': [str(p) for p in jobs], 'code_commit': commit(),
-            'smoke': args.smoke})
+            write_immutable(scratch / f'{args.stage}_manifest.json', {
+                'stage': args.stage, 'jobs': [str(p) for p in jobs], 'code_commit': commit(),
+                'smoke': args.smoke})
         print(json.dumps({'stage': args.stage, 'jobs': len(jobs)}), flush=True)
         run_jobs(jobs, gpus, deadline)
 
