@@ -2,7 +2,7 @@
 \section{Methodology}
 \label{sec:method}
 
-Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear}\blue{, which keeps the cost linear in the number of sensors,} and omit the channel dimension throughout the remainder of this paper\blue{; the $C$ channels of a dataset share one model}. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following \blue{subsections}, we describe the data preprocessing procedure, present the proposed network architecture \blue{and the scope of its phase alignment, introduce its level--amplitude extension, and finally analyze the computational complexity of both}.
+Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear}\blue{, which keeps the cost linear in the number of sensors,} and omit the channel dimension throughout the remainder of this paper\blue{; the $C$ channels of a dataset share one model}. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following \blue{subsections}, we describe the data preprocessing procedure, present the proposed network architecture\blue{, introduce its level--amplitude extension, analyze the computational complexity of both, and finally delimit the scope of phase alignment}.
 
 \begin{figure*}[t]
     \centering
@@ -113,20 +113,6 @@ All phases share the same predictor parameters, which enforces consistency acros
 \blue{In the notation of Section~\ref{subsec:preprocessing}, the $p$-th row of $\mathbf Y_{\text{phase}}$ holds the $K'$ future values $F_p$ of phase $p$ in normalized units, and de-tokenizing $\mathbf Y_{\text{phase}}$ gives the \emph{phase forecast} $F\in\mathbb R^H$; we call the computation from the phase tokens to $F$ the \emph{phase path}. For \sysname, the normalized forecast is $\hat{\tilde y}=F$.}
 
 
-\subsection{\blue{Scope of Phase Alignment}}
-\label{sec:scope}
-
-\blue{
-\fakeparagraph{Weak Periodicity}
-Although \sysname is built around periodic alignment, it remains usable on weakly periodic or partially non-periodic time series. When no strong periodic structure is present, the phase representation degenerates into a coarse subsampling of the sequence: the phase tokens resemble trend embeddings sampled every $\Lp$ steps and capture slowly varying components and broad temporal structure. Through the routing mechanism, the model can still aggregate information across these coarse tokens; this suppresses high-frequency noise and overfitting to short-term stochastic fluctuations, so the model retains a certain degree of robustness without a clear period.
-
-\fakeparagraph{Failure Modes}
-In datasets without a clear dominant period, the estimated phase length may be affected by noise or minor harmonics, and the resulting misalignment is the primary failure mode of the model. In multi-period settings, a model aligned to a suboptimal harmonic instead of the dominant component still operates but delivers inferior forecasts (\secref{sec:phase_length}). A phase length that is excessively large or small also introduces substantial circular padding, which injects artificial boundary information and degrades the forecasts; input lengths divisible by the phase length avoid it and are recommended whenever possible.
-
-This subsection concerns series without a reliable period. Changes across cycles (Section~\ref{sec:mot_changes}) are a different limitation: they arise even when the period is exact, and Section~\ref{sec:extension} addresses them.
-}
-
-
 \blue{
 \subsection{\sysLA: Supplying the Missing Level and Amplitude}
 \label{sec:extension}
@@ -206,4 +192,19 @@ Thus, \blue{for a fixed number of layers,} the computational cost grows \blue{li
 \blue{
 \fakeparagraph{Cost of \sysLA}
 The level branch adds $3K$ ($E$) $+\,3$ ($c_E$) $+\,9$ ($\Gamma$) $+\,3$ ($c_\Gamma$) $=105$ parameters at $K=30$ with the fixed profiles of \equref{eq:branch}, the modulation $k_q(3+d)$, and the gates $2C$ for $C$ channels, or two in total when shared. In the notation of Section~\ref{subsec:preprocessing}, the branch costs $O(L)$ per channel for pooling and $O(K+H)$ for the readout, and the modulation $O(Pd)$, against the backbone cost above, so the overall complexity remains linear in the input and output lengths and in the number of channels.
+}
+
+\needspace{6\baselineskip}
+\subsection{\blue{Scope of Phase Alignment}}
+\label{sec:scope}
+
+\blue{
+\fakeparagraph{Weak Periodicity}
+Phase tokenization reshapes the window without loss for any $\Lp$; what a weak period removes is the alignment. Each phase token still samples the series every $\Lp$ steps at one offset, so without a period the tokens become shifted, nearly redundant copies of its slowly varying part, which the shared embedding and the routing layers can still pool. All seven benchmarks are strongly periodic, and we do not evaluate this regime.
+
+\fakeparagraph{Failure Modes}
+When the dominant period is unclear, the estimated phase length may follow noise or a minor harmonic, and the resulting misalignment is the main failure mode we expect. On Traffic (\secref{sec:phase_length}), the harmonics 12 and 8 of the dominant period give larger errors than the period 24 itself. When $\Lp$ does not divide $L_{\text{in}}$, the circular padding of Section~\ref{subsec:preprocessing} appends $\Pin\Lp-L_{\text{in}}<\Lp$ values from the start of the window, which do not continue the series, and it shifts the phase of each forecast row by $L_{\text{in}} \bmod \Lp$ steps against the input token of the same index; the lengths 28 and 21 in \tabref{tab:phase_length}, which do not divide 720, combine this offset with the misalignment. Input lengths divisible by the phase length avoid both effects and are recommended whenever possible.
+
+\fakeparagraph{Relation to the Theory}
+The envelopes of Section~\ref{sec:theory} (Theorems~\ref{thm:level_envelope} and~\ref{thm:amplitude}(a)) follow from the final LayerNorm and the affine predictor alone and hold for every window, periodic or not. The capability results rest on the periodic structure: Theorem~\ref{thm:stability} on the low rank of the folded window, and Proposition~\ref{prop:capability}, Theorem~\ref{thm:complement} and Theorem~\ref{thm:amplitude}(b) on the multiplicative seasonal model~\equref{eq:mult_model}, with an exact period and horizons of whole cycles. Changes across cycles (Section~\ref{sec:mot_changes}) are a different limitation: they arise even when the period is exact, and \sysLA (Section~\ref{sec:extension}) addresses them.
 }
