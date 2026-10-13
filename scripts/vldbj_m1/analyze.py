@@ -13,6 +13,11 @@ Measures on trained checkpoints, per theory Section 5 and Appendix B:
 Each job writes ``analysis.json`` and ``analysis_windows.npz`` into the run
 directory.  Window-level joins for gain stratification are done offline.
 
+``--pf-e14`` analyzes the plain PhaseFormer checkpoints of the same-protocol
+ladder (E14 phase-only runs, every seed): the same code path with arm ``pf``, which has
+no level branch, no modulation and no fusion gates, so the shape gate is 0 and the
+amplitude envelope is ``B_phi`` itself; the hand-over and modulation blocks are absent.
+
 ``--selected-variants`` analyzes the seed-2021 tune runs of the variants chosen
 by ``run.py --stage tune-select``: those run directories keep their best
 checkpoint in ``checkpoints/best.ckpt`` and their job spec (source config,
@@ -76,7 +81,18 @@ def analysis_job(path):
         if (run_dir / 'analysis.json').exists():
             return
         variant = None
-        if (run_dir / 'result.json').exists():
+        cfg = None
+        if job['arm'] == 'pf':
+            # Plain PhaseFormer of the ladder: rebuild the E14 source config and load its best checkpoint.
+            from scripts.run_lowrank_interaction_stage2 import construct as legacy_construct
+            result = {'name': job['name']}
+            src = json.loads((Path(job['source_run_dir']) / 'config.json').read_text())
+            src.pop('checkpoint', None)
+            if digest(job['checkpoint']) != job['checkpoint_sha256']:
+                raise ValueError('Checkpoint changed after planning')
+            checkpoint = job['checkpoint']
+            model, args = legacy_construct(src, workers=0)
+        elif (run_dir / 'result.json').exists():
             result = json.loads((run_dir / 'result.json').read_text())
             cfg = json.loads((run_dir / 'config.json').read_text())
             if digest(result['checkpoint']) != result['checkpoint_sha256']:
@@ -95,7 +111,8 @@ def analysis_job(path):
             variant = spec.get('variant')
         torch.set_num_threads(2)
         torch.set_float32_matmul_precision('medium')
-        model, args = construct({**cfg, 'checkpoint': ''})
+        if job['arm'] != 'pf':
+            model, args = construct({**cfg, 'checkpoint': ''})
         state = torch.load(checkpoint, map_location='cpu', weights_only=False)['state_dict']
         model.load_state_dict(state, strict=True)
         device = torch.device('cuda:0')
@@ -103,7 +120,8 @@ def analysis_job(path):
 
         period, pred_len = model.period_len, model.pred_len
         k_primes, d = pred_len // period, model.latent_dim
-        arm, is_m1 = job['arm'], job['arm'] == 'm1'
+        arm, is_m1, is_pf = job['arm'], job['arm'] == 'm1', job['arm'] == 'pf'
+        seed = int(job.get('seed', ANALYSIS_SEED))
 
         # --- envelope constants read from the weights (Theorems 3 and 5a) ---
         ln = model.routing_layers[-1].interact.norm2
@@ -117,21 +135,26 @@ def analysis_job(path):
         C1 = (d ** 0.5 / k_primes) * (Jd @ (A.T @ torch.ones(k_primes, device=device))).norm().item()
         C_phi = abs(c0) + C1
         B_phi = (d / k_primes) ** 0.5 * torch.linalg.matrix_norm(A @ Jd, ord=2).item()
-        gate = model.lowrank_interaction_gate.detach().float().reshape(-1).cpu()
-        delta = model.lowrank_dynamic_fusion.shape_bias_delta.detach().float().reshape(-1).cpu()
         channels = model.enc_in
-        g_level = torch.sigmoid(gate).expand(channels).clone()    # (C,)
-        g_shape = torch.sigmoid(gate + delta).expand(channels).clone()
+        if is_pf:
+            # No fusion gates: the whole forecast is the phase path.
+            g_level = torch.zeros(channels)
+            g_shape = torch.zeros(channels)
+        else:
+            gate = model.lowrank_interaction_gate.detach().float().reshape(-1).cpu()
+            delta = model.lowrank_dynamic_fusion.shape_bias_delta.detach().float().reshape(-1).cpu()
+            g_level = torch.sigmoid(gate).expand(channels).clone()    # (C,)
+            g_shape = torch.sigmoid(gate + delta).expand(channels).clone()
         budget = (1.0 - g_shape) * B_phi                          # (C,)
         U = pi_basis(pred_len, period, device, torch.float32)
 
-        branch = model.lowrank_interaction_branch
+        branch = None if is_pf else model.lowrank_interaction_branch
         captured = {}
 
         def branch_hook(module, inputs, output):
             captured['branch'] = output[0].detach()               # (B, H, C) normalized
 
-        handle_branch = model.lowrank_interaction_branch.register_forward_hook(branch_hook)
+        handle_branch = None if is_pf else model.lowrank_interaction_branch.register_forward_hook(branch_hook)
         _, loader = data_provider(args.dataset_args, 'test')
 
         def run_pass(intervention, capture_q):
@@ -170,7 +193,8 @@ def analysis_job(path):
                     store['omega'].append(omega.cpu())
                     store['sigma'].append(sigma.squeeze(1).cpu())
                     store['mse'].append(mse.cpu())
-                    store['branch_lev'].append(captured['branch'].mean(1).cpu())
+                    store['branch_lev'].append(torch.zeros_like(lam).cpu() if is_pf
+                                               else captured['branch'].mean(1).cpu())
                     store['budget_excess'].append((omega.cpu() - budget).clamp_min(0))
                     if capture_q:
                         captured['q_list'].append(captured['q'].cpu())
@@ -185,12 +209,13 @@ def analysis_job(path):
         if is_m1:
             native = run_pass('native', capture_q=True)
             branch.intervention = 'native'
-        handle_branch.remove()
+        if handle_branch is not None:
+            handle_branch.remove()
 
         lam, dist, mse, sigma = base['lam'], base['dist'], base['mse'], base['sigma']
         levF, omega = base['levF'], base['omega']
         lam_flat = lam.flatten().numpy()
-        record = {'name': result['name'], 'arm': arm, 'seed': ANALYSIS_SEED, 'variant': variant,
+        record = {'name': result['name'], 'arm': arm, 'seed': seed, 'variant': variant,
                   'code_commit': commit(),
                   'constants': {'c0': c0, 'C1': C1, 'C_phi': C_phi, 'B_phi': B_phi,
                                 'd': d, 'K_prime': k_primes},
@@ -198,7 +223,7 @@ def analysis_job(path):
                             'g_level_min': g_level.min().item(),
                             'g_level_max': g_level.max().item(),
                             'g_shape_mean': g_shape.mean().item(),
-                            'shared': bool(cfg['vldbj_m1']['shared_gate'])},
+                            'shared': None if is_pf else bool(cfg['vldbj_m1']['shared_gate'])},
                   'level': {
                       'mean_abs_lambda': lam.abs().mean().item(),
                       'share_outside_interval': (dist > 0).float().mean().item(),
@@ -210,10 +235,14 @@ def analysis_job(path):
                       'share_demand_over_budget': (base['budget_excess'] > 0).float().mean().item(),
                       'mean_omega': omega.mean().item(),
                       'mean_budget': budget.mean().item()},
-                  'handover': {
+                  'handover': None if is_pf else {
                       'mean_branch_level': base['branch_lev'].mean().item(),
                       'corr_branch_level_lambda': float(np.corrcoef(
                           base['branch_lev'].flatten().numpy(), lam_flat)[0, 1])}}
+        if is_pf:
+            record['checkpoint'] = checkpoint
+            record['checkpoint_sha256'] = job['checkpoint_sha256']
+            record['source_run_dir'] = job['source_run_dir']
 
         npz = {'lambda': lam.numpy(), 'levF': levF.numpy(), 'dist': dist.numpy(),
                'omega': omega.numpy(), 'sigma': sigma.numpy(), 'mse': mse.numpy(),
@@ -269,6 +298,34 @@ def plan_jobs(runs_dir):
     return out
 
 
+def plan_pf_e14(scratch):
+    """Plain-PhaseFormer jobs: every E14 phase-only run (28 settings x 3 seeds) with its checkpoint."""
+    from scripts.run_lowrank_interaction_stage2 import digest as sha
+    from scripts.vldbj_m1.proto import e14_records
+    from scripts.vldbj_m1.run import DATASETS, E14_ROOT, HORIZONS, SEEDS, e14_sources
+    sources, records = e14_sources(), e14_records()
+    out = []
+    for dataset in DATASETS:
+        for horizon in HORIZONS:
+            for seed in SEEDS:
+                key = (dataset, horizon, seed)
+                if not records[key]['checkpoint']:
+                    raise ValueError(f'No E14 checkpoint for {key}')
+                name = f'{dataset}_H{horizon}_S{seed}__pf'
+                run_dir = scratch / 'runs' / name
+                run_dir.mkdir(parents=True, exist_ok=True)
+                job = {'run_dir': str(run_dir), 'arm': 'pf', 'name': name, 'dataset': dataset,
+                       'horizon': horizon, 'seed': seed,
+                       'source_run_dir': str(E14_ROOT / sources[key]['source_run']),
+                       'checkpoint': records[key]['checkpoint'],
+                       'checkpoint_sha256': sha(records[key]['checkpoint'])}
+                path = scratch / 'jobs' / f'{name}.json'
+                path.parent.mkdir(parents=True, exist_ok=True)
+                save_json(path, job)
+                out.append(path)
+    return out
+
+
 def plan_selected_variants(scratch):
     """Analyze the seed-2021 tune runs of the variants chosen by tune-select."""
     selection = json.loads((scratch / 'selection.json').read_text())
@@ -299,12 +356,18 @@ def main():
     parser.add_argument('--selected-variants', type=Path,
                         help='vldbj_m1 scratch dir with tune_selection.json; analyzes '
                              'the seed-2021 tune runs of every chosen variant')
-    parser.add_argument('--gpus', default='0,1,2,3,4,5,6,7')
+    parser.add_argument('--pf-e14', type=Path,
+                        help='scratch dir for the plain-PhaseFormer envelope read-out of the '
+                             'E14 phase-only checkpoints (all seeds)')
+    parser.add_argument('--gpus', default='0,1,2,3,4,5,6,7',
+                        help='comma-separated worker GPUs; repeat an id for several workers on one GPU')
     parser.add_argument('--job', type=Path)
     args = parser.parse_args()
     if args.job:
         return analysis_job(args.job)
-    if args.selected_variants:
+    if args.pf_e14:
+        jobs = plan_pf_e14(args.pf_e14.resolve())
+    elif args.selected_variants:
         jobs = plan_selected_variants(args.selected_variants)
     else:
         jobs = plan_jobs(args.runs_dir)

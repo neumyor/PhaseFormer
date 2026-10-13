@@ -145,6 +145,117 @@ class VLDBJM1Tests(unittest.TestCase):
         self.assertGreater(len(extension_names), 0)
 
 
+class StaticQTests(unittest.TestCase):
+    """The static-q ablation: q is a learned per-channel constant, default path untouched."""
+
+    def setUp(self):
+        torch.manual_seed(7)
+        torch.set_num_threads(2)
+        torch.set_float32_matmul_precision('highest')
+
+    def test_default_path_is_unchanged(self):
+        cfg = prepare_config(e14_source(), 'm1', 'S2', False)
+        self.assertNotIn('static_q', cfg['vldbj_m1'])
+        m1, *_ = paired_models(e14_source(), 'm1', 'S2', False)
+        names = {n for n, _ in m1.named_parameters()}
+        self.assertIn('lowrank_interaction_branch.communication.output.weight', names)
+        self.assertNotIn('lowrank_interaction_branch.communication.q', names)
+        self.assertEqual(parameter_breakdown(m1)['modulation'], 2 * (3 + m1.latent_dim))
+
+    def test_static_q_starts_identical_and_has_per_channel_parameters(self):
+        x = torch.randn(3, 720, 7)
+        m1, b0, _, cfg, _ = paired_models(e14_source(), 'm1', 'S2', False, None, True)
+        self.assertTrue(cfg['vldbj_m1']['static_q'])
+        names = {n: p for n, p in m1.named_parameters()}
+        q = names['lowrank_interaction_branch.communication.q']
+        self.assertEqual(tuple(q.shape), (7, m1.latent_dim))
+        self.assertEqual(float(q.abs().sum()), 0.0)
+        self.assertNotIn('lowrank_interaction_branch.communication.output.weight', names)
+        self.assertEqual(parameter_breakdown(m1)['modulation'], 7 * m1.latent_dim)
+        m1.eval(), b0.eval()
+        with torch.no_grad():
+            torch.testing.assert_close(forward(m1, x), forward(b0, x), atol=0, rtol=0)
+
+    def test_static_q_is_state_independent_and_receives_gradient(self):
+        m1, *_ = paired_models(e14_source(), 'm1', 'S2', False, None, True)
+        branch = m1.lowrank_interaction_branch
+        branch.communication.q.data.normal_()
+        phase = torch.randn(2, 7, 30, m1.latent_dim)
+        _, _, delta_a = branch.communication(torch.randn(2, 7, 3), phase)
+        _, _, delta_b = branch.communication(torch.randn(2, 7, 3), phase)
+        torch.testing.assert_close(delta_a, delta_b, atol=0, rtol=0)
+        m1.train()
+        x = torch.randn(2, 720, 7)
+        forward(m1, x).square().mean().backward()
+        grad = branch.communication.q.grad
+        self.assertIsNotNone(grad)
+        self.assertGreater(float(grad.abs().sum()), 0.0)
+
+    def test_nonzero_static_q_keeps_phase_cycle_means(self):
+        m1, b0, *_ = paired_models(e14_source(), 'm1', 'S2', False, None, True)
+        m1.lowrank_interaction_branch.communication.q.data.normal_()
+        torch.nn.init.normal_(m1.lowrank_interaction_branch.lowrank_head.mix.weight)
+        b0.load_state_dict({k: v for k, v in m1.state_dict().items() if k in b0.state_dict()})
+        captured = {}
+        for name, model in (('m1', m1), ('b0', b0)):
+            model.predictor.register_forward_hook(lambda mod, inp, out, n=name: captured.__setitem__(n, out))
+        x = torch.randn(2, 720, 7).double()
+        with torch.no_grad():
+            forward(m1.double().eval(), x)
+            forward(b0.double().eval(), x)
+        self.assertGreater((captured['m1'] - captured['b0']).abs().max(), 1e-6)
+        torch.testing.assert_close(captured['m1'].mean(2), captured['b0'].mean(2), atol=1e-10, rtol=0)
+
+    def test_modulation_off_intervention_matches_b0_forecast_parts(self):
+        m1, *_ = paired_models(e14_source(), 'm1', 'S2', False, None, True)
+        branch = m1.lowrank_interaction_branch
+        branch.communication.q.data.normal_()
+        x = torch.randn(2, 720, 7)
+        m1.eval()
+        with torch.no_grad():
+            branch.intervention = 'native'
+            native = forward(m1, x)
+            branch.intervention = 'off'
+            off = forward(m1, x)
+        self.assertGreater((native - off).abs().max(), 1e-6)
+
+    def test_static_q_is_an_m1_only_flag(self):
+        with self.assertRaises(ValueError):
+            prepare_config(e14_source(), 'b0', 'S2', False, None, True)
+
+    def test_static_q_job_name_and_extension_lr_group(self):
+        from scripts.vldbj_m1 import proto
+        job = {'dataset': 'ETTh1', 'horizon': 96, 'seed': 2021, 'arm': 'm1', 'protocol': 'e14',
+               'init': 'scratch'}
+        self.assertEqual(proto.name(job), 'ETTh1_H96_S2021__m1__e14')
+        self.assertEqual(proto.name(dict(job, static_q=True)), 'ETTh1_H96_S2021__m1__e14__staticq')
+        m1, *_ = paired_models(e14_source(), 'm1', 'S2', False, None, True)
+        self.assertTrue('lowrank_interaction_branch.communication.q'.startswith(
+            __import__('scripts.vldbj_m1.run', fromlist=['EXTENSION_PREFIXES']).EXTENSION_PREFIXES))
+
+
+    def test_staticq_plan_matches_la_protocol_configuration(self):
+        from unittest import mock
+        from scripts.vldbj_m1 import protocol, staticq
+        sources = collections.defaultdict(lambda: {'config': {}, 'source_run': 'x'})
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(staticq, 'commit', return_value='c'), \
+                mock.patch.object(staticq, 'provenance', return_value={}):
+            settings = [(d, h) for d in ('ETTh1', 'ETTm1', 'ETTm2', 'Electricity', 'Traffic', 'Weather', 'ETTh2')
+                        for h in (96, 192, 336, 720)]
+            jobs = [json.loads(p.read_text()) for p in staticq.plan(Path(tmp), sources, settings, False)]
+        self.assertEqual(len(jobs), 84)
+        self.assertEqual({j['seed'] for j in jobs}, {2021, 2022, 2023})
+        for job in jobs:
+            key = (job['dataset'], job['horizon'])
+            self.assertTrue(job['static_q'])
+            self.assertEqual((job['arm'], job['protocol'], job['init'], job['head']), ('m1', 'e14', 'scratch', 'S2'))
+            self.assertEqual(job['shared_gate'], protocol.FINAL_SHARED_GATE[key[0]])
+            self.assertEqual(job['variant_id'], protocol.FINAL_VARIANTS.get(key))
+            self.assertTrue(job['output'].endswith('__staticq'))
+        self.assertEqual(jobs[0]['dataset'], 'Traffic')  # slow datasets first
+
+
 class TuneSelectTest(unittest.TestCase):
     """tune-select compares seed-paired test reads and confirm replans winners."""
 

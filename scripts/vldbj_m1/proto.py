@@ -68,6 +68,8 @@ def name(job):
     base = f"{job['dataset']}_H{job['horizon']}_S{job['seed']}__{job['arm']}__{job['protocol']}"
     if job['init'] == 'warm':
         base += f"__warm_bb{job['backbone_lr_mult']:g}"
+    if job.get('static_q'):
+        base += '__staticq'
     return base
 
 
@@ -121,7 +123,7 @@ def build_model(job):
     if job['init'] == 'warm':
         variant = dict(variant or {}, gate_init=WARM_GATE_INIT)
     model, reference, args, cfg, common_hash = paired_models(
-        src, job['arm'], job['head'], job['shared_gate'], variant)
+        src, job['arm'], job['head'], job['shared_gate'], variant, bool(job.get('static_q', False)))
     del reference
     return model, args, cfg, common_hash
 

@@ -45,6 +45,29 @@ def legendre_profiles(horizon, count=PROFILE_COUNT):
     return torch.stack(columns, -1).float()
 
 
+class StaticCommunication(nn.Module):
+    """Centered modulation whose vector q is a learned per-channel constant.
+
+    Replaces ``q = V2 V1 t`` of the centered multiplicative modulation by a free
+    parameter ``q[c] in R^d`` that does not depend on the branch state ``t``.
+    Starting at q = 0 keeps the forecast identical to b0 at initialization, and
+    the slot-centering keeps every future cycle mean of the phase forecast
+    unchanged, exactly as in the state-driven modulation. Used only by the
+    ``static_q`` ablation that separates the level-driven part of q from its
+    static per-channel part.
+    """
+
+    def __init__(self, channels, phase_dim):
+        super().__init__()
+        self.mode = 'tp_mod_centered'
+        self.q = nn.Parameter(torch.zeros(int(channels), int(phase_dim)))
+
+    def forward(self, trend, phase):
+        write = self.q.unsqueeze(0).unsqueeze(-2)                 # (1, C, 1, d)
+        delta = (phase - phase.mean(-2, keepdim=True)) * write
+        return trend, phase + delta, delta
+
+
 class ProfileLevelHead(nn.Module):
     """Anchored cycle-mean readout written onto fixed low-frequency profiles.
 
@@ -81,15 +104,20 @@ class ProfileLevelHead(nn.Module):
 TUNE_FIELDS = ('communication_width', 'extension_lr_mult', 'gate_init')
 
 
-def prepare_config(source, arm, head, shared_gate, variant=None):
+def prepare_config(source, arm, head, shared_gate, variant=None, static_q=False):
     """Derive one registered config from an E14 phase-only source config.
 
     ``variant`` tunes only the extension (width, gate init, extension learning
     rate multiplier); the backbone protocol is untouched and the main-stage
-    variant is recovered exactly with ``variant=None``.
+    variant is recovered exactly with ``variant=None``. ``static_q`` (m1 only)
+    replaces the state-driven modulation vector by a learned per-channel
+    constant; the default adds nothing to the config, so registered hashes and
+    the default path are unchanged.
     """
     if arm not in ARMS or head not in HEADS:
         raise ValueError((arm, head))
+    if static_q and arm != 'm1':
+        raise ValueError('static_q applies to the m1 arm only')
     variant = dict(variant or {})
     if set(variant) - set(TUNE_FIELDS):
         raise ValueError(variant)
@@ -125,6 +153,8 @@ def prepare_config(source, arm, head, shared_gate, variant=None):
                        'communication_width': width, 'extension_lr_mult': lr_mult,
                        'gate_init': gate_init, 'zero_init_exit': True,
                        'source_config_hash': source.get('config_hash')}
+    if static_q:
+        cfg['vldbj_m1']['static_q'] = True
     return cfg
 
 
@@ -160,10 +190,13 @@ def construct(config, workers=0):
     if protocol['arm'] == 'm1':
         model.lowrank_interaction_branch = IsolatedBranch(branch, model.latent_dim, 'tp_mod_centered',
                                                          width=protocol.get('communication_width', 2))
+        if protocol.get('static_q'):
+            model.lowrank_interaction_branch.communication = StaticCommunication(
+                model.enc_in, model.latent_dim)
     return model, args
 
 
-def paired_models(source, arm, head, shared_gate, variant=None):
+def paired_models(source, arm, head, shared_gate, variant=None, static_q=False):
     """Build ``arm`` with every b0 parameter copied from a same-seed b0.
 
     A ``gate_init`` variant re-initializes only the two fusion logits after the
@@ -173,7 +206,7 @@ def paired_models(source, arm, head, shared_gate, variant=None):
     pl.seed_everything(source['seed'], workers=True)
     reference, args = construct(prepare_config(source, 'b0', head, shared_gate))
     common = {k: v.detach().clone() for k, v in reference.state_dict().items()}
-    config = prepare_config(source, arm, head, shared_gate, variant)
+    config = prepare_config(source, arm, head, shared_gate, variant, static_q)
     pl.seed_everything(source['seed'], workers=True)
     model, _ = construct(config)
     current = model.state_dict()
