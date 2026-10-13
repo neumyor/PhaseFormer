@@ -124,22 +124,6 @@ with innovation $\nu=\tilde y-\mathbb E[\tilde y\mid\tilde x]$ and $|\psi_1|\ge\
 \fakeparagraph{The cycle-mean branch contains the construction}
 Under model \equref{eq:mult_model} with $\alpha=0$, Lemma~\ref{lem:bayes} gives $\lambda_1=b^\top\bar r=w^\top\tilde x$ with $w=\tfrac1Pb\otimes\one_P$, which is constant within cycles, and so is $u$ in part~(c). Then $u^\top(\tilde x-\tilde x_L\one)=P\,u_{\mathrm c}^\top(\bar r-\tilde x_L\one_K)$, where $u_{\mathrm c}\in\mathbb R^K$ holds the per-cycle values of $u$ and $\bar r-\tilde x_L\one_K$ are the cycle means of the anchored window. The branch~\equref{eq:branch} with first row of $E$ equal to $Pu_{\mathrm c}^\top$, $c_E=0$, $\Gamma=e_1e_1^\top$ and $c_\Gamma=0$ outputs $\tilde x_L\one_H+\one_Hu^\top(\tilde x-\tilde x_L\one)$, because the first column of $\Psi_H$ is $\one_H$. The construction of part~(c) is therefore realized exactly, for any gates of the fusion~\equref{eq:fusion}.
 
-\subsection{Proof of Theorem~\ref{thm:amplitude}}
-
-Index the forecast by future cycle $k'$ and phase $p$. The projection $M_c$ replaces every entry by the mean of its future cycle, and $J_c=I-M_c$. Since $\one_H$ is constant within cycles, $J_c\one_H=0$. Since $U=J_c\operatorname{span}\{a_2,a_3\}\subseteq\operatorname{range}(J_c)$, the operator $\Pi=J_c-P_U$ is the orthogonal projection onto $\operatorname{range}(J_c)\cap U^\perp$, and $\Pi J_c=\Pi$.
-
-\begin{proof}
-(a) By part~(a) of the full statement of Theorem~\ref{thm:level_envelope}, the phase forecast of phase $p$ is $F_p=o_\varphi+A\varsigma_p$ with $\varsigma_p\perp\one_d$ and $\|\varsigma_p\|^2<d$. The common term $o_\varphi$ cancels in the within-cycle deviations, so, as a $K'\times P$ array, $J_cF=A\,[\varsigma_1-\bar\varsigma,\dots,\varsigma_P-\bar\varsigma]=AJ_d\,\Sigma_c$ with $\bar\varsigma=\tfrac1P\sum_p\varsigma_p$ and centered columns $\Sigma_c$. Then $\|\Sigma_c\|_F^2=\sum_p\|\varsigma_p\|^2-P\|\bar\varsigma\|^2<Pd$, so $\|J_cF\|^2\le\|AJ_d\|_2^2\|\Sigma_c\|_F^2<Pd\|AJ_d\|_2^2$ and $\tfrac1{\sqrt H}\|J_cF\|<\sqrt{d/K'}\,\|AJ_d\|_2=B_\varphi$, which is the claim for \sysname, whose forecast is $\hat{\tilde y}=F$. The branch output~\equref{eq:branch} is $F_{\mathrm b}=\tilde x_L\one_H+\Psi_H(\Gamma t+c_\Gamma)$; its within-cycle part lies in $J_c\operatorname{span}\{\one_H,a_2,a_3\}=U$, so $\Pi F_{\mathrm b}=0$. By~\equref{eq:fusion}, $\Pi\hat{\tilde y}=\Pi J_c\hat{\tilde y}=(1-g_s)\Pi F+g_s\Pi F_{\mathrm b}=(1-g_s)\Pi F$, and $\|\Pi F\|\le\|J_cF\|$. For the error, $\tfrac1H\|\hat y-y\|^2\ge\tfrac{\sigma^2}{H}\|\Pi(\hat{\tilde y}-\tilde y)\|^2$ because $\Pi$ is a projection that annihilates $\mu\one_H$, and the reverse triangle inequality gives $\|\Pi(\hat{\tilde y}-\tilde y)\|/\sqrt H\ge\Omega-(1-g_s)B_\varphi$.
-
-(b) In raw units the window is $X_{kp}=\ell_k+(1+\alpha\ell_k)s_p$ with $\sum_ps_p=0$, so the cycle means are $\ell_k$ and the window mean is $\mu=\tfrac1K\sum_k\ell_k$. The window's average within-cycle shape in normalized units is $\tfrac1K\sum_k(X_{kp}-\ell_k)/\sigma=(1+\alpha\mu)s_p/\sigma$; denote it, tiled over the horizon, by $\bar s$. With a persistent future level $\ell_f$, the future is $y_{k'p}=\ell_f+(1+\alpha\ell_f)s_p$, so $\Lambda=(\ell_f-\mu)/\sigma$ and
-\begin{equation*}
-J_c\tilde y=\frac{(1+\alpha\ell_f)\,s}{\sigma}
-=\frac{1+\alpha\mu+\alpha\sigma\Lambda}{1+\alpha\mu}\,\bar s
-=(1+\alpha_w\Lambda)\,\bar s ,
-\end{equation*}
-with $\alpha_w=\alpha\sigma/(1+\alpha\mu)$, assuming $1+\alpha\mu>0$. Applying $\Pi=\Pi J_c$ gives $\Omega=|1+\alpha_w\Lambda|\,\|\Pi\bar s\|/\sqrt H$. \qed
-\end{proof}
-
 \begin{table*}[t]
 \blue{
 \centering
@@ -190,6 +174,24 @@ Weather & 96 & 0.150 & 0.197 & 0.1445{\scriptsize$\pm$0.0003} & 0.1914{\scriptsi
 \end{tabular}
 }
 \end{table*}
+
+\subsection{Proof of Theorem~\ref{thm:amplitude}}
+
+Index the forecast by future cycle $k'$ and phase $p$. The projection $M_c$ replaces every entry by the mean of its future cycle, and $J_c=I-M_c$. Since $\one_H$ is constant within cycles, $J_c\one_H=0$. Since $U=J_c\operatorname{span}\{a_2,a_3\}\subseteq\operatorname{range}(J_c)$, the operator $\Pi=J_c-P_U$ is the orthogonal projection onto $\operatorname{range}(J_c)\cap U^\perp$, and $\Pi J_c=\Pi$.
+
+\begin{proof}
+(a) By part~(a) of the full statement of Theorem~\ref{thm:level_envelope}, the phase forecast of phase $p$ is $F_p=o_\varphi+A\varsigma_p$ with $\varsigma_p\perp\one_d$ and $\|\varsigma_p\|^2<d$. The common term $o_\varphi$ cancels in the within-cycle deviations, so, as a $K'\times P$ array, $J_cF=A\,[\varsigma_1-\bar\varsigma,\dots,\varsigma_P-\bar\varsigma]=AJ_d\,\Sigma_c$ with $\bar\varsigma=\tfrac1P\sum_p\varsigma_p$ and centered columns $\Sigma_c$. Then $\|\Sigma_c\|_F^2=\sum_p\|\varsigma_p\|^2-P\|\bar\varsigma\|^2<Pd$, so $\|J_cF\|^2\le\|AJ_d\|_2^2\|\Sigma_c\|_F^2<Pd\|AJ_d\|_2^2$ and $\tfrac1{\sqrt H}\|J_cF\|<\sqrt{d/K'}\,\|AJ_d\|_2=B_\varphi$, which is the claim for \sysname, whose forecast is $\hat{\tilde y}=F$. The branch output~\equref{eq:branch} is $F_{\mathrm b}=\tilde x_L\one_H+\Psi_H(\Gamma t+c_\Gamma)$; its within-cycle part lies in $J_c\operatorname{span}\{\one_H,a_2,a_3\}=U$, so $\Pi F_{\mathrm b}=0$. By~\equref{eq:fusion}, $\Pi\hat{\tilde y}=\Pi J_c\hat{\tilde y}=(1-g_s)\Pi F+g_s\Pi F_{\mathrm b}=(1-g_s)\Pi F$, and $\|\Pi F\|\le\|J_cF\|$. For the error, $\tfrac1H\|\hat y-y\|^2\ge\tfrac{\sigma^2}{H}\|\Pi(\hat{\tilde y}-\tilde y)\|^2$ because $\Pi$ is a projection that annihilates $\mu\one_H$, and the reverse triangle inequality gives $\|\Pi(\hat{\tilde y}-\tilde y)\|/\sqrt H\ge\Omega-(1-g_s)B_\varphi$.
+
+(b) In raw units the window is $X_{kp}=\ell_k+(1+\alpha\ell_k)s_p$ with $\sum_ps_p=0$, so the cycle means are $\ell_k$ and the window mean is $\mu=\tfrac1K\sum_k\ell_k$. The window's average within-cycle shape in normalized units is $\tfrac1K\sum_k(X_{kp}-\ell_k)/\sigma=(1+\alpha\mu)s_p/\sigma$; denote it, tiled over the horizon, by $\bar s$. With a persistent future level $\ell_f$, the future is $y_{k'p}=\ell_f+(1+\alpha\ell_f)s_p$, so $\Lambda=(\ell_f-\mu)/\sigma$ and
+\begin{equation*}
+J_c\tilde y=\frac{(1+\alpha\ell_f)\,s}{\sigma}
+=\frac{1+\alpha\mu+\alpha\sigma\Lambda}{1+\alpha\mu}\,\bar s
+=(1+\alpha_w\Lambda)\,\bar s ,
+\end{equation*}
+with $\alpha_w=\alpha\sigma/(1+\alpha\mu)$, assuming $1+\alpha\mu>0$. Applying $\Pi=\Pi J_c$ gives $\Omega=|1+\alpha_w\Lambda|\,\|\Pi\bar s\|/\sqrt H$. \qed
+\end{proof}
+
+
 
 \subsection{Proof of Proposition~\ref{prop:modulation}}
 
