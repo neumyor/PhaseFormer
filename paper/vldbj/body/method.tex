@@ -205,5 +205,5 @@ Thus, \blue{for a fixed number of layers,} the computational cost grows \blue{li
 
 \blue{
 \fakeparagraph{Cost of \sysLA}
-The level branch adds $3K$ ($E$) $+\,3$ ($c_E$) $+\,9$ ($\Gamma$) $+\,3$ ($c_\Gamma$) $=105$ parameters at $K=30$ with the fixed profiles of \equref{eq:branch}, the modulation $k_q(3+d)$, and the gates $2C$ for $C$ channels, or two in total when shared; none of these depends on the forecast horizon. In the notation of Section~\ref{subsec:preprocessing}, the branch costs $O(L)$ per channel for pooling and $O(K+H)$ for the readout, and the modulation $O(Pd)$, against the backbone cost above, so the overall complexity remains linear in the input and output lengths and in the number of channels.
+The level branch adds $3K$ ($E$) $+\,3$ ($c_E$) $+\,9$ ($\Gamma$) $+\,3$ ($c_\Gamma$) $=105$ parameters at $K=30$ with the fixed profiles of \equref{eq:branch}, the modulation $k_q(3+d)$, and the gates $2C$ for $C$ channels, or two in total when shared. In the notation of Section~\ref{subsec:preprocessing}, the branch costs $O(L)$ per channel for pooling and $O(K+H)$ for the readout, and the modulation $O(Pd)$, against the backbone cost above, so the overall complexity remains linear in the input and output lengths and in the number of channels.
 }
