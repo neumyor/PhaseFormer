@@ -58,9 +58,9 @@ We submit the manuscript \emph{``PhaseFormer: Efficient Phase-Based Forecasting 
 \item \textbf{New theory (Section~5, with complete proofs in a new appendix; entirely new).} The conference version contains one theorem in its main text (phase-token stability, retained as Theorem~1 in Section~3.1); the journal version adds three theorems, two propositions and a corollary in Section~5, plus three supporting lemmas and a further corollary in the proofs appendix:
 \begin{itemize}[itemsep=0.05em,topsep=0.15em]
 \item a capability proposition: the routers pass a common level shift on, and PhaseFormer can approximate, to any accuracy, the Bayes forecast of a standard seasonal random-walk model of the Holt--Winters type;
-\item a level-envelope theorem, with a corollary: for every parameter value, the forecast level is confined to an interval fixed by the final layer normalization and readable from the trained weights; windows outside it incur an explicit error floor, the level competes with the cycle shape for the same coordinates, and following the level uniformly requires a wide envelope;
-\item a low-rank complement theorem: the level that the phase path cannot follow acts only through a few fixed horizon profiles, so a rank-limited linear branch on the cycle means carries it;
-\item an amplitude-envelope theorem: the within-cycle amplitude of the forecast is bounded by a constant of the weights, and the amplitude demand of a multiplicative series grows linearly with its level demand;
+\item a level-envelope theorem, with a corollary: for every parameter value, the forecast level is confined to an interval fixed by the final layer normalization and readable from the trained weights; windows outside it incur an explicit error floor, and following the level uniformly requires a wide envelope;
+\item a low-rank complement theorem: under standard seasonal models, the level that the phase path cannot follow acts only through a few fixed horizon profiles, so a rank-limited linear branch on the cycle means carries it;
+\item an amplitude-envelope theorem: the within-cycle amplitude of the forecast is bounded by a constant of the weights, and the amplitude demand of a multiplicative series scales with its level demand;
 \item a centered-modulation proposition: the modulation leaves every future cycle mean of the phase forecast exactly unchanged, and one driven by the level forecast can supply the missing amplitude factor.
 \end{itemize}
 

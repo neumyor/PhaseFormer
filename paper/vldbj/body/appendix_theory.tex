@@ -129,21 +129,6 @@ J_c\tilde y=\frac{(1+\alpha\ell_f)\,s}{\sigma}
 with $\alpha_w=\alpha\sigma/(1+\alpha\mu)$, assuming $1+\alpha\mu>0$. Applying $\Pi=\Pi J_c$ gives $\Omega=|1+\alpha_w\Lambda|\,\|\Pi\bar s\|/\sqrt H$. \qed
 \end{proof}
 
-\subsection{Proof of Proposition~\ref{prop:modulation}}
-
-\begin{proof}
-(a) $\sum_p(h_p-\bar h)\odot q=\big(\sum_ph_p-P\bar h\big)\odot q=0$. The predictor is affine and shared, so $\tfrac1P\sum_p(\Phi h'_p+c_\Phi)=\tfrac1P\sum_p(\Phi h_p+c_\Phi)$ for every future cycle. The fusion~\equref{eq:fusion} uses the phase forecast only through $M_cF$ in its level part, so the level of the fused forecast is unchanged as well. The level envelope applies because the modulated forecast has the same level as the unmodulated forecast computed from the same latents, which lies in $\mathcal I_\varphi$, and Theorem~\ref{thm:complement} depends on the phase path only through its level and its shape error.
-
-(b) With $h_p=\gamma_2\odot\varsigma_p+\beta_2$, the modulated deviations are $(h_p-\bar h)\odot(\one+q)=\operatorname{diag}(\gamma_2\odot(\one+q))J_d(\varsigma_p-\bar\varsigma)$, and the argument of Theorem~\ref{thm:amplitude}(a) gives the envelope $B_\varphi(q)=\sqrt{d/K'}\,\|\Phi\operatorname{diag}(\gamma_2\odot(\one+q))J_d\|_2$; for $q=q_1\one_d$ the diagonal factor is the scalar $1+q_1$, so $B_\varphi(q)=|1+q_1|B_\varphi$. If $q=\alpha_w\one_d\,\xi^\top t=\alpha_w\hat\Lambda\one_d$, then the modulated phase forecast $F^{q}$ satisfies $J_cF^{q}=(1+\alpha_w\hat\Lambda)J_cF$ and, with $\Pi F=\Pi\bar s/(1-g_s)$, $\Pi\hat{\tilde y}=(1-g_s)\Pi F^{q}=(1+\alpha_w\hat\Lambda)\Pi\bar s$. The modulation~\equref{eq:la_modulation} realizes this $q$ with $w=k_q=1$ (and hence with any $k_q\ge1$), $V_1=\xi^\top$ and $V_2=\alpha_w\one_d$. \qed
-\end{proof}
-
-The modulation thus removes the constant amplitude envelope along exactly the required direction without touching the level.
-
-\section{Extended Results of \sysLA}
-\label{app:ext_results}
-
-Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the protocol configuration of Section~\ref{sec:ext_setup}. Over the backbone, the level branch of the extension contributes 105 parameters with the fixed profiles of \equref{eq:branch} (477 and 657 on the four settings that select a learned decoder; Appendix~\ref{app:la_config}), the modulation $k_q(3+d)$ with $k_q=\min(w,3,d)$ (Section~\ref{sec:ext_modulation}) contributes between 14 and 262 parameters, and the fusion two gates per channel or two shared gates; branch and modulation together add between 119 and 679 parameters across the settings, the gates between 2 and $2C$ more (Section~\ref{sec:complexity} and Appendix~\ref{app:la_config}).
-
 \begin{table*}[t]
 \blue{
 \centering
@@ -194,6 +179,23 @@ Weather & 96 & 0.150 & 0.197 & 0.1445{\scriptsize$\pm$0.0003} & 0.1914{\scriptsi
 \end{tabular}
 }
 \end{table*}
+
+\subsection{Proof of Proposition~\ref{prop:modulation}}
+
+\begin{proof}
+(a) $\sum_p(h_p-\bar h)\odot q=\big(\sum_ph_p-P\bar h\big)\odot q=0$. The predictor is affine and shared, so $\tfrac1P\sum_p(\Phi h'_p+c_\Phi)=\tfrac1P\sum_p(\Phi h_p+c_\Phi)$ for every future cycle. The fusion~\equref{eq:fusion} uses the phase forecast only through $M_cF$ in its level part, so the level of the fused forecast is unchanged as well. The level envelope applies because the modulated forecast has the same level as the unmodulated forecast computed from the same latents, which lies in $\mathcal I_\varphi$, and Theorem~\ref{thm:complement} depends on the phase path only through its level and its shape error.
+
+(b) With $h_p=\gamma_2\odot\varsigma_p+\beta_2$, the modulated deviations are $(h_p-\bar h)\odot(\one+q)=\operatorname{diag}(\gamma_2\odot(\one+q))J_d(\varsigma_p-\bar\varsigma)$, and the argument of Theorem~\ref{thm:amplitude}(a) gives the envelope $B_\varphi(q)=\sqrt{d/K'}\,\|\Phi\operatorname{diag}(\gamma_2\odot(\one+q))J_d\|_2$; for $q=q_1\one_d$ the diagonal factor is the scalar $1+q_1$, so $B_\varphi(q)=|1+q_1|B_\varphi$. If $q=\alpha_w\one_d\,\xi^\top t=\alpha_w\hat\Lambda\one_d$, then the modulated phase forecast $F^{q}$ satisfies $J_cF^{q}=(1+\alpha_w\hat\Lambda)J_cF$ and, with $\Pi F=\Pi\bar s/(1-g_s)$, $\Pi\hat{\tilde y}=(1-g_s)\Pi F^{q}=(1+\alpha_w\hat\Lambda)\Pi\bar s$. The modulation~\equref{eq:la_modulation} realizes this $q$ with $w=k_q=1$ (and hence with any $k_q\ge1$), $V_1=\xi^\top$ and $V_2=\alpha_w\one_d$. \qed
+\end{proof}
+
+The modulation thus removes the constant amplitude envelope along exactly the required direction without touching the level.
+
+\section{Extended Results of \sysLA}
+\label{app:ext_results}
+
+Table~\ref{tab:la_full} reports the per-horizon test results of \sysLA on all 28 settings against the \sysname backbone retrained under the protocol configuration of Section~\ref{sec:ext_setup}. Over the backbone, the level branch of the extension contributes 105 parameters with the fixed profiles of \equref{eq:branch} (477 and 657 on the four settings that select a learned decoder; Appendix~\ref{app:la_config}), the modulation $k_q(3+d)$ with $k_q=\min(w,3,d)$ (Section~\ref{sec:ext_modulation}) contributes between 14 and 262 parameters, and the fusion two gates per channel or two shared gates; branch and modulation together add between 119 and 679 parameters across the settings, the gates between 2 and $2C$ more (Section~\ref{sec:complexity} and Appendix~\ref{app:la_config}).
+
+
 }
 
 \blue{
