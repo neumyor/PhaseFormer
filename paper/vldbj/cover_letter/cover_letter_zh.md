@@ -11,7 +11,7 @@
 
 我们投递稿件 *“PhaseFormer: Efficient Phase-Based Forecasting for Spatio-Temporal Data Beyond Stable Cycles”*（作者：Yiming Niu、Jinliang Deng、Yongxin Tong），申请收录于特刊 *Spatio-Temporal Data Management and Analytics: Machine Learning-based Solutions and Beyond*。
 
-**会议版本披露。** 根据期刊投稿规则，我们在此声明：本稿是我们已经过同行评审的会议论文 *“PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting”*（Y. Niu、J. Deng、Y. Tong，International Conference on Learning Representations (ICLR), 2026）的扩展版本。稿件在三处引用了该会议论文：标题脚注、第 1 节、Declarations；第 1 节最后一段说明了哪些部分沿用会议版、哪些部分为新增。提交的 PDF 中，相对会议版新增或改动的段落一律以蓝色印刷；该标记由源码中的一个开关产生，随稿另附一份关闭标记的干净版。
+**会议版本披露。** 根据期刊投稿规则，我们在此声明：本稿是我们已经过同行评审的会议论文 *“PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting”*（Y. Niu、J. Deng、Y. Tong，International Conference on Learning Representations (ICLR), 2026）的扩展版本。稿件在三处引用了该会议论文：标题脚注、第 1 节、Declarations；第 1 节概述了新增贡献；下文逐节列出哪些部分为新增、哪些沿用会议版。
 
 **与特刊的相关性。** 本期特刊征集面向时空数据的高效、可扩展方法，预测是其主题之一。PhaseFormer 用一个约一千参数（Traffic 上 1.16K）的共享模型预测传感器网络中的每一路传感器流，部署成本随传感器数量线性增长，各传感器可并行处理。扩展部分处理的是大规模传感器网络特有的非平稳性：我们的数据分析（第 3.2 节）表明，日周期水平与振幅之间的耦合在全部七个基准数据集中都存在，且在两个传感器网络上最强，即 Traffic（862 个道路传感器）和 Electricity（321 个电表）。
 
@@ -26,7 +26,7 @@
    - **振幅包络定理**：预测的周期内振幅被一个由权重决定的常数约束，乘性序列的振幅需求随其水平需求线性增长；
    - **中心化调制作命题**：调制严格保持 phase 预测的每个未来周期均值不变，一个由水平预测驱动的调制能补足缺失的振幅因子。
 
-3. **新模型（第 4.4 节；全部为新增）。** PhaseFormer-LA 保持会议版骨干不变，新增两个组件，每个都由一个新结果推出：一个秩 3 水平分支，读取锚定的周期均值并写到三个固定的 horizon 轮廓上，经独立的水平门与形状门和 phase 预测融合（带此分支的 PhaseFormer 即 PhaseFormer-L）；以及一个对最终 phase 隐变量的中心化振幅调制，由分支的水平预测驱动。水平分支在固定轮廓下贡献 105 个参数（选择学习解码器的 4 个 setting 为 477 或 657），调制贡献 14 至 262 个；两者合计按 setting 新增 119 至 679 个参数，另加每通道两个或共享的两个融合门。关闭调制时 PhaseFormer-LA 精确退化为 PhaseFormer-L；由同一随机状态构建的模型在初始化时预测完全一致；新增计算量在输入与输出长度上保持线性。
+3. **新模型（第 4.4 节，成本见第 4.5 节；全部为新增）。** PhaseFormer-LA 保持会议版骨干不变，新增两个组件，每个都由一个新结果推出：一个秩 3 水平分支，读取锚定的周期均值并写到三个固定的 horizon 轮廓上，经独立的水平门与形状门和 phase 预测融合（带此分支的 PhaseFormer 即 PhaseFormer-L）；以及一个对最终 phase 隐变量的中心化振幅调制，由分支的水平预测驱动。水平分支在固定轮廓下贡献 105 个参数（选择学习解码器的 4 个 setting 为 477 或 657），调制贡献 14 至 262 个；两者合计按 setting 新增 119 至 679 个参数，另加每通道两个或共享的两个融合门。关闭调制时 PhaseFormer-LA 精确退化为 PhaseFormer-L；由同一随机状态构建的模型在初始化时预测完全一致；新增计算量在输入与输出长度上保持线性。
 
 4. **新实验（第 6.2–6.5 节；全部为新增）。**
    - 主对比表新增 PhaseFormer-LA 行：全部 28 个“数据集 × 预测长度”setting、三个 seed（第 6.2 节）；相对会议版 PhaseFormer，MSE 在 17/28 个 setting 和 5/7 个数据集均值上更优（最大平均改进 1.6%，最大平均退化 1.5%；MAE 在 12 个 setting 和 4 个均值上改进）；未改进的两个数据集均值上，差距来自训练协议，在相同协议下扩展的退化至多 0.3%。新增附录给出按 horizon 的均值 ± 标准差结果，对照在相同协议下重训的 PhaseFormer 骨干。
@@ -37,7 +37,7 @@
 
 **主表结果的配置。** 主表 PhaseFormer-LA 按 setting 选择其余扩展超参数；新增附录逐 setting 列出选择结果：28 个 setting 中 24 个使用固定的 105 参数分支轮廓，4 个使用学习解码器（477 或 657 参数），5 个在推理时关闭调制。验证与消融实验使用单一固定协议配置（第 6.1 节）。
 
-**与会议版的重叠。** 以下部分沿用会议版，仅做编辑性修改：第 3.1 节（含 Theorem 1 的稳定性分析）；第 4.1–4.3 节（tokenization、架构与周期性假设的适用范围）；第 6 节中的会议版实验（与八个基线的对比、效率、router 与 routing 消融、相位长度敏感性、案例研究）；以及会议版补充材料（含稳定性定理的证明），作为 electronic supplementary material 提交。摘要、引言、相关工作和结论经过修订和扩写；按第 1–7 节正文字数计，标记为新增或改动的段落约占三分之二。整体为新增的有：第 3.2 节、第 4 节的 PhaseFormer-LA 小节、第 5 节、第 6.4 节的验证实验、第 6.5 节的组件梯子，以及三个附录（证明、扩展结果、per-setting 配置）。新增内容因此超过期刊要求的 30%。
+**与会议版的重叠。** 以下部分沿用会议版，仅做编辑性修改：第 3.1 节（含 Theorem 1 的稳定性分析）；第 4.1–4.3 节（tokenization、架构与周期性假设的适用范围；其中第 4.2 节补充了第 5 节所依赖的路由层与预测器的完整描述）；第 6 节中的会议版实验（与八个基线的对比、效率、router 与 routing 消融、相位长度敏感性、案例研究）；以及会议版补充材料（含稳定性定理的证明），作为 electronic supplementary material 提交。摘要、引言、相关工作和结论经过修订和扩写；按第 1–7 节正文字数计，新增或改动的段落约占三分之二。整体为新增的有：第 3.2 节、第 4 节的 PhaseFormer-LA 小节、第 5 节、第 6.4 节的验证实验、第 6.5 节的组件梯子，以及三个附录（证明、扩展结果、per-setting 配置）。新增内容因此超过期刊要求的 30%。
 
 **可获取性。** 所有数据集均为公开基准。PhaseFormer 与 PhaseFormer-LA 的代码及全部实验脚本见 https://github.com/neumyor/PhaseFormer_TSL 。
 
