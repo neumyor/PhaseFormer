@@ -10,6 +10,8 @@
 
 Inputs (all under research_runs/, none under paper/):
   --pf-root      vldbj_pf_envelope      runs/<ds>_H<h>_S<seed>__pf/{analysis.json,analysis_windows.npz}
+                 (the npz files are large: run ``--compact-dir <pf-root>`` on the server, which writes a
+                 small analysis_compact.json next to each, and rsync only the json files)
   --staticq-root vldbj_staticq          results.csv (staticq.py --stage collect)
   --pilot-root   vldbj_m1_pilot         main/, tune/, confirm/ of the LA protocol runs
   --e14-csv      phaseformer_L_e14_main_v1/results.csv   (PhaseFormer column of the ladder)
@@ -49,6 +51,9 @@ def gate_tag(dataset):
 def envelope_record(run_dir):
     """The tab:envelope quantities of one analyzed checkpoint (floor recomputed from the windows)."""
     run_dir = Path(run_dir)
+    compact = run_dir / 'analysis_compact.json'
+    if compact.exists() and not (run_dir / 'analysis_windows.npz').exists():
+        return json.loads(compact.read_text())
     a = json.loads((run_dir / 'analysis.json').read_text())
     z = np.load(run_dir / 'analysis_windows.npz')
     # analysis.json stores a floor that is off by a factor of pred_len in old runs; recompute.
@@ -144,7 +149,7 @@ def render_envelope(summary, util, missing, tex=False):
             lines.append(f"| {ds} | {label} | {r['C1']:.2f} | {r['B_phi']:.2f} | {r['g_s']:.2f} | "
                          f"{100 * r['outside']:.1f}% | {100 * r['floor']:.2f}% | {100 * r['omega_over']:.1f}% |")
     lines.append('')
-    lines.append(f"Max level utilization max|levF-c0|/C1 over all checkpoints: PF {util['PF']}, LA {util['LA']:.2f}")
+    lines.append(f"Max level utilization max|levF-c0|/C1 over all checkpoints: PF {util['PF']:.2f}, LA {util['LA']:.2f}")
     return '\n'.join(lines) + '\n'
 
 
@@ -153,7 +158,7 @@ def load_e14(e14_csv):
     out = {}
     with open(e14_csv) as handle:
         for row in csv.DictReader(handle):
-            if row['arm'] == 'phase_only' and row['status'] == 'read':
+            if row['arm'] == 'phase_only' and row['status'] in ('read', 'reused'):  # reused rows keep their test reads
                 out[(row['dataset'], int(row['horizon']), int(row['seed']))] = (
                     float(row['test_mse']), float(row['test_mae']))
     return out
@@ -290,7 +295,21 @@ def main():
                         default=ROOT / 'research_runs/phaseformer_L_e14_main_v1/results.csv')
     parser.add_argument('--out', type=Path, default=ROOT / 'research_runs/vldbj_supplementary_summary')
     parser.add_argument('--only', choices=('A', 'B'), help='aggregate one experiment only')
+    parser.add_argument('--compact-dir', type=Path,
+                        help='write analysis_compact.json for every analyzed run under DIR/runs and exit')
+    parser.add_argument('--compact-out', type=Path,
+                        help='with --compact-dir: write the compact files under this root instead')
     args = parser.parse_args()
+    if args.compact_dir:
+        n = 0
+        for run in sorted((args.compact_dir / 'runs').glob('*/analysis.json')):
+            record = envelope_record(run.parent)
+            target = (args.compact_out or args.compact_dir) / 'runs' / run.parent.name
+            target.mkdir(parents=True, exist_ok=True)
+            (target / 'analysis_compact.json').write_text(json.dumps(record))
+            n += 1
+        print(f'wrote {n} analysis_compact.json files under {args.compact_dir}')
+        return
     args.out.mkdir(parents=True, exist_ok=True)
 
     if args.only != 'B':
