@@ -7498,3 +7498,31 @@ statements}.tex, supplementary.tex (new), cover_letter/*, main.pdf, supplementar
 docs/PhaseFormer_VLDBJ_LA_wide_search_results.md. Concurrent edits from the user's
 other session (Section 4/5 revisions, commits 9eea223/f2b7901) were preserved
 throughout; two of its commits swept in earlier parts of this batch.
+
+## 2026-10-13 Supplementary experiments launched: PhaseFormer envelope read-out (A) and static-q ablation (B)
+
+- Purpose (VLDBJ extension, deadline 2026-10-15): (A) the tab:envelope quantities on the retrained
+  PhaseFormer backbone (ladder column 1) for comparison with the LA checkpoints; (B) a static-q
+  ablation of PhaseFormer-LA that separates the level-driven part of the modulation from its static
+  per-channel part. No test-set selection is involved: nothing is tuned for either experiment (B reuses
+  the per-setting LA protocol hyperparameters, so static-q gets exactly the LA budget and no per-setting
+  tuning of its own).
+- Code (commit 040c578, branch codex/trend-token-cross-attention): `scripts/vldbj_m1/model.py`
+  (`StaticCommunication`, flag `static_q` in `prepare_config`/`paired_models`/`construct`, m1 only,
+  default off: state dict, config and forward of b0/m1 verified identical to the previous commit),
+  `proto.py` (job name suffix `__staticq`, flag forwarded), `staticq.py` (controller: 28 settings x 3
+  seeds, head S2, per-dataset gate sharing and the eight `FINAL_VARIANTS`, from scratch, best-val
+  checkpoint, native and modulation-off test reads), `analyze.py` (arm `pf`, `--pf-e14`: same code path
+  as the LA analysis; no gates so g_s = 0 and the amplitude envelope is B_phi), tests (39 pass locally
+  and on the server). Aggregation: `scripts/summarize_vldbj_supplementary.py`.
+- static-q definition: q[c] is a free zero-initialized parameter in R^d per channel (C*d parameters,
+  e.g. 7 channels x d=4 = 28 on ETTh1, 862 x d on Traffic) instead of q = V2 V1 t (2(3+d) parameters);
+  same slot centering (cycle-mean invariance kept; the cycle-mean check passes in the smoke runs),
+  same extension learning-rate group. It is a superset of the static part of LA's q, hence the strongest
+  static competitor.
+- Server: frozen clone `~/niuyiming/PhaseFormer_vldbj_supp_20261013` from bundle
+  `phaseformer_vldbj_supp.bundle` (same pattern as the other VLDBJ runs; the main checkout is on
+  weak_residual_nlinear_bottleneck with uncommitted changes and was not touched). A: all 84 E14 phase-only
+  checkpoints existed, no retraining; `~/niuyiming/vldbj_pf_envelope.log`, results
+  `research_runs/vldbj_pf_envelope/`. B: `~/niuyiming/vldbj_staticq.log`, results
+  `research_runs/vldbj_staticq/` (GPUs 0,1 x 4 slots; the other GPUs are used by another user).
