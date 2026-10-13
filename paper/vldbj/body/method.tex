@@ -2,7 +2,7 @@
 \section{Methodology}
 \label{sec:method}
 
-Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear}\blue{, which keeps the cost linear in the number of sensors,} and omit the channel dimension throughout the remainder of this paper\blue{; the $C$ channels of a dataset share one model}. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following \blue{subsections}, we describe the data preprocessing procedure, present the proposed network architecture\blue{, introduce its level--amplitude extension, analyze the computational complexity of both, and finally delimit the scope of phase alignment}.
+Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear}\blue{, which keeps the cost linear in the number of sensors,} and omit the channel dimension throughout the remainder of this paper\blue{; the $C$ channels of a dataset share one model}. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following \blue{subsections}, we describe the data preprocessing procedure, present the proposed network architecture\blue{, introduce its level--amplitude extension, and finally analyze the computational complexity of both}.
 
 \begin{figure*}[t]
     \centering
@@ -21,13 +21,13 @@ Phase tokenization transforms the one-dimensional input sequence into a two-dime
 Conversely, phase de-tokenization reconstructs the predicted phase--period matrix back into a one-dimensional output sequence.
 \revised{\blue{Let $L_{\text{phase}}$ denote the period length, the number of steps in one cycle, which we also call the phase length; it is estimated by frequency analysis (\secref{sec:phase_length}) and kept fixed.}}
 
-To ensure that the input sequence length is a multiple of $L_{\text{phase}}$, we circularly pad the sequence to length \blue{$P_{\text{in}}L_{\text{phase}}$}, where $P_{\text{in}} = \left\lceil \frac{L_{\text{in}}}{L_{\text{phase}}} \right\rceil.$
+To ensure that the input sequence length is a multiple of $L_{\text{phase}}$, we circularly pad the sequence to length \blue{$P_{\text{in}}L_{\text{phase}}$}, where $P_{\text{in}} = \left\lceil \frac{L_{\text{in}}}{L_{\text{phase}}} \right\rceil.$ \blue{Input lengths that are multiples of $L_{\text{phase}}$ need no padding and are recommended whenever possible.}
 As illustrated in \figref{fig:overview}, the padded sequence $\mathbf{X}$ is then reshaped into a phase--period matrix $\mathbf{X}_{\text{phase}} \in \mathbb{R}^{L_{\text{phase}} \times P_{\text{in}}}$, where each entry \blue{$\mathbf{X}_{\text{phase}}[p, k]$ corresponds to the observation at the $p$-th phase of the $k$-th cycle}.
 \blue{De-tokenization reverses this reshaping.}
 
 \blue{
 \fakeparagraph{Notation}
-We abbreviate $P=\Lp$ for the period, $K=\Pin$ and $K'=\Pout$ for the numbers of input and output cycles, $L=KP$ and $H=K'P$ for the input length and the horizon. In all \sysLA experiments $L=720$, $P=24$ and $K=30$, and every horizon $H\in\{96,192,336,720\}$ is a whole number of cycles, so that no padding occurs. The folded normalized window $\tilde X\in\mathbb R^{K\times P}$, the transpose of the phase--period matrix of $\tilde x$, has one row per cycle; it is the matrix $X$ of Theorem~\ref{thm:stability} and Section~\ref{sec:mot_changes} with $D=K$ and $H=P$, and from here on $H$ denotes the horizon. Its columns are the phase tokens $\tilde x_p\in\mathbb R^K$, and its row means are the cycle means $\bar r=\tfrac1P\tilde X\one_P\in\mathbb R^K$. Sections~\ref{subsec:phase-network}, \ref{sec:complexity} and~\ref{sec:scope} keep the conference symbols $\Lp$, $\Pin$ and $\Pout$.
+We abbreviate $P=\Lp$ for the period, $K=\Pin$ and $K'=\Pout$ for the numbers of input and output cycles, $L=KP$ and $H=K'P$ for the input length and the horizon. In all \sysLA experiments $L=720$, $P=24$ and $K=30$, and every horizon $H\in\{96,192,336,720\}$ is a whole number of cycles, so that no padding occurs. The folded normalized window $\tilde X\in\mathbb R^{K\times P}$, the transpose of the phase--period matrix of $\tilde x$, has one row per cycle; it is the matrix $X$ of Theorem~\ref{thm:stability} and Section~\ref{sec:mot_changes} with $D=K$ and $H=P$, and from here on $H$ denotes the horizon. Its columns are the phase tokens $\tilde x_p\in\mathbb R^K$, and its row means are the cycle means $\bar r=\tfrac1P\tilde X\one_P\in\mathbb R^K$. Sections~\ref{subsec:phase-network} and~\ref{sec:complexity} keep the conference symbols $\Lp$, $\Pin$ and $\Pout$.
 }
 
 % --------------------------------------------------------------------
@@ -193,18 +193,3 @@ Thus, \blue{for a fixed number of layers,} the computational cost grows \blue{li
 \fakeparagraph{Cost of \sysLA}
 The level branch adds $3K$ ($E$) $+\,3$ ($c_E$) $+\,9$ ($\Gamma$) $+\,3$ ($c_\Gamma$) $=105$ parameters at $K=30$ with the fixed profiles of \equref{eq:branch}, the modulation $k_q(3+d)$, and the gates $2C$ for $C$ channels, or two in total when shared. In the notation of Section~\ref{subsec:preprocessing}, the branch costs $O(L)$ per channel for pooling and $O(K+H)$ for the readout, and the modulation $O(Pd)$, against the backbone cost above, so the overall complexity remains linear in the input and output lengths and in the number of channels.
 }
-
-\needspace{6\baselineskip}
-\subsection{\blue{Scope of Phase Alignment}}
-\label{sec:scope}
-
-\blue{
-Phase alignment assumes a clear period whose length divides the input. This subsection describes what happens when either assumption fails, a limitation distinct from the changes across cycles (Section~\ref{sec:mot_changes}), which arise even when the period is exact; Section~\ref{sec:theory_design} states which theoretical results rely on the period.
-
-\fakeparagraph{No Clear Period}
-Without a clear dominant period, the estimated phase length may follow noise or a minor harmonic; this is the main failure mode we expect. On Traffic (\secref{sec:phase_length}), the harmonics 12 and 8, which divide 720, merge two or three phases of the 24-step cycle into one token and give larger errors than the period 24. If the series has no period at all, each token still samples it every $\Lp$ steps: the tokens share its slowly varying part and carry its faster variation as aliased, unaligned noise, which the routing layers may average out. We do not evaluate this regime.
-
-\fakeparagraph{Input Length Not a Multiple of the Period}
-If $\Lp$ does not divide $L_{\text{in}}$, the circular padding of Section~\ref{subsec:preprocessing} appends the first $\Pin\Lp-L_{\text{in}}$ values of the window, which do not continue the series, and offsets every output phase token by $L_{\text{in}}\bmod\Lp$ steps from the input token of the same index. The lengths 28 and 21 in \tabref{tab:phase_length} do not divide 720, so their errors likely combine these effects with the wrong period. Input lengths divisible by $\Lp$ remove the padding effects, though not a wrong period.
-}
-\par\vspace*{\fill}
