@@ -2,29 +2,31 @@
 \section{How Far \sysname Can Follow Changes Across Cycles}
 \label{sec:theory}
 
-This section explains why the two components of Section~\ref{sec:extension} take their form. For level drift (Section~\ref{sec:mot_changes}) we first ask whether the architecture can represent it; for both changes we then ask how far a trained model reaches and what form the remainder takes. Table~\ref{tab:two_envelopes} summarizes the answers. We use the notation of Section~\ref{sec:method}; full statements and proofs are in Appendix~\ref{app:proofs}.
+Section~\ref{sec:mot_changes} left open whether the changes across cycles cost \sysname accuracy. Theorem~\ref{thm:stability} concerns the input tokens, whose span these changes move; here we ask what the forecast can follow, and the limit lies in the final LayerNorm and the predictor. The answer has four steps (Table~\ref{tab:two_envelopes}). (i)~\sysname can represent level drift. (ii)~For fixed weights, its forecast level and amplitude stay in two \emph{envelopes} computable from the weights; a window whose \emph{demand}, the level or amplitude its future requires, lies outside an envelope has an error floor, and we say that the envelope \emph{binds}. (iii)~Under the seasonal models of Section~\ref{sec:mot_changes}, the missing level is a few scalars on fixed profiles, and the amplitude demand is the cycle shape scaled with the level. (iv)~These forms determine the form of each component of \sysLA (Section~\ref{sec:theory_design}). The subscript $\varphi$ marks constants of the phase path; proofs are in Appendix~\ref{app:proofs}.
 
 \begin{table}[t]
 \blue{
 \centering
-\caption{Overview of Section~\ref{sec:theory}: two changes across cycles, two envelopes, two components.}
+\caption{Overview of Section~\ref{sec:theory}: for each change across cycles, what the future requires, what a fixed checkpoint allows, and the component of \sysLA that supplies the rest.}
 \label{tab:two_envelopes}
 \footnotesize
 \setlength{\tabcolsep}{3pt}
-\def\tcA#1{\parbox[t]{47pt}{\raggedright #1}}
-\def\tcB#1{\parbox[t]{91pt}{\raggedright #1}}
-\def\tcC#1{\parbox[t]{89pt}{\raggedright #1}}
+\def\tcA#1{\parbox[t]{50pt}{\raggedright #1}}
+\def\tcB#1{\parbox[t]{89pt}{\raggedright #1}}
+\def\tcC#1{\parbox[t]{88pt}{\raggedright #1}}
 \begin{tabular}{@{}lll@{}}
 \toprule
  & \tcB{Level drift} & \tcC{Level-dependent amplitude} \\
 \midrule
-\tcA{Demand} & \tcB{$\Lambda$, future level~\equref{eq:level_demand}} & \tcC{$\Omega$, future shape~\equref{eq:amplitude_demand}} \\
+\tcA{Demand} & \tcB{future level} & \tcC{future within-cycle swing} \\
 \addlinespace[2pt]
-\tcA{Envelope} & \tcB{interval $\mathcal I_\varphi$ of half-width $C_1$ (Thm.~\ref{thm:level_envelope})} & \tcC{$(1-g_s)B_\varphi$ (Thm.~\ref{thm:amplitude}a)} \\
+\tcA{Envelope} & \tcB{level interval fixed by the weights (Thm.~\ref{thm:level_envelope})} & \tcC{amplitude bound fixed by the weights (Thm.~\ref{thm:amplitude}a)} \\
 \addlinespace[2pt]
-\tcA{Beyond it} & \tcB{rank $\le m$ on fixed profiles (Thm.~\ref{thm:complement})} & \tcC{cycle shape scaled by $1+\alpha_w\Lambda$ (Thm.~\ref{thm:amplitude}b)} \\
+\tcA{Representable} & \tcB{yes (Prop.~\ref{prop:capability}), if the envelope is wide (Cor.~\ref{cor:capability_cost})} & \tcC{no result} \\
 \addlinespace[2pt]
-\tcA{Component} & \tcB{cycle-mean branch~\equref{eq:branch}} & \tcC{centered modulation~\equref{eq:la_modulation} (Prop.~\ref{prop:modulation})} \\
+\tcA{Seasonal form} & \tcB{missing level: few scalars on fixed profiles (Thm.~\ref{thm:complement})} & \tcC{demand: cycle shape scaled with the level (Thm.~\ref{thm:amplitude}b)} \\
+\addlinespace[2pt]
+\tcA{Component} & \tcB{low-rank branch on cycle means, bypassing the final LayerNorm} & \tcC{centered modulation driven by the level forecast (Prop.~\ref{prop:modulation})} \\
 \addlinespace[2pt]
 \tcA{Tested in} & \tcB{Sections~\ref{sec:exp_envelopes}, \ref{sec:exp_capacity}} & \tcC{Sections~\ref{sec:exp_envelopes}, \ref{sec:exp_mechanism}} \\
 \bottomrule
@@ -32,7 +34,7 @@ This section explains why the two components of Section~\ref{sec:extension} take
 }
 \end{table}
 
-\subsection{Bounded Reach of a Trained Model}
+\subsection{Capability and Bounded Reach}
 \label{sec:theory_setup}
 
 Let $\tilde y=(y-\mu\one)/\sigma$ be the future in the coordinates of the window. The \emph{level demand} of a window,
@@ -40,23 +42,23 @@ Let $\tilde y=(y-\mu\one)/\sigma$ be the future in the coordinates of the window
 \Lambda=\lev(\tilde y)=(\mu_y-\mu)/\sigma,
 \label{eq:level_demand}
 \end{equation}
-is the distance of the future mean $\mu_y$ from the window mean in units of the window's standard deviation. The analysis uses the multiplicative seasonal model~\equref{eq:mult_model}.
-
-\fakeparagraph{Why the Reach Is Bounded}
-Every routing layer ends with the LayerNorm $\LN_2$, whose output is $\gamma_2\odot\varsigma+\beta_2$ with a centered $\varsigma$ of norm less than $\sqrt d$, whatever the input. The predictor of \equref{eq:predictor} is affine, so for fixed weights every phase forecast lies in a fixed ellipsoid, the image of this ball under $A=\Phi\operatorname{diag}(\gamma_2)$ shifted by $o_\varphi=\Phi\beta_2+c_\Phi$. Routing, attention and depth decide which point of the ellipsoid is produced, never the ellipsoid itself. Its projections onto the level and onto the within-cycle shape give the two envelopes below.
-
-\subsection{Level Drift}
-\label{sec:theory_level}
+is the distance of the future mean $\mu_y$ from the window mean in units of the window's standard deviation. The analysis uses the multiplicative seasonal model~\equref{eq:mult_model}; with $\alpha=0$ it is the additive seasonal random-walk model.
 
 \fakeparagraph{Capability}
-Under model~\equref{eq:mult_model} with $\alpha=0$, the Bayes forecast of each phase is its average over the window, with the plain average of the cycle means replaced by a recency-weighted average $b^\top\bar r$ (Lemma~\ref{lem:bayes}, Appendix~\ref{app:proofs}). For general weights $b$ with $\one^\top b=1$, we call this forecaster of the Holt--Winters type the \emph{level-adaptive seasonal forecaster} $G_b$.
+Under the additive model, the Bayes forecast of each phase is its average over the window, with the plain average of the cycle means replaced by a recency-weighted average $b^\top\bar r$ (Lemma~\ref{lem:bayes}, Appendix~\ref{app:proofs}). For general weights $b$ with $\one^\top b=1$, we call this forecaster of the Holt--Winters type the \emph{level-adaptive seasonal forecaster} $G_b$.
 
 \begin{proposition}[Structural level capability]
 \label{prop:capability}
-A level trajectory enters every phase token as a common shift, and router attention passes a common shift on (Lemma~\ref{lem:shift}); only the LayerNorms distort it. For every $b$ with $\one^\top b=1$ and $\|b\|\le1$, there are parameters for which \sysname with one routing layer and $d\ge4$ approximates $G_b$, and hence the Bayes forecast, uniformly to any accuracy: a large offset $c$ in the embedding makes the LayerNorms nearly linear, and the error decays as $c^{-2}$.
+For every $b$ with $\one^\top b=1$ and $\|b\|\le1$, there are parameters for which \sysname with one routing layer and $d\ge4$ approximates $G_b$ uniformly over all normalized windows to any accuracy, and hence, under the additive model, the Bayes forecast.
 \end{proposition}
 
-The architecture can therefore represent level drift; Corollary~\ref{cor:capability_cost} below shows that doing so uniformly requires a wide envelope.
+A level trajectory enters every phase token as a common shift, router attention passes a common shift on (Lemma~\ref{lem:shift}), and only the LayerNorms distort it; a large offset in the embedding makes them nearly linear, and the error decays with the inverse square of the offset. The architecture can therefore represent level drift. For fixed weights, however, it cannot follow every level.
+
+\fakeparagraph{Why the Reach Is Bounded}
+Every routing layer ends with the LayerNorm $\LN_2$, whose output is $\gamma_2\odot\varsigma+\beta_2$ with a centered $\varsigma$ of norm less than $\sqrt d$, whatever the input. The predictor of \equref{eq:predictor} is affine, so for fixed weights every phase forecast lies in a fixed ellipsoid, the image of this ball under $A=\Phi\operatorname{diag}(\gamma_2)$ shifted by $o_\varphi=\Phi\beta_2+c_\Phi$. Routing, attention and depth decide which point of the ellipsoid is produced, never the ellipsoid itself. Its projections onto the level and onto the within-cycle shape are the \emph{level envelope} and the \emph{amplitude envelope}.
+
+\subsection{Level Drift}
+\label{sec:theory_level}
 
 \fakeparagraph{Level Envelope}
 With $A$ and $o_\varphi$ from the last routing layer, define
@@ -84,15 +86,18 @@ For every parameter value of \sysname (any depth, routers, heads, positional emb
 If \sysname approximates $G_b$ uniformly to within $\epsilon_0$ in forecast level, then $C_1\ge\sqrt{K\|b\|^2-1}-\epsilon_0$.
 \end{corollary}
 
-Tracking the level of the last cycle (all weight on cycle $K$) thus requires $C_1\ge\sqrt{K-1}=5.39$ at $K=30$. Conversely, a phase path of half-width $C_1$ can follow a weighting $b$ uniformly over windows only if it averages over roughly $1/\|b\|^2\ge K/(1+C_1^2)$ cycles; the binding windows are those whose variation lies between cycles. The phase paths of the trained \sysLA checkpoints of Section~\ref{sec:exp_envelopes} have $C_1$ between $1.07$ and $1.86$ on the ETT and Weather datasets (averaged over horizons), at least about 7 to 14 of the 30 input cycles, and $3.80$ and $5.23$ on Electricity and Traffic, close to the 5.39 that the last cycle requires. Since a jointly trained phase path may hand part of the level to the branch (Theorem~\ref{thm:complement}(c)), these values describe the trained phase path rather than the backbone alone. Ordinary changes can exceed a narrow envelope: a pure linear trend continued through the horizon demands $\Lambda=1.96$ to $3.46$ at $L=720$, and a large persistent step within the last $L/(1+(|c_0|+C_1)^2)$ samples demands a level outside $\mathcal I_\varphi$ (Corollary~\ref{cor:steps}, Appendix~\ref{app:proofs}).
+\fakeparagraph{Representing Drift Costs Envelope Width}
+Corollary~\ref{cor:capability_cost} reconciles Proposition~\ref{prop:capability} with Theorem~\ref{thm:level_envelope}. Tracking the level of the last cycle (all weight on cycle $K$) requires $C_1\ge\sqrt{K-1}=5.39$ at $K=30$. Conversely, an envelope of half-width $C_1$ lets the phase path follow a weighting $b$ uniformly over windows only if $b$ averages over roughly $1/\|b\|^2\ge K/(1+C_1^2)$ cycles. The trained phase paths are narrow on the ETT and Weather datasets ($C_1$ between $1.07$ and $1.86$) and close to this width on Electricity and Traffic (Section~\ref{sec:exp_envelopes}).
+
+Ordinary changes exceed a narrow envelope: a pure linear trend continued through the horizon demands $\Lambda=1.96$ to $3.46$ at $L=720$, and a large persistent step within the last $L/(1+(|c_0|+C_1)^2)$ samples demands a level outside $\mathcal I_\varphi$ (Corollary~\ref{cor:steps}, Appendix~\ref{app:proofs}).
 
 \fakeparagraph{What a Level Branch Must Supply}
-The phase path misses the part of the level demand outside $\mathcal I_\varphi$, a thresholded, nonlinear function of the window, but this part enters the forecast along fixed horizon profiles. Suppose that
+The envelope bounds the phase path, not the fused forecast: a branch that does not pass through $\LN_2$ can supply a level outside $\mathcal I_\varphi$, and the fused level $(1-g_\ell)\lev(F)+g_\ell\lev(F_{\mathrm b})$ of \sysL can leave the interval. The part of the level demand outside $\mathcal I_\varphi$ is a thresholded, nonlinear function of the window, but it enters the forecast along fixed horizon profiles. Suppose that
 \begin{equation}
 \mathbb E[\tilde y\mid\tilde x]=S(\tilde x)+\textstyle\sum_{j=1}^m a_j\lambda_j(\tilde x),
 \label{eq:profile_model}
 \end{equation}
-where $S$ is a horizon-centered shape carried by the phase path, $a_1=\one_H$ is the displacement profile, $a_2,\dots,a_m$ are fixed horizon-centered profiles such as tilt and curvature, and the $\lambda_j$ are scalar state forecasts. Model~\equref{eq:mult_model} with $\alpha=0$ has $m=1$ and a linear $\lambda_1$; a local linear trend adds a tilt.
+where $S$ is a horizon-centered shape carried by the phase path, $a_1=\one_H$ is the displacement profile, $a_2,\dots,a_m$ are fixed horizon-centered profiles such as tilt and curvature, and the $\lambda_j$ are scalar state forecasts. The additive model has $m=1$ and a linear $\lambda_1$; a local linear trend adds a tilt. In Theorem~\ref{thm:complement}, part~(a) shows that the optimal linear branch is low-rank, part~(b) that it acts on the level only as far as the envelope binds, and part~(c) that the anchored branch of~\equref{eq:branch} needs rank one; $F'$ is the phase path with its shape pre-scaled by the gates of~\equref{eq:fusion}.
 
 \begin{theorem}[Low-rank level structure]
 \label{thm:complement}
@@ -102,7 +107,7 @@ Let the phase path $F$ have its level in $\mathcal I_\varphi$, and let a branch 
 (c) Let $m=1$ with $\lambda_1$ linear in the window, let the branch be anchored, $F_{\mathrm b}=\tilde x_L\one_H+W(\tilde x-\tilde x_L\one_L)$, and let the jointly trained phase path carry the shape at the scale of the gates of~\equref{eq:fusion}, $F'=M_cS/(1-g_\ell)+J_cS/(1-g_s)$. Then a rank-one $W=\one_Hu^\top$ attains the Bayes risk of~\equref{eq:profile_model} for any gates. With equal gates and $m$ profiles, $\operatorname{rank}W\le m$.
 \end{theorem}
 
-What the backbone misses is thus a few scalars per window times fixed profiles, and a low-rank map onto them suffices. The envelope bounds the phase path, not the fused forecast: the level $(1-g_\ell)\lev(F)+g_\ell\lev(F_{\mathrm b})$ of \sysL can leave $\mathcal I_\varphi$, because the branch does not pass through $\LN_2$. On \sysLA checkpoints the floor~\equref{eq:level_floor} is therefore a lower bound on the error of the phase path alone.
+Under the profile model~\equref{eq:profile_model}, what the backbone misses is thus a few scalars per window times fixed profiles, and a low-rank map onto them suffices. On \sysLA checkpoints, the floor~\equref{eq:level_floor} is a lower bound on the error of the phase path alone.
 
 \subsection{Level-Dependent Amplitude}
 \label{sec:theory_amplitude}
@@ -112,7 +117,7 @@ The \emph{amplitude demand} is the size of the future's within-cycle shape that 
 \Omega=\tfrac{1}{\sqrt H}\|\Pi\tilde y\|,\qquad \Pi=J_c-P_U,
 \label{eq:amplitude_demand}
 \end{equation}
-where $P_U$ projects onto the subspace $U$ spanned by $J_ca_2$ and $J_ca_3$, the within-cycle parts of the branch profiles of~\equref{eq:branch}, which the branch can supply itself; for \sysname alone, $U=\{0\}$ and $\Pi=J_c$. With $A$ from the last routing layer, define
+where $P_U$ projects onto the subspace $U$ spanned by $J_ca_2$ and $J_ca_3$, the within-cycle parts of the branch profiles of~\equref{eq:branch}, which the branch can supply itself; for \sysname alone, $U=\{0\}$ and $\Pi=J_c$. For model~\equref{eq:mult_model} we write $\alpha_w=\alpha\sigma/(1+\alpha\mu)$ for the coupling strength in the coordinates of the window. With $A$ from the last routing layer, define
 \begin{equation}
 B_\varphi=\sqrt{d/K'}\;\|AJ_d\|_2 .
 \label{eq:amplitude_constant}
@@ -121,27 +126,33 @@ B_\varphi=\sqrt{d/K'}\;\|AJ_d\|_2 .
 \begin{theorem}[Amplitude envelope]
 \label{thm:amplitude}
 (a) For every parameter value of \sysname and every window, $\tfrac1{\sqrt H}\|J_c\hat{\tilde y}\|<B_\varphi$. For \sysL, $\tfrac1{\sqrt H}\|\Pi\hat{\tilde y}\|<(1-g_s)B_\varphi$. In both cases, with $g_s=0$ for \sysname, $\tfrac1H\|\hat y-y\|^2\ge\sigma^2\big(\Omega-(1-g_s)B_\varphi\big)_+^2$.
-(b) Under model~\equref{eq:mult_model} with $1+\alpha\mu>0$, without noise and with a level that persists over the horizon, the future within-cycle shape is $(1+\alpha_w\Lambda)\bar s$, where $\bar s$ is the window's average within-cycle shape tiled over the horizon and $\alpha_w=\alpha\sigma/(1+\alpha\mu)$. Hence $\Omega=|1+\alpha_w\Lambda|\,\Omega_0$ with $\Omega_0=\|\Pi\bar s\|/\sqrt H$.
+(b) Under model~\equref{eq:mult_model} with $1+\alpha\mu>0$, without noise and with a level that persists over the horizon, the future within-cycle shape is $(1+\alpha_w\Lambda)\bar s$, where $\bar s$ is the window's average within-cycle shape tiled over the horizon. Hence $\Omega=|1+\alpha_w\Lambda|\,\Omega_0$ with $\Omega_0=\|\Pi\bar s\|/\sqrt H$.
 \end{theorem}
 
-The level branch cannot relax the envelope of part~(a), because its within-cycle output stays in $U$. By part~(b), the amplitude demand of a multiplicative series grows linearly with the level demand, whereas the envelope is a constant of the checkpoint. Coupling alone therefore imposes no error floor; only demand beyond the envelope does. The theory thus locates the unavoidable losses where the envelope is tight rather than where the coupling is strongest, and Traffic, the most strongly coupled benchmark (\blue{Fig.~\ref{fig:coupling}}), has the widest envelopes (Section~\ref{sec:exp_envelopes}). On \sysLA checkpoints, $(1-g_s)B_\varphi$ is the envelope of the unmodulated phase path, which the modulation changes:
+\fakeparagraph{Coupling Costs Accuracy Only Beyond the Envelope}
+By Theorem~\ref{thm:amplitude}, the amplitude demand of a multiplicative series grows linearly with the level demand, whereas the envelope is a constant of the checkpoint, so the coupling causes a floor only where it drives the demand beyond the envelope. The unavoidable losses therefore lie where the envelope is tight, not where the coupling is strongest: Traffic, the most strongly coupled benchmark (Fig.~\ref{fig:coupling}), has the widest envelopes (Section~\ref{sec:exp_envelopes}). The excess can come from the factor $|1+\alpha_w\Lambda|$ or from a large $\Omega_0$ alone; the level branch supplies neither, since its within-cycle output stays in $U$.
+
+\fakeparagraph{Supplying the Factor without Moving the Level}
+A component that supplies the factor must scale the cycle shape with a level forecast without moving any cycle mean, so that Theorems~\ref{thm:level_envelope} and~\ref{thm:complement} still hold. A modulation of the final phase latents centered over the phases does both; on \sysLA checkpoints, $(1-g_s)B_\varphi$ is the envelope of the unmodulated phase path:
 
 \begin{proposition}[Centered modulation]
 \label{prop:modulation}
 Let the final phase latents be modulated as in~\equref{eq:la_modulation}, $h'_p=h_p+(h_p-\bar h)\odot q$, with any $q\in\mathbb R^d$ that may depend on the window.
 (a) Every future cycle mean of the phase forecast is unchanged, so Theorems~\ref{thm:level_envelope} and~\ref{thm:complement} hold for the modulated phase path, and the level path of \sysL is untouched.
-(b) A vector $q=q_1\one_d$ multiplies the amplitude envelope by $|1+q_1|$. If the phase path carries the window's average shape, $\Pi F=\Pi\bar s/(1-g_s)$, and the branch state reads a level forecast $\hat\Lambda$ linearly, $\xi^\top t=\hat\Lambda$, then $q=\alpha_w\one_d\,\xi^\top t$ yields the within-cycle forecast $(1+\alpha_w\hat\Lambda)\,\Pi\bar s$, the target of Theorem~\ref{thm:amplitude}(b) with $\Lambda$ replaced by its forecast.
+(b) A vector $q=q_1\one_d$ multiplies the amplitude envelope by $|1+q_1|$. If the phase path carries the window's average shape, $\Pi F=\Pi\bar s/(1-g_s)$, and the branch state reads a level forecast $\hat\Lambda$ linearly, $\xi^\top t=\hat\Lambda$ for some $\xi\in\mathbb R^3$, then $q=\alpha_w\one_d\,\xi^\top t$ yields the within-cycle forecast $(1+\alpha_w\hat\Lambda)\,\Pi\bar s$, the target of Theorem~\ref{thm:amplitude}(b) with $\Lambda$ replaced by its forecast.
 \end{proposition}
 
-\subsection{Design Consequences and Scope}
+It thus supplies the factor $1+\alpha_w\hat\Lambda$, but not an excess that comes from a large $\Omega_0$ alone.
+
+\subsection{From the Envelopes to \sysLA}
 \label{sec:theory_design}
 
 \fakeparagraph{What the Theory Determines}
-Theorem~\ref{thm:complement} and Lemma~\ref{lem:bayes} determine the form of the level branch: it reads the cycle means, which contain the Bayes level, writes onto the displacement and a few smooth profiles, and bypasses $\LN_2$, so that its level is not confined to $\mathcal I_\varphi$; with fixed profiles it contains the construction of Theorem~\ref{thm:complement}(c) for any gates (Appendix~\ref{app:proof_complement}). Theorem~\ref{thm:amplitude} and Proposition~\ref{prop:modulation} determine the form of the modulation: centered so that it leaves the level alone, and driven by the level state so that it can supply the factor $1+\alpha_w\hat\Lambda$; a width of one already contains the construction.
+The theory derives the form of each component, not every choice in it. Theorem~\ref{thm:complement} and Lemma~\ref{lem:bayes} determine the form of the level branch: it reads the cycle means, which contain the Bayes level, writes onto the displacement and a few smooth profiles, and bypasses $\LN_2$, so that its level is not confined to $\mathcal I_\varphi$; with fixed profiles it realizes the construction of Theorem~\ref{thm:complement}(c) exactly, for any gates (Appendix~\ref{app:proof_complement}). Theorem~\ref{thm:amplitude} and Proposition~\ref{prop:modulation} determine the form of the modulation: centered so that it leaves the level alone, and driven by the level state so that it can supply the factor $1+\alpha_w\hat\Lambda$; a width of one already suffices for the construction of Proposition~\ref{prop:modulation}(b).
 
 \fakeparagraph{What the Theory Leaves Open}
-Four choices are not derived. The anchor at the last value, which makes the branch shift-equivariant and starts it at the last-value forecast, is assumed in Theorem~\ref{thm:complement}(c). The curvature profile goes beyond the displacement and tilt of the models above. Proposition~\ref{prop:modulation}(b) assumes that the branch state reads the level linearly. The default modulation width is two rather than one. In the protocol configuration, the profile basis was chosen on the validation split among three variants of rank three, the gate sharing per dataset, and the width by the per-setting small grid search, which the main-table configuration extends (Section~\ref{sec:ext_setup}); Section~\ref{sec:exp_capacity} compares the fixed profiles with learned decoders, and Section~\ref{sec:exp_ladder} measures each component.
+Five choices are not derived. The anchor at the last value, which makes the branch shift-equivariant and starts it at the last-value forecast, is assumed in Theorem~\ref{thm:complement}(c). The separate level and shape gates are not required: Theorem~\ref{thm:complement}(c) holds for any gates, and its rank bound for $m>1$ is shown for equal gates. The curvature profile goes beyond the displacement and tilt of the models above. Proposition~\ref{prop:modulation}(b) assumes that the branch state reads the level linearly. The default modulation width is two rather than one. Nor is there a capability result for the amplitude: whether the backbone can itself produce $(1+\alpha_w\Lambda)\bar s$ inside its envelope is open, so the theory shows where the modulation is necessary but not where it helps. Section~\ref{sec:ext_setup} describes how these choices were selected, Section~\ref{sec:exp_capacity} compares the fixed profiles with learned decoders, and Section~\ref{sec:exp_ladder} measures each component.
 
 \fakeparagraph{Scope}
-The results are exact statements about the architecture, but whether an envelope binds depends on the checkpoint and the data; the envelopes can be read from the weights and the demands computed from data. The envelopes (Theorems~\ref{thm:level_envelope} and~\ref{thm:amplitude}(a)) and Proposition~\ref{prop:modulation}(a) hold for every parameter value and every window, periodic or not. The other results need periodic structure: an approximately low-rank folded window (Theorem~\ref{thm:stability}), the profile model~\equref{eq:profile_model} (Theorem~\ref{thm:complement}), or model~\equref{eq:mult_model} with period $P$ (the Bayes optimality in Proposition~\ref{prop:capability}, Theorem~\ref{thm:amplitude}(b) and Proposition~\ref{prop:modulation}(b)). All results assume horizons of whole cycles. Proposition~\ref{prop:modulation}(b) further idealizes that the phase path carries the window's average shape, the regime that Theorem~\ref{thm:stability} supports, and that $\alpha_w$ is the same for all windows of a channel. Section~\ref{sec:exp_theory} tests these predictions.
+Whether an envelope binds depends on the checkpoint and the data. The envelopes (Theorems~\ref{thm:level_envelope} and~\ref{thm:amplitude}(a)) and Proposition~\ref{prop:modulation}(a) hold for every parameter value and every window, periodic or not. The other results need periodic structure: an approximately low-rank folded window (Theorem~\ref{thm:stability}), the profile model~\equref{eq:profile_model} (Theorem~\ref{thm:complement}), or model~\equref{eq:mult_model} with period $P$ (the Bayes optimality in Proposition~\ref{prop:capability}, Theorem~\ref{thm:amplitude}(b) and Proposition~\ref{prop:modulation}(b)). All results assume horizons of whole cycles. Proposition~\ref{prop:modulation}(b) further idealizes that the phase path carries the window's average shape, which we do not prove for trained models, and that $\alpha_w$ is the same for all windows of a channel. Section~\ref{sec:exp_theory} tests three predictions: the level envelope holds on every checkpoint, and where it binds the branch tracks the level (Section~\ref{sec:exp_envelopes}); the modulation leaves every cycle mean unchanged and reads the level (Section~\ref{sec:exp_mechanism}); and a few fixed profiles suffice (Section~\ref{sec:exp_capacity}).
 }
