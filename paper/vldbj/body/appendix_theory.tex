@@ -79,6 +79,11 @@ Parts~(b) and~(c) are Theorem~\ref{thm:level_envelope}.
 Every routing layer ends with $\LN_2$, so $h^{(N_r)}_p=\gamma_2\odot\varsigma_p+\beta_2$ with $\varsigma_p\perp\one_d$ and $\|\varsigma_p\|^2=d\|J_dz\|^2/(\|J_dz\|^2+d\epsilon)<d$. Substituting into~\equref{eq:predictor} gives $F_p=o_\varphi+A\varsigma_p$, and $\hat{\tilde y}=F$ for \sysname, which is (a). For a functional $a\in\mathbb R^{K'}$, $\langle a,A\varsigma_p\rangle=\langle J_dA^\top a,\varsigma_p\rangle$ is bounded by $\sqrt d\|J_dA^\top a\|$. With $a=\one/K'$, the level $\ell_p=\one^\top F_p/K'$ of phase $p$ lies in $\mathcal I_\varphi$, and the forecast level is the average of the $\ell_p$, which gives (b). For (c), the Cauchy--Schwarz inequality gives $\tfrac1H\|e\|^2\ge\lev(e)^2$ for the normalized error $e=\hat{\tilde y}-\tilde y$, and $\lev(e)^2=(\lev(\hat{\tilde y})-\Lambda)^2\ge\operatorname{dist}(\Lambda,\mathcal I_\varphi)^2$; de-normalization multiplies by $\sigma^2$. For (d), let $v=J_dA^\top\one_{K'}/K'$, so that $C_1=\sqrt d\|v\|$, and decompose $\varsigma_p$ along $v$ and its complement: $F_p=o_\varphi+\tfrac{\ell_p-c_0}{\|v\|^2}Av+A\varsigma_\perp$ with $\|\varsigma_\perp\|^2<d\big(1-((\ell_p-c_0)/C_1)^2\big)$. \qed
 \end{proof}
 
+\begin{corollary}[Capability costs envelope width]
+\label{cor:capability_cost}
+If \sysname approximates $G_b$ uniformly to within $\epsilon_0$ in forecast level, then $C_1\ge\sqrt{K\|b\|^2-1}-\epsilon_0$.
+\end{corollary}
+
 \begin{proof}[of Corollary~\ref{cor:capability_cost}]
 $\lev(G_b)=b^\top\bar r$ is maximized over $\one^\top\bar r=0$, $\|\bar r\|^2\le K$ at $s_b=\sqrt K\|J_Kb\|=\sqrt{K\|b\|^2-1}$ by a window that is constant within cycles, and its negative attains $-s_b$. A forecast level within $\epsilon_0$ of both values lies in $\mathcal I_\varphi$ by Theorem~\ref{thm:level_envelope}, so $c_0+C_1>s_b-\epsilon_0$ and $c_0-C_1<-s_b+\epsilon_0$, hence $C_1>s_b-\epsilon_0$. \qed
 \end{proof}
@@ -94,6 +99,12 @@ For a step of size $\Delta$ at $fL$ samples before the origin over zero-mean bac
 
 \subsection{Proof of Theorem~\ref{thm:complement}}
 \label{app:proof_complement}
+
+\fakeparagraph{Full statement} Let the phase path $F$ have its level in $\mathcal I_\varphi$, and let a branch read any feature of the window.
+(a) The least-squares linear predictor of the residual $\tilde y-F$ is a matrix of rank at most $m$ on the profiles $a_1,\dots,a_m$, plus a term driven only by the shape error of the phase path; the innovation noise contributes nothing.
+(b) For Gaussian features, $\lambda_1$ affine in the features and a phase path that clips its level to $\mathcal I_\varphi$, the readout onto $a_1$ is the Bayes level readout scaled by $P(\lambda_1\notin\mathcal I_\varphi)$: the optimal branch acts on the level only to the extent that the envelope binds.
+(c) Let $m=1$ with $\lambda_1$ linear in the window, let the branch be anchored, $F_{\mathrm b}=\tilde x_L\one_H+W(\tilde x-\tilde x_L\one_L)$, and let the jointly trained phase path carry the shape at the scale of the gates of~\equref{eq:fusion}, $F'=M_cS/(1-g_\ell)+J_cS/(1-g_s)$. Then a rank-one $W=\one_Hu^\top$ attains the Bayes risk of~\equref{eq:profile_model} for any gates. With equal gates and $m$ profiles, $\operatorname{rank}W\le m$.
+Part~(a) is Theorem~\ref{thm:complement} of Section~\ref{sec:theory_level}; we refer to the three parts as Theorem~\ref{thm:complement}(a)--(c).
 
 Write the phase forecast as $F=S+\sum_ja_j\varphi_j+r_\varphi$ with $r_\varphi\perp\operatorname{span}\{a_j\}$, where $r_\varphi$ is the phase path's shape error; then $\varphi_1=\lev(F)\in\mathcal I_\varphi$, and the conditional residual is
 \begin{equation}
@@ -181,6 +192,10 @@ Weather & 96 & 0.150 & 0.197 & 0.1445{\scriptsize$\pm$0.0003} & 0.1914{\scriptsi
 \end{table*}
 
 \subsection{Proof of Proposition~\ref{prop:modulation}}
+
+\fakeparagraph{Full statement} Let the final phase latents be modulated as in~\equref{eq:la_modulation}, $h'_p=h_p+(h_p-\bar h)\odot q$, with any $q\in\mathbb R^d$ that may depend on the window.
+(a) Every future cycle mean of the phase forecast is unchanged, so Theorems~\ref{thm:level_envelope} and~\ref{thm:complement} hold for the modulated phase path, and the level path of \sysL is untouched.
+(b) A vector $q=q_1\one_d$ multiplies the amplitude envelope by $|1+q_1|$. If the phase path carries the window's average shape, $\Pi F=\Pi\bar s/(1-g_s)$, and the branch state reads a level forecast $\hat\Lambda$ linearly, $\xi^\top t=\hat\Lambda$ for some $\xi\in\mathbb R^3$, then $q=\alpha_w\one_d\,\xi^\top t$ yields the within-cycle forecast $(1+\alpha_w\hat\Lambda)\,\Pi\bar s$, the target of Theorem~\ref{thm:amplitude}(b) with $\Lambda$ replaced by its forecast. This $q$ has the form $V_2V_1t$ of~\equref{eq:la_modulation} with $k_q=1$, $V_1=\xi^\top$ and $V_2=\alpha_w\one_d$, so a modulation of width one suffices.
 
 \begin{proof}
 (a) $\sum_p(h_p-\bar h)\odot q=\big(\sum_ph_p-P\bar h\big)\odot q=0$. The predictor is affine and shared, so $\tfrac1P\sum_p(\Phi h'_p+c_\Phi)=\tfrac1P\sum_p(\Phi h_p+c_\Phi)$ for every future cycle. The fusion~\equref{eq:fusion} uses the phase forecast only through $M_cF$ in its level part, so the level of the fused forecast is unchanged as well. The level envelope applies because the modulated forecast has the same level as the unmodulated forecast computed from the same latents, which lies in $\mathcal I_\varphi$, and Theorem~\ref{thm:complement} depends on the phase path only through its level and its shape error.
