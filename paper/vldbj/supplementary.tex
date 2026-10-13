@@ -108,10 +108,41 @@ State Key Laboratory of Complex \& Critical Software Environment, Beihang Univer
 \maketitle
 
 \begin{abstract}
-This electronic supplementary material collects the supplementary material of the conference version~\citep{niu2026phaseformer}: the baseline descriptions and the implementation details, the full forecasting results across all prediction horizons, the per-model efficiency comparison in parameters and FLOPs, the PCA visualizations of the token spaces, the studies of the number of routers, the model scale and the input length, the reconstruction analysis of fine-grained temporal information retention, the comparison with time series foundation models, the forecasting showcases, and the theoretical analysis of phase tokenization. It accompanies the main manuscript, which contains the article and the appendices of the journal extension.
+This electronic supplementary material collects the supplementary material of the conference version~\citep{niu2026phaseformer}: the baseline descriptions and the implementation details, the full forecasting results across all prediction horizons, the per-model efficiency comparison in parameters and FLOPs, the PCA visualizations of the token spaces, the studies of the number of routers, the model scale and the input length, the reconstruction analysis of fine-grained temporal information retention, the comparison with time series foundation models, the forecasting showcases, and the theoretical analysis of phase tokenization. \blue{It also reports the level--amplitude coupling of Section~3.2 of the main manuscript on every split.} It accompanies the main manuscript, which contains the article and the appendices of the journal extension.
 \end{abstract}
 
 \input{body/appendix}
+
+\blue{
+\section{Level--Amplitude Coupling on All Splits}
+\label{app:coupling_splits}
+Table~\ref{tab:coupling} extends Fig.~3(b) of the main manuscript to the training and validation periods. The splits are those of the forecasting experiments: the 12/4/4-month borders on the ETT datasets and 70\%, 10\% and 20\% of the series on the others. The windows have length 720 and stride 24, and a cycle has 24 samples. For every window, the correlation is taken between the 30 cycle means and the 30 within-cycle RMS deviations. The sign-consistent coupling averages this correlation over the windows of each channel, keeping its sign, and then averages the magnitudes of the channel averages. The shifted-pairing reference computes the same statistic after pairing the cycle means of every window with the RMS deviations of the window half the split later (circularly). The synthetic additive series follows Eq.~(6) of the main manuscript with $\alpha=0$.
+
+\begin{table*}[t]
+\centering
+\caption{Level--amplitude coupling on every split: sign-consistent coupling, its shifted-pairing reference, and, on the test split, the mean absolute correlation and the share of windows with a positive correlation.}
+\label{tab:coupling}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lcccccccc}
+\toprule
+ & \multicolumn{3}{c}{sign-consistent} & \multicolumn{3}{c}{shifted pairing} & \multicolumn{2}{c}{test} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-9}
+Dataset & train & val & test & train & val & test & mean $|\mathrm{corr}|$ & positive \\
+\midrule
+Synthetic additive series & 0.00 & 0.05 & 0.02 & 0.00 & 0.03 & 0.01 & 0.14 & 0.47 \\
+\midrule
+ETTm2 & 0.10 & 0.10 & 0.10 & 0.06 & 0.05 & 0.07 & 0.26 & 0.52 \\
+ETTh2 & 0.17 & 0.19 & 0.12 & 0.04 & 0.08 & 0.07 & 0.27 & 0.57 \\
+ETTm1 & 0.20 & 0.39 & 0.38 & 0.10 & 0.13 & 0.10 & 0.46 & 0.49 \\
+Weather & 0.37 & 0.36 & 0.41 & 0.09 & 0.11 & 0.12 & 0.45 & 0.68 \\
+ETTh1 & 0.28 & 0.32 & 0.45 & 0.05 & 0.12 & 0.13 & 0.49 & 0.60 \\
+Electricity & 0.54 & 0.55 & 0.50 & 0.07 & 0.11 & 0.12 & 0.55 & 0.84 \\
+Traffic & 0.86 & 0.86 & 0.89 & 0.29 & 0.25 & 0.27 & 0.89 & 1.00 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+}
 
 \bibliographystyle{spmpsci}
 \bibliography{references}

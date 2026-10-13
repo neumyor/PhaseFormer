@@ -172,7 +172,7 @@ with $g_\ell=\operatorname{sigmoid}(\omega)$ and $g_s=\operatorname{sigmoid}(\om
 \subsubsection{Centered Amplitude Modulation}
 \label{sec:ext_modulation}
 
-Level-dependent amplitude scales the cycle shape with the level (\equref{eq:cycle_axis_changes}, Table~\ref{tab:coupling}). Before the shared predictor, \sysLA adds to each final phase latent $h_p$ its deviation from the phase mean $\bar h$, scaled elementwise by a vector $q$ computed from the branch state $t$, which carries the level forecast (center of Fig.~\ref{fig:la_overview}):
+Level-dependent amplitude scales the cycle shape with the level (\equref{eq:cycle_axis_changes}, \blue{Fig.~\ref{fig:coupling}}). Before the shared predictor, \sysLA adds to each final phase latent $h_p$ its deviation from the phase mean $\bar h$, scaled elementwise by a vector $q$ computed from the branch state $t$, which carries the level forecast (center of Fig.~\ref{fig:la_overview}):
 \begin{equation}
 h'_p=h_p+(h_p-\bar h)\odot q,\qquad \bar h=\tfrac1P\textstyle\sum_ph_p,\qquad q=V_2V_1\,t,
 \label{eq:la_modulation}

@@ -100,56 +100,34 @@ Hence, \emph{phase tokenization is more robust and consistent under cycle patter
 \subsection{Changes Across Cycles}
 \label{sec:mot_changes}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/coupling.pdf}
+\caption{Level--amplitude coupling: busier days swing wider. (a)~Thirty days of one Traffic sensor from the test period, a window whose correlation (0.93) is close to the Traffic median; top: hourly occupancy; bottom: the level (mean) and the amplitude (RMS deviation) of each day, standardized. (b)~Sign-consistent coupling over the test windows of every dataset; red ticks: the shifted-pairing reference. A cycle has 24 samples, one day on the hourly datasets.}
+\label{fig:coupling}
+\end{figure}
+
 \fakeparagraph{What Theorem~\ref{thm:stability} does not cover}
-In the folded matrix $X\in\mathbb R^{D\times H}$ of the theorem, the rows index cycles and the columns index phases, so phase tokens correspond to $\operatorname{Col}(X)$. The transformation $X'=XS^\top$ acts \emph{along the phase axis}: every cycle is reshaped in the same way, which we call a \emph{common shape change}. Two other kinds of change are ubiquitous in sensor streams and act \emph{along the cycle axis}, that is, across cycles:
+The theorem covers a \emph{common shape change}: $X'=XS^\top$ reshapes every cycle of a window in the same way. Sensor streams also change from one cycle to the next (Fig.~\ref{fig:coupling}(a)). The \emph{level} of a cycle, its mean, moves: a road carries more traffic on some days than on others. The \emph{amplitude} of a cycle, its swing around the level, moves with the level: on a busy day the rush hours rise far above the night, whereas a quiet day stays low and flat. In the folded matrix $X\in\mathbb R^{D\times H}$ of the theorem, with the $D$ cycles as rows and the $H$ phases as columns, these two \emph{changes across cycles} take the form
 \begin{equation}
 \underbrace{X+\ell\,\mathbf 1^\top}_{\text{level drift}},
 \qquad
 \underbrace{\operatorname{diag}(\mathbf 1+\alpha\ell)\,X}_{\text{level-dependent amplitude}},
 \label{eq:cycle_axis_changes}
 \end{equation}
-where $\ell\in\mathbb R^D$ holds the level of each cycle and $\alpha$ is a coupling strength. The first change adds the direction $\ell$ to the column space, and the second rescales the cycles unevenly, so in general neither leaves $\operatorname{Col}(X)$ invariant. Under the row scaling $\operatorname{diag}(\mathbf 1+\alpha\ell)$ the row space, which patch tokens see, is unchanged, so this second change is a weakness of phase tokens specifically. With noise, the combination of the two changes is the multiplicative seasonal model of classical forecasting~\citep{winters1960forecasting},
+where $\ell\in\mathbb R^D$ holds the cycle levels and $\alpha$ is a coupling strength. Unlike $XS^\top$, which mixes the columns, both act on the rows, so in general neither leaves the span of the phase tokens, $\operatorname{Col}(X)$, unchanged, and Theorem~\ref{thm:stability} no longer applies. With noise, the two changes combine into
 \begin{equation}
 X_{kp}=\ell_k+(1+\alpha\ell_k)\,s_p+e_{kp},
 \qquad
 \ell_k=\ell_{k-1}+\eta_k,
 \label{eq:mult_model}
 \end{equation}
-where $X_{kp}$ is the value at phase $p$ of cycle $k$, with a zero-mean seasonal profile $s$, a random-walk level $\ell$ and Gaussian noise; with $\alpha=0$ it is the additive seasonal random-walk model.
+where $X_{kp}$ is the value at phase $p$ of cycle $k$, with a zero-mean seasonal profile $s$, a random-walk level $\ell$ and Gaussian noise. With $\alpha=0$ this is the additive seasonal random-walk model; with $\alpha\neq0$ the swing grows with the level, and we call it the multiplicative seasonal model, after the multiplicative form of Holt--Winters forecasting~\citep{winters1960forecasting}. Under \equref{eq:mult_model}, the phase token of phase $p$ is $s_p\mathbf 1+(1+\alpha s_p)\,\ell$ up to noise: every phase token carries the level, but with a weight that follows the cycle shape, large at the rush hours and small at night. Level-dependent amplitude is thus a weakness of phase tokens specifically, since it multiplies each row, that is, each patch token, by one factor and leaves the span of the patch tokens unchanged.
 
 \fakeparagraph{Insight 3: The within-cycle amplitude moves with the cycle level}
-In a multiplicative series~\equref{eq:mult_model}, the within-cycle amplitude of a window moves with its cycle level. We measure this directly on the data, independently of any model. For every channel and every window of length 720 (stride 24, 30 cycles of 24 samples), we compute the Pearson correlation between the 30 cycle means and the 30 within-cycle root-mean-square deviations. An additive series gives a correlation near zero, up to estimation noise, and a multiplicative series a positive or negative one. As anchors, we compute the same statistic on a synthetic additive series and on a synthetic multiplicative series with $\alpha=0.25$, both following \equref{eq:mult_model} with a random-walk level.
+We measure the amplitude of a cycle as its root-mean-square deviation from its mean. In Fig.~\ref{fig:coupling}(a), the levels and amplitudes of the 30 days rise and fall together, with a correlation of 0.93. We compute this correlation for every channel and every window of 720 samples (30 cycles of 24, stride 24), directly on the data. Over 30 cycles, two series that drift independently also correlate by chance, with either sign. We therefore average the correlation over the windows of each channel, keeping its sign, and report the mean magnitude of these channel averages, the \emph{sign-consistent coupling}: chance correlations cancel in the average, a coupling of stable sign does not. As a reference, the same statistic is computed after pairing the levels of every window with the amplitudes of the window half the period away, which keeps the drift of both but removes their alignment.
 
-\begin{table}[t]
-\blue{
-\centering
-\caption{Level--amplitude coupling: mean absolute correlation between the cycle means and the within-cycle RMS deviations of length-720 windows, and the share of windows with absolute correlation at least 0.3. The synthetic anchors follow \equref{eq:mult_model} with $\alpha=0$ and $\alpha=0.25$.}
-\label{tab:coupling}
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{lccccc}
-\toprule
- & \multicolumn{3}{c}{mean $|\mathrm{corr}|$} & \multicolumn{2}{c}{share $\ge0.3$} \\
-\cmidrule(lr){2-4}\cmidrule(lr){5-6}
-Dataset & train & val & test & train & test \\
-\midrule
-Additive anchor & 0.12 & 0.12 & 0.14 & 0.06 & 0.08 \\
-\midrule
-ETTm2 & 0.26 & 0.27 & 0.37 & 0.33 & 0.58 \\
-ETTh2 & 0.34 & 0.26 & 0.29 & 0.49 & 0.44 \\
-ETTm1 & 0.38 & 0.43 & 0.38 & 0.53 & 0.63 \\
-ETTh1 & 0.42 & 0.49 & 0.51 & 0.58 & 0.66 \\
-Weather & 0.43 & 0.42 & 0.45 & 0.59 & 0.59 \\
-Electricity & 0.60 & 0.59 & 0.55 & 0.79 & 0.75 \\
-Traffic & 0.87 & 0.86 & 0.88 & 0.98 & 0.99 \\
-\midrule
-Multiplicative anchor & 0.75 & 0.74 & 0.79 & 0.99 & 1.00 \\
-\bottomrule
-\end{tabular}
-}
-\end{table}
+Fig.~\ref{fig:coupling}(b) shows that five benchmarks lie far above this reference and that the coupling is strongest on the two sensor networks: Electricity, with 321 meters, reaches 0.50, and Traffic, with 862 road sensors, 0.89. On these two networks the correlation is positive in 84\% and in over 99\% of the windows, respectively, so a busier day swings wider. Weekends do not explain this: over the weekday cycles of each window alone, the coupling is still 0.51 and 0.82. On ETTh1 and ETTm1, the sign differs between channels but is stable within each, so the amplitude grows with the level on some channels and shrinks on others. ETTh2 and ETTm2 show the weakest coupling, little above the reference. On the training and validation periods, too, the two sensor networks are the most and ETTh2 and ETTm2 the least coupled (electronic supplement). Hence, \emph{wherever its sign is stable, a phase-token model needs a way to scale the cycle shape with the level}.
 
-Table~\ref{tab:coupling} shows that every benchmark lies well above the additive floor of 0.12, on every split. The coupling is weakest in ETTm2 and ETTh2, at roughly twice the floor, and strongest in the two sensor networks: Electricity, with 321 meters, reaches 0.60, and Traffic, with 862 road sensors, reaches 0.87, above the multiplicative anchor, with 98\% of its windows above 0.3. On a road network, a busier week raises the cycle level and deepens the rush-hour peaks together; on a power grid, demand scales with consumption in the same way. The level-dependent amplitude of \equref{eq:cycle_axis_changes} is therefore not a corner case: it is strongest on the large spatio-temporal datasets, and it is stable across the train, validation and test periods. It is compatible with Insight~1, which compares the distribution of phase tokens across weeks: the coupling describes how the amplitude moves with the level within a window, and it recurs from week to week.
-
-Level-dependent amplitude is thus pronounced in every benchmark; what costs accuracy is a window that needs a level or an amplitude beyond the reach of a trained model (Section~\ref{sec:theory}), and how often this happens is measured in Section~\ref{sec:exp_envelopes}. Section~\ref{sec:extension} adds two components to \sysname for the two changes, and Section~\ref{sec:theory} shows how far the backbone alone can follow them and why the components take this form.
+This coupling within a window does not contradict Insight~1, which compares the distribution of phase tokens across weeks. Whether it costs accuracy is decided by envelopes that the trained weights fix (Section~\ref{sec:theory}), which Section~\ref{sec:exp_envelopes} measures; Section~\ref{sec:extension} adds one component to \sysname for each of the two changes.
 }
