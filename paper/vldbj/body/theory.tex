@@ -2,44 +2,14 @@
 \section{How Far \sysname Can Follow Changes Across Cycles}
 \label{sec:theory}
 
-Section~\ref{sec:mot_changes} left open whether the changes across cycles cost \sysname accuracy, and Section~\ref{sec:extension} introduced \sysLA to supply what they require. This section answers the question and shows why the two components take their form, in four steps (Table~\ref{tab:two_envelopes}):
+Section~\ref{sec:mot_changes} left open whether the changes across cycles cost \sysname accuracy, and Section~\ref{sec:extension} introduced \sysLA to supply what they require. This section answers the question and shows why the two components take their form, in four steps:
 \begin{enumerate}[label=(\roman*),leftmargin=2em,itemsep=0.1em,topsep=0.2em]
 \item \emph{\sysname can represent level drift}: suitable weights make it a seasonal forecaster of the Holt--Winters type (Section~\ref{sec:theory_setup}).
 \item \emph{For fixed weights, its reach is bounded.} The forecast level stays in a fixed interval and the within-cycle amplitude below a fixed bound, the level and amplitude \emph{envelopes}, both computable from the weights. A window whose future requires a level or an amplitude outside an envelope, its \emph{demand}, has an error floor that grows with the shortfall; we then say that the envelope \emph{binds}. A change across cycles therefore forces a floor only where it drives the demand beyond an envelope, which depends on the trained weights and not on the strength of the change alone.
 \item \emph{What the envelopes exclude is simple}: under the seasonal models of Section~\ref{sec:mot_changes}, the missing level is a few numbers per window, each multiplying a fixed profile over the horizon such as an offset or a tilt, and the amplitude demand is the cycle shape scaled with the level (Sections~\ref{sec:theory_level} and~\ref{sec:theory_amplitude}).
 \item \emph{These forms determine the form of each component of \sysLA} (Section~\ref{sec:theory_design}).
 \end{enumerate}
-Unlike Theorem~\ref{thm:stability}, which concerns the input tokens, these limits concern the forecast and lie in the final LayerNorm and the predictor. The subscript $\varphi$ marks constants of the phase path; proofs are in Appendix~\ref{app:proofs}.
-
-\begin{table}[t]
-\blue{
-\centering
-\caption{Overview of Section~\ref{sec:theory}: for each change across cycles, what the future requires, what a fixed checkpoint allows, and the component of \sysLA that supplies the rest.}
-\label{tab:two_envelopes}
-\footnotesize
-\setlength{\tabcolsep}{3pt}
-\def\tcA#1{\parbox[t]{50pt}{\raggedright #1}}
-\def\tcB#1{\parbox[t]{89pt}{\raggedright #1}}
-\def\tcC#1{\parbox[t]{88pt}{\raggedright #1}}
-\begin{tabular}{@{}lll@{}}
-\toprule
- & \tcB{Level drift} & \tcC{Level-dependent amplitude} \\
-\midrule
-\tcA{Demand} & \tcB{future level} & \tcC{future within-cycle swing} \\
-\addlinespace[2pt]
-\tcA{Envelope} & \tcB{level interval fixed by the weights (Thm.~\ref{thm:level_envelope})} & \tcC{amplitude bound fixed by the weights (Thm.~\ref{thm:amplitude}a)} \\
-\addlinespace[2pt]
-\tcA{Representable} & \tcB{yes (Prop.~\ref{prop:capability}), if the envelope is wide (Cor.~\ref{cor:capability_cost})} & \tcC{no result} \\
-\addlinespace[2pt]
-\tcA{Seasonal form} & \tcB{missing level: few scalars on fixed profiles (Thm.~\ref{thm:complement})} & \tcC{demand: cycle shape scaled with the level (Thm.~\ref{thm:amplitude}b)} \\
-\addlinespace[2pt]
-\tcA{Component} & \tcB{low-rank branch on cycle means, bypassing the final LayerNorm} & \tcC{centered modulation driven by the level forecast (Prop.~\ref{prop:modulation})} \\
-\addlinespace[2pt]
-\tcA{Tested in} & \tcB{Sections~\ref{sec:exp_envelopes}, \ref{sec:exp_capacity}} & \tcC{Sections~\ref{sec:exp_envelopes}, \ref{sec:exp_mechanism}} \\
-\bottomrule
-\end{tabular}
-}
-\end{table}
+Unlike Theorem~\ref{thm:stability}, which concerns the input tokens, these limits concern the forecast and lie in the final LayerNorm and the predictor: the envelopes hold for every parameter value and every window, periodic or not, and a seasonal model enters only where a result names it. All results take horizons of whole cycles, as in all \sysLA experiments (Section~\ref{subsec:preprocessing}). The subscript $\varphi$ marks constants of the phase path; proofs are in Appendix~\ref{app:proofs}.
 
 \subsection{Capability and Bounded Reach}
 \label{sec:theory_setup}
@@ -87,7 +57,7 @@ For every parameter value of \sysname (any depth, routers, heads, positional emb
 \end{equation}
 \end{theorem}
 
-In words, each phase forecast that the phase path can produce, for any window, is a point of one fixed ellipsoid, and the level envelope $\mathcal I_\varphi$ is the shadow of the ellipsoid on the level axis; the forecast level, the average of the levels of these points, therefore stays in $\mathcal I_\varphi$. Whatever the window, the forecast level, measured from the window mean in units of the window's standard deviation, stays in $\mathcal I_\varphi$, and a future whose level lies outside costs at least the squared distance to the interval, rescaled by $\sigma^2$, in MSE. More depth, routers or heads do not remove this bound; only weights that widen $\mathcal I_\varphi$, or a path that bypasses $\LN_2$, can. On \sysLA checkpoints, the floor~\equref{eq:level_floor} therefore bounds the error of the phase path alone.
+In words, each phase forecast that the phase path can produce, for any window, is a point of one fixed ellipsoid, and the level envelope $\mathcal I_\varphi$ is the shadow of the ellipsoid on the level axis. Whatever the window, the forecast level, the average of the levels of these points measured from the window mean in units of the window's standard deviation, therefore stays in $\mathcal I_\varphi$, and a future whose level lies outside costs at least the squared distance to the interval, rescaled by $\sigma^2$, in MSE. More depth, routers or heads do not remove this bound; only weights that widen $\mathcal I_\varphi$, or a path that bypasses $\LN_2$, can. On \sysLA checkpoints, the floor~\equref{eq:level_floor} therefore bounds the error of the phase path alone.
 
 Following level drift uniformly requires a wide envelope: if \sysname approximates $G_b$ to within $\epsilon_0$ in forecast level, then $C_1\ge\sqrt{K\|b\|^2-1}-\epsilon_0$ (Corollary~\ref{cor:capability_cost}, Appendix~\ref{app:proofs}). Tracking the level of the last cycle thus requires $C_1\ge\sqrt{K-1}=5.39$ at $K=30$; conversely, an envelope of half-width $C_1$ follows a weighting $b$ uniformly only if $b$ averages over at least about $K/(1+C_1^2)$ cycles, so a narrow envelope can follow only a slowly adapting level.
 
@@ -106,7 +76,7 @@ where $S$ is a horizon-centered shape carried by the phase path, $a_1=\one_H$ is
 Let the phase path $F$ have its level in $\mathcal I_\varphi$, and let a branch read any feature of the window. The least-squares linear predictor of the residual $\tilde y-F$ is a matrix of rank at most $m$ on the profiles $a_1,\dots,a_m$, plus a term driven only by the shape error of the phase path; the innovation noise contributes nothing.
 \end{theorem}
 
-The shape-error term vanishes when the phase path gets the shape right. Under the profile model~\equref{eq:profile_model}, what the backbone misses is thus a few scalars per window times fixed profiles, and a low-rank map onto them suffices. Appendix~\ref{app:proof_complement} proves two further parts of the theorem. By part~(b), for Gaussian features the optimal branch acts on the level only to the extent that the envelope binds: the branch should take over the level where the phase path cannot, a hand-over that Section~\ref{sec:exp_envelopes} tests. By part~(c), with one profile ($m=1$), an anchored branch of rank one attains the Bayes risk of~\equref{eq:profile_model} for any gates, provided the jointly trained phase path carries the shape at the scale of the gates.
+The shape-error term vanishes when the phase path gets the shape right. Under the profile model~\equref{eq:profile_model}, what the backbone misses is thus a few scalars per window times fixed profiles, and a low-rank map onto them suffices. Appendix~\ref{app:proof_complement} proves two further parts of the theorem. By part~(b), for Gaussian features the optimal branch acts on the level only to the extent that the envelope binds: the branch should take over the level where the phase path cannot, a hand-over that Section~\ref{sec:exp_envelopes} tests. By part~(c), with one profile ($m=1$), an anchored branch of rank one attains the Bayes risk of~\equref{eq:profile_model} for any gates, provided the jointly trained phase path carries the shape at the scale of the gates. Section~\ref{sec:exp_capacity} tests how much capacity the branch needs.
 
 \subsection{Level-Dependent Amplitude}
 \label{sec:theory_amplitude}
@@ -134,7 +104,7 @@ For model~\equref{eq:mult_model}, we write $\alpha_w=\alpha\sigma/(1+\alpha\mu)$
 \end{theorem}
 
 \fakeparagraph{The Coupling Forces a Floor Only Beyond the Envelope}
-By Theorem~\ref{thm:amplitude}, the amplitude demand of a multiplicative series scales with $|1+\alpha_w\Lambda|$, whereas the envelope is a constant of the checkpoint, so the floor of part~(a) arises only where the coupling drives the demand beyond the envelope; inside it, the theory neither guarantees nor excludes a loss. The losses that the envelope makes unavoidable therefore lie where it is tight, not where the coupling is strongest: Traffic, the most strongly coupled benchmark (Fig.~\ref{fig:coupling}), has the widest envelopes (Section~\ref{sec:exp_envelopes}). On the two sensor networks, the strong coupling therefore does not force the phase path of the trained \sysLA checkpoints to lose: almost no test window needs a level or an amplitude beyond what their weights allow. Conversely, a binding amplitude envelope shows that some component is necessary, not that the modulation will gain; empirically, \sysLA gains most where the \emph{level} envelope binds (Section~\ref{sec:exp_ladder}).
+By Theorem~\ref{thm:amplitude}, the amplitude demand of a multiplicative series scales with $|1+\alpha_w\Lambda|$, whereas the envelope is a constant of the checkpoint, so the floor of part~(a) arises only where the coupling drives the demand beyond the envelope; inside it, the theory neither guarantees nor excludes a loss. The losses that the envelope makes unavoidable therefore lie where it is tight, not where the coupling is strongest: Traffic, the most strongly coupled benchmark (Fig.~\ref{fig:coupling}), has the widest envelopes (Section~\ref{sec:exp_envelopes}). On the two sensor networks, the strong coupling therefore does not force the phase path of the trained \sysLA checkpoints to lose: almost no test window needs a level or an amplitude beyond what their weights allow. Conversely, a binding amplitude envelope shows that a component beyond the phase path is necessary; how much the modulation then gains is measured rather than predicted, since for the amplitude the theory provides the bound and the form of the demand, while the capability result of Proposition~\ref{prop:capability} concerns the level. Empirically, \sysLA gains most where the \emph{level} envelope binds (Section~\ref{sec:exp_ladder}).
 
 \fakeparagraph{What a Modulation Must Supply}
 Where the amplitude envelope binds, the level branch cannot help, since its within-cycle output stays in $U$. A component that supplies the factor must scale the cycle shape with a level forecast without moving any cycle mean, so that Theorems~\ref{thm:level_envelope} and~\ref{thm:complement} still hold. A modulation of the final phase latents centered over the phases does both:
@@ -146,17 +116,12 @@ Let the final phase latents be modulated as in~\equref{eq:la_modulation}, $h'_p=
 (b) A uniform $q=q_1\one_d$ multiplies the amplitude envelope by $|1+q_1|$, and if the phase path carries the window's average shape, a $q$ that reads the branch's level forecast $\hat\Lambda$ linearly yields the within-cycle forecast $(1+\alpha_w\hat\Lambda)\,\Pi\bar s$, the target of Theorem~\ref{thm:amplitude}(b) with $\Lambda$ replaced by its forecast (Appendix~\ref{app:proofs}).
 \end{proposition}
 
+Part~(b) assumes that the phase path carries the window's average shape and that the branch reads the level linearly, with one coupling strength $\alpha_w$ for all windows and channels; Section~\ref{sec:exp_mechanism} tests both parts on synthetic series and on the trained checkpoints. A uniform $q_1$ scales the envelope by $|1+q_1|$ independently of the level, so a static part of $q$ can also cover an excess that comes from the window's own shape $\Omega_0$ rather than from the coupling; Section~\ref{sec:exp_mechanism} observes such a part on the trained checkpoints.
+
 \subsection{From the Envelopes to \sysLA}
 \label{sec:theory_design}
 
-\fakeparagraph{What the Theory Determines}
-Because the envelopes bound the phase path and not the components that supply the rest, they locate where the phase path must lose, not how much \sysLA gains. What the theory determines is the form of each component. Theorem~\ref{thm:complement} and Lemma~\ref{lem:bayes}, by which the Bayes level is a recency-weighted average of the cycle means, determine the level branch: it reads the cycle means, which contain the Bayes level, writes onto the displacement and a few smooth profiles, and bypasses $\LN_2$, so that its level is not confined to $\mathcal I_\varphi$. Theorem~\ref{thm:amplitude} and Proposition~\ref{prop:modulation} determine the modulation: centered so that it leaves the level alone, and driven by the level state so that it can supply the factor $1+\alpha_w\hat\Lambda$. Both constructions need little capacity: with fixed profiles, the branch realizes the rank-one construction of Theorem~\ref{thm:complement}(c) exactly, for any gates (Appendix~\ref{app:proof_complement}), and a modulation of width one suffices for Proposition~\ref{prop:modulation}(b). This is why the extension can stay small: the level branch has 105 parameters with the fixed profiles (Section~\ref{sec:complexity}), and since the construction holds for any gates, the per-channel gates, the only part of the extension that grows with the number of sensors, are not required by the theory.
+Because the envelopes bound the phase path and not the components that supply the rest, they locate where the phase path must lose, not how much \sysLA gains. What the theory gives is the form of each component. Under the additive model, Theorem~\ref{thm:complement} and Lemma~\ref{lem:bayes}, by which the Bayes level is a recency-weighted average of the cycle means, give the level branch: it reads the cycle means, writes onto the displacement and a few fixed profiles, and bypasses $\LN_2$, so that its level is not confined to $\mathcal I_\varphi$. Theorem~\ref{thm:amplitude} and Proposition~\ref{prop:modulation} give the modulation: centered so that it leaves every cycle mean unchanged, and driven by the level state so that it can supply the factor $1+\alpha_w\hat\Lambda$.
 
-\fakeparagraph{Limits}
-The theory leaves three kinds of question open.
-\begin{itemize}[leftmargin=1.2em,itemsep=0.1em,topsep=0.2em]
-\item \emph{Design choices.} Four choices are not derived: the anchor at the last value, which Theorem~\ref{thm:complement}(c) assumes; the separate level and shape gates, since Theorem~\ref{thm:complement}(c) holds for any gates; the curvature profile, which goes beyond the displacement and tilt of the models above; and the default modulation width of two. Section~\ref{sec:ext_setup} describes how they were selected.
-\item \emph{The amplitude.} There is no capability result for the amplitude, so the theory shows where the modulation is necessary but not where it helps; an excess that comes from the window's own shape $\Omega_0$ rather than from the coupling is reachable only by a static part of $q$, which the theory does not predict.
-\item \emph{Assumptions.} The envelopes and Proposition~\ref{prop:modulation}(a) hold for every parameter value and every window, periodic or not. The other results need periodic structure: an approximately low-rank folded window (Theorem~\ref{thm:stability}), the profile model~\equref{eq:profile_model} (Theorem~\ref{thm:complement}) or model~\equref{eq:mult_model} (Proposition~\ref{prop:capability}, Theorem~\ref{thm:amplitude}(b) and Proposition~\ref{prop:modulation}(b)). Proposition~\ref{prop:modulation}(b) further idealizes that the phase path carries the window's average shape, which we do not prove for trained models, that the branch reads the level linearly, and that $\alpha_w$ is the same for all windows of a channel. All results assume horizons of whole cycles.
-\end{itemize}
+Both components need little capacity. Under the additive model, the branch with the fixed profiles realizes the rank-one construction of Theorem~\ref{thm:complement}(c) exactly, for any gates (Appendix~\ref{app:proof_complement}), and a modulation of width one suffices for Proposition~\ref{prop:modulation}(b). The level branch therefore has 105 parameters (Section~\ref{sec:complexity}), and the per-channel gates, the only part of the extension that grows with the number of sensors, are not required by the theory. The remaining elements of \sysLA are design choices within this form. The anchor at the last value makes the branch shift-equivariant and starts it at the last-value forecast (Section~\ref{sec:extension}), and the construction of Theorem~\ref{thm:complement}(c) holds with it. Separate level and shape gates let the fused forecast take its level and its shape from the two paths in different proportions, which Theorem~\ref{thm:complement}(c) allows since it holds for any gates. The curvature profile extends the displacement and tilt of the seasonal models, and Section~\ref{sec:exp_capacity} shows that the three fixed profiles lose essentially nothing against learned decoders. The default modulation width of two contains the width-one construction; Section~\ref{sec:ext_setup} describes its selection per setting.
 }
