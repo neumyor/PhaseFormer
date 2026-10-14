@@ -87,8 +87,8 @@
 
 \begin{document}
 
-\title{Electronic Supplementary Material for ``PhaseFormer: Efficient Phase-Based Forecasting for Spatio-Temporal Data Beyond Stable Cycles''%
-\thanks{This document is the electronic supplementary material (ESM) of the manuscript ``PhaseFormer: Efficient Phase-Based Forecasting for Spatio-Temporal Data Beyond Stable Cycles'' submitted to The VLDB Journal. The manuscript extends the conference paper ``PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting'' published at ICLR 2026~\citep{niu2026phaseformer}. This ESM collects the supplementary material of the conference version, previously its Appendix~A; the appendices of the journal extension --- the proofs of Section~5, the extended results and the per-setting configurations --- remain in the main manuscript.}}
+\title{Electronic Supplementary Material for ``PhaseFormer+: Phase, Level, and Amplitude Tokens for Efficient Spatio-Temporal Forecasting''%
+\thanks{This document is the electronic supplementary material (ESM) of the manuscript ``PhaseFormer+: Phase, Level, and Amplitude Tokens for Efficient Spatio-Temporal Forecasting'' submitted to The VLDB Journal. The manuscript extends the conference paper ``PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting'' published at ICLR 2026~\citep{niu2026phaseformer}. This ESM collects the supplementary material of the conference version, previously its Appendix~A, in which PhaseFormer denotes the phase pathway of PhaseFormer+; the proofs of Section~5, the extended results and the per-setting configurations remain in the appendices of the main manuscript.}}
 
 \author{Yiming Niu \and Jinliang Deng \and Yongxin Tong}
 
@@ -108,7 +108,7 @@ State Key Laboratory of Complex \& Critical Software Environment, Beihang Univer
 \maketitle
 
 \begin{abstract}
-This electronic supplementary material collects the supplementary material of the conference version~\citep{niu2026phaseformer}: the baseline descriptions and the implementation details, the full forecasting results across all prediction horizons, the per-model efficiency comparison in parameters and FLOPs, the PCA visualizations of the token spaces, the studies of the number of routers, the model scale and the input length, the reconstruction analysis of fine-grained temporal information retention, the comparison with time series foundation models, the forecasting showcases, and the theoretical analysis of phase tokenization. \blue{It also reports the level--amplitude coupling of Section~3.2 of the main manuscript on every split.} It accompanies the main manuscript, which contains the article and the appendices of the journal extension.
+This electronic supplementary material collects the supplementary material of the conference version~\citep{niu2026phaseformer}: the baseline descriptions and the implementation details, the full forecasting results across all prediction horizons, the per-model efficiency comparison in parameters and FLOPs, the PCA visualizations of the token spaces, the studies of the number of routers, the model scale and the input length, the reconstruction analysis of fine-grained temporal information retention, the comparison with time series foundation models, the forecasting showcases, and the theoretical analysis of phase tokenization. \blue{It also reports the level--amplitude coupling of Section~3.3 of the main manuscript on every split.} It accompanies the main manuscript, which contains the article and its appendices.
 \end{abstract}
 
 \input{body/appendix}
@@ -116,7 +116,7 @@ This electronic supplementary material collects the supplementary material of th
 \blue{
 \section{Level--Amplitude Coupling on All Splits}
 \label{app:coupling_splits}
-Table~\ref{tab:coupling} extends Fig.~3(b) of the main manuscript to the training and validation periods. The splits are those of the forecasting experiments: the 12/4/4-month borders on the ETT datasets and 70\%, 10\% and 20\% of the series on the others. The windows have length 720 and stride 24, and a cycle has 24 samples. For every window, the correlation is taken between the 30 cycle means and the 30 within-cycle RMS deviations. The sign-consistent coupling averages this correlation over the windows of each channel, keeping its sign, and then averages the magnitudes of the channel averages. The shifted-pairing reference computes the same statistic after pairing the cycle means of every window with the RMS deviations of the window half the split later (circularly). The synthetic additive series follows Eq.~(6) of the main manuscript with $\alpha=0$.
+Table~\ref{tab:coupling} extends Fig.~4(b) of the main manuscript to the training and validation periods. The splits are those of the forecasting experiments: the 12/4/4-month borders on the ETT datasets and 70\%, 10\% and 20\% of the series on the others. The windows span 30 cycles and are shifted by one cycle at a time. For every window, the correlation is taken between the 30 cycle means and the 30 within-cycle RMS deviations. The sign-consistent coupling averages this correlation over the windows of each channel, keeping its sign, and then averages the magnitudes of the channel averages. The shifted-pairing reference computes the same statistic after pairing the cycle means of every window with the RMS deviations of the window half the split later (circularly). The synthetic additive series follows Eq.~(7) of the main manuscript with $\alpha=0$.
 
 \begin{table*}[t]
 \centering
