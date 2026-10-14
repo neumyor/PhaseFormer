@@ -107,7 +107,7 @@ Against the light models, \sysplus attains a lower MSE on every dataset than the
 \label{sec:exp_efficiency}
 
 We evaluate the computational overhead of all models, with detailed results in \blue{the electronic supplement}.
-\figref{fig:flops_params_visualization} shows the FLOPs and the number of parameters of all tested models on the Electricity and Traffic.
+\figref{fig:flops_params_visualization} shows the FLOPs and the number of parameters of \blue{\sysplus and the eight baselines} on the Electricity and Traffic \blue{datasets}.
 Overall, phase-based models incur lower overhead than patch-based ones.
 On the Traffic dataset, \blue{the phase pathway of \sysplus} achieves a FLOPs reduction of about 99.99\% over PatchTST and Crossformer\blue{, with about 1.2K parameters}.
 This stems from the \blue{low dimension} of phase tokens (\secref{sec:mot_stability}), \blue{which lets a small latent space and a few routers carry them. Among the light models, \sysplus attains a lower MSE than TimeBase and SparseTSF on every dataset and than FITS on six of the seven (Section~\ref{sec:exp_results}).}

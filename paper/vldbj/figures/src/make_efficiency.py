@@ -93,7 +93,7 @@ def vline(x, y0, y1, color=GRID, lw=0.75, dash=None):
 # --------------------------------------------------------------------------
 def scatter():
     new_slide(6.0, 3.2)
-    X0, X1, Y0, Y1 = 0.62, 5.88, 0.12, 2.5       # plot frame (inches)
+    X0, X1, Y0, Y1 = 0.62, 5.78, 0.12, 2.5       # plot frame (inches)
     lx0, lx1 = 2.0, 9.0                          # log10 parameters
     my0, my1 = 0.244, 0.306                      # MAE
 
@@ -183,7 +183,7 @@ def scatter():
 # FLOPs and parameters per model on Traffic and Electricity (log bars).
 # --------------------------------------------------------------------------
 def bars():
-    new_slide(12.2, 3.55)
+    new_slide(12.2, 3.69)
     W, GAP, PX0 = 2.15, 0.85, 0.78
     panels = [('(a) FLOPs on Traffic', 2, 'GFLOPs', -4.0, 3.0, 'Traffic'),
               ('(b) Parameters on Traffic', 1, 'Parameters', 2.0, 8.0, 'Traffic'),
@@ -201,7 +201,7 @@ def bars():
             hline(x0, x1, py(10 ** e))
         for e in range(int(lo), int(hi) + 1):
             hline(x0 - 0.05, x0, py(10 ** e), color=INK, lw=0.75)
-            text(x0 - 0.56, py(10 ** e) - 0.11, 0.5, 0.22, [exp_label(e)], size=TICK,
+            text(x0 - 0.59, py(10 ** e) - 0.11, 0.5, 0.22, [exp_label(e)], size=TICK,
                  align=PP_ALIGN.RIGHT)
         text(x0 - 0.25, 0.04, W + 0.5, 0.28, [title], size=TEXT)
         names = sorted(MODELS, key=lambda n: -MODELS[n][col])
@@ -236,10 +236,10 @@ def bars():
                       align=PP_ALIGN.RIGHT, color=RED if name == 'PhaseFormer+' else INK)
             tb.rotation = -60
         box(x0, Y0, W, Y1 - Y0, fill=None, line=INK, lw=1.0, shape=MSO_SHAPE.RECTANGLE)
-        tb = text(x0 - 0.5 - 0.6, (Y0 + Y1) / 2 - 0.12, 1.2, 0.24, [unit])
+        tb = text(x0 - 0.57 - 0.6, (Y0 + Y1) / 2 - 0.12, 1.2, 0.24, [unit])
         tb.rotation = -90
     # legend
-    LY = 3.26
+    LY = 3.40
     items = [('Phase-based', PHASE, None, 1.1), ('Patch-based', PATCH, None, 1.1),
              ('Phase and patch', PHASE, PATCH, 1.45), ('Others', OTHER, None, 0.75),
              ('PhaseFormer+ level and amplitude pathways (≤2.1K / ≤1.0K)', LIGHT[PHASE], RED, 5.1)]
