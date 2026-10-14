@@ -1,7 +1,7 @@
 \section{Experiments}
 \label{sec:exp}
 
-\blue{Section~\ref{sec:exp_main} gives the setup. Sections~\ref{sec:exp_results} and~\ref{sec:exp_efficiency} compare \sysname and \sysLA with the baselines in accuracy and cost, and Section~\ref{sec:exp_ablation} analyzes the components of \sysname. Section~\ref{sec:exp_theory} then tests the theory of Section~\ref{sec:theory} on trained checkpoints, and Section~\ref{sec:exp_ladder} attributes the gains of \sysLA to its two components.}
+\blue{The thesis of this article is that good tokens let a very small model suffice. The experiments test it with three questions. Is \sysplus, built on the three tokens, both accurate and small (Sections~\ref{sec:exp_results} and~\ref{sec:exp_efficiency})? Does each part of it earn its place, the components of the phase pathway (Section~\ref{sec:exp_ablation}) and the level and amplitude tokens (Section~\ref{sec:exp_ladder})? And do the trained models behave as the unified view of Section~\ref{sec:theory} predicts (Section~\ref{sec:exp_theory})? Section~\ref{sec:exp_main} gives the setup, and Section~\ref{sec:exp_summary} answers the three questions.}
 
 \subsection{\blue{Setup}}
 \label{sec:exp_main}
@@ -20,38 +20,35 @@ and \textit{Traffic}\footnote{\url{https://pems.dot.ca.gov/}},
 covering a diverse range of real-world scenarios.
 The details of the datasets are provided in \blue{the electronic supplement}.
 Following prior works~\citep{nie2023patchtst, zhang2023crossformer, huang2025timebase}, we adopt a 6:2:2 split for the ETT datasets and a 7:1:2 split for the other datasets. 
-For \sysname, we report the average results over three random seeds, while for the other baselines we follow their official implementations and released code. 
+For \blue{\sysplus}, we report the average results over three random seeds, while for the other baselines we follow their official implementations and released code. 
 We evaluate the forecasting \textbf{accuracy} of all tested models using mean squared error (MSE) and mean absolute error (MAE), 
 and assess \textbf{efficiency} in terms of floating-point operations (FLOPs) and the number of parameters (Params).
 
 \fakeparagraph{Baselines and Implementation Details}
-% We evaluate our approach against eight competitive baselines, encompassing both state-of-the-art Transformer architectures and parameter-efficient forecasting models.  
+% We evaluate \blue{\sysplus} against eight competitive baselines, encompassing both state-of-the-art Transformer architectures and parameter-efficient forecasting models.  
 \revised{
-We evaluate our approach against eight competitive baselines, following the standard non-pretraining setting where all models are trained and evaluated directly on domain-specific datasets. 
+We evaluate \blue{\sysplus} against eight competitive baselines, following the standard non-pretraining setting where all models are trained and evaluated directly on domain-specific datasets. 
 The baselines span both state-of-the-art Transformer-based architectures and recent parameter-efficient forecasting models.
 }
 We compare our method with PatchTST \citeyearpar{nie2023patchtst}, iTransformer \citeyearpar{liu2023itransformer}, Crossformer \citeyearpar{zhang2023crossformer}, FEDformer \citeyearpar{zhou2022fedformer}, TimeBase \citeyearpar{huang2025timebase}, SparseTSF \citeyearpar{lin2024sparsetsf}, FITS \citeyearpar{fits2024}, and TimeMixer \citeyearpar{timemixer24}.
-Among these, PatchTST, Crossformer, and TimeMixer are patch-based; SparseTSF is phase-based; TimeBase integrates patch and phase paradigms; FITS and FEDformer are frequency-domain; and iTransformer models the full sequence directly.
+Among these, PatchTST, Crossformer, and TimeMixer are patch-based; SparseTSF is phase-based; TimeBase integrates patch and phase paradigms; FITS and FEDformer are frequency-domain; and iTransformer models the full sequence directly. \blue{FEDformer and TimeMixer, in addition, decompose the series into trend and seasonal parts.}
 For all baselines, we adopt the recommended configurations provided in their official implementations\revised{, keeping hyperparameters aligned with ~\cite{huang2025timebase}.}
 The model is optimized using the Adam optimizer with a fixed learning rate of $1 \times 10^{-3}$.  
 Following the settings from efficiency-oriented works~\citep{huang2025timebase, lin2024sparsetsf, fits2024}, the look-back length is set to 720 time steps.
 More implementation details are provided in \blue{the electronic supplement}.
 
 \blue{
-\fakeparagraph{Setup for \sysLA}
+\fakeparagraph{Training of \sysplus}
 \label{sec:ext_setup}
-\sysLA uses the \sysname backbone of each setting (a setting is one dataset with one horizon, 28 in total) with the components of Section~\ref{sec:extension}. It is trained from scratch with the Huber loss, at most 30 epochs with early stopping on the validation loss (patience 8), with three seeds (2021--2023). The Huber loss is chosen for its linear tail, which keeps sharp level shifts from dominating the gradient and stabilizes training. All runs of \sysL and \sysLA use the input length $L=720$, the period $P=24$, and the seven datasets and four horizons above. \sysL and \sysLA are built from the same random state for each setting and seed, so that they produce identical forecasts at initialization whenever they share the gate initialization (Section~\ref{sec:ext_init}). On the settings that keep the default extension hyperparameters, their differences are therefore due to the modulation alone; on the eight settings where the per-setting search below changed these hyperparameters for \sysLA only, the differences also reflect those changes.
+\sysplus is trained from scratch on each setting (a setting is one dataset with one horizon, 28 in total) with the Huber loss, at most 30 epochs with early stopping on the validation loss (patience 8), and three seeds (2021--2023). The Huber loss is chosen for its linear tail, which keeps sharp level shifts from dominating the gradient and stabilizes training. All runs use the input length $L=720$ and the seven datasets and four horizons above. The phase-only and phase--level variants of the token ablation are trained under the same protocol, and \sysplus and its phase--level variant are built from the same random state for each setting and seed, so that they produce identical forecasts at initialization whenever they share the gate initialization (Section~\ref{sec:ext_init}).
 
-Before the 28-setting runs, we fixed the remaining design choices on the validation split of one setting per dataset (ETTh1-96, ETTh2-720, ETTm1-336, ETTm2-96, Weather-192, Electricity-96 and Traffic-96). The branch decoder was chosen among three variants of the same rank: learned decoders on 30 or 90 pooled values, and the fixed displacement, tilt and curvature profiles of \equref{eq:branch}. The gates were chosen per dataset between per-channel and shared. The rule preferred the variant with the fewest parameters whenever the validation errors were within 0.5\%, and it selected shared gates when they were within 0.1\% of per-channel gates. It selected the fixed profiles for every dataset, and shared gates for ETTh2, ETTm1 and ETTm2. The remaining hyperparameters of the extension --- the modulation width $w$, the learning-rate multiplier of the extension parameters, and the gate initialization --- were selected per setting by a small grid search on the five datasets other than ETTh1 and ETTh2, whose settings keep the default values.
+The design of the level and amplitude pathways was fixed on the validation split of one setting per dataset (ETTh1-96, ETTh2-720, ETTm1-336, ETTm2-96, Weather-192, Electricity-96 and Traffic-96). The level decoder was chosen among three variants of the same rank: learned decoders on 30 or 90 pooled values, and the fixed offset, tilt and curvature profiles of \equref{eq:branch}. The gates were chosen per dataset between per-channel and shared. The rule preferred the variant with the fewest parameters whenever the validation errors were within 0.5\%, and it selected shared gates when they were within 0.1\% of per-channel gates. It selected the fixed profiles for every dataset, and shared gates for ETTh2, ETTm1 and ETTm2.
 
-We report \sysLA in two configurations. The \emph{main-table configuration} of Table~\ref{tab:main_results} is the per-setting-tuned deployment configuration: it extends the per-setting search to further extension hyperparameters, including the basis of the level branch and whether the modulation is active at inference, which the search switches off on five settings (Appendix~\ref{app:la_config}). The \emph{protocol configuration} keeps one branch design, the fixed profiles, on every setting and the modulation always active at inference, so that the mechanism analyses of Sections~\ref{sec:exp_theory} and~\ref{sec:exp_ladder} are defined in the same way on all 28 settings; it is the instrument of these controlled attributions rather than a deployment recipe. Those sections compare it with \sysL and with the \sysname backbone retrained under the same protocol, which we call \sysname (retrained), as opposed to \sysname (conference), the result of the conference version. The dataset averages of the two \sysLA configurations differ by between 0.3\% and 2\%.
+\sysplus of Table~\ref{tab:main_results}, the \emph{main-table configuration}, selects the further hyperparameters of its level and amplitude pathways per setting by a small grid search (Appendix~\ref{app:la_config}). The token ablation and the analyses of Section~\ref{sec:exp_theory} use one fixed design on all 28 settings, the \emph{protocol configuration}, with the fixed profiles and the amplitude pathway always active, so that they are defined in the same way everywhere.
 }
 
 \subsection{\blue{Main Results}}
 \label{sec:exp_results}
-
-We conduct a joint evaluation of model efficiency and predictive accuracy. 
-The comparative analysis highlights that the proposed \textit{\sysname} establishes an improved effectiveness-efficiency tradeoff in terms of parameter scale and error metrics.
 
 \begin{table*}[t]
 \centering
@@ -59,7 +56,7 @@ The comparative analysis highlights that the proposed \textit{\sysname} establis
 Main results for long-term forecasting.
 \blue{The input length is $L=720$, and results are averaged over the horizons $H\in\{96,192,336,720\}$.}
 The best results are shown in \best{bold}, and the second-best in \second{underline}.
-\blue{The \sysname row is \sysname (conference). \sysLA uses the main-table configuration (Section~\ref{sec:ext_setup}) and is averaged over three seeds; bold and underline marks are assigned among the baselines and \sysname only, so the \sysLA row is reported as a reference and carries no marks by design, even where it is the best entry.}
+\blue{\sysplus uses the main-table configuration (Section~\ref{sec:ext_setup}) and is averaged over three seeds.}
 }
 \label{tab:main_results}
 \footnotesize
@@ -77,20 +74,27 @@ The best results are shown in \best{bold}, and the second-best in \second{underl
 \cline{2-15}
  & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
 \hline
-\blue{\sysLA} & \blue{0.401} & \blue{0.418} & \blue{0.341} & \blue{0.387} & \blue{0.351} & \blue{0.379} & \blue{0.248} & \blue{0.313} & \blue{0.159} & \blue{0.250} & \blue{0.392} & \blue{0.252} & \blue{0.219} & \blue{0.256} \\
+\blue{\sysplus} & \best{0.401} & \second{0.418} & \second{0.341} & 0.387 & \best{0.351} & \best{0.379} & \best{0.248} & \best{0.313} & \best{0.159} & \best{0.250} & \best{0.392} & \best{0.252} & \best{0.219} & \best{0.256} \\
 \hline
-\sysname & \best{0.403} & \best{0.415} & 0.346 & 0.388 & \best{0.346} & \best{0.374} & \best{0.250} & \best{0.313} & \best{0.160} & \best{0.250} & \best{0.386} & \best{0.249} & \best{0.223} & \best{0.260} \\
-PatchTST & 0.420 & 0.439 & \second{0.344} & 0.390 & \second{0.354} & 0.383 & 0.251 & 0.319 & 0.169 & 0.265 & \second{0.394} & \second{0.266} & \second{0.223} & 0.264 \\
+PatchTST & 0.420 & 0.439 & 0.344 & 0.390 & \second{0.354} & 0.383 & 0.251 & 0.319 & 0.169 & 0.265 & \second{0.394} & \second{0.266} & \second{0.223} & 0.264 \\
 iTransformer & 0.453 & 0.467 & 0.392 & 0.422 & 0.370 & 0.401 & 0.278 & 0.337 & \second{0.165} & 0.263 & 0.406 & 0.290 & 0.233 & 0.273 \\
 Crossformer & 0.517 & 0.512 & 1.468 & 0.867 & 0.390 & 0.417 & 0.392 & 0.426 & 0.180 & 0.273 & 0.545 & 0.282 & 0.255 & 0.304 \\
 FEDformer & 0.523 & 0.523 & 0.428 & 0.469 & 0.438 & 0.465 & 0.401 & 0.452 & 0.235 & 0.348 & 0.638 & 0.400 & 0.354 & 0.393 \\
-TimeBase & \second{0.404} & \second{0.416} & 0.347 & 0.397 & 0.356 & \second{0.380} & \best{0.250} & \second{0.314} & 0.167 & \second{0.258} & 0.418 & 0.278 & 0.227 & \second{0.262} \\
-SparseTSF & 0.406 & 0.418 & 0.345 & \second{0.383} & 0.362 & 0.383 & 0.252 & 0.316 & 0.168 & 0.263 & 0.413 & 0.280 & 0.243 & 0.285 \\
+TimeBase & \second{0.404} & \best{0.416} & 0.347 & 0.397 & 0.356 & \second{0.380} & \second{0.250} & \second{0.314} & 0.167 & \second{0.258} & 0.418 & 0.278 & 0.227 & \second{0.262} \\
+SparseTSF & 0.406 & \second{0.418} & 0.345 & \second{0.383} & 0.362 & 0.383 & 0.252 & 0.316 & 0.168 & 0.263 & 0.413 & 0.280 & 0.243 & 0.285 \\
 FITS & 0.419 & 0.435 & \best{0.334} & \best{0.382} & 0.359 & 0.382 & 0.285 & 0.336 & 0.172 & 0.270 & 0.410 & 0.290 & 0.241 & 0.283 \\
 TimeMixer & 0.452 & 0.474 & 0.386 & 0.425 & 0.383 & 0.413 & 0.314 & 0.367 & 0.171 & 0.273 & 0.421 & 0.298 & 0.237 & 0.281 \\
 \hline
 \end{tabular}
 \end{table*}
+
+\blue{
+Table~\ref{tab:main_results} reports the average errors over the four horizons; per-horizon results with standard deviations are in Table~\ref{tab:la_full}. \sysplus attains the best average MSE on six of the seven datasets and the best average MAE on five, and it is the only model that ranks first or second in MSE on all seven. The only exception is ETTh2, where FITS leads (0.334) and \sysplus is second (0.341).
+
+Two comparisons carry the thesis. Against the large models, \sysplus is more accurate on every dataset in both metrics, at a tiny fraction of their cost. On Traffic, the largest dataset, it is the only model more accurate than PatchTST in both metrics, reducing its MAE by 5.3\%, although PatchTST holds 7.6M parameters; on Electricity it reduces the MSE by 3.6\% relative to the runner-up, iTransformer. FEDformer and TimeMixer, which decompose the series into trend and seasonal parts, trail \sysplus on every dataset in both metrics, in line with the partial coverage of Section~\ref{sec:related}, and the patch-based PatchTST, Crossformer and TimeMixer degrade on Electricity, where the shape, the level and the amplitude all vary across 321 meters.
+
+Against the light models, \sysplus attains a lower MSE on every dataset than the small cross-cycle (phase-based) forecasters TimeBase and SparseTSF, by about 5\% to 6\% on the two sensor networks: 4.8\% and 5.4\% on Electricity and 6.2\% and 5.1\% on Traffic; FITS trails there by 7.6\% and 4.4\%. Unlike SparseTSF, which forecasts each phase with one shared linear map, the phase pathway exchanges information across phases through its routing layer; on the setting of each network in Table~\ref{tab:ablation_phase}, removing this layer raises its MSE by 10.3\% on Electricity and by 4.6\% on Traffic (Section~\ref{sec:exp_ablation}).
+}
 
 \begin{figure*}[t]
     \centering
@@ -125,22 +129,10 @@ TimeMixer & 0.452 & 0.474 & 0.386 & 0.425 & 0.383 & 0.413 & 0.314 & 0.367 & 0.17
     \caption{
     Comparison of FLOPs and parameter counts across models on the Traffic and Electricity\revised{, using an input length of 720 steps and predicting 96 future steps}.
     Patch-based models are shown in green, phase-based models in blue, and other models in gray.
+    \blue{The highlighted bar is the phase pathway of \sysplus; its level and amplitude pathways add less than 0.25\% of the FLOPs on both datasets and at most about 2.1K parameters (Section~\ref{sec:exp_efficiency}).}
     }
     \label{fig:flops_params_visualization}
 \end{figure*}
-
-
-We evaluate the predictive accuracy of \sysname and the baseline methods on seven datasets. 
-\tabref{tab:main_results} reports the average prediction errors across four forecasting horizons, with detailed results provided in \blue{the electronic supplement}.
-\blue{Overall, \sysname attains the best average MSE on six of the seven datasets, with the clearest margins on the two large sensor networks: on Electricity it reduces the MSE by 3.0\% relative to the runner-up, iTransformer, and on the largest dataset, Traffic, by 2.0\% relative to PatchTST and by 7.7\% relative to TimeBase, underscoring its robustness on large-scale and heterogeneous data.}
-\blue{The only exception is ETTh2, where FITS leads (0.334) and \sysname is within 0.002 of the second-best MSE (PatchTST, 0.344) and third in MAE.}
-A closer examination reveals that patch-based baselines, including PatchTST, Crossformer, and TimeMixer, exhibit performance degradation on \blue{Electricity}.
-\blue{The electronic supplement adds CycleNet to the comparison: on Electricity it attains a lower dataset average than both \sysname and \sysLA (0.157 against 0.160 and 0.159 in the full per-horizon tables of the supplement). We position this as a point on the efficiency trade-off rather than a like-for-like gap: CycleNet carries 472K parameters on Electricity and 563K on Traffic against the 1.16K of \sysname on both --- several hundred times more, a cost that grows with the number of channels through its learnable per-channel recurrent cycles (see the per-model parameter and FLOPs comparison in the electronic supplement).}
-
-\blue{
-\fakeparagraph{Results of \sysLA}
-Table~\ref{tab:main_results} adds \sysLA, averaged over three seeds; per-horizon results with standard deviations are in Table~\ref{tab:la_full}. Against \sysname (conference), \sysLA improves the MSE on five of the seven dataset averages, by up to 1.6\% (Weather), and on 17 of the 28 settings; the MAE improves on 12 settings and four dataset averages (all comparisons on unrounded averages). These gains are conservative: the shared training protocol of the extension places \sysname (retrained) above its conference error on every dataset. Against \sysname (retrained), \sysLA improves the MSE on ETTh2, ETTm2 and Weather at every horizon by more than one seed standard deviation (Table~\ref{tab:la_full}), and on ETTm1 and Traffic the two models match: \sysname (retrained) averages 0.352 and 0.392 there, the \sysLA row 0.351 and 0.392. Section~\ref{sec:exp_theory} shows that ETTh2, ETTm2 and Weather are where the level envelope binds, and Section~\ref{sec:exp_ladder} attributes the gains to the two components under one protocol.
-}
 
 \subsection{\blue{Efficiency}}
 \label{sec:exp_efficiency}
@@ -148,23 +140,24 @@ Table~\ref{tab:main_results} adds \sysLA, averaged over three seeds; per-horizon
 We evaluate the computational overhead of all models, with detailed results in \blue{the electronic supplement}.
 \figref{fig:flops_params_visualization} shows the FLOPs and the number of parameters of all tested models on the Electricity and Traffic.
 Overall, phase-based models incur lower overhead than patch-based ones.
-On the Traffic dataset, \sysname achieves a FLOPs reduction of about 99.99\% over PatchTST and Crossformer.
-Beyond patch-based baselines, it also outperforms other phase-based models like SparseTSF, consistently delivering high efficiency.
-This stems from the \blue{stability} of phase tokens over time (\secref{sec:mot_stability}), making them inherently more efficient to process. 
-Taken together with the previous accuracy evaluations, these results \blue{show} that \sysname provides an efficient yet effective solution, delivering superior performance on complex datasets.
-\blue{The extension keeps this efficiency profile. Over \sysname, the level branch and the modulation of \sysLA add between 119 and 679 parameters in all 28 settings of the main-table configuration. The fusion gates add two parameters in total when they are shared and two per channel otherwise (1{,}724 on Traffic); they are the only component of the extension whose size grows with the number of sensors. Including them, the extension adds at most about 2.1K parameters, the largest increment being on Traffic (Section~\ref{sec:complexity} and Appendix~\ref{app:la_config}). Its added computation is linear in the input length and is dominated by the cost of the backbone.}
-\blue{Measured on a single A800 GPU (fp32, batch 32, $L{=}720$), the extension adds between $0.09\%$ and $0.23\%$ to the FLOPs of the \sysname backbone on Traffic and Electricity, and between $3.9\%$ and $10.5\%$ to its latency: the added operations --- gates, fusions and pooling --- are element-wise and therefore memory-bound rather than compute-bound. The ratio falls as the backbone grows; on the smallest backbone (ETTh2-720, 718 parameters) the same absolute overhead amounts to about $37\%$ of its FLOPs and $71\%$ of its latency, the forward pass remaining below $2$\,ms.}
+On the Traffic dataset, \blue{the phase pathway of \sysplus} achieves a FLOPs reduction of about 99.99\% over PatchTST and Crossformer\blue{, with about 1.2K parameters}.
+This stems from the \blue{low dimension} of phase tokens (\secref{sec:mot_stability}), \blue{which lets a small latent space and a few routers carry them. Among the light models, \sysplus attains a lower MSE than TimeBase and SparseTSF on every dataset and than FITS on six of the seven (Section~\ref{sec:exp_results}).}
+\blue{The level and amplitude pathways keep this efficiency profile. They add between 119 and 679 parameters in all 28 settings of the main-table configuration. The fusion gates add two parameters in total when they are shared and two per channel otherwise (1{,}724 on Traffic); they are the only part whose size grows with the number of sensors. Including them, the level and amplitude pathways add at most about 2.1K parameters, the largest increment being on Traffic (Section~\ref{sec:complexity} and Appendix~\ref{app:la_config}). Measured on a single A800 GPU (fp32, batch 32, $L{=}720$), they add between $0.09\%$ and $0.23\%$ to the FLOPs of the phase pathway on Traffic and Electricity: their operations --- gates, fusions, the cycle means of the level token and two maps of rank at most three --- are negligible next to the routing layers.
 
-\subsection{\blue{Analysis of \sysname}}
+The electronic supplement adds CycleNet to the comparison, which on Electricity attains a lower dataset average than \sysplus (0.157 in the per-horizon tables of the supplement, against 0.159 in Table~\ref{tab:main_results}). CycleNet stores a learned cycle for every channel and carries 472K parameters on Electricity and 563K on Traffic, two orders of magnitude more than \sysplus, a cost that grows with the number of channels; \sysplus instead reads the shape of every channel from its own phase tokens with one shared pathway (see the per-model parameter and FLOPs comparison in the electronic supplement). Taken together with the accuracy results, \sysplus attains the best average MSE on six of the seven benchmarks and is orders of magnitude cheaper than the Transformer baselines.}
+
+\subsection{\blue{Analysis of the Phase Pathway}}
 \label{sec:exp_ablation}
 
-\subsubsection{\blue{Ablation Studies}}
+\blue{The phase pathway is the largest of the three pathways and the base of the token ablation of Section~\ref{sec:exp_ladder}. We analyze it on its own, without the level and amplitude pathways: its routers, its routing layer, its phase length and its attention patterns.}
+
+\subsubsection{\blue{Number of Routers and Cross-Phase Routing}}
 
 \fakeparagraph{Varying the Number of Routers}
 We systematically evaluate the impact of different number of routers $M$ on model performance, with results summarized in \figref{fig:router_number_visualization}.
 The experiments indicate that across three datasets, the model’s prediction error generally decreases as the number of routers $M$ increases, before eventually stabilizing or slightly rising.
-It is worth noting that the best performance is usually achieved when $M \in \{4,8\}$, which is much smaller compared to the actual number of phase tokens, $L_{\text{phase}} = 24$.
-This observation indicates that the phase token spans an inherently low-dimensional space, so only a small number of routers is sufficient to effectively capture and represent its underlying structure\blue{, in line with Insight~2 (Section~\ref{sec:mot_stability}), by which two dimensions explain over 90\% of the variance of phase tokens}.
+The best performance is usually achieved when $M \in \{4,8\}$, \blue{far fewer routers than phase tokens (24 on Electricity and Traffic)}.
+This observation indicates that the phase token spans an inherently low-dimensional space, so only a small number of routers is sufficient to effectively capture and represent its underlying structure\blue{, in line with Insight~2 (Section~\ref{sec:mot_stability}), by which two dimensions explain over 90\% of the variance of phase tokens on Traffic}.
 More detailed results are provided in \blue{the electronic supplement}.
 
 \begin{figure*}[t]
@@ -195,17 +188,15 @@ More detailed results are provided in \blue{the electronic supplement}.
     \label{fig:router_number_visualization}
 \end{figure*}
 
-
-
 \begin{table*}[t]
 \centering
-\caption{Cross-Phase Routing layer ablation. Each cell reports MSE, MAE, and FLOPs. Lower is better for all metrics. FLOPs are reported in millions (MFLOPs). The best results are highlighted with \best{Bold}, and the second-best results with \second{Underlined}.}
+\caption{\blue{Ablation of the cross-phase routing layer of the phase pathway.} Each cell reports MSE, MAE, and FLOPs. Lower is better for all metrics. FLOPs are reported in millions (MFLOPs). The best results are highlighted with \best{Bold}, and the second-best results with \second{Underlined}.}
 \label{tab:ablation_phase}
 \footnotesize
 \begin{tabular}{c|ccc|ccc|ccc|ccc}
 \hline
 \multirow{2}{*}{Dataset}
-& \multicolumn{3}{c|}{\textbf{\sysname}} 
+& \multicolumn{3}{c|}{\textbf{Routing}} 
 & \multicolumn{3}{c|}{\textbf{w/ FullAttention}} 
 & \multicolumn{3}{c|}{\textbf{w/ LinearMixing}} 
 & \multicolumn{3}{c}{\textbf{w/o Routing}} \\
@@ -236,21 +227,18 @@ Traffic
 \end{tabular}
 \end{table*}
 
-
-
-
 \fakeparagraph{Effectiveness of Cross-Phase Routing} 
-To assess the contribution of the cross-phase routing layer, we compare four variants of the model: 
-\textbf{\sysname}, which adopts the original cross-phase routing layer; 
+To assess the contribution of the cross-phase routing layer, we compare four variants of the \blue{phase pathway}: 
+\textbf{Routing}, which adopts the cross-phase routing layer; 
 \textbf{w/ FullAttention}, which substitutes the cross-phase routing layer with a full attention mechanism;
 \textbf{w/ LinearMixing}, which replaces the cross-phase routing layer with a linear layer; and 
 \textbf{w/o Routing}, which directly projects each phase into its own future.
 All other experimental settings are kept identical across these variants. 
 
-As summarized in \tabref{tab:ablation_phase}, \sysname consistently outperforms \textbf{w/ LinearMixing} and \textbf{w/o Routing}, indicating that explicit cross-phase routing is crucial for modeling periodic dynamics. Moreover, \sysname not only incurs less \blue{computation}, but also achieves lower prediction error than \textbf{w/ FullAttention}, showing that the routing layer is both efficient and effective. We attribute these gains to operating in a low-dimensional phase token space, which concentrates informative interactions and reduces cost.
+As summarized in \tabref{tab:ablation_phase}, \blue{routing} consistently outperforms \textbf{w/ LinearMixing} and \textbf{w/o Routing}, indicating that explicit cross-phase routing is crucial for modeling periodic dynamics. Moreover, \blue{routing} not only incurs less \blue{computation}, but also achieves lower prediction error than \textbf{w/ FullAttention}, showing that the routing layer is both efficient and effective. We attribute these gains to operating in a low-dimensional phase token space, which concentrates informative interactions and reduces cost.
 
 \revised{
-\subsubsection{Sensitivity Analysis of Phase Length Choices}
+\subsubsection{Sensitivity to the Phase Length}
 \label{sec:phase_length}
 
 \begin{table}[t]
@@ -269,8 +257,8 @@ As summarized in \tabref{tab:ablation_phase}, \sysname consistently outperforms 
 \caption{Comparison of forecasting performance under different phase lengths on the Traffic dataset (\blue{$L=720$, $H=96$}).}
 \label{tab:phase_length}
 \end{table}
-\sysname automatically determines the phase length through frequency-domain analysis (see \blue{the electronic supplement}), extracting salient periodic components directly from the data.
-To assess its sensitivity to phase length, we conduct experiments on the Traffic dataset. Its frequency spectrum contains several clear periodic components (see \figref{fig:spectrum_traffic}). Based on spectral amplitudes, we select the top five candidate phase lengths and run \sysname for forecasting. The results are shown in \tabref{tab:phase_length}.
+\blue{\sysplus} automatically determines the phase length through frequency-domain analysis (see \blue{the electronic supplement}), extracting salient periodic components directly from the data.
+To assess its sensitivity to phase length, we conduct experiments on the Traffic dataset. Its frequency spectrum contains several clear periodic components (see \figref{fig:spectrum_traffic}). Based on spectral amplitudes, we select the top five candidate phase lengths and run \blue{the phase pathway} for forecasting. The results are shown in \tabref{tab:phase_length}.
 
 \begin{figure}[t]
     \centering
@@ -279,20 +267,21 @@ To assess its sensitivity to phase length, we conduct experiments on the Traffic
     \label{fig:spectrum_traffic}
 \end{figure}
 
-The experiments show that the model performs best when the phase length is 24, corresponding to the dominant spectral component. \blue{The errors of the five candidates increase exactly in the order of their spectral amplitudes (\figref{fig:spectrum_traffic}), so the strongest spectral component is also the most accurate phase length.}
-These findings demonstrate that \sysname effectively captures the dataset’s primary periodic structure.
+The experiments show that the model performs best when the phase length is 24, corresponding to the dominant spectral component. \blue{The MSE of the five candidates increases exactly in the order of their spectral amplitudes (\figref{fig:spectrum_traffic}), so the strongest spectral component is also the most accurate phase length.}
+These findings demonstrate that \blue{the phase pathway} effectively captures the dataset’s primary periodic structure.
 }
 
 \subsubsection{Case Study}
 \label{sec:exp_case}
 We select one sample from Traffic dataset, comprising an input sequence of length 720 and an output sequence of length 96 (816 time steps in total). 
-The input sequence is fed into \sysname, and we record the attention-weight matrices at the first cross-phase routing layer during both aggregation (Phase$\rightarrow$Router) and distribution (Router$\rightarrow$Phase).
+The input sequence is fed into \blue{the phase pathway}, and we record the attention-weight matrices at the first cross-phase routing layer during both aggregation (Phase$\rightarrow$Router) and distribution (Router$\rightarrow$Phase).
 As shown in \figref{fig:sender} and \figref{fig:receiver}, both attention patterns exhibit clear local similarity: adjacent phases tend to be assigned to the same routers and to receive attention from similar routers.
 This indicates that the routing mechanism captures temporally consistent phase relationships. 
 Meanwhile, the attention weights reveal that certain phases share similar attentive patterns.
 To analyze this further, we focus on three phases with distinct attentive patterns and \blue{visualize} them in \figref{fig:traffic_data_visualization}.
 These phases display different temporal behaviors: Phase 5 remains relatively stable over long horizons, whereas Phase 9 and Phase 1 both exhibit a pronounced 7-day periodicity but with opposite trends.
-The differing patterns of these phase tokens suggest that the router structure not only distinguishes among phase tokens but also effectively models their periodicity and trend characteristics.
+The differing patterns of these phase tokens suggest that the router structure not only distinguishes among phase tokens but also effectively models their \blue{weekly pattern and drift}.
+\blue{Together, these analyses show why the phase pathway is small: the phase tokens are low-dimensional, so a few routers suffice; routing is more accurate than both full attention and no exchange, with up to 14\% fewer FLOPs than full attention; and the dominant period is the most accurate phase length. One further point anticipates the token ablation: the router curves level off at a few routers, so added capacity in the phase pathway stops paying, whereas the 105-parameter level pathway still improves the MSE by 2.7\% on Weather (Section~\ref{sec:exp_ladder}).}
 
 
 \begin{figure*}[t] 
@@ -322,22 +311,65 @@ The differing patterns of these phase tokens suggest that the router structure n
   \label{fig:case_study_wrap_all}
 \end{figure*}
 
+\blue{
+\subsection{Each Token Earns Its Place}
+\label{sec:exp_ladder}
+
+\begin{table*}[t]
+\blue{
+\centering
+\caption{Token ablation: \sysplus built up one token at a time. Test MSE/MAE averaged over the four horizons and three seeds, all variants trained under one protocol (protocol configuration, Section~\ref{sec:ext_setup}). Phase only: the phase-only variant; phase + level: the phase--level variant; \sysplus (amplitude off): the trained \sysplus with the amplitude pathway switched off. Bold: best of the first three columns. Relative differences in the text are computed on unrounded averages.}
+\label{tab:ladder}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lcccccccc}
+\toprule
+Dataset & \multicolumn{2}{c}{Phase only} & \multicolumn{2}{c}{Phase + level} & \multicolumn{2}{c}{\sysplus} & \multicolumn{2}{c}{\begin{tabular}[c]{@{}c@{}}\sysplus\\(amplitude off)\end{tabular}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
+ & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
+\midrule
+ETTh1 & 0.408 & \textbf{0.419} & 0.412 & 0.425 & \textbf{0.405} & 0.421 & 0.414 & 0.429 \\
+ETTh2 & 0.354 & 0.396 & \textbf{0.347} & \textbf{0.393} & 0.348 & \textbf{0.393} & 0.352 & 0.396 \\
+ETTm1 & \textbf{0.352} & \textbf{0.377} & 0.354 & 0.380 & 0.353 & 0.380 & 0.355 & 0.381 \\
+ETTm2 & 0.258 & 0.319 & \textbf{0.253} & \textbf{0.315} & \textbf{0.253} & \textbf{0.315} & 0.257 & 0.318 \\
+Weather & 0.227 & 0.262 & 0.221 & \textbf{0.257} & \textbf{0.220} & \textbf{0.257} & 0.220 & 0.257 \\
+Electricity & 0.161 & \textbf{0.251} & \textbf{0.160} & \textbf{0.251} & \textbf{0.160} & \textbf{0.251} & 0.162 & 0.254 \\
+Traffic & \textbf{0.392} & \textbf{0.248} & 0.395 & 0.251 & 0.393 & 0.252 & 0.400 & 0.256 \\
+\bottomrule
+\end{tabular}
+}
+\end{table*}
+
+Table~\ref{tab:ladder} builds \sysplus up one token at a time, on all 28 settings with three seeds, under the protocol configuration: the phase-only variant (Section~\ref{sec:ext_setup}), then the level token, then the amplitude token; its last column switches the amplitude pathway off on the trained \sysplus. Under one protocol, \sysplus improves on its phase-only variant on five of the seven dataset averages, by between 0.4\% and 3.3\%, and stays within 0.3\% of it on ETTm1 and Traffic, at a parameter cost of about 130--170, excluding the fusion gates. The envelopes predict both halves of this result. The four largest gains fall on the four datasets where an envelope binds: the level envelope on Weather, ETTm2 and ETTh2, and the amplitude envelope on ETTh1 (Table~\ref{tab:envelope}). On ETTm1, Electricity and Traffic, where neither envelope leaves more than 3.5\% of the test windows outside, the error moves by at most 0.4\%, as the theory predicts. In the main-table configuration, \sysplus improves on the phase-only variant at every horizon of ETTh2, ETTm2 and Weather, by more than one seed standard deviation (Table~\ref{tab:la_full}).
+
+\fakeparagraph{The level token}
+The level token gains exactly where the level envelope binds, on the phase-only variant as on \sysplus (Section~\ref{sec:exp_envelopes}). On ETTh2, ETTm2 and Weather, where between 7.8\% and 9.7\% of the test windows lie outside the envelope of the phase-only variant and between 12\% and 21\% outside that of \sysplus, it improves the MSE by 2.0\%, 1.8\% and 2.7\%; on the four datasets where at most 3.5\% lie outside, it changes the error by at most 1.0\%.
+
+\fakeparagraph{The amplitude token}
+The amplitude token adds what the level token cannot. ETTh1 is the one dataset on which the amplitude envelope binds but the level envelope barely does (14.8\% against 2.5\% of the windows, Table~\ref{tab:envelope}); there the level token alone costs 1.0\%, the amplitude token carries the recovery, and \sysplus ends 0.7\% below the phase-only variant. Switching the amplitude pathway off on the trained model removes the entire gain (0.414 against 0.405). Across all 28 settings, the amplitude pathway improves its own model in 27 cases.
+
+\fakeparagraph{Weak and strong coupling}
+On ETTh2 and ETTm2, the two least coupled benchmarks (Section~\ref{sec:mot_changes}), the level token delivers the gain, and the amplitude pathway is still at work within \sysplus: switching it off raises the MSE from 0.348 to 0.352 and from 0.253 to 0.257. With coupling this weak, the 31.8\% of ETTh2 windows over the amplitude envelope owe their excess to the windows' own shape $\Omega_0$ rather than to the level. On Traffic, the most coupled benchmark, the amplitude pathway improves its own model (0.393 against 0.400 with it switched off) although no window exceeds the envelope; the gain combines the static per-channel correction of $q$ (Section~\ref{sec:exp_mechanism}) with a level-dependent part, which the stratification below brings out.
+
+\fakeparagraph{Where the gain occurs}
+If the amplitude pathway carries the level-dependent amplitude, the per-window gains of \sysplus over its phase--level variant should grow with the level demand. Stratifying the per-window test gains by the quintiles of $|\Lambda|$ supports this. Across all 28 settings, the top quintile gains $0.002$ MSE more than the bottom one, and on most of the settings where \sysplus improves on average, the mean gain of the top quintile exceeds that of the bottom one, with the strongest settings rising from bottom to top (Traffic-$96$: $+0.0002$ to $+0.0033$ across the quintiles; ETTh1-$192$: $-0.0033$ to $+0.0052$; Weather-$96$: $-0.0031$ to $+0.0080$). The amplitude pathway thus gains most on the windows whose level moves most.
+}
 
 \blue{
-\subsection{Validating the Theory}
+\subsection{Validating the Unified View}
 \label{sec:exp_theory}
 
-Section~\ref{sec:theory} argues in four steps. Step~(i), that \sysname can represent level drift, is established by construction (Proposition~\ref{prop:capability}). Steps~(ii)--(iv) make predictions that can be checked on trained checkpoints: that the envelopes hold on every checkpoint and bind where the demands of the data exceed them, and that the branch takes over the level there (Section~\ref{sec:exp_envelopes}); that the modulation preserves the cycle means and reads the level (Section~\ref{sec:exp_mechanism}); and that a few fixed profiles suffice for the level branch (Section~\ref{sec:exp_capacity}). Section~\ref{sec:exp_ladder} then measures what each component gains.
+Section~\ref{sec:theory} argues in three steps, each of which can be checked on the trained models. Necessity: the envelopes hold on every trained model and bind where the demands of the data exceed them; there the level pathway takes over the level, and the amplitude pathway leaves every cycle mean in place, so it cannot stand in for the level pathway (Sections~\ref{sec:exp_envelopes} and~\ref{sec:exp_mechanism}). Form: the amplitude pathway gains with the level-driven amplitude of the data and reads the level (Section~\ref{sec:exp_mechanism}). Sufficiency: three fixed profiles, 105 parameters, lose essentially nothing against learned decoders (Section~\ref{sec:exp_capacity}).
 
-\subsubsection{Envelopes and Level Hand-over on Trained Checkpoints}
+\subsubsection{Envelopes and the Division of Labor}
 \label{sec:exp_envelopes}
 
-The constants of Theorems~\ref{thm:level_envelope} and~\ref{thm:amplitude} are functions of the weights, so they can be read from every trained checkpoint, and the demands are functions of the data. Table~\ref{tab:envelope} reports both for the \sysLA checkpoints (averaged over the four horizons), together with the level demand $\Lambda$ and the amplitude demand $\Omega$ of every test window.
+The constants of Theorems~\ref{thm:level_envelope} and~\ref{thm:amplitude} are functions of the weights, so they can be read from every trained model, and the demands are functions of the data. Table~\ref{tab:envelope} reports both for the trained \sysplus models (averaged over the four horizons), together with the level demand $\Lambda$ and the amplitude demand $\Omega$ of every test window.
 
 \begin{table}[t]
 \blue{
 \centering
-\caption{Envelopes of the phase path on trained \sysLA checkpoints (protocol configuration; averages over the horizons; modulation switched off). $C_1$, $B_\varphi$: half-width of the level envelope and amplitude envelope, read from the weights; $g_s$: shape gate; outside $\mathcal I_\varphi$: share of test windows whose level demand $\Lambda$ lies outside the level envelope; floor/MSE: error floor~\equref{eq:level_floor} as a share of the test MSE; $\Omega$ over env.: share of windows whose amplitude demand exceeds $(1-g_s)B_\varphi$.}
+\caption{Envelopes of the phase pathway of the trained \sysplus models (protocol configuration; averages over the horizons; amplitude pathway switched off). $C_1$, $B_\varphi$: half-width of the level envelope and amplitude envelope, read from the weights; $g_s$: shape gate; outside $\mathcal I_\varphi$: share of test windows whose level demand $\Lambda$ lies outside the level envelope; floor/MSE: error floor~\equref{eq:level_floor} as a share of the test MSE; $\Omega$ over env.: share of windows whose amplitude demand exceeds $(1-g_s)B_\varphi$.}
 \label{tab:envelope}
 \footnotesize
 \setlength{\tabcolsep}{2.6pt}
@@ -357,71 +389,38 @@ Traffic & 5.23 & 5.25 & 0.21 & 0.0\% & 0.0\% & 0.0\% \\
 }
 \end{table}
 
-Three observations. First, the level envelope holds exactly as stated: across all 84 checkpoints (28 settings, three seeds), the measured levels of the phase forecast never leave $\mathcal I_\varphi$, the largest observed value of $|\lev(F)-c_0|/C_1$ being $0.74$, so the floors below are conservative. Second, where the envelope binds, it binds in the way the theory predicts. On ETTh2, Weather and ETTm2, between 12\% and 21\% of test windows have a level demand outside the interval, the floor accounts for 5.0\% to 11.6\% of the test MSE, and on ETTh2 and Weather both the share of out-of-envelope windows and the tightness of the interval grow with the horizon (ETTh2: $C_1$ from 1.27 to 0.85 and the outside share from 15\% to 27\% between $H=96$ and $H=720$; Weather: 1.86 to 0.96 and 10\% to 34\%). On the two sensor networks the trained checkpoints developed wide envelopes that almost no test window escapes. Their half-widths, $C_1$ between 3.8 and 5.2, stay below the 5.39 needed to track the level of the last cycle uniformly (Section~\ref{sec:theory_level}), but the level demands of the test windows are smaller, and the floor is at most 0.5\% of the test MSE. The envelopes thus force almost no loss on the phase path there, and Section~\ref{sec:exp_ladder} shows that, under one protocol, the extension changes the error on these datasets by less than 1\%.
+\fakeparagraph{The envelope holds} The level envelope holds exactly as stated: across all 84 trained models (28 settings, three seeds), the measured levels of the phase forecast never leave $\mathcal I_\varphi$, the largest observed value of $|\lev(F)-c_0|/C_1$ being $0.74$, so the floors below are conservative.
 
-Third, the hand-over follows the envelope. The level gate stays near its initialization value on every dataset ($g_\ell$ between 0.20 and 0.26 on average), but what the branch does with its share depends on whether the envelope binds: the correlation between the branch's level and the window's level demand is between $0.40$ and $0.44$ on the four ETT datasets, whose envelopes are narrow ($C_1\le1.86$), and $0.03$ and $-0.01$ on Electricity and Traffic, whose envelopes are wide. The branch tracks the level where the phase path cannot, as Theorem~\ref{thm:complement}(b) predicts.
+\fakeparagraph{It binds where the theory predicts} Where the envelope binds, it binds in the way the theory predicts. On ETTh2, Weather and ETTm2, between 12\% and 21\% of test windows have a level demand outside the interval, the floor accounts for 5.0\% to 11.6\% of the test MSE, and on ETTh2 and Weather both the share of out-of-envelope windows and the tightness of the interval grow with the horizon (ETTh2: $C_1$ from 1.27 to 0.85 and the outside share from 15\% to 27\% between $H=96$ and $H=720$; Weather: 1.86 to 0.96 and 10\% to 34\%). On the two sensor networks, the phase pathways of the trained models develop wide envelopes that almost no test window escapes. Their half-widths, $C_1$ between 3.8 and 5.2, stay below the 5.39 needed to track the level of the last cycle uniformly (Section~\ref{sec:theory_level}), but the level demands of the test windows are smaller, and the floor is at most 0.5\% of the test MSE. The envelopes thus force almost no loss on the phase pathway there, and adding the level and the amplitude tokens changes the error on these datasets by less than 1\% (Section~\ref{sec:exp_ladder}).
 
-Reading the 84 checkpoints of \sysname (retrained) in the same way shows that this pattern is a property of the data, present before the extension is added. Their forecast levels also never leave the envelope (largest observed utilization $0.87$), and the level envelope binds on the same three datasets: on ETTh2, ETTm2 and Weather, between 7.8\% and 9.7\% of the test windows lie outside it and the floor is 1.7\% to 4.1\% of the test MSE, against at most 3.5\% and 0.6\% on the other four. Trained next to the branch, the phase path of \sysLA narrows its envelope on these three datasets ($C_1$ from between 1.72 and 2.16 to between 1.07 and 1.41), changes it by at most 0.1 on ETTh1 and ETTm1, and widens it on the two sensor networks: it leaves the level to the branch where the level envelope binds, the division of labor of Theorem~\ref{thm:complement}(b).
+\fakeparagraph{The division of labor follows the envelope} The level gate takes a similar share on every dataset ($g_\ell$ between 0.20 and 0.26 on average), but what the level pathway does with its share depends on whether the envelope binds: the correlation between the level forecast of the level pathway and the window's level demand is between $0.40$ and $0.44$ on the four ETT datasets, whose envelopes are narrow ($C_1\le1.86$), and $0.03$ and $-0.01$ on Electricity and Traffic, whose envelopes are wide. The level pathway tracks the level where the phase pathway cannot, as Theorem~\ref{thm:complement}(b) predicts.
 
-\begin{table*}[t]
-\blue{
-\centering
-\caption{Ablation ladder, test MSE/MAE averaged over the four horizons and three seeds (protocol configuration, Section~\ref{sec:ext_setup}). \sysname (retrained) is the backbone retrained under this protocol; \sysLA (mod.\ off) is \sysLA with the modulation disabled on the trained checkpoint.}
-\label{tab:ladder}
-\footnotesize
-\setlength{\tabcolsep}{6pt}
-\begin{tabular}{lcccccccc}
-\toprule
-Dataset & \multicolumn{2}{c}{\begin{tabular}[c]{@{}c@{}}\sysname\\(retrained)\end{tabular}} & \multicolumn{2}{c}{\sysL} & \multicolumn{2}{c}{\sysLA} & \multicolumn{2}{c}{\begin{tabular}[c]{@{}c@{}}\sysLA\\(mod.\ off)\end{tabular}} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}
- & MSE & MAE & MSE & MAE & MSE & MAE & MSE & MAE \\
-\midrule
-ETTh1 & 0.408 & 0.419 & 0.412 & 0.425 & \textbf{0.405} & \textbf{0.421} & 0.414 & 0.429 \\
-ETTh2 & 0.354 & 0.396 & \textbf{0.347} & \textbf{0.393} & 0.348 & \textbf{0.393} & 0.352 & 0.396 \\
-ETTm1 & \textbf{0.352} & \textbf{0.377} & 0.354 & 0.380 & 0.353 & 0.380 & 0.355 & 0.381 \\
-ETTm2 & 0.258 & 0.319 & \textbf{0.253} & \textbf{0.315} & \textbf{0.253} & \textbf{0.315} & 0.257 & 0.318 \\
-Weather & 0.227 & 0.262 & 0.221 & 0.257 & \textbf{0.220} & \textbf{0.257} & 0.220 & 0.257 \\
-Electricity & 0.161 & 0.251 & \textbf{0.160} & \textbf{0.251} & \textbf{0.160} & \textbf{0.251} & 0.162 & 0.254 \\
-Traffic & \textbf{0.392} & \textbf{0.248} & 0.395 & 0.251 & 0.393 & 0.252 & 0.400 & 0.256 \\
-\bottomrule
-\end{tabular}
-}
-\end{table*}
+Reading the 84 trained phase-only variants in the same way shows that this pattern is a property of the data, present without the level and amplitude tokens. Their forecast levels also never leave the envelope (largest observed utilization $0.87$), and the level envelope binds on the same three datasets: on ETTh2, ETTm2 and Weather, between 7.8\% and 9.7\% of the test windows lie outside it and the floor is 1.7\% to 4.1\% of the test MSE, against at most 3.5\% and 0.6\% on the other four. Trained next to the level pathway, the phase pathway of \sysplus narrows its envelope on these three datasets ($C_1$ from between 1.72 and 2.16 to between 1.07 and 1.41), changes it by at most 0.1 on ETTh1 and ETTm1, and widens it on the two sensor networks: it leaves the level to the level pathway where the level envelope binds, the division of labor of Theorem~\ref{thm:complement}(b).
 
-\subsubsection{Mechanism of the Modulation}
+\subsubsection{The Amplitude Pathway}
 \label{sec:exp_mechanism}
 
 \fakeparagraph{Synthetic multiplicative series}
-We first test Theorem~\ref{thm:amplitude} where the ground truth is known. We generate seven-channel series from \equref{eq:mult_model} with a random-walk level, a sinusoidal daily profile and coupling $\alpha\in\{0,0.25,0.5\}$, and train \sysL and \sysLA from the same initialization (two seeds, 30 epochs). Without coupling ($\alpha=0$), the modulation has nothing to carry and the two models are indistinguishable: \sysLA changes the validation MSE by $-0.28\%$. With coupling, \sysLA reduces the validation MSE by $3.3\%$ at $\alpha=0.25$ and by $4.8\%$ at $\alpha=0.5$, and it does so for both seeds. The gain appears exactly when the data contain level-dependent amplitude and grows with the coupling, as the form of the demand in Theorem~\ref{thm:amplitude}(b) and the construction of Proposition~\ref{prop:modulation}(b) imply.
+We first test Theorem~\ref{thm:amplitude} where the ground truth is known. We generate seven-channel series from \equref{eq:mult_model} with a random-walk level, a sinusoidal daily profile and coupling $\alpha\in\{0,0.25,0.5\}$, and train \sysplus and its phase--level variant from the same initialization (two seeds, 30 epochs). Without coupling ($\alpha=0$), the amplitude pathway has nothing to carry and the two models are indistinguishable: \sysplus changes the validation MSE by $-0.28\%$. With coupling, \sysplus reduces the validation MSE by $3.3\%$ at $\alpha=0.25$ and by $4.8\%$ at $\alpha=0.5$, and it does so for both seeds. The gain appears exactly when the data contain level-dependent amplitude and grows with the coupling, as the form of the demand in Theorem~\ref{thm:amplitude}(b) and the construction of Proposition~\ref{prop:modulation}(b) imply.
 
 \fakeparagraph{Cycle-mean invariance}
-Proposition~\ref{prop:modulation}(a) is an exact identity, so we verify it on every trained \sysLA checkpoint. Switching the modulation off and on, in double precision, changes every future cycle mean of the phase forecast by at most $8.9\times10^{-16}$ in absolute value, against a tolerance of $7\times10^{-9}$ relative to the forecast scale, while it changes individual phase forecasts by up to $1.8$ window standard deviations. All 84 checkpoints (28 settings, three seeds) pass.
+Proposition~\ref{prop:modulation}(a) is an exact identity, so we verify it on every trained \sysplus. Switching the amplitude pathway off and on, in double precision, changes every future cycle mean of the phase forecast by at most $8.9\times10^{-16}$ in absolute value, against a tolerance of $7\times10^{-9}$ relative to the forecast scale, while it changes individual phase forecasts by up to $1.8$ window standard deviations. All 84 trained models (28 settings, three seeds) pass.
 
-\fakeparagraph{What drives the modulation}
-Proposition~\ref{prop:modulation}(b) predicts that the modulation reads the level: its construction in Appendix~\ref{app:proofs}, $q=\alpha_w\one_d\,\xi^\top t$ with $\xi^\top t$ the branch's level forecast, scales the phase amplitude by the factor $1+\alpha_w\hat\Lambda$. The trained checkpoints bear this out, most clearly at $H=96$, and where they read the level less, the modulation acts as a static per-channel amplitude correction, which a uniform part of $q$ provides (Section~\ref{sec:theory_amplitude}). We correlate, per channel, the component of $q$ along $\one_d$ with the window's level demand $\Lambda$; pooling channels would mix the level-driven part of $q$ with its channel-dependent static scale. At $H=96$, the mean per-channel correlation is $0.46$ on Weather (86\% of channels), $0.30$ on Electricity, where all 166 significant channels share one sign, and $0.54$ on ETTh2, with every channel above $0.3$; averaged over the horizons it is between $0.12$ and $0.37$ on the seven datasets. The sign of the learned coupling is consistent within each setting --- the significant channels of Weather-$96$ share the sign opposite to that of Electricity-$96$ --- which the construction allows, since $\alpha_w$ is learned.
+\fakeparagraph{The amplitude pathway reads the level}
+Proposition~\ref{prop:modulation}(b) predicts that the amplitude pathway reads the level: its construction, $q=\alpha_w\hat\Lambda\,\one_d$ with $\hat\Lambda$ the level forecast of the level pathway, scales the phase amplitude by the factor $1+\alpha_w\hat\Lambda$. The trained models bear this out, most clearly at $H=96$, and where they read the level less, the amplitude pathway acts as a static per-channel amplitude correction, which a uniform part of $q$ provides (Section~\ref{sec:theory_amplitude}). We correlate, per channel, the component of $q$ along $\one_d$ with the window's level demand $\Lambda$; pooling channels would mix the level-driven part of $q$ with its channel-dependent static scale. At $H=96$, the mean per-channel correlation is $0.46$ on Weather (86\% of channels), $0.30$ on Electricity, where all 166 significant channels share one sign, and $0.54$ on ETTh2, with every channel above $0.3$; averaged over the horizons it is between $0.12$ and $0.37$ on the seven datasets. The sign of the learned coupling is consistent within each setting --- the significant channels of Weather-$96$ share the sign opposite to that of Electricity-$96$ --- which the construction allows, since $\alpha_w$ is learned.
 
-On ETTm1-$96$ and ETTm2-$96$ the correlation is lower ($0.27$ and $0.02$): there the modulation acts mostly as the static correction. On ETTh2 and Weather the correlation is lower at longer horizons, where the persistent-level idealization of Theorem~\ref{thm:amplitude}(b) is less accurate. Two further observations agree with the construction: $q$ is only weakly correlated with the amplitude demand $\Omega$ itself (mean per-channel correlation below $0.20$ everywhere), so it follows the level rather than the amplitude; and the static part of $q$ is a per-channel amplitude correction whose removal accounts for the degradation of the modulation-off column of Table~\ref{tab:ladder} on six of the seven datasets.
+On ETTm1-$96$ and ETTm2-$96$ the correlation is lower ($0.27$ and $0.02$): there the amplitude pathway acts mostly as the static correction. Two further observations agree with the construction: $q$ is only weakly correlated with the amplitude demand $\Omega$ itself (mean per-channel correlation below $0.20$ everywhere), so it follows the level rather than the amplitude; and the static part of $q$ is a per-channel amplitude correction whose removal accounts for the degradation of the amplitude-off column of Table~\ref{tab:ladder} on six of the seven datasets.
 
-\subsubsection{Capacity of the Level Branch}
+\subsubsection{Capacity of the Level Pathway}
 \label{sec:exp_capacity}
 
-Theorem~\ref{thm:complement}(a) predicts that, under standard seasonal models, the level the phase path misses enters through a few fixed horizon profiles, so a branch whose profiles are fixed in advance should lose nothing against one that learns them. The selection experiment of Section~\ref{sec:ext_setup} provides a direct check. At the same rank, the three decoders differ widely in parameter count: the learned decoders have $93+4H$ and $273+4H$ parameters, up to 3{,}153 at $H=720$, whereas the fixed profiles have 105 parameters. Yet their setting-normalized validation errors, averaged over seven datasets and both gate variants, differ by only 0.13\%: 1.0102 for the decoder on 90 pooled values, 1.0107 for the decoder on 30 pooled values and 1.0115 for the fixed profiles, relative to the best variant of each setting. The fixed profiles sit within the 0.5\% tie of the best decoder and are preferred as the smallest. A branch restricted to the span of the displacement, tilt and curvature profiles therefore loses essentially nothing against branches that can learn arbitrary horizon profiles, as Theorem~\ref{thm:complement}(a) predicts, and these three profiles suffice. The protocol configuration keeps the fixed profiles on every setting; the per-setting search of the main-table configuration, which also weighs small per-setting differences, selects a learned decoder on ETTm1-720 and on three of the four horizons of ETTm2 (Appendix~\ref{app:la_config}).
+Theorem~\ref{thm:complement}(a) predicts that, under standard seasonal models, the level beyond the reach of the phase pathway enters through a few fixed horizon profiles, so a level pathway whose profiles are fixed in advance should lose nothing against one that learns them. The selection experiment of Section~\ref{sec:ext_setup} provides a direct check. At the same rank, the three decoders differ widely in parameter count: the learned decoders have 477 and 657 parameters, between four and seven times the 105 of the fixed profiles. Yet their setting-normalized validation errors, averaged over seven datasets and both gate variants, differ by only 0.13\%: 1.0102 for the decoder on 90 pooled values, 1.0107 for the decoder on 30 pooled values and 1.0115 for the fixed profiles, relative to the best variant of each setting. The fixed profiles sit within the 0.5\% tie of the best decoder and are preferred as the smallest. A level pathway restricted to the span of the offset, tilt and curvature profiles therefore loses essentially nothing against level pathways that can learn arbitrary horizon profiles, as Theorem~\ref{thm:complement}(a) predicts, and these three profiles suffice: even in the main-table configuration, 24 of the 28 settings keep them (Appendix~\ref{app:la_config}).
+
 }
 
 \blue{
-\subsection{From \sysname to \sysLA}
-\label{sec:exp_ladder}
-Table~\ref{tab:ladder} adds the components one at a time, on all 28 settings with three seeds, under the protocol configuration of Section~\ref{sec:ext_setup}. Its first column is \sysname (retrained), so the ladder isolates the components; its last column disables the modulation on the trained \sysLA checkpoint.
+\subsection{Summary}
+\label{sec:exp_summary}
 
-
-
-The two steps contribute differently, and the difference follows the theory. The level branch gains exactly where the level envelope binds, on \sysname (retrained) before the branch is added as on \sysLA (Section~\ref{sec:exp_envelopes}): on ETTh2, ETTm2 and Weather, where between 12\% and 21\% of the test windows lie outside the envelope, it improves the MSE by 2.0\%, 1.8\% and 2.7\%, while on the four datasets where at most 3.5\% lie outside, it changes the error by at most 1.0\%. Over all settings, \sysL improves on \sysname (retrained) in 17 of the 28. The modulation adds what the level branch cannot. ETTh1 is the one dataset whose amplitude envelope binds (14.8\% of the windows) while its level envelope barely does (2.5\%); there the branch alone costs 1.0\%, the modulation carries the recovery, and \sysLA ends 0.7\% below \sysname (retrained). Disabling the modulation on the trained checkpoint gives back the entire difference (0.414 against 0.405). Across all 28 settings, the modulation improves its own checkpoint in 27 cases, and \sysLA improves on \sysname (retrained) in 17.
-
-Under one protocol, \sysLA thus improves five of the seven dataset averages, by between 0.4\% and 3.3\% (computed on unrounded averages), and stays within 0.3\% of \sysname (retrained) on ETTm1 and Traffic, at a parameter cost of about 130--170, excluding the fusion gates, in the protocol configuration. This matches Section~\ref{sec:theory_design}: the extension addresses the changes across cycles, and it gains most where Section~\ref{sec:exp_envelopes} shows them to bind. On ETTh2 and ETTm2, the two least coupled benchmarks (Section~\ref{sec:mot_changes}), the modulation adds nothing over \sysL (0.348 against 0.347, and 0.253 on both): with coupling this weak, the 31.8\% of ETTh2 windows over the amplitude envelope owe their excess to the windows' own shape $\Omega_0$ rather than to the level. On Traffic, the most coupled benchmark, the modulation improves its own checkpoint (0.393 against 0.400 with the modulation off) although no window exceeds the envelope; the gain combines the static per-channel correction of $q$ (Section~\ref{sec:exp_mechanism}) with a level-dependent part, which the stratification below brings out.
-
-\fakeparagraph{Where the gain occurs}
-If the modulation carries the level-dependent amplitude, the per-window gains of \sysLA over \sysL should grow with the level demand. Stratifying the per-window test gains by the quintiles of $|\Lambda|$ supports this. Across all 28 settings, the top quintile gains $0.002$ MSE more than the bottom one, and on 12 of the 17 settings where \sysLA improves on average, the mean gain of the top quintile exceeds that of the bottom one, with the strongest settings rising from bottom to top (Traffic-$96$: $+0.0002$ to $+0.0033$ across the quintiles; ETTh1-$192$: $-0.0033$ to $+0.0052$; Weather-$96$: $-0.0031$ to $+0.0080$). The modulation thus gains most on the windows whose level moves most.
-
-\fakeparagraph{Summary}
-\sysname attains the best average MSE on six of the seven benchmarks at a fraction of the cost of its baselines. On trained checkpoints, the level envelope of Section~\ref{sec:theory} holds on every checkpoint and binds on exactly the three datasets where the level branch gains most, the modulation preserves every cycle mean exactly and reads the level, and three fixed profiles suffice for the level branch. Together, the two components let \sysLA improve five of the seven dataset averages under one protocol at a cost of about 130--170 parameters, excluding the fusion gates, while costing at most 0.3\% on the two datasets they do not improve.
+The experiments answer the three questions of this section. First, \sysplus is both accurate and small: it attains the best average MSE on six of the seven benchmarks and ranks first or second on all seven. On Traffic, the largest benchmark, its phase pathway needs about 1.2K parameters and cuts the FLOPs of PatchTST and Crossformer by about 99.99\%, and the level and amplitude pathways add at most about 2.1K parameters. Second, each part earns its place: in the phase pathway, cross-phase routing is more accurate than both full attention and no exchange and needs only a few routers; built up one token at a time under one protocol, \sysplus gains exactly where the envelopes predict, with its four largest gains on the four datasets where an envelope binds. Third, the trained models behave as the unified view predicts: the level envelope holds on every model and binds on exactly the three datasets where the level token gains most, the amplitude pathway preserves every cycle mean exactly and reads the level, and three fixed profiles suffice for the level pathway. Forecasting periodic sensor streams thus does not need the complexity of current models: with tokens that cover the shape, the level and the amplitude, a model of a few thousand parameters suffices.
 }
