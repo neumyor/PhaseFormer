@@ -99,7 +99,7 @@ Against the light models, \sysplus attains a lower MSE on every dataset than the
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{figures/efficiency_bars.pdf}
-    \caption{\blue{FLOPs per forecast and parameters of all models on Traffic and Electricity, with an input length of 720 steps and a horizon of 96 (logarithmic scales). Phase-based models are blue, patch-based models green, and the other models gray. The \sysplus bar shows its phase pathway; the dashed part adds the at most about 2.1K parameters of its level and amplitude pathways, which add less than 0.25\% of the FLOPs (Section~\ref{sec:exp_efficiency}).}}
+    \caption{\blue{FLOPs per forecast and parameters of \sysplus and the eight baselines on Traffic and Electricity, with an input length of 720 steps and a horizon of 96 (logarithmic scales). Phase-based models are blue, patch-based models green, TimeBase, which combines patches and phases, blue with a dashed green outline, and the other models gray. The \sysplus bar shows its phase pathway; the dashed part adds the parameters of its level and amplitude pathways, at most about 2.1K on Traffic and 1.0K on Electricity, which add less than 0.25\% of the FLOPs (Section~\ref{sec:exp_efficiency}).}}
     \label{fig:flops_params_visualization}
 \end{figure*}
 

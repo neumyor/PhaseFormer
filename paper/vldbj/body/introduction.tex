@@ -21,7 +21,7 @@ Forecasting models, however, have grown ever more elaborate. Decomposition model
     \caption{\blue{Accuracy and efficiency.}}
     \label{fig:efficiency_plot}
   \end{subfigure}
-  \caption{\blue{Good tokens let a very small model suffice. (a)~A patch token holds consecutive values, a piece of the cycle shape at the level and amplitude of its cycle; a phase token collects the values at one phase from successive cycles. (b)~Accuracy and cost on Traffic: average MAE over the four horizons against the number of parameters, with marker size growing with the FLOPs per forecast (input length 720, horizon 96). \sysplus is drawn with its phase pathway plus the at most about 2.1K parameters of its level and amplitude pathways.}}
+  \caption{\blue{Good tokens let a very small model suffice. (a)~A patch token holds consecutive values, a piece of the cycle shape at the level and amplitude of its cycle; a phase token collects the values at one phase from successive cycles. (b)~Accuracy and cost on Traffic: average MAE over the four horizons against the number of parameters at horizon 96 (input length 720); the marker size grows logarithmically with the FLOPs per forecast, printed below each name. \sysplus is drawn with its phase pathway plus the at most about 2.1K parameters of its level and amplitude pathways, and its FLOPs are those of the phase pathway, to which they add less than 0.25\%. TimeBase, which combines patches and phases, has a double ring; FEDformer (MAE 0.400) lies outside the plotted range.}}
   \label{fig:introduction}
 \end{figure*}
 

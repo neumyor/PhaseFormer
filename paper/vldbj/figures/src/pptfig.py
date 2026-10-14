@@ -74,8 +74,9 @@ def save(path):
 # lowercase Greek are italic, _x/_{..} and ^x/^{..} are sub/superscripts,
 # 𝟏 is the bold all-ones vector, \b{..} bold upright, \r{..} upright.  **...** outside math is bold.
 # --------------------------------------------------------------------------
-def _run(par, text, size, bold=False, italic=False, font=TEXT_FONT, baseline=0, color=BLACK,
+def _run(par, text, size, bold=False, italic=False, font=None, baseline=0, color=BLACK,
          underline=False):
+    font = font or TEXT_FONT
     run = par.add_run()
     run.text = text
     f = run.font
