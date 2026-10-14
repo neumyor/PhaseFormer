@@ -1,17 +1,27 @@
 
-\section{Methodology}
+\section{\blue{\sysplus: One Small Pathway per Token}}
 \label{sec:method}
 
-Given the focus on periodicity, we adopt the channel-independent paradigm~\citep{nie2023patchtst, zeng2023dlinear}\blue{, which keeps the cost linear in the number of sensors,} and omit the channel dimension throughout the remainder of this paper\blue{; the $C$ channels of a dataset share one model}. The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively. In the following \blue{subsections}, we describe the data preprocessing procedure, present the proposed network architecture\blue{, introduce its level--amplitude extension, and finally analyze the computational complexity of both}.
+\blue{\sysplus is one model with three tokens and three small pathways, each forecasting one part of the window form $X\approx\ell\,\one^\top+a\,s^\top$ of Section~\ref{sec:motivations} (Fig.~\ref{fig:la_overview}). The \emph{phase pathway}, a phase-based routing Transformer, reads the phase tokens and forecasts every phase, and with it the shape $s$ (Section~\ref{subsec:phase-network}). The \emph{level pathway} reads the level token and forecasts the level term through a rank-three map onto fixed offset, tilt and curvature profiles (Section~\ref{sec:ext_level}). The \emph{amplitude pathway} scales the within-cycle part of the phase forecast by a factor that the level drives (Section~\ref{sec:ext_modulation}). Two gates then fuse the phase forecast, already rescaled by the amplitude pathway, with the level-pathway forecast (Section~\ref{sec:ext_init}). One level token thus drives both the level and the amplitude, and the three pathways produce one forecast. The pathways are small because what each carries is low-dimensional: the phase pathway needs about 1.2K parameters on the largest benchmark, Traffic, and the level and amplitude pathways add at most about 2.1K (Sections~\ref{sec:complexity} and~\ref{sec:exp_efficiency}).}
+
+\blue{\fakeparagraph{Problem setup}
+\sysplus is channel-independent}~\citep{nie2023patchtst, zeng2023dlinear}\blue{: one shared model forecasts the series of every sensor separately, so its cost on a sensor network is the cost per sensor times the number of sensors. We omit the channel dimension from here on; the $C$ channels of a dataset share one model.} The objective of forecasting is to predict the future trajectory $\mathbf{Y}\in\mathbb{R}^{L_{\text{out}}}$ from an input sequence $\mathbf{X}\in\mathbb{R}^{L_{\text{in}}}$, where $L_{\text{in}}$ and $L_{\text{out}}$ denote the input and output lengths, respectively.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/la_overview.pdf}
+\caption{\blue{\sysplus: three tokens, three small pathways, one forecast. The phase pathway embeds the phase tokens and refines them through $N_r$ cross-phase routing layers into the final phase latents $h_1,\dots,h_P$, which its shared predictor $\Phi$ decodes into the phase forecast $F$ once the amplitude pathway has rescaled them. The level pathway (bottom) maps the level token, the anchored cycle means, to a three-dimensional state $t$ and writes it onto the offset, tilt and curvature profiles $\Psi_H$, giving the level-pathway forecast $F_{\mathrm b}$. The amplitude pathway computes the amplitude token $q$ from the same state $t$ and scales the within-cycle part of the phase latents by $\one+q$, centered over the phases. Two gates fuse the cycle levels and the within-cycle shapes of $F$ and $F_{\mathrm b}$. Fig.~\ref{fig:overview} details the phase pathway.}}
+\label{fig:la_overview}
+\end{figure*}
 
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{figures/phaseformer_overview.pdf}
-    \caption{\blue{Overview of \sysname: phase tokenization and de-tokenization (left); the embedding, $N_r$ cross-phase routing layers and the shared predictor (middle); and the phase-to-router aggregation and router-to-phase distribution inside a routing layer (right).}}
+    \caption{\blue{The phase pathway of \sysplus: phase tokenization and de-tokenization (left); the embedding, $N_r$ cross-phase routing layers and the shared predictor (middle); and, inside a routing layer, a few routers that gather messages from all phases and distribute them back (right).}}
     \label{fig:overview}
 \end{figure*}
 
-\subsection{Data \blue{Preprocessing}}
+\subsection{\blue{From a Window to Three Tokens}}
 \label{subsec:preprocessing}
 \fakeparagraph{Normalization and De-Normalization}
 Following \cite{kim2021reversible}, we normalize inputs with their estimated mean and standard deviation, and de-normalize predictions to the original scale. \blue{This normalization (RevIN) maps an input window $x$ with mean $\mu$ and standard deviation $\sigma$ to $\tilde x=(x-\mu\one)/\sigma$, so that $\one^\top\tilde x=0$, and a forecast $\hat{\tilde y}$ in these coordinates is de-normalized to $\hat y=\mu\one+\sigma\hat{\tilde y}$.}
@@ -27,15 +37,28 @@ As illustrated in \figref{fig:overview}, the padded sequence $\mathbf{X}$ is the
 
 \blue{
 \fakeparagraph{Notation}
-We abbreviate $P=\Lp$ for the period, $K=\Pin$ and $K'=\Pout$ for the numbers of input and output cycles, $L=KP$ and $H=K'P$ for the input length and the horizon. In all \sysLA experiments $L=720$, $P=24$ and $K=30$, and every horizon $H\in\{96,192,336,720\}$ is a whole number of cycles, so that no padding occurs. The folded normalized window $\tilde X\in\mathbb R^{K\times P}$, the transpose of the phase--period matrix of $\tilde x$, has one row per cycle; it is the matrix $X$ of Theorem~\ref{thm:stability} and Section~\ref{sec:mot_changes} with $D=K$ and $H=P$, and from here on $H$ denotes the horizon. Its columns are the phase tokens $\tilde x_p\in\mathbb R^K$, and its row means are the cycle means $\bar r=\tfrac1P\tilde X\one_P\in\mathbb R^K$. Sections~\ref{subsec:phase-network} and~\ref{sec:complexity} keep the conference symbols $\Lp$, $\Pin$ and $\Pout$.
+We abbreviate $P=\Lp$ for the period, $K=\Pin$ and $K'=\Pout$ for the numbers of input and output cycles, and $L=L_{\text{in}}=KP$ and $H=L_{\text{out}}=K'P$ for the input length and the horizon. For the period found by frequency analysis, the input length and every horizon of the experiments are whole numbers of cycles, so that no padding occurs. The folded normalized window $\tilde X\in\mathbb R^{K\times P}$, the transpose of the phase--period matrix of $\tilde x$, has one row per cycle; it is the matrix $X$ of Section~\ref{sec:motivations} with $D=K$ cycles and $H=P$ phases, and from here on $H$ denotes the horizon. Sections~\ref{subsec:phase-network} and~\ref{sec:complexity} use the symbols $\Lp$, $\Pin$ and $\Pout$, which also cover padded inputs.
+
+\fakeparagraph{The three tokens}
+The tokens follow the three parts of \equref{eq:three_parts}.
+\begin{itemize}[leftmargin=1.2em,itemsep=0.1em,topsep=0.2em]
+\item The \emph{phase tokens} are the columns $\tilde x_p\in\mathbb R^K$ of $\tilde X$, one per phase. Each is $\ell+s_p\,a$ up to noise, so together they carry the shape $s$ as their coordinates in a stable subspace (Section~\ref{sec:mot_stability}).
+\item The \emph{level token} is the vector of cycle levels $\ell$ of the window, measured from its last value $\tilde x_L$,
+\begin{equation}
+\bar r-\tilde x_L\one_K,\qquad \bar r=\tfrac1P\tilde X\one_P\in\mathbb R^K ,
+\label{eq:level_token}
+\end{equation}
+one number per cycle. The anchor makes it shift-invariant in normalized coordinates: adding $c\one_L$ to $\tilde x$ leaves the level token unchanged.
+\item The \emph{amplitude token} is a scale $q\in\mathbb R^d$ computed from the state of the level pathway (\equref{eq:la_modulation}). It is the latent form of the amplitude factor $a$: the amplitude pathway scales the within-cycle part of the phase latents by $\one+q$, so a uniform $q=q_1\one_d$ scales the within-cycle part of the phase forecast by the single factor $1+q_1$. It needs no input of its own, since the amplitude follows the level (Section~\ref{sec:mot_changes}).
+\end{itemize}
 }
 
 % --------------------------------------------------------------------
-\subsection{Phase-\blue{Based} Routing Transformer}
+\subsection{\blue{The Phase Pathway: Phase-Based Routing Transformer}}
 \label{subsec:phase-network}
 
-The phase--period matrix is fed into our proposed phase-based routing Transformer, termed \sysname, to capture and extrapolate temporal dynamics at the phase level.
-As illustrated in \figref{fig:overview}, \sysname first applies an embedding layer to the phase tokens, then refines them through \blue{a stack of $N_r$} cross-phase routing layers, and finally maps them to the target via a shared predictor.
+\blue{The phase pathway forecasts the shape. It is a phase-based routing Transformer, the only part of \sysplus that uses attention, and it forecasts every phase from the phase tokens.}
+As illustrated in \figref{fig:overview}, \blue{the phase pathway} first applies an embedding layer to the phase tokens, then refines them through \blue{a stack of $N_r$} cross-phase routing layers, and finally maps them to the target via a shared predictor.
 
 % ---------------- embedding ----------------
 \subsubsection{Embedding Layer}
@@ -56,10 +79,9 @@ The resulting $\tilde{\mathbf{Z}}$ is then forwarded to the cross-phase routing 
 % ---------------- Attention ----------------
 \subsubsection{Cross-Phase Routing Layer}
 
-Directly modeling full pairwise interactions among phase representations via self-attention is computationally expensive.
-To handle this, we introduce a set of learnable routers $\mathbf{R}\in\mathbb{R}^{M\times d}$ to mediate information exchange across phases.
+\blue{Phase tokens need to exchange information, since no single phase token holds the cycle shape, and they span a low-dimensional subspace (Insight~2, Section~\ref{sec:mot_stability}), so a few intermediaries suffice for the exchange.} We introduce a set of learnable routers $\mathbf{R}\in\mathbb{R}^{M\times d}$ to mediate information exchange across phases.
 \revised{
-While the design is inspired by prior routing-style \blue{architectures}~\citep{jaegle2021perceiver, zhang2023crossformer}, our contribution lies in \emph{leveraging the inherent low-rank structure of phase-aligned tokens} \blue{(Insight~2, Section~\ref{sec:mot_stability})}.
+\blue{The design follows prior routing-style architectures~\citep{jaegle2021perceiver, zhang2023crossformer}, and the routers exploit} \emph{the inherent low-rank structure of phase-aligned tokens}.
 \blue{Cross-phase routing reduces the quadratic cost of self-attention to a cost linear in the number of phases, while every phase can still exchange information with every other phase.}
 }
 
@@ -93,8 +115,8 @@ The aggregated information in the routers is subsequently redistributed to the p
 \end{gathered}
 \end{equation}
 This mechanism restores phase-level resolution while simultaneously enforcing coherence across phases through the contextualized routers.
-Ultimately, each phase representation attends to all others through a two-stage routing pathway.
-\blue{A routing layer combines the two steps with residual connections, two LayerNorms and an MLP: writing $z_p$ and $m_p$ for the $p$-th rows of the layer input ($\tilde{\mathbf Z}$ for the first layer) and of $\mathbf Z_{\text{attn}}$, it computes $o_p=\LN_1(z_p+m_p)$ and outputs $h_p=\LN_2\big(o_p+\mathrm{MLP}(o_p)\big)$. Each LayerNorm centers its input over the $d$ features, rescales it to unit root mean square, and applies a learned gain $\gamma_i$ and offset $\beta_i$: $\LN_i(u)=\gamma_i\odot\varsigma+\beta_i$ with $\varsigma=J_du/(\|J_du\|^2/d+\epsilon)^{1/2}$ and $J_d=I_d-\tfrac1d\one\one^\top$. Hence $\|\varsigma\|<\sqrt d$ for every input; since $\LN_2$ is the last operation of every routing layer, this bound holds for every final phase latent, which Section~\ref{sec:theory} builds on. Appendix~\ref{app:proofs} states the full layer and the stack.}
+Ultimately, each phase representation attends to all others \blue{in two steps, through the routers}.
+\blue{A routing layer combines the two steps with residual connections, two LayerNorms and an MLP: writing $z_p$ and $m_p$ for the $p$-th rows of the layer input ($\tilde{\mathbf Z}$ for the first layer) and of $\mathbf Z_{\text{attn}}$, it computes $o_p=\LN_1(z_p+m_p)$ and outputs $h_p=\LN_2\big(o_p+\mathrm{MLP}(o_p)\big)$. Each LayerNorm centers its input over the $d$ features, rescales it to unit root mean square, and applies a learned gain $\gamma_i$ and bias $\beta_i$: $\LN_i(u)=\gamma_i\odot\varsigma+\beta_i$ with $\varsigma=J_du/(\|J_du\|^2/d+\epsilon)^{1/2}$ and $J_d=I_d-\tfrac1d\one\one^\top$. Hence $\|\varsigma\|<\sqrt d$ for every input, and since $\LN_2$ is the last operation of every routing layer, every final phase latent is bounded. This bound confines the level and the within-cycle amplitude of every phase forecast to the two envelopes of Section~\ref{sec:theory}, and it is why the level and amplitude tokens have pathways of their own: the level pathway bypasses $\LN_2$, and the amplitude pathway rescales its output. Appendix~\ref{app:proofs} states the full layer and the stack.}
 
 
 % ---------------- predictor ----------------
@@ -109,30 +131,15 @@ The predictor produces multi-step forecasts of length $P_{\text{out}}$ for all p
 \end{gathered}
 \label{eq:predictor}
 \end{equation}
-All phases share the same predictor parameters, which enforces consistency across phases and reduces the number of trainable parameters. This not only improves efficiency but also regularizes learning, thereby enhancing generalization. Finally, the predicted phase--period matrix $\mathbf{Y}_{\text{phase}}$ is passed through de-tokenization and de-normalization to produce the final forecast $\mathbf{Y}$.
-\blue{In the notation of Section~\ref{subsec:preprocessing}, the $p$-th row of $\mathbf Y_{\text{phase}}$ holds the $K'$ future values $F_p$ of phase $p$ in normalized units, and de-tokenizing $\mathbf Y_{\text{phase}}$ gives the \emph{phase forecast} $F\in\mathbb R^H$; we call the computation from the phase tokens to $F$ the \emph{phase path}. For \sysname, the normalized forecast is $\hat{\tilde y}=F$.}
+All phases share the same predictor parameters, which enforces consistency across phases and reduces the number of trainable parameters\blue{: every phase is decoded by the same map, so the phases differ in their forecasts only through their latents}.
+\blue{In the notation of Section~\ref{subsec:preprocessing}, the $p$-th row of $\mathbf Y_{\text{phase}}$ holds the $K'$ future values $F_p$ of phase $p$ in normalized units, and de-tokenizing $\mathbf Y_{\text{phase}}$ gives the \emph{phase forecast} $F\in\mathbb R^H$; the computation from the phase tokens to $F$ is the phase pathway. A model with the phase pathway alone, the \emph{phase-only variant} of \sysplus, forecasts $\hat{\tilde y}=F$ and de-normalizes it. In \sysplus, the predictor reads the final phase latents after the amplitude pathway (Section~\ref{sec:ext_modulation}), and $F$ is fused with the level forecast (Section~\ref{sec:ext_init}).}
 
 
 \blue{
-\subsection{\sysLA: Supplying the Missing Level and Amplitude}
-\label{sec:extension}
+\subsection{The Level Pathway}
+\label{sec:ext_level}
 
-Section~\ref{sec:mot_changes} shows that sensor streams change across cycles: the level of a cycle drifts, and on five of the seven benchmarks the amplitude moves with it. \sysLA adds one component for each change and keeps the backbone unchanged: phase tokenization, embedding, cross-phase routing and the shared predictor are those of \sysname. A level branch with a gated fusion addresses level drift; \sysname with these two parts is \sysL. A centered modulation of the final phase latents addresses level-dependent amplitude; adding it to \sysL gives \sysLA. Fig.~\ref{fig:la_overview} shows where the components attach. Section~\ref{sec:theory} shows why each component takes its form: for fixed weights, the phase forecast stays within a level envelope and an amplitude envelope fixed by the final LayerNorm and the predictor, and what these envelopes exclude has a simple form.
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/la_overview.pdf}
-\caption{\sysLA. The \sysname backbone and the shared predictor are unchanged and keep the colors of Fig.~\ref{fig:overview}; the new components are blue. A rank-3 level branch reads the anchored cycle means and writes onto three fixed horizon profiles; its state $t$ drives a centered modulation of the final phase latents; the two forecasts are fused with separate level and shape gates.}
-\label{fig:la_overview}
-\end{figure*}
-
-\fakeparagraph{Notation}
-In addition to the notation of Section~\ref{subsec:preprocessing}, let $\tilde x_L$ be the last value of the normalized window. Let $M_c$ be the orthogonal projection of $\mathbb R^H$ onto the subspace of vectors constant within each future cycle, and $J_c=I-M_c$: $M_c$ replaces each future cycle by its mean (the cycle level), and $J_c$ keeps the within-cycle deviations (the cycle shape). Finally, $\lev(v)=\tfrac1H\one^\top v$ is the overall level of a forecast $v\in\mathbb R^H$.
-
-\subsubsection{Level Branch and Gated Fusion}
-
-\fakeparagraph{Level Branch}
-Level drift adds the same vector of cycle levels to every phase token (\equref{eq:cycle_axis_changes}), so the level of a window is carried by its cycle means, and the forecast of the level is smooth over the horizon (constant under the seasonal random walk, Lemma~\ref{lem:bayes}). The branch therefore reads only the cycle means and writes onto a few smooth profiles (left of Fig.~\ref{fig:la_overview}). It pools the anchored window $\tilde x-\tilde x_L\one_L$ to its cycle means $\bar r-\tilde x_L\one_K$ and maps them to a three-dimensional state,
+The level pathway forecasts the level term. The level of a window is carried by its cycle means, and the forecast of the level is smooth over the horizon (constant under the seasonal random walk, Lemma~\ref{lem:bayes}). The level pathway therefore reads only the level token (\equref{eq:level_token}) and writes onto a few smooth profiles (bottom of Fig.~\ref{fig:la_overview}). It maps the level token to a three-dimensional state,
 \begin{equation}
 \begin{gathered}
 t=E(\bar r-\tilde x_L\one_K)+c_E\in\mathbb R^3,\\
@@ -140,12 +147,26 @@ F_{\mathrm b}=\tilde x_L\one_H+\Psi_H\,(\Gamma t+c_\Gamma),
 \end{gathered}
 \label{eq:branch}
 \end{equation}
-where $\Psi_H=[\one_H,a_2,a_3]\in\mathbb R^{H\times3}$ holds the displacement, tilt and curvature profiles, the discrete orthogonal polynomials of degree $0,1,2$ on the forecast grid, normalized to unit root mean square, so that its first column is $\one_H$ and the other two have zero mean over the horizon. $\Psi_H$ is fixed; only $E\in\mathbb R^{3\times K}$, $c_E\in\mathbb R^3$, $\Gamma\in\mathbb R^{3\times3}$ and $c_\Gamma\in\mathbb R^3$ are learned. Section~\ref{sec:theory_level} shows that, under standard seasonal models, the level the phase path misses enters through a low-rank map onto a few fixed horizon profiles; that these three profiles suffice is checked empirically in Section~\ref{sec:exp_capacity}.
+where $\Psi_H=[\one_H,\psi_2,\psi_3]\in\mathbb R^{H\times3}$ holds the offset, tilt and curvature profiles, the discrete orthogonal polynomials of degree $0,1,2$ on the forecast grid, normalized to unit root mean square, so that its first column is $\one_H$ and the other two have zero mean over the horizon. $\Psi_H$ is fixed; only $E\in\mathbb R^{3\times K}$, $c_E\in\mathbb R^3$, $\Gamma\in\mathbb R^{3\times3}$ and $c_\Gamma\in\mathbb R^3$ are learned, $3K+15$ parameters. By the anchor, the level pathway is shift-equivariant: adding $c\one_L$ to $\tilde x$ leaves $t$ unchanged and adds $c\one_H$ to $F_{\mathrm b}$. Under standard seasonal models, the level beyond the reach of the phase pathway enters through a low-rank map onto a few fixed horizon profiles (Theorem~\ref{thm:complement}), and Section~\ref{sec:exp_capacity} confirms that these three profiles suffice. The level pathway reads the window directly and is fused after the shared predictor, so, unlike the phase forecast, it bypasses every LayerNorm of the phase pathway, and its level is not confined to the level envelope of Theorem~\ref{thm:level_envelope}. The envelope theorems bound the phase forecast with $q=0$; the amplitude pathway keeps its level bound and rescales its amplitude bound (Proposition~\ref{prop:modulation}).
 
-The anchor makes the branch shift-equivariant in normalized coordinates: adding $c\one_L$ to $\tilde x$ leaves $t$ unchanged and adds $c\one_H$ to $F_{\mathrm b}$. The branch reads the window directly and is fused after the shared predictor, so, unlike the phase forecast, it bypasses every LayerNorm of the backbone; Section~\ref{sec:theory_level} shows why this matters.
+\subsection{The Amplitude Pathway}
+\label{sec:ext_modulation}
 
-\fakeparagraph{Gated Fusion}
-For every future cycle, the fused forecast takes its level and its within-cycle shape from $F$ and $F_{\mathrm b}$ with separate gates,
+The amplitude pathway forecasts the amplitude factor. The phase pathway alone keeps the within-cycle amplitude of its forecast below a fixed bound, the amplitude envelope (Theorem~\ref{thm:amplitude}(a)), whereas level-dependent amplitude scales the cycle shape with the level (\equref{eq:cycle_axis_changes}, Fig.~\ref{fig:coupling}). The amplitude pathway therefore uses what the other two pathways supply, the shape and the level state, and adds one scale. Before the shared predictor, the amplitude pathway adds to each final phase latent $h_p$ its deviation from the phase mean $\bar h$, scaled elementwise by the amplitude token $q$, computed from the state $t$ of the level pathway, which carries the forecast level $\hat\Lambda$ (top center of Fig.~\ref{fig:la_overview}):
+\begin{equation}
+h'_p=h_p+(h_p-\bar h)\odot q,\qquad \bar h=\tfrac1P\textstyle\sum_ph_p,\qquad q=V_2V_1\,t,
+\label{eq:la_modulation}
+\end{equation}
+with $V_1\in\mathbb R^{k_q\times3}$, $V_2\in\mathbb R^{d\times k_q}$, $k_q=\min(w,3,d)$ and no biases, $k_q(3+d)$ parameters; the width $w$ is $2$ by default. The predictor then receives $h'_p$ in place of $h_p$, so the phase forecast $F$ is computed from the modulated latents.
+
+\fakeparagraph{Why the modulation is centered}
+Because the predictor of \equref{eq:predictor} is shared and affine, $\Phi\bar h+c_\Phi$ is the vector of future cycle means of the phase forecast: $\bar h$ is the latent counterpart of the cycle level, and $h_p-\bar h$ that of the within-cycle shape. The deviations sum to zero over the phases (the centering is over the phases, not over the $d$ features as in a LayerNorm), so the amplitude pathway changes only the within-cycle part of the phase forecast and leaves its cycle means unchanged (Proposition~\ref{prop:modulation}(a)); it never moves the level that the level pathway sets. A uniform $q=q_1\one_d$ scales that part by $1+q_1$, and a $q$ driven by the forecast level $\hat\Lambda$ supplies the level-driven factor $1+\alpha_w\hat\Lambda$ that the multiplicative model requires (Theorem~\ref{thm:amplitude}(b), Proposition~\ref{prop:modulation}(b)).
+
+\subsection{One Forecast from Three Pathways}
+\label{sec:ext_init}
+
+\fakeparagraph{Gated fusion}
+Let $M_c$ be the orthogonal projection of $\mathbb R^H$ onto the subspace of vectors constant within each future cycle, and $J_c=I-M_c$: $M_c$ replaces each future cycle by its mean (the cycle level), and $J_c$ keeps the within-cycle deviations (the cycle shape); $\lev(v)=\tfrac1H\one^\top v$ is the overall level of a forecast $v\in\mathbb R^H$. For every future cycle, the fused forecast takes its level and its within-cycle shape from the phase forecast $F$ and the level-pathway forecast $F_{\mathrm b}$ with separate gates,
 \begin{equation}
 \begin{gathered}
 M_c\hat{\tilde y}=(1-g_\ell)M_cF+g_\ell M_cF_{\mathrm b},\\
@@ -153,30 +174,30 @@ J_c\hat{\tilde y}=(1-g_s)J_cF+g_sJ_cF_{\mathrm b},
 \end{gathered}
 \label{eq:fusion}
 \end{equation}
-with $g_\ell=\operatorname{sigmoid}(\omega)$ and $g_s=\operatorname{sigmoid}(\omega+\delta)$. Since $J_c\one_H=0$, the branch enters the within-cycle shape only through the within-cycle parts $J_ca_2$ and $J_ca_3$ of its tilt and curvature profiles. The gates are static: they depend on neither the input nor the time step. They are learned either per channel or shared across the $C$ channels (Section~\ref{sec:ext_init}).
+with $g_\ell=\operatorname{sigmoid}(\omega)$ and $g_s=\operatorname{sigmoid}(\omega+\delta)$, and the fused forecast is de-normalized. Since $J_c\one_H=0$, the level pathway enters the within-cycle shape only through the within-cycle parts $J_c\psi_2$ and $J_c\psi_3$ of its tilt and curvature profiles. The gates are static: they depend on neither the input nor the time step. They are learned either per channel or shared across the $C$ channels.
 
-\subsubsection{Centered Amplitude Modulation}
-\label{sec:ext_modulation}
-
-Level-dependent amplitude scales the cycle shape with the level (\equref{eq:cycle_axis_changes}, \blue{Fig.~\ref{fig:coupling}}). Before the shared predictor, \sysLA adds to each final phase latent $h_p$ its deviation from the phase mean $\bar h$, scaled elementwise by a vector $q$ computed from the branch state $t$, which carries the level forecast (center of Fig.~\ref{fig:la_overview}):
+\fakeparagraph{The whole model}
+Collecting \equref{eq:level_token}--\equref{eq:fusion}, \sysplus computes, for every sensor,
 \begin{equation}
-h'_p=h_p+(h_p-\bar h)\odot q,\qquad \bar h=\tfrac1P\textstyle\sum_ph_p,\qquad q=V_2V_1\,t,
-\label{eq:la_modulation}
+\begin{gathered}
+t=E(\bar r-\tilde x_L\one_K)+c_E,\qquad q=V_2V_1t,\\
+F_{\mathrm b}=\tilde x_L\one_H+\Psi_H(\Gamma t+c_\Gamma),\\
+F_p=\Phi\big(h_p+(h_p-\bar h)\odot q\big)+c_\Phi,\\
+\hat{\tilde y}=M_c\big[(1-g_\ell)F+g_\ell F_{\mathrm b}\big]\\
+\qquad+J_c\big[(1-g_s)F+g_sF_{\mathrm b}\big],
+\end{gathered}
+\label{eq:forward}
 \end{equation}
-with $V_1\in\mathbb R^{k_q\times3}$, $V_2\in\mathbb R^{d\times k_q}$, $k_q=\min(w,3,d)$ and no biases; the width $w$ is $2$ by default. The predictor then receives $h'_p$ in place of $h_p$. Because the predictor of \equref{eq:predictor} is shared and affine, $\Phi\bar h+c_\Phi$ is the vector of future cycle means of the phase forecast: $\bar h$ is the latent counterpart of the cycle level, and $h_p-\bar h$ that of the within-cycle shape. The deviations sum to zero over the phases, so the modulation changes only the within-cycle part of the phase forecast and leaves its cycle means unchanged (Proposition~\ref{prop:modulation}(a)); a uniform $q=q_1\one_d$ scales that part by $1+q_1$. This centering is over the phases, not over the features as in a LayerNorm. Theorem~\ref{thm:amplitude}(b) and Proposition~\ref{prop:modulation}(b) explain why the scale is driven by the level state.
+where $h_1,\dots,h_P$ are the final phase latents of the phase pathway, $F$ de-tokenizes $F_1,\dots,F_P$, and $\hat y=\mu\one+\sigma\hat{\tilde y}$. The phase tokens set the latents, the level token sets the state $t$, and $t$ sets both the level-pathway forecast and the amplitude token.
 
-\subsubsection{Nesting and Initialization}
-\label{sec:ext_init}
-
-The new parameters are initialized so that the components start from simple forecasts. $\Gamma$ and $c_\Gamma$ are zero, so the branch initially forecasts the last value; $V_2$ is zero, so the modulation is initially the identity; and both gates start at a common value $g_0$, $0.2$ by default ($\delta=0$). With $V_2=0$, \sysLA reduces exactly to \sysL, and \sysL tends to \sysname as $g_\ell,g_s\to0$. Hence \sysLA and \sysL built from the same random state with the same gate initialization have identical forecasts at initialization; Section~\ref{sec:exp} pairs them in this way. We write \sysLA (mod.\ off) for a trained \sysLA evaluated with $V_2=0$.
-
-The experiments use two configurations (Section~\ref{sec:ext_setup}): the \emph{protocol configuration}, with the fixed profiles of \equref{eq:branch} and the gate sharing chosen per dataset, and the \emph{main-table configuration}, which searches further extension hyperparameters per setting, including the gate sharing, and replaces $\Psi_H$ by a learned decoder of the same rank on four settings (Appendix~\ref{app:la_config}).
+\fakeparagraph{Simple starting forecasts and nested variants}
+The level and amplitude pathways start from simple forecasts: $\Gamma$ and $c_\Gamma$ are zero, so the level pathway initially forecasts the last value; $V_2$ is zero, so the amplitude pathway is initially the identity; and both gates start at a common value $g_0$, $0.2$ by default ($\delta=0$). The variants of the token ablation are sub-models of one model: with $V_2=0$, \sysplus reduces exactly to its \emph{phase--level variant}, the phase and level pathways alone, which tends to the phase-only variant as $g_\ell,g_s\to0$. In particular, \sysplus and its phase--level variant built from the same random state with the same gate initialization have identical forecasts at initialization, so the token ablation adds one token at a time from the same starting forecast. We write \sysplus (amplitude off) for a trained \sysplus evaluated with $V_2=0$.
 }
 
-\subsection{Complexity of \sysname{} \blue{and \sysLA}}
+\subsection{\blue{Efficiency: Small Pathways, Linear Cost per Sensor}}
 \label{sec:complexity}
 
-For each \blue{channel}, the overall complexity of \sysname\ can be summarized as follows:
+\blue{Each pathway is small because what it carries is low-dimensional, and \sysplus has no operation across sensors, so its cost per sensor sets its cost on the whole network. For each channel, the phase pathway costs as follows:}
 the phase embedding layer requires $O(L_{\text{phase}} P_{\text{in}} d)$ time and $O(L_{\text{phase}} d)$ memory.
 The cross-phase routing layer, which dominates computation, incurs $O((L_{\text{phase}}+M)d^2 + M L_{\text{phase}} d)$ time and $O(\blue{n_h} M L_{\text{phase}} + (L_{\text{phase}}+M)d)$ memory.
 Finally, the predictor costs $O(L_{\text{phase}} d P_{\text{out}})$ time and $O(L_{\text{phase}} P_{\text{out}})$ memory.
@@ -190,6 +211,6 @@ As investigated in \blue{\secref{sec:mot_stability}}, the phase token space exhi
 Thus, \blue{for a fixed number of layers,} the computational cost grows \blue{linearly} with both the input length $L_{\text{in}}$ and the output horizon $L_{\text{out}}$.
 
 \blue{
-\fakeparagraph{Cost of \sysLA}
-The level branch adds $3K$ ($E$) $+\,3$ ($c_E$) $+\,9$ ($\Gamma$) $+\,3$ ($c_\Gamma$) $=105$ parameters at $K=30$ with the fixed profiles of \equref{eq:branch}, the modulation $k_q(3+d)$, and the gates $2C$ for $C$ channels, or two in total when shared. In the notation of Section~\ref{subsec:preprocessing}, the branch costs $O(L)$ per channel for pooling and $O(K+H)$ for the readout, and the modulation $O(Pd)$, against the backbone cost above, so the overall complexity remains linear in the input and output lengths and in the number of channels.
+\fakeparagraph{Cost of the level and amplitude pathways}
+The level pathway has $3K$ ($E$) $+\,3$ ($c_E$) $+\,9$ ($\Gamma$) $+\,3$ ($c_\Gamma$) $=105$ parameters at $K=30$ with the fixed profiles of \equref{eq:branch}, the amplitude pathway $k_q(3+d)$, and the gates $2C$ for $C$ channels, or two in total when shared. In the notation of Section~\ref{subsec:preprocessing}, the level pathway costs $O(L)$ per channel to form the level token and $O(K+H)$ for the readout, and the amplitude pathway $O(Pd)$, both small next to the phase pathway. On the largest benchmark, Traffic, the phase pathway holds about 1.2K parameters, and the level and amplitude pathways add at most about 2.1K, most of them per-channel gates, and, on Traffic and Electricity, less than 0.25\% of the FLOPs of the phase pathway (Section~\ref{sec:exp_efficiency}). The cost of \sysplus is thus linear in the input length, in the horizon and in the number of sensors, and because one shared model serves every sensor, every saving recurs for every sensor at every update.
 }

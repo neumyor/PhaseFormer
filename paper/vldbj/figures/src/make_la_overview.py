@@ -34,7 +34,7 @@ label(IX, YM + 0.24, IW, 0.26, ['$x ∈ ℝ^L$'])
 PX, PW = 1.64, 2.5
 PY0, PY1 = 0.06, 2.38
 box(PX, PY0, PW, PY1 - PY0, fill=GRAY_PANEL, radius=0.06)
-label(PX, PY0 + 0.08, PW, 0.5, ['**PhaseFormer Backbone**', '(unchanged)'], size=TEXT, spacing=0.95)
+label(PX, PY0 + 0.08, PW, 0.5, ['**Phase Pathway**', '(phase tokens)'], size=TEXT, spacing=0.95)
 sx, sw, sh = PX + 0.14, 1.94, 0.4
 ys = (0.72, 1.28, 1.84)
 box(sx, ys[0], sw, sh, ['Phase Tokenization'], fill=WHITE, size=TEXT)
@@ -48,7 +48,7 @@ for y0, y1 in ((ys[0] + sh, ys[1]), (ys[1] + sh, ys[2] - 0.08)):
 
 # 3. Centered modulation (new).
 MX, MW = 5.0, 2.46
-box(MX, YM - BH / 2, MW, BH, ['**Centered Modulation**', '$h′_p = h_p + (h_p − h̅) ⊙ q$'],
+box(MX, YM - BH / 2, MW, BH, ['**Amplitude Pathway**', '$h′_p = h_p + (h_p − h̅) ⊙ q$'],
     fill=BLUE_BOX, size=TEXT, spacing=1.25)
 
 # 4. Shared predictor (unchanged, Fig. 3 yellow).
@@ -81,13 +81,13 @@ path([(FX + FW, YM), (OX, YM)])
 LY, LH = 2.6, 1.6
 LX0, LX1 = 0.36, 11.7
 box(LX0, LY, LX1 - LX0, LH, fill=BLUE_PANEL, lw=1.25, dash=True, radius=0.05)
-label(0.9, LY + 0.07, 5.0, 0.3, ['**Level Branch** (rank 3, on cycle means)'], align=PP_ALIGN.LEFT)
+label(0.9, LY + 0.07, 5.0, 0.3, ['**Level Pathway** (rank 3, on the level token)'], align=PP_ALIGN.LEFT)
 
 YB = LY + 0.92                 # center line of the branch boxes
 BBH = 1.08
 # pooling box
 CX, CW = 1.2, 2.9
-box(CX, YB - BBH / 2, CW, BBH, ['**Cycle-Mean Pooling**',
+box(CX, YB - BBH / 2, CW, BBH, ['**Level Token**',
                                 '$r̄ − x̃_L 𝟏_K ∈ ℝ^K$ from $x̃ − x̃_L 𝟏_L$',
                                 '$t = E(r̄ − x̃_L 𝟏_K) + c_E ∈ ℝ^3$'],
     size=TEXT, spacing=1.12)
@@ -99,7 +99,7 @@ label(TX - 0.25, YB + 0.14, 1.3, 0.26, ['state $t ∈ ℝ^3$'], size=SMALL)
 RX, RW = 7.15, 4.4
 box(RX, YB - BBH / 2, RW, BBH)
 label(RX, YB - BBH / 2 + 0.07, RW, 0.28, ['**Fixed Profiles** $Ψ_H$'])
-for (name, prof, bx) in (('displacement', [0.5] * 9, RX + 0.22),
+for (name, prof, bx) in (('offset', [0.5] * 9, RX + 0.22),
                          ('tilt', [k / 8 for k in range(9)], RX + 1.86),
                          ('curvature', [1 - ((k - 4) / 4) ** 2 for k in range(9)], RX + 2.82)):
     box(bx, YB - 0.14, 0.42, 0.24, fill=WHITE, line=RGBColor(0x90, 0x90, 0x90), lw=0.5,

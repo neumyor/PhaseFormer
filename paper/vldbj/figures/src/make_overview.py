@@ -153,7 +153,7 @@ yc = token_stack(2.33, row_y - 0.32, 0.38, 0.1, 4, 2, gap=0.035)
 path([(2.23, row_y), (2.33, row_y)], color=DARK_GREEN, lw=1.5)
 
 path([(LX + LW / 2, 1.5), (LX + LW / 2, 1.62)])
-box(LX, 1.62, LW, 0.38, ['**PhaseFormer**'], fill=GRAY_BOX, line=PURPLE, lw=1.75, size=22,
+box(LX, 1.62, LW, 0.38, ['**Phase Pathway**'], fill=GRAY_BOX, line=PURPLE, lw=1.75, size=22,
     shape=MSO_SHAPE.RECTANGLE)
 path([(LX + LW / 2, 2.0), (LX + LW / 2, 2.12)])
 
