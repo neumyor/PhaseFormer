@@ -21,7 +21,7 @@ Forecasting models, however, have grown ever more elaborate. Decomposition model
     \caption{\blue{Accuracy and efficiency.}}
     \label{fig:efficiency_plot}
   \end{subfigure}
-  \caption{\blue{Good tokens let a very small model suffice. (a)~A patch token holds consecutive values, a piece of the cycle shape at the level and amplitude of its cycle; a phase token collects the values at one phase from successive cycles. (b)~Accuracy, parameters and FLOPs (marker size) on Traffic with an input length of 720 and a horizon of 96; the red point is the phase pathway of \sysplus, to which the level and amplitude pathways add at most about 2.1K parameters.}}
+  \caption{\blue{Good tokens let a very small model suffice. (a)~A patch token holds consecutive values, a piece of the cycle shape at the level and amplitude of its cycle; a phase token collects the values at one phase from successive cycles. (b)~Accuracy and cost on Traffic: average MAE over the four horizons against the number of parameters, with marker size growing with the FLOPs per forecast (input length 720, horizon 96). \sysplus is drawn with its phase pathway plus the at most about 2.1K parameters of its level and amplitude pathways.}}
   \label{fig:introduction}
 \end{figure*}
 

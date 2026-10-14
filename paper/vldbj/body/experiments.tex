@@ -98,39 +98,8 @@ Against the light models, \sysplus attains a lower MSE on every dataset than the
 
 \begin{figure*}[t]
     \centering
-    % 子图1 - Traffic FLOPs
-    \begin{subfigure}{0.24\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{figures/flops_traffic.png}
-        \caption{FLOPs on Traffic}
-        \label{fig:traffic_flops}
-    \end{subfigure}
-    % 子图2 - Traffic Params
-    \begin{subfigure}{0.24\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{figures/params_traffic.png}
-        \caption{Params on Traffic}
-        \label{fig:traffic_params}
-    \end{subfigure}
-    % 子图3 - Electricity FLOPs
-    \begin{subfigure}{0.24\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{figures/flops_electricity.png}
-        \caption{FLOPs on Electricity}
-        \label{fig:electricity_flops}
-    \end{subfigure}
-    % 子图4 - Electricity Params
-    \begin{subfigure}{0.24\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{figures/params_electricity.png}
-        \caption{Params on Electricity}
-        \label{fig:electricity_params}
-    \end{subfigure}
-    \caption{
-    Comparison of FLOPs and parameter counts across models on the Traffic and Electricity\revised{, using an input length of 720 steps and predicting 96 future steps}.
-    Patch-based models are shown in green, phase-based models in blue, and other models in gray.
-    \blue{The highlighted bar is the phase pathway of \sysplus; its level and amplitude pathways add less than 0.25\% of the FLOPs on both datasets and at most about 2.1K parameters (Section~\ref{sec:exp_efficiency}).}
-    }
+    \includegraphics[width=\textwidth]{figures/efficiency_bars.pdf}
+    \caption{\blue{FLOPs per forecast and parameters of all models on Traffic and Electricity, with an input length of 720 steps and a horizon of 96 (logarithmic scales). Phase-based models are blue, patch-based models green, and the other models gray. The \sysplus bar shows its phase pathway; the dashed part adds the at most about 2.1K parameters of its level and amplitude pathways, which add less than 0.25\% of the FLOPs (Section~\ref{sec:exp_efficiency}).}}
     \label{fig:flops_params_visualization}
 \end{figure*}
 
