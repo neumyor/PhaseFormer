@@ -5,7 +5,7 @@ Management and Analytics: Machine Learning-based Solutions and Beyond"
 (initial submission due 2026-10-15).
 
 - `main.tex` — manuscript, Springer `svjour3` with the `twocolumn` option, as required by
-  the VLDBJ submission rules (two-column template, at most 25 pages).
+  the VLDBJ submission rules (two-column template).
 - `\blue{...}` (defined in `main.tex`) marks every passage that is new or changed relative
   to the ICLR version. `\showchangesfalse` produces a clean copy.
 - `body/` — sections. `theory.tex`, `extension.tex`, `extension_experiments.tex` and
