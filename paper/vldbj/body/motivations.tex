@@ -1,170 +1,112 @@
 \section{\blue{What Tokens Must Represent}}
 \label{sec:motivations}
-\blue{A forecaster can be small only if its tokens carry what the forecast needs in a compact form, and it can be accurate only if they carry all of it. This section identifies what that is. A window of a periodic series is one low-dimensional structure with three parts, the shape, the level and the amplitude of its cycles, and the benchmarks draw on all three (Section~\ref{sec:mot_tokens}). Phase tokens carry the shape stably and in few dimensions (Section~\ref{sec:mot_stability}). The level and the amplitude change along the cycles, coupled to each other, and move the very plane that the phase tokens span, so they need tokens of their own (Section~\ref{sec:mot_changes}).}
+\blue{This section finds what a forecaster's tokens must hold, in three steps. A window of a periodic series consists of three parts, the shape, the level and the amplitude of its cycles, and every benchmark needs all three (Section~\ref{sec:mot_tokens}). Phase tokens hold the shape stably, patch tokens do not (Section~\ref{sec:mot_stability}). Phase tokens cannot hold the level and the amplitude stably, so these need tokens of their own; since the amplitude follows the level, one level token drives both (Section~\ref{sec:mot_changes}).}
 
 \blue{
-\subsection{One Window, One Low-Rank Form, Three Parts}
+\subsection{One Window, Three Parts}
 \label{sec:mot_tokens}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/token_energy.pdf}
-\caption{A window is a level term plus an amplitude-scaled shape. (a)~The normalized Traffic window of Fig.~\ref{fig:coupling}(a), folded with one row per day, and its three terms in \equref{eq:three_parts}, on one color scale; the two terms carry 87\% of its energy. (b)~Mean shares of the energy of a normalized test window carried by the level term (blue), the amplitude-scaled shape (orange) and the rest (gray); the shares add up because the three terms are orthogonal, and the label gives the share of the first two together.}
+\caption{A window is a level term plus an amplitude-scaled shape. (a)~A normalized Traffic window, one row per day, and its three terms in \equref{eq:three_parts}. (b)~Energy shares of the three orthogonal terms, averaged over the test windows; the numbers give the first two together. Orange dominates on three datasets, navy on the other four.}
 \label{fig:token_energy}
 \end{figure}
 
-Normalize a window of a periodic series to zero mean and unit variance and fold it into a matrix $X\in\mathbb R^{D\times H}$ with one row per cycle and one column per phase, the position within the cycle; in this section $D$ counts the cycles and $H$ the phases, and Section~\ref{sec:method} gives the folding in detail. The window carries three kinds of information. The \emph{shape} $s\in\mathbb R^H$ is the pattern of values across the phases, with mean zero. The \emph{level} of a cycle is its mean, and the cycle levels form a vector $\ell\in\mathbb R^D$ that drifts from cycle to cycle. The \emph{amplitude} of a cycle is its swing around its level, that is, how strongly the cycle expresses the shape, and the cycle amplitudes form a vector $a\in\mathbb R^D$. Together,
+Fold a normalized window of a periodic series into a matrix $X\in\mathbb R^{D\times H}$, one row per cycle and one column per position in the cycle, its \emph{phase} (Section~\ref{sec:method}). The rows repeat one pattern, but not exactly: some cycles sit higher than others, and some swing more widely. Three quantities therefore describe a window: the \emph{shape} $s\in\mathbb R^H$, the pattern that all cycles share; the \emph{level} $\ell_k$ of each cycle, its mean; and the \emph{amplitude} $a_k$ of each cycle, how widely it swings around its level. Each cycle is its level plus its amplitude times the shape, so
 \begin{equation}
-X=\ell\,\one^\top+a\,s^\top+N
-=\begin{bmatrix}\ell & a\end{bmatrix}\begin{bmatrix}\one & s\end{bmatrix}^{\!\top}+N ,
+X=\ell\,\one^\top+a\,s^\top+N ,
 \label{eq:three_parts}
 \end{equation}
-where $N$ is what the three parts do not describe. The level term $\ell\,\one^\top$ holds the row means of $X$, and $a\,s^\top$ is the best rank-one approximation, in the Frobenius norm, of the within-cycle part $X-\ell\,\one^\top$, with $s$ scaled to unit root mean square, so that $|a_k|$ is the swing of cycle $k$ under this form. Since the rows of the within-cycle part have mean zero, so does $s$; the level term is therefore orthogonal to $a\,s^\top$ and to $N$, whose rows also have mean zero, and $N$, the residual of a best approximation, is orthogonal to $a\,s^\top$. The three terms are thus orthogonal, and their energies add up. A window that follows \equref{eq:three_parts} is low-dimensional as a whole, a matrix of rank at most two, described by $D$ levels, $D$ amplitudes and one shape of $H$ values instead of $DH$ values.
+a \emph{level term} plus an \emph{amplitude-scaled shape}, with $\ell,a\in\mathbb R^D$ and a rest $N$. Here $\ell$ holds the cycle means, $s$ has mean zero and unit root mean square, and $a\,s^\top$ is the best rank-one fit to the within-cycle part $X-\ell\,\one^\top$, so the three terms are orthogonal. Without the rest, a window has rank at most two: its columns lie in the plane of $\ell$ and $a$, its rows in the plane of $\one$ and $s$.
 
-Fig.~\ref{fig:token_energy} shows how closely the benchmarks follow this form. In the Traffic window of panel~(a), the level term and the amplitude-scaled shape reproduce the folded window up to a small rest; the level term is faint there because the levels of this window drift little relative to its daily swing. On average over the test windows of each dataset (panel~(b)), the two terms together carry between 78\% and 93\% of the energy of a window. Because the window is normalized, $\ell$ has mean zero, so the level share measures the drift within the window, not its offset. Which part carries more depends on the data: the amplitude-scaled shape dominates on Electricity, Traffic and ETTh1, and the level on ETTh2, ETTm1, ETTm2 and Weather, where it carries up to 80\% of the energy. The benchmarks thus need both terms in different proportions, and Section~\ref{sec:mot_changes} shows that the amplitude in them moves with the level.
+Real windows are close to this form: the level term and the amplitude-scaled shape carry between 78\% and 93\% of the energy of a window on every dataset (Fig.~\ref{fig:token_energy}). Since the window is normalized, the level term measures how far the levels drift within it, not its offset. Which term dominates depends on the data: the amplitude-scaled shape on Electricity, Traffic and ETTh1, the level term on the other four. Neither term can therefore be dropped.
 
-\fakeparagraph{Takeaways}
-\emph{A periodic window is one low-dimensional structure with three parts, and the benchmarks need all three.} Each part is small: the shape is one vector over the phases; the level is one number per cycle, whose future under standard seasonal models is a few coefficients of fixed horizon profiles (Section~\ref{sec:theory_level}); and the amplitude is one number per cycle that moves with the level on five of the seven benchmarks (Section~\ref{sec:mot_changes}). The product form of \equref{eq:three_parts} also shows how each token relates to the parts. A phase token, a column of $X$, is $\ell+s_p\,a$ up to noise: the two factors along the cycles, weighted by the shape. A patch token, a row of $X$, is $\ell_k\one+a_k s$ up to noise: the shape at the level and the amplitude of its cycle, all three parts mixed in one vector. Which part changes therefore decides which token moves, and the rest of this section follows this rule: a change of the shape leaves the span of the phase tokens in place (Section~\ref{sec:mot_stability}), and a change of the level or the amplitude moves it (Section~\ref{sec:mot_changes}).}
+\fakeparagraph{Takeaway}
+\emph{A window is a level term plus an amplitude-scaled shape, and every benchmark needs both.} A forecaster's tokens must hold the shape, the level and the amplitude.}
 
-\begin{figure*}[t]
-  \centering
-  %  subfigure
-  \begin{subfigure}[t]{0.59\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/visualization_cycle_phase_comparison.png}
-    \caption{Temporal shift comparison across multiple datasets.}
-    \label{fig:visualization_tsne}
-  \end{subfigure}
-  \hfill
-%  subfigure
-  \begin{subfigure}[t]{0.37\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/traffic_pca_cycle_phase.png}
-    \caption{PCA for phase tokens on \emph{Traffic}.}
-    \label{fig:traffic_pca_cycle_phase}
-  \end{subfigure}
-  \caption{\blue{Phase tokens carry the shape stably and in few dimensions. (a)~t-SNE projections of patch and phase tokens over time, with the average MMD between each later week and the first week below: patch tokens drift, phase tokens stay in place. (b)~PCA on Traffic: two dimensions explain over 90\% of the variance of phase tokens, whereas patch tokens need more than eleven.}}  
-  \label{fig:phase_token_comparison}
-\end{figure*}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/token_geometry.pdf}
+\caption{\blue{Phase tokens hold the shape stably and compactly. (a)~Drift of each week's tokens from those of the first week (MMD$^2$) on Traffic; lower is more stable. (b)~Variance captured by two principal components; higher is more compact. Green: patch tokens; blue: phase tokens.}}
+\label{fig:phase_token_comparison}
+\end{figure}
 
-\subsection{\blue{The Shape: Phase Tokens Carry It Stably and in Few Dimensions}}
+\subsection{\blue{The Shape: Phase Tokens Hold It Stably}}
 \label{sec:mot_stability}
 
-\blue{The first part of \equref{eq:three_parts} that a token must carry is the shape. We compare two tokenizations of the folded matrix for it, its rows and its columns, on three widely used datasets.} As illustrated in \figref{fig:phase_token}, a patch token is composed of adjacent observations within a \blue{cycle}, whereas a phase token is constructed by extracting values at identical offsets across consecutive \blue{cycles}. \blue{Two insights follow.}
+\blue{Which token holds these parts? By \equref{eq:three_parts}, a \emph{patch token}, a row of $X$, is $\ell_k\one+a_k\,s$: the shape spans its plane, together with $\one$. A \emph{phase token}, a column, is $\ell+s_p\,a$: it lies in the plane of $\ell$ and $a$, and the shape only sets where in that plane, through the weight $s_p$. A token must also hold its part \emph{stably}: when the part changes, the token should stay where a model fitted on past windows expects it.
 
-\fakeparagraph{Insight 1: Phase tokens are globally stationary, while patch tokens are locally stationary}
-To provide an intuitive overview of their geometric structures, we project both types of tokens into two-dimensional spaces using t-SNE~\citep{tsne2008}.
-As shown in Fig.~\ref{fig:visualization_tsne}, the distributions of patch tokens drift continuously over time but exhibit local coherence, indicating \emph{local stationarity}\blue{: a patch token changes with the cycle it comes from}. In contrast, phase tokens form compact and coherent clusters that remain stable over the long term, reflecting strong \emph{global stationarity}. To quantify the long-term drift, we compute the average discrepancy distance between each subsequent week and the initial week. Specifically, we adopt the Maximum Mean Discrepancy (MMD) metric~\citep{ouyang2021mmd}, a statistical measure of distributional divergence:
-\begin{equation}
-\begin{aligned}
-\mathrm{MMD}^2(P, Q)
-&= \mathbb{E}_{x,x' \sim P}[k(x,x')]
-+ \mathbb{E}_{y,y' \sim Q}[k(y,y')]\\
-&\quad - 2\,\mathbb{E}_{x \sim P, y \sim Q}[k(x,y)],
-\end{aligned}
-\end{equation}
-where \(P\) and \(Q\) denote tokens collected from two different weeks, respectively, and \(k(\cdot,\cdot)\) is the RBF kernel function. As two distributions become closer, their MMD value approaches zero. The results at the bottom of Fig.~\ref{fig:visualization_tsne} show that the average MMD distance of the phase token space is \blue{far} smaller than that of the patch token space. Taken together, both qualitative and quantitative analyses demonstrate that phase tokenization exhibits substantially lower temporal distribution divergence, thereby \emph{facilitating better generalization across the time axis}.
+Consider a change of the shape, as when commuting habits shift the rush hours in every cycle alike. Phase tokens move within their plane; the plane of the patch tokens turns. Real data show both effects.}
 
-\fakeparagraph{Insight 2: Phase tokens reside in a lower-dimensional subspace than patch tokens}
-To measure the effective dimensionality of the token space, we perform principal component analysis (PCA) on it. As illustrated in Fig.~\ref{fig:traffic_pca_cycle_phase}, two dimensions are already sufficient to explain over 90\% of the variance of phase tokens, whereas patch tokens require more than eleven dimensions to achieve the same degree of explanation, owing to their drifting behavior observed in Fig.~\ref{fig:visualization_tsne}. Consequently, phase information resides in a low-dimensional subspace, \emph{providing a principled basis for parameter- and computation-efficient modeling}. \blue{\equref{eq:three_parts} is in line with this: within a window, the phase token of phase $p$ is $\ell+s_p\,a$ up to noise, so all phase tokens lie near the plane spanned by $\ell$ and $a$, and the shape enters only through the coordinates $(1,s_p)$ of each token in that plane. Within one window, the patch tokens lie near a plane as well, that of $\one$ and $s$; what separates the two tokenizations is what happens across windows. When the shape changes, this plane turns, since every patch token carries the shape in each of its values, whereas the phase tokens change only their coordinates (Theorem~\ref{thm:stability} below). Pooled over the series, as in Fig.~\ref{fig:traffic_pca_cycle_phase}, the patch tokens therefore spread over many dimensions, and the phase tokens stay in few.}
+\fakeparagraph{Insight 1: On Traffic, phase tokens drift less}
+\blue{On Traffic, we measure how far the tokens of each week drift from those of the first week by the squared maximum mean discrepancy (MMD$^2$)~\citep{ouyang2021mmd}; phase tokens drift 43\% less than patch tokens (Fig.~\ref{fig:phase_token_comparison}(a)).}
 
-\revised{
-We further establish, using perturbation theory, that phase tokenization remains stable \blue{when every cycle is reshaped in the same way}, whereas patch tokenization exhibits structural drift. 
-\blue{The theorem analyzes the folded matrix $X$ of Section~\ref{sec:mot_tokens}, a delay embedding of the window with one row per cycle, in the general low-rank form $X=AG^\top+N$, of which \equref{eq:three_parts} is the case $r=2$. We state it here; its proof is given in the electronic supplement.}
-}
-\begin{theorem}[Phase Tokenization Stability]
+\fakeparagraph{Insight 2: Phase tokens are more compact}
+\blue{Two principal components capture 74\% of the variance of phase tokens on Traffic and 79\% on Electricity, against 58\% and 68\% for patch tokens (Fig.~\ref{fig:phase_token_comparison}(b)): phase tokens concentrate in the plane of $\ell$ and $a$, whereas patch tokens, which start at any phase of the cycle as the input windows do, spread over the many shifted copies of the shape.}
+
+\blue{Theorem~\ref{thm:stability} proves the mechanism for any low-rank window $X=AG^\top+N$; \equref{eq:three_parts} is the case $A=[\ell,\,a]$, $G=[\one,\,s]$, and a common shape change turns $X$ into $XS^\top$. The proof is in the electronic supplement.}
+
+\begin{theorem}[\blue{Stability of phase tokens}]
 \label{thm:stability}
-Let $X = A G^\top + N \in \mathbb{R}^{D\times H}$ with 
-$\operatorname{rank}(A)=\operatorname{rank}(G)=r \ll \min(D,H)$, 
-and consider the transformed data
-\begin{equation}
-X' = X S^\top + R,
-\end{equation}
-where \blue{$M=AG^\top$ is the signal and $N'=NS^\top$ the transformed noise, so that} $\|N'\|_2 \le \|S\|_2\|N\|_2$, 
-$\|R\|_2 \le \varepsilon(\|M\|_F+\|N\|_F)$, 
-and let $\delta_{\min} > 0$ denote the minimal spectral separation. 
-Then there exists a universal constant $C>0$ such that:
+\blue{Let $X=AG^\top+N$ with $A$, $G$ and $SG$ of rank $r$, and $X'=XS^\top+R$, with $R$ a small perturbation. Let $\mathcal U_r$ and $\mathcal V_r$ be the leading $r$-dimensional subspaces of the phase and the patch tokens, $d$ the distance between subspaces, $\delta_{\min}>0$ the spectral gap of the signal, and $\eta=C(\|N\|_2+\|NS^\top\|_2+\|R\|_2)/\delta_{\min}$ for a universal constant $C$. Then}
 \begin{enumerate}[leftmargin=2em]
-\item For phase tokenization and corresponding subspace $\mathcal U_r$, there exists:
-\begin{equation}
-d\big(\mathcal U_r(X),\mathcal U_r(X')\big)
-\;\le\;
-C\,\frac{\|N\|_2+\|N'\|_2+\|R\|_2}{\delta_{\min}},
-\end{equation}
-with exact invariance in the noiseless case $(N=R=0)$.
-\item For patch tokenization and corresponding subspace $\mathcal V_r$, there exists:
-\begin{equation}
-\begin{aligned}
-d\big(\mathcal V_r(X),\mathcal V_r(X')\big)
-\;\ge\;&
-d\big(\mathrm{Col}(G),\mathrm{Col}(S G)\big)\\
-&- C\,\frac{\|N\|_2+\|N'\|_2+\|R\|_2}{\delta_{\min}}.
-\end{aligned}
-\end{equation}
+\item \blue{$d\big(\mathcal U_r(X),\mathcal U_r(X')\big)\le\eta$: phase tokens keep their subspace, exactly so without noise;}
+\item \blue{$d\big(\mathcal V_r(X),\mathcal V_r(X')\big)\ge d\big(\mathrm{Col}(G),\mathrm{Col}(SG)\big)-\eta$: patch tokens move as far as the shape change turns the plane of $\one$ and $s$.}
 \end{enumerate}
 \end{theorem}
 
-\noindent
-\textbf{Takeaways.} 
-Phase tokenization is structurally invariant under the \blue{common shape change} $S$ and only subject to perturbations from noise and small \blue{cycle-to-cycle} mismatches. 
-In contrast, patch tokenization generally suffers from a non-vanishing structural offset. 
-Hence, \emph{phase tokenization is more robust and consistent under \blue{drifts of the shape}}. \blue{In the notation of \equref{eq:three_parts}, the theorem applies with $A=[\ell,\,a]$, $G=[\one,\,s]$ and $r=2$ whenever the level and the amplitude trajectories are linearly independent. A common shape change turns $G$ into $SG=[S\one,\,Ss]$ and leaves $A$ as it is, so the phase tokens keep spanning the plane of $\ell$ and $a$, whereas the plane of the patch tokens, spanned by $\one$ and $s$, turns into that of $S\one$ and $Ss$. \emph{Phase tokens are the stable carrier of the shape.} The other two parts, $\ell$ and $a$, are the plane itself: a change of the shape leaves the phase tokens in place, but a change of the level or the amplitude moves them, and Section~\ref{sec:mot_changes} turns to these changes.}
+\fakeparagraph{Takeaway}
+\blue{\emph{Phase tokens hold the shape stably; patch tokens do not.} The flip side: the plane of the phase tokens is made of $\ell$ and $a$, so what still moves phase tokens is a change of the level or the amplitude.}
 
 \blue{
-\subsection{The Level and the Amplitude: Coupled Factors Along the Cycles}
+\subsection{The Level and the Amplitude: Tokens of Their Own}
 \label{sec:mot_changes}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/coupling.pdf}
-\caption{Level--amplitude coupling: busier days swing wider. (a)~Thirty days of one Traffic sensor from the test period, a window whose correlation (0.93) is close to the Traffic median; top: hourly occupancy; bottom: the level (mean) and the amplitude (RMS deviation) of each day, standardized. (b)~Sign-consistent coupling over the test windows of every dataset; red ticks: the shifted-pairing reference.}
+\caption{Busier days swing wider. (a)~Level and amplitude of each day for one Traffic sensor, standardized. (b)~Level--amplitude coupling over the test windows of every dataset; dark: the two sensor networks; tick: chance level.}
 \label{fig:coupling}
 \end{figure}
 
-\fakeparagraph{Changes along the cycles}
-Theorem~\ref{thm:stability} covers a \emph{common shape change}: $X'=XS^\top$ reshapes every cycle of a window in the same way. The level and the amplitude change differently, from one cycle to the next (Fig.~\ref{fig:coupling}(a)). The level of a cycle moves: a road carries more traffic on some days than on others. The amplitude of a cycle moves with the level: on a busy day the rush hours rise far above the night, whereas a quiet day stays low and flat. In the folded matrix $X\in\mathbb R^{D\times H}$, these two \emph{changes along the cycles} take the form
+Within a window, the level and the amplitude change from one cycle to the next: a road is busier on some days than on others, and on a busy day the rush hours rise far above the night (Fig.~\ref{fig:coupling}(a)). As the window moves forward, it therefore brings new trajectories $\ell$ and $a$. In the folded window, the two changes are
 \begin{equation}
 \underbrace{X+\delta\,\one^\top}_{\text{level drift}},
 \qquad
-\underbrace{X+\operatorname{diag}(\alpha\ell)\,(X-\ell\,\one^\top)}_{\text{level-dependent amplitude}},
+\underbrace{X+\operatorname{diag}(\alpha\ell)\,(X-\ell\,\one^\top)}_{\text{amplitude that follows the level}},
 \label{eq:cycle_axis_changes}
 \end{equation}
-where $\delta\in\mathbb R^D$ is a change of the cycle levels and $\alpha$ is a coupling strength; the second change scales the within-cycle part of each cycle by $1+\alpha\ell_k$ and keeps every cycle mean. Unlike $XS^\top$, which mixes the columns, both act on the rows: the first replaces $\ell$ by $\ell+\delta$, the second replaces $a$ by $(\one+\alpha\ell)\odot a$, so both change the factor $A=[\ell,\,a]$ of Theorem~\ref{thm:stability}, and in general neither leaves the plane spanned by the phase tokens in place. Under both changes, each phase token keeps its coordinates $(1,s_p)$ in that plane: the phase tokens go on holding the shape, and what moves is the plane itself, the level and the amplitude trajectories, two numbers per cycle. The two kinds of change thus act on different factors, and the tokens divide accordingly. The phase tokens carry the shape, which a common shape change moves without moving their plane; a level token and an amplitude token carry the plane, which is exactly what the changes along the cycles move. A patch token $\ell_k\one+a_k\,s$, in contrast, holds the level, the amplitude and the shape of its cycle at once, so it changes whenever any of the three changes. The phase tokens do contain the two trajectories, but a forecaster that reads phase tokens alone must recover and extrapolate them cycle by cycle, and Section~\ref{sec:theory} shows that, for any fixed weights, the phase pathway follows them only within two envelopes.
+where $\delta\in\mathbb R^D$ shifts the cycle levels and $\alpha$ sets how strongly the swing grows with the level. They replace $\ell$ by $\ell+\delta$ and $a$ by $(\one+\alpha\ell)\odot a$. Both alter the very trajectories that span the plane of the phase tokens, so both in general move that plane. A model that reads phase tokens alone must therefore re-estimate the level and the amplitude in every window, and Section~\ref{sec:theory} shows that, with fixed weights, it can do so only within two envelopes computable from its weights. The level and the amplitude need tokens of their own.
 
-\fakeparagraph{A seasonal model of the two changes}
-With noise, the two changes combine into
+They need not have two independent tokens, however. Combining the two changes, with noise and a level that drifts as a random walk, gives a simple seasonal model of the raw series,
 \begin{equation}
 X_{kp}=\ell_k+(1+\alpha\ell_k)\,s_p+e_{kp},
 \qquad
 \ell_k=\ell_{k-1}+\eta_k,
 \label{eq:mult_model}
 \end{equation}
-where $X_{kp}$ is the value at phase $p$ of cycle $k$, with a zero-mean shape $s$ of unit root mean square, as in Section~\ref{sec:mot_tokens}, a random-walk level $\ell$ and Gaussian noise. This is \equref{eq:three_parts} with the amplitude $a=\one+\alpha\ell$ tied to the level. With $\alpha=0$ it is the additive seasonal random-walk model; with $\alpha\neq0$ the swing grows ($\alpha>0$) or shrinks ($\alpha<0$) with the level, and we call it the multiplicative seasonal model, after the multiplicative form of Holt--Winters forecasting~\citep{winters1960forecasting}. Under \equref{eq:mult_model}, the phase token of phase $p$ is $s_p\one+(1+\alpha s_p)\,\ell$ up to noise: every phase token carries the level, with a weight $1+\alpha s_p$ that follows the cycle shape; for $\alpha>0$, as on Traffic, it is large at the rush hours and small at night. Since the amplitude is then an affine function of the level, a forecast of the level also determines the forecast amplitude, which Insight~3 shows the benchmarks require.
+with a zero-mean shape $s$ of unit root mean square and Gaussian noise. For $\alpha=0$ it is the additive seasonal random-walk model; for $\alpha\neq0$ the swing grows ($\alpha>0$) or shrinks ($\alpha<0$) with the level, and we call it multiplicative, after the multiplicative form of Holt--Winters forecasting~\citep{winters1960forecasting}. Here the amplitude $\one+\alpha\ell$ is a function of the level, so a forecast of the level also gives the amplitude, and one level token can drive both. Insight~3 shows that real data behave this way.
 
-\fakeparagraph{Insight 3: The within-cycle amplitude moves with the cycle level}
-We measure the amplitude of a cycle as its root-mean-square deviation from its mean; for a cycle that follows \equref{eq:three_parts}, this is $|a_k|$. In Fig.~\ref{fig:coupling}(a), the levels and amplitudes of the 30 days rise and fall together, with a correlation of 0.93. We compute this correlation for every channel and every test window of 30 cycles, shifted by one cycle at a time, directly on the data. Over 30 cycles, two series that drift independently also correlate by chance, with either sign. We therefore average the correlation over the windows of each channel, keeping its sign, and report the mean magnitude of these channel averages, the \emph{sign-consistent coupling}: chance correlations cancel in the average, a coupling of stable sign does not. As a reference, the \emph{shifted pairing} computes the same statistic after pairing the levels of every window with the amplitudes of the window half the sequence of test windows later, wrapping around at its end, which keeps the drift of both but removes their alignment.
+\fakeparagraph{Insight 3: The amplitude follows the level}
+In the Traffic window of Fig.~\ref{fig:coupling}(a), the level and the amplitude of the 30 days rise and fall together ($r=0.93$). To test every dataset, we correlate them in every test window of every channel and average the signed correlation over each channel's windows, so that chance correlations cancel, and then average the magnitudes of these channel means, since the sign is stable within a channel but differs between channels on ETTh1 and ETTm1. The result, the \emph{level--amplitude coupling}, lies far above its chance level (the same statistic with levels and amplitudes taken from different windows) on five of the seven benchmarks and is strongest on the two sensor networks, 0.89 on Traffic and 0.50 on Electricity (Fig.~\ref{fig:coupling}(b)). ETTh2 and ETTm2 are the least coupled, but there the level itself dominates the window (Fig.~\ref{fig:token_energy}(b)), so the level token is needed all the same. The electronic supplement gives the details and shows the same ordering on the training and validation periods.
 
-Fig.~\ref{fig:coupling}(b) shows that five benchmarks lie far above this reference and that the coupling is strongest on the two sensor networks: Electricity, with 321 meters, reaches 0.50, and Traffic, with 862 road sensors, 0.89. On these two networks the correlation is positive in 84\% and in over 99\% of the windows, respectively, so a busier day swings wider. Weekends do not explain this: over the weekday cycles of each window alone, the coupling is still 0.51 and 0.82. On ETTh1 and ETTm1, the sign differs between channels but is stable within each, so the amplitude grows with the level on some channels and shrinks on others. ETTh2 and ETTm2 show the weakest coupling, little above the reference; on these two datasets, however, the level carries most of the energy of a window (Fig.~\ref{fig:token_energy}(b)), and they are among the datasets on which the level token gains most (Section~\ref{sec:exp_ladder}). Every benchmark thus leans on at least one of the two parts along the cycles. On the training and validation periods, too, the two sensor networks are the most and ETTh2 and ETTm2 the least coupled (electronic supplement). The coupling acts within a window, along the cycles, and complements Insight~1, which compares the distribution of phase tokens across weeks: that distribution stays in place, while within each window the level and the amplitude move together.
-
-\fakeparagraph{Takeaways}
-\emph{The level and the amplitude are the factors of \equref{eq:three_parts} along the cycles, low-dimensional and coupled.} They move the very plane that the phase tokens span; each is one number per cycle; and wherever the sign of the coupling is stable, the amplitude follows the level, so the forecast must scale the cycle shape with the level. Hence, \emph{the level and the amplitude need tokens of their own, and one level token can drive both}.
-
-\fakeparagraph{One form, three tokens}
-The three parts of \equref{eq:three_parts} thus call for three tokens, each in the low-dimensional form that its part takes (Table~\ref{tab:three_tokens}). This is what lets a forecaster be small and accurate at once: with one token per part, nothing is left mixed for the network to untangle, and with all three parts covered, nothing the forecast needs is left out. The amplitude token needs no input of its own: since the amplitude follows the level, it is computed from the level token. Section~\ref{sec:method} builds one small pathway for each token, and Section~\ref{sec:theory} shows that each pathway is necessary, why it takes the low-dimensional form of its part, and why together they suffice.
+\fakeparagraph{Takeaway: one form, three tokens}
+\emph{The level and the amplitude change cycle by cycle, and the amplitude follows the level.} Each part of \equref{eq:three_parts} therefore gets its own token (Table~\ref{tab:three_tokens}): phase tokens for the shape, a level token with one number per cycle for the level, and an amplitude token computed from the level token. With one token per part, nothing is left mixed for the network to untangle; with all three covered, nothing is left out. Section~\ref{sec:method} builds one small pathway per token, and Section~\ref{sec:theory} shows why each is needed and why together they suffice.
 
 \begin{table}[t]
 \centering
-\caption{One form, three tokens: the parts of a window in \equref{eq:three_parts}, how each changes, why each is low-dimensional, and the token of \sysplus that carries it.}
+\caption{One form, three tokens.}
 \label{tab:three_tokens}
 \footnotesize
 \setlength{\tabcolsep}{2.5pt}
 \begin{tabular}{@{}l l p{0.2\linewidth} p{0.31\linewidth} l@{}}
 \toprule
-Part & Factor & Changes & Low-dimensional as & Token \\
+Part & Factor & Changes & Compact form & Token \\
 \midrule
 Shape & $s$ & alike in every cycle & one vector; phase tokens keep their span (Thm.~\ref{thm:stability}) & phase \\
-Level & $\ell$ & from cycle to cycle & a few coefficients of fixed horizon profiles (Sec.~\ref{sec:theory_level}) & level \\
-Amplitude & $a$ & with the level & one factor per cycle that follows the level (Insight~3) & amplitude \\
+Level & $\ell$ & from cycle to cycle & one number per cycle & level \\
+Amplitude & $a$ & with the level & one number per cycle, computed from the level (Insight~3) & amplitude \\
 \bottomrule
 \end{tabular}
 \end{table}

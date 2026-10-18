@@ -1,0 +1,275 @@
+\blue{
+\section{第\ref{sec:theory}节的证明}
+\label{app:proofs}
+
+全文中，$\tilde X\in\mathbb R^{K\times P}$ 表示折叠后的归一化窗口，其相位标记为 $\tilde x_p$、周期均值为 $\bar r$，并满足 $\one^\top\tilde x=0$、$\|\tilde x\|^2\le L$、$\one^\top\bar r=0$ 与 $\|\bar r\|^2\le K$。一个路由层（第\ref{subsec:phase-network}节）将标记 $h_1,\dots,h_P\in\mathbb R^d$ 映射为
+\begin{equation*}
+\begin{gathered}
+	u_p=h_p+\pi_p,\quad
+	\rho'_j=\operatorname{Attn}_s(\rho_j;u_{1:P}),\\
+	m_p=\operatorname{Attn}_r(u_p;\rho'_{1:M}),
+\end{gathered}
+\end{equation*}
+\begin{equation*}
+o_p=\LN_1(u_p+m_p),\qquad h_p^+=\LN_2\big(o_p+\operatorname{MLP}(o_p)\big),
+\end{equation*}
+其中 $\rho_j$ 为路由器，$\pi_p$ 为位置嵌入，且
+\begin{equation*}
+\operatorname{Attn}(z;s_{1:n})=W_o\operatorname{concat}_{\text{heads}}\big(\sum_i\alpha_i(W_vs_i+c_v)\big)+c_o,
+\end{equation*}
+权重 $\alpha_i$ 为 $\langle W_qz+c_q,W_ks_i+c_k\rangle$ 在每个头内对 $i$ 的 softmax。第一层接收嵌入 $h^{(0)}_p=\LN_e(W_e\tilde x_p+b_e)$。在 $N_r$ 层的堆叠中，第 $l+1$ 层接收 $h^{(l)}_p+\LN'_l\big(W'_l(U_lh^{(l)}_p+c_{U,l})+c'_l\big)$，即上一层的输出加上对其投影 $U_lh^{(l)}_p+c_{U,l}\in\mathbb R^{\Pin}$ 的再嵌入，因此每层的最后一个运算都是 $\LN_2$。
+
+\subsection{季节随机游走预测器}
+
+对满足 $\one^\top b=1$ 且 $\|b\|\le1$ 的 $b\in\mathbb R^K$，\emph{水平自适应季节预测器}定义为
+\begin{equation}
+G_b(\tilde X)_p=\one_{K'}\Big[\tfrac1K\one_K^\top\tilde x_p+\big(b-\tfrac1K\one_K\big)^\top\bar r\Big],\qquad p=1,\dots,P .
+\label{eq:gb}
+\end{equation}
+其水平为 $\lev(G_b)=b^\top\bar r$，因为 $\one^\top\bar r=0$。
+
+\begin{lemma}[贝叶斯 预测]
+\label{lem:bayes}
+在 $\alpha=0$ 的模型~\equref{eq:mult_model}、高斯水平增量与噪声、以及季节轮廓和初始水平上的平坦先验下，采用局部水平模型在周期均值上的 Kalman 权重的 $G_b$ 是每个未来周期的后验均值预测。它是线性的，且满足 $G_b(aX+c\one\one^\top)=aG_b(X)+c\one\one^\top$，因此在 RevIN 坐标中预测、再反归一化即可在原始窗口上复现它。在稳态下，权重为 $b_k\approx\kappa(1-\kappa)^{K-k}$，其中 $\kappa=\tfrac12(-\tau+\sqrt{\tau^2+4\tau})$，$\tau=P\sigma_\eta^2/\sigma_e^2$。
+\end{lemma}
+
+\begin{proof}
+对于高斯噪声，周期均值 $r_k=\tfrac1P\sum_pX_{kp}=\ell_k+\bar e_k$ 与相位偏差 $X_{kp}-r_k=s_p+(e_{kp}-\bar e_k)$ 相互独立，且偏差不涉及 $\ell$。偏差以后验均值 $\tfrac1K\sum_k(X_{kp}-r_k)$ 识别出 $s_p$。周期均值构成一个观测方差为 $\sigma_e^2/P$ 的局部水平模型，其在每个未来周期的后验均值即 Kalman 预测 $b^\top r$。将两个后验均值相加即得原始数据上的~\equref{eq:gb}。线性性是显然的，而 $(b-\tfrac1K\one)^\top\one=0$ 给出平移性质。 \qed
+\end{proof}
+
+\subsection{命题\ref{prop:capability}的证明}
+
+\fakeparagraph{完整陈述} 考虑具有一个路由层、潜在宽度 $d\ge4$ 以及任意数量路由器和头的相位通路。
+(a) 它对窗口的水平与尺度精确等变：当 $a>0$ 时 $F(ax+c\one)=aF(x)+c\one$。
+(b) 周期水平的轨迹以共同平移的形式进入每个相位标记，而路由器注意力会将其输入的共同平移传递下去：发送方权重保持不变，每个路由器缓冲区平移同一向量（引理\ref{lem:shift}）。LayerNorm 只能近似保持共同平移，部分~(c) 通过一个大偏移来控制这一点。
+(c) 对每个满足 $\one^\top b=1$ 且 $\|b\|\le1$ 的权重向量 $b$，存在参数 $\theta_c$（$c^2\ge5L$），其预测在所有归一化窗口上一致逼近 $G_b$，误差至多为 $\kappa_0L^{3/2}/c^2$，其中 $\kappa_0$ 为绝对常数。由引理\ref{lem:bayes}，相位通路因此可以把 $\alpha=0$ 的模型~\equref{eq:mult_model} 的 贝叶斯 预测逼近到任意精度。
+
+\begin{lemma}[共同平移透传]
+\label{lem:shift}
+若路由层的每个输入标记都平移同一向量，即 $u_p\mapsto u_p+v$，则每个发送方权重保持不变，每个路由器缓冲区平移 $V_sv$（其中 $V_s=W^s_oW^s_v$），每个接收方输出平移 $V_rV_sv$ 加上接收方对未平移缓冲区重新加权产生的效应（其中 $V_r=W^r_oW^r_v$）。
+\end{lemma}
+
+\begin{proof}
+路由器 $j$ 与标记 $p$ 的发送方得分在每个头中变化 $\langle W_q\rho_j+c_q,W_kv\rangle$，它与 $p$ 无关，故在关于 $p$ 的 softmax 中相消。缓冲区是 $W_v(u_p+v)+c_v$ 的凸组合再经 $W_o$ 作用，由此得到缓冲区的平移。接收方权重可能改变，但它们是凸组合，且每个缓冲区平移同一向量，因此输出平移 $V_rV_sv$，而重新加权只作用于未平移的缓冲区。 \qed
+\end{proof}
+
+\begin{lemma}[LayerNorm 的大偏移线性化]
+\label{lem:ln_linear}
+设 $e_0\perp\one_d$ 且 $\|e_0\|^2=d$，$w\perp\{\one_d,e_0\}$，$\gamma=\one$，$\beta=0$，$c>0$。则 $c\LN(ce_0+w)=(1-\eta)(ce_0+w)$，其中 $0\le\eta\le\rho^2/(2c^2)$，$\rho^2=\|w\|^2/d+\epsilon$。
+\end{lemma}
+
+\begin{proof}
+由于 $J_d(ce_0+w)=ce_0+w$ 且 $\|ce_0+w\|^2/d=c^2+\|w\|^2/d$，故 LayerNorm 的尺度为 $c(1+\rho^2/c^2)^{1/2}$，而 $1-(1+t)^{-1/2}\le t/2$。 \qed
+\end{proof}
+
+\begin{proof}[命题\ref{prop:capability}的证明]
+(a) RevIN 将 $ax+c\one$ 映射到同一个 $\tilde x$，反归一化恢复出 $a\sigma$ 与 $a\mu+c$。(b) 周期水平的轨迹 $\ell\in\mathbb R^K$ 为每个相位标记加上 $\ell$，从而为每个嵌入预激活加上 $W_e\ell$；引理\ref{lem:shift} 适用于路由层输入的任意共同平移。
+
+(c) 选取正交的 $e_0,e_1,e_2\perp\one_d$ 且 $\|e_i\|^2=d$，由于 $d\ge4$ 这是可行的。设 $\alpha_1=\tfrac1K\one_K$，$\alpha_2=b-\tfrac1K\one_K$，$f_p=(\alpha_1-\alpha_2)^\top\tilde x_p$，$g_p=\alpha_2^\top\tilde x_p$。取 $W_e=e_1(\alpha_1-\alpha_2)^\top+e_2\alpha_2^\top$，$c_e=ce_0$，所有 LayerNorm 增益为一、偏置为零，无位置嵌入，$W^s_q=0$（均匀发送方权重），$W^s_oW^s_v=\tfrac1de_2e_2^\top$，$W^r_oW^r_v=I$，所有注意力偏置为零，MLP 输出层为零，以及 $\Phi=\tfrac{c_*}{d}\one_{K'}(e_1+e_2)^\top$，$c_\Phi=0$，其中 $c_*=c(1+O(\epsilon))$ 使该映射在零内容处精确。嵌入给出 $h_p=(ce_0+f_pe_1+g_pe_2)/n_p$，其中 $n_p=(c^2+f_p^2+g_p^2+\epsilon)^{1/2}$。均匀的发送方权重使每个路由器缓冲区都等于 $\bar g_he_2$，其中 $\bar g_h=\tfrac1P\sum_qg_q/n_q$；由于所有缓冲区相等，任意接收方权重下每个接收方输出都等于该缓冲区。预测器读取 $e_1+e_2$ 坐标并返回 $\one_{K'}(c_*/M_p)(f_p+g_p+n_p\bar g_h)$，其中 $M_p$ 汇集各 LayerNorm 的尺度。由于 $f_p+g_p=\alpha_1^\top\tilde x_p$ 且 $\tfrac1P\sum_qg_q=\alpha_2^\top\bar r$，零误差极限即 $G_b(\tilde X)_p$。对于误差，$\|\alpha_1-\alpha_2\|^2=\|b\|^2\le1$，$\|\alpha_2\|^2\le1$ 且 $\|\tilde x_p\|\le\sqrt L$，故 $|f_p|,|g_p|,|\bar g_h|\le\sqrt L$，且每个尺度自变量至多为 $5L/c^2$。由引理\ref{lem:ln_linear}，三个 LayerNorm 因子与各比值 $n_p/n_q$ 各贡献至多上述值一半的相对误差，乘以目标量级 $3\sqrt L$ 即得该界，其中 $\kappa_0\le30$。结合引理\ref{lem:bayes}，相位通路即可逼近 贝叶斯 预测。 \qed
+\end{proof}
+
+在随机游走窗口上以 $K=30$、$P=24$、$d=8$ 和 Kalman 权重（$\tau=0.05$）直接数值实现该构造，得到 $c=3,10,30,100,300$ 时 $\max|F-G_b|=0.54$、$0.075$、$0.0078$、$7.6\times10^{-4}$ 与 $8.2\times10^{-5}$，正是所预测的 $c^{-2}$ 速率。
+
+\subsection{定理\ref{thm:level_envelope}及其推论的证明}
+
+\fakeparagraph{完整陈述} 对相位通路的每个参数取值和每个输入窗口：
+(a) 每个归一化相位预测都落在固定椭球 $\mathcal E_\theta=\{o_\varphi+A\varsigma:\ \varsigma\perp\one_d,\ \|\varsigma\|<\sqrt d\}$ 内；
+(b) 相位预测的水平落在包络内，即 $\lev(F)\in\mathcal I_\varphi$，因此预测为相位预测（$\hat{\tilde y}=F$）的模型在原始单位下的预测均值 $\mu_{\hat y}$ 满足 $|\mu_{\hat y}-\mu|<(|c_0|+C_1)\sigma$；
+(c) 这样的模型对每个水平需求为 $\Lambda$ 的窗口都满足~\equref{eq:level_floor}；
+(d) 相位的水平与形状争夺相同的坐标：当相位 $p$ 的水平趋近 $\mathcal I_\varphi$ 的边界时，其预测中依赖于输入的部分被迫落到单一轮廓 $AJ_dA^\top\one$ 上。
+部分~(b) 与~(c) 即定理\ref{thm:level_envelope}。
+
+\begin{proof}
+每个路由层都以 $\LN_2$ 结束，故 $h^{(N_r)}_p=\gamma_2\odot\varsigma_p+\beta_2$，其中 $\varsigma_p\perp\one_d$ 且 $\|\varsigma_p\|^2=d\|J_dz\|^2/(\|J_dz\|^2+d\epsilon)<d$。代入~\equref{eq:predictor} 得 $F_p=o_\varphi+A\varsigma_p$，此即 (a)；预测为相位预测的模型满足 $\hat{\tilde y}=F$。对泛函 $a\in\mathbb R^{K'}$，$\langle a,A\varsigma_p\rangle=\langle J_dA^\top a,\varsigma_p\rangle$ 被 $\sqrt d\|J_dA^\top a\|$ 界住。取 $a=\one/K'$，相位 $p$ 的水平 $\ell_p=\one^\top F_p/K'$ 落在 $\mathcal I_\varphi$ 中，而预测水平是各 $\ell_p$ 的平均，这给出 (b)。对于 (c)，Cauchy--Schwarz 不等式给出归一化误差 $e=\hat{\tilde y}-\tilde y$ 满足 $\tfrac1H\|e\|^2\ge\lev(e)^2$，且 $\lev(e)^2=(\lev(\hat{\tilde y})-\Lambda)^2\ge\operatorname{dist}(\Lambda,\mathcal I_\varphi)^2$；反归一化乘以 $\sigma^2$。对于 (d)，设 $v=J_dA^\top\one_{K'}/K'$，则 $C_1=\sqrt d\|v\|$，将 $\varsigma_p$ 沿 $v$ 及其正交补分解：$F_p=o_\varphi+\tfrac{\ell_p-c_0}{\|v\|^2}Av+A\varsigma_\perp$，其中 $\|\varsigma_\perp\|^2<d\big(1-((\ell_p-c_0)/C_1)^2\big)$。 \qed
+\end{proof}
+
+\begin{corollary}[能力以包络宽度为代价]
+\label{cor:capability_cost}
+若相位通路在预测水平上一致逼近 $G_b$ 至 $\epsilon_0$ 以内，则 $C_1\ge\sqrt{K\|b\|^2-1}-\epsilon_0$。
+\end{corollary}
+
+\begin{proof}[推论\ref{cor:capability_cost}的证明]
+在约束 $\one^\top\bar r=0$、$\|\bar r\|^2\le K$ 下，$\lev(G_b)=b^\top\bar r$ 在一个周期内为常数的窗口处取得最大值 $s_b=\sqrt K\|J_Kb\|=\sqrt{K\|b\|^2-1}$，其相反数则达到 $-s_b$。由定理\ref{thm:level_envelope}，与这两个值都相距 $\epsilon_0$ 以内的预测水平落在 $\mathcal I_\varphi$ 中，故 $c_0+C_1>s_b-\epsilon_0$ 且 $c_0-C_1<-s_b+\epsilon_0$，因此 $C_1>s_b-\epsilon_0$。 \qed
+\end{proof}
+
+\begin{corollary}[阶跃与趋势]
+\label{cor:steps}
+发生在预测起点之前 $fL$ 个样本处的持续阶跃，当其相对于背景增大时，水平需求趋于 $\sqrt{(1-f)/f}$；延续到预测时域的纯线性趋势满足 $\Lambda=\sqrt3(L+H)/\sqrt{L^2-1}$。因此，任何发生在 $L/(1+(|c_0|+C_1)^2)$ 个样本之内的阶跃都要求一个超出 $\mathcal I_\varphi$ 的水平；而在 $L=720$ 时，延续的趋势在 $H=96$ 到 $720$ 时要求 $\Lambda=1.96$ 到 $3.46$。
+\end{corollary}
+
+\begin{proof}
+对于原点之前 $fL$ 个样本处、大小为 $\Delta$ 的阶跃叠加在方差为 $\sigma_0^2$ 的零均值背景波动上的情形，窗口均值为 $\Delta f$，窗口方差为 $\Delta^2f(1-f)+\sigma_0^2$，未来水平为 $\Delta$，故 $\Lambda=\Delta(1-f)/(\Delta^2f(1-f)+\sigma_0^2)^{1/2}\to\sqrt{(1-f)/f}$，当 $f<1/(1+(|c_0|+C_1)^2)$ 时它超过 $|c_0|+C_1$。对于线性趋势，时间索引 $1,\dots,L$ 的均值为 $(L+1)/2$、总体方差为 $(L^2-1)/12$，未来平均索引为 $L+(H+1)/2$。 \qed
+\end{proof}
+
+\begin{table*}[t]
+\blue{
+\centering
+\caption{\sysplus（三个种子的均值 $\pm$ 标准差）及其仅相位变体在全部 28 个设置上的逐时域测试结果。\sysplus 列采用表\ref{tab:main_results} 的主表配置，见附录\ref{app:la_config}；仅相位列按第\ref{sec:ext_setup}节的协议配置训练，与第\ref{sec:exp_ladder}节的标记消融相同。}
+\label{tab:la_full}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{llcccc}
+\toprule
+数据集 & $H$ & \multicolumn{2}{c}{仅相位} & \multicolumn{2}{c}{\sysplus} \\
+ & & MSE & MAE & MSE & MAE \\
+\midrule
+ETTh1 & 96 & 0.361 & 0.387 & 0.3601{\scriptsize$\pm$0.0025} & 0.3881{\scriptsize$\pm$0.0016} \\
+ & 192 & 0.405 & 0.411 & 0.3958{\scriptsize$\pm$0.0065} & 0.4117{\scriptsize$\pm$0.0026} \\
+ & 336 & 0.442 & 0.435 & 0.4273{\scriptsize$\pm$0.0057} & 0.4318{\scriptsize$\pm$0.0024} \\
+ & 720 & 0.423 & 0.442 & 0.4191{\scriptsize$\pm$0.0060} & 0.4409{\scriptsize$\pm$0.0052} \\
+\midrule
+ETTh2 & 96 & 0.282 & 0.343 & 0.2737{\scriptsize$\pm$0.0003} & 0.3344{\scriptsize$\pm$0.0006} \\
+ & 192 & 0.344 & 0.383 & 0.3377{\scriptsize$\pm$0.0032} & 0.3800{\scriptsize$\pm$0.0027} \\
+ & 336 & 0.376 & 0.409 & 0.3646{\scriptsize$\pm$0.0024} & 0.4050{\scriptsize$\pm$0.0022} \\
+ & 720 & 0.416 & 0.449 & 0.3893{\scriptsize$\pm$0.0009} & 0.4266{\scriptsize$\pm$0.0008} \\
+\midrule
+ETTm1 & 96 & 0.302 & 0.351 & 0.3022{\scriptsize$\pm$0.0019} & 0.3514{\scriptsize$\pm$0.0020} \\
+ & 192 & 0.330 & 0.363 & 0.3298{\scriptsize$\pm$0.0006} & 0.3659{\scriptsize$\pm$0.0015} \\
+ & 336 & 0.359 & 0.381 & 0.3630{\scriptsize$\pm$0.0060} & 0.3868{\scriptsize$\pm$0.0042} \\
+ & 720 & 0.415 & 0.413 & 0.4098{\scriptsize$\pm$0.0026} & 0.4137{\scriptsize$\pm$0.0019} \\
+\midrule
+ETTm2 & 96 & 0.174 & 0.265 & 0.1613{\scriptsize$\pm$0.0007} & 0.2525{\scriptsize$\pm$0.0007} \\
+ & 192 & 0.228 & 0.300 & 0.2162{\scriptsize$\pm$0.0011} & 0.2919{\scriptsize$\pm$0.0012} \\
+ & 336 & 0.276 & 0.331 & 0.2701{\scriptsize$\pm$0.0052} & 0.3270{\scriptsize$\pm$0.0022} \\
+ & 720 & 0.352 & 0.380 & 0.3455{\scriptsize$\pm$0.0022} & 0.3792{\scriptsize$\pm$0.0005} \\
+\midrule
+Electricity & 96 & 0.130 & 0.223 & 0.1288{\scriptsize$\pm$0.0008} & 0.2218{\scriptsize$\pm$0.0008} \\
+ & 192 & 0.146 & 0.236 & 0.1448{\scriptsize$\pm$0.0012} & 0.2350{\scriptsize$\pm$0.0005} \\
+ & 336 & 0.167 & 0.260 & 0.1648{\scriptsize$\pm$0.0004} & 0.2575{\scriptsize$\pm$0.0007} \\
+ & 720 & 0.199 & 0.285 & 0.1983{\scriptsize$\pm$0.0008} & 0.2851{\scriptsize$\pm$0.0008} \\
+\midrule
+Traffic & 96 & 0.363 & 0.232 & 0.3622{\scriptsize$\pm$0.0036} & 0.2341{\scriptsize$\pm$0.0006} \\
+ & 192 & 0.380 & 0.242 & 0.3849{\scriptsize$\pm$0.0059} & 0.2471{\scriptsize$\pm$0.0011} \\
+ & 336 & 0.393 & 0.250 & 0.3897{\scriptsize$\pm$0.0045} & 0.2525{\scriptsize$\pm$0.0017} \\
+ & 720 & 0.433 & 0.270 & 0.4328{\scriptsize$\pm$0.0029} & 0.2746{\scriptsize$\pm$0.0008} \\
+\midrule
+Weather & 96 & 0.150 & 0.197 & 0.1445{\scriptsize$\pm$0.0003} & 0.1914{\scriptsize$\pm$0.0008} \\
+ & 192 & 0.195 & 0.240 & 0.1855{\scriptsize$\pm$0.0009} & 0.2324{\scriptsize$\pm$0.0012} \\
+ & 336 & 0.246 & 0.280 & 0.2357{\scriptsize$\pm$0.0017} & 0.2740{\scriptsize$\pm$0.0017} \\
+ & 720 & 0.316 & 0.332 & 0.3118{\scriptsize$\pm$0.0020} & 0.3281{\scriptsize$\pm$0.0015} \\
+\bottomrule
+\end{tabular}
+}
+\end{table*}
+
+\begin{table}[t]
+\centering
+\caption{主表配置下 \sysplus 的逐设置选择配置。基：\emph{固定}轮廓（105 个参数），或在 \emph{30} / \emph{90} 个池化周期值上学习的解码器（477 / 657 个参数）。学习率 / 相位学习率：水平与振幅通路 / 相位通路的学习率倍率。振幅：振幅通路在推理时启用或关闭。}
+\label{tab:la_config}
+\footnotesize
+\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{llccclccc}
+\toprule
+数据集 & $H$ & $g_0$ & 学习率 & $w$ & 基 & 门控 & 相位学习率 & 振幅 \\
+\midrule
+ETTh1 & 96 & 0.1 & 0.1 & 3 & 固定 & 逐通道 & 1.0 & 开 \\
+ETTh1 & 192 & 0.1 & 100 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+ETTh1 & 336 & 0.2 & 1 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+ETTh1 & 720 & 0.1667 & 3 & 3 & 固定 & 逐通道 & 1.0 & 关 \\
+ETTh2 & 96 & 0.999 & 3.3333 & 2 & 固定 & 共享 & 1.0 & 开 \\
+ETTh2 & 192 & 0.1 & 0.1 & 2 & 固定 & 共享 & 0.3 & 开 \\
+ETTh2 & 336 & 0.5 & 1 & 2 & 固定 & 共享 & 1.0 & 关 \\
+ETTh2 & 720 & 0.999 & 3 & 2 & 固定 & 共享 & 1.0 & 开 \\
+ETTm1 & 96 & 0.5 & 1 & 2 & 固定 & 共享 & 1.0 & 开 \\
+ETTm1 & 192 & 0.001 & 0.3 & 2 & 固定 & 共享 & 1.0 & 开 \\
+ETTm1 & 336 & 0.2 & 1 & 2 & 固定 & 共享 & 1.0 & 开 \\
+ETTm1 & 720 & 0.0333 & 10 & 2 & 30 & 逐通道 & 1.0 & 关 \\
+ETTm2 & 96 & 0.99 & 30 & 2 & 90 & 逐通道 & 1.0 & 开 \\
+ETTm2 & 192 & 0.2 & 1 & 2 & 90 & 逐通道 & 1.0 & 开 \\
+ETTm2 & 336 & 0.2 & 1 & 2 & 固定 & 共享 & 1.0 & 开 \\
+ETTm2 & 720 & 0.99 & 30 & 2 & 90 & 共享 & 1.0 & 关 \\
+Electricity & 96 & 0.001 & 10 & 2 & 固定 & 逐通道 & 3.0 & 开 \\
+Electricity & 192 & 0.001 & 0.1 & 2 & 固定 & 逐通道 & 3.0 & 开 \\
+Electricity & 336 & 0.1 & 3.3333 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+Electricity & 720 & 0.5 & 1 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+Traffic & 96 & 0.2 & 1 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+Traffic & 192 & 0.2 & 1 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+Traffic & 336 & 0.5 & 0.1 & 2 & 固定 & 逐通道 & 3.0 & 关 \\
+Traffic & 720 & 0.5 & 10 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+Weather & 96 & 0.5 & 30 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+Weather & 192 & 0.2 & 10 & 2 & 固定 & 逐通道 & 1.0 & 开 \\
+Weather & 336 & 0.5 & 10 & 4 & 固定 & 逐通道 & 1.0 & 开 \\
+Weather & 720 & 0.2 & 10 & 4 & 固定 & 逐通道 & 1.0 & 开 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{定理\ref{thm:complement}的证明}
+\label{app:proof_complement}
+
+\fakeparagraph{完整陈述} 设相位预测 $F$ 的水平落在 $\mathcal I_\varphi$ 中，并设水平通路读取窗口的任意特征。
+(a) 残差 $\tilde y-F$ 的最小二乘线性预测器是作用在轮廓 $\psi_1,\dots,\psi_m$ 上、秩至多为 $m$ 的矩阵，加上一项仅由相位通路的形状误差驱动的项；新息噪声不产生任何贡献。
+(b) 对高斯特征、关于特征仿射的 $\lambda_1$ 以及将自身水平截断到 $\mathcal I_\varphi$ 的相位通路，到 $\psi_1$ 上的读出是按 $P(\lambda_1\notin\mathcal I_\varphi)$ 缩放的 贝叶斯 水平读出：最优水平通路仅在包络构成约束的程度上作用于水平。
+(c) 设 $m=1$ 且 $\lambda_1$ 关于窗口线性，水平通路为锚定形式 $F_{\mathrm b}=\tilde x_L\one_H+W(\tilde x-\tilde x_L\one_L)$，联合训练的相位通路以~\equref{eq:fusion} 门控的尺度承载形状，即 $F'=M_cS/(1-g_\ell)+J_cS/(1-g_s)$。则秩一矩阵 $W=\one_Hu^\top$ 对任意门控都达到~\equref{eq:profile_model} 的 贝叶斯 风险。当门控相等且有 $m$ 个轮廓时，$\operatorname{rank}W\le m$。
+部分~(a) 即第\ref{sec:theory_level}节的定理\ref{thm:complement}；我们将这三个部分统称为定理\ref{thm:complement}(a)--(c)。
+
+将相位预测写作 $F=S+\sum_j\psi_j\varphi_j+r_\varphi$，其中 $r_\varphi\perp\operatorname{span}\{\psi_j\}$，$r_\varphi$ 是相位通路的形状误差；于是 $\varphi_1=\lev(F)\in\mathcal I_\varphi$，条件残差为
+\begin{equation}
+D=\tilde y-F=\textstyle\sum_j\psi_j\vartheta_j+\nu-r_\varphi,\qquad\vartheta_j=\lambda_j-\varphi_j,
+\label{eq:dcond}
+\end{equation}
+其中新息为 $\nu=\tilde y-\mathbb E[\tilde y\mid\tilde x]$，且 $|\vartheta_1|\ge\operatorname{dist}(\lambda_1,\mathcal I_\varphi)$。
+
+\begin{proof}
+(a) 设 $\zeta$ 为水平通路读取的特征，$\Sigma=\mathbb E[\zeta\zeta^\top]\succ0$。由于 $\zeta$ 是 $\tilde x$ 的函数，$\mathbb E[\nu\zeta^\top]=0$。因此 $W^*=\mathbb E[D\zeta^\top]\Sigma^{-1}=\sum_j\psi_j\beta_j^\top-\mathbb E[r_\varphi\zeta^\top]\Sigma^{-1}$，其中 $\beta_j=\Sigma^{-1}\mathbb E[\vartheta_j\zeta]$，其第一项的秩至多为 $m$。对任意 $W$，超额风险为 $H^{-1}\|(W-W^*)\Sigma^{1/2}\|_F^2$；取 $W=\sum_j\psi_j\beta_j^\top$ 时它等于 $H^{-1}\|\mathbb E[r_\varphi\zeta^\top]\Sigma^{-1/2}\|_F^2\le H^{-1}\mathbb E\|r_\varphi\|^2$，且由 Eckart--Young 定理，第 $m$ 个之后的预测奇异值的总能量至多为 $\|\mathbb E[r_\varphi\zeta^\top]\Sigma^{-1/2}\|_F^2$。
+
+(b) 对 $\zeta\sim\mathcal N(0,\Sigma)$，Stein 引理给出 $\beta_1=\mathbb E[\nabla_\zeta\vartheta_1]$。若 $\lambda_1=w^\top\zeta+\text{const}$ 且相位通路将其水平截断到 $\mathcal I_\varphi$，则 $\vartheta_1$ 是 $\lambda_1$ 超出 $\mathcal I_\varphi$ 的软阈值超出量，其梯度几乎处处为 $\mathbb 1\{\lambda_1\notin\mathcal I_\varphi\}w$，故 $\beta_1=P(\lambda_1\notin\mathcal I_\varphi)\,w$。
+
+(c) 设 $\lambda_1=w^\top\tilde x$；由于 $\one^\top\tilde x=0$，可取 $\one^\top w=1$。取 $W=\one_Hu^\top$，其中 $u=(w-(1-g_\ell)L^{-1}\one_L)/g_\ell$，使 $\one^\top u=1$。锚定项相消，$F_{\mathrm b}=\tilde x_L\one_H+\one_H(u^\top\tilde x-\tilde x_L)=\one_Hu^\top\tilde x$，而 $\one^\top\tilde x=0$ 给出 $g_\ell u^\top\tilde x=w^\top\tilde x$。水平通路的输出在预测时域上为常数，故 $M_cF_{\mathrm b}=F_{\mathrm b}$ 且 $J_cF_{\mathrm b}=0$。由~\equref{eq:fusion} 及 $F'=M_cS/(1-g_\ell)+J_cS/(1-g_s)$，得 $M_c\hat{\tilde y}=M_cS+\one_H\lambda_1$ 与 $J_c\hat{\tilde y}=J_cS$，故对任意门控都有 $\hat{\tilde y}=S+\one_H\lambda_1=\mathbb E[\tilde y\mid\tilde x]$。当门控相等为 $g$ 且水平以其他方式在两条通路之间分配时，水平通路必须提供 $[\mathbb E[\tilde y\mid\tilde x]-(1-g)F']/g-\tilde x_L\one$，当 $F'$ 承载形状时它落在 $\operatorname{span}\{\psi_j\}$ 中，故秩至多为 $m$。 \qed
+\end{proof}
+
+\fakeparagraph{水平通路包含该构造}
+在 $\alpha=0$ 的模型 \equref{eq:mult_model} 下，引理\ref{lem:bayes} 给出 $\lambda_1=b^\top\bar r=w^\top\tilde x$，其中 $w=\tfrac1Pb\otimes\one_P$ 在周期内为常数，部分~(c) 中的 $u$ 亦然。于是 $u^\top(\tilde x-\tilde x_L\one)=P\,u_{\mathrm c}^\top(\bar r-\tilde x_L\one_K)$，其中 $u_{\mathrm c}\in\mathbb R^K$ 保存 $u$ 的逐周期值，$\bar r-\tilde x_L\one_K$ 是锚定窗口的周期均值。取 $E$ 的第一行为 $Pu_{\mathrm c}^\top$、$c_E=0$、$\Gamma=e_1e_1^\top$、$c_\Gamma=0$ 的水平通路~\equref{eq:branch} 输出 $\tilde x_L\one_H+\one_Hu^\top(\tilde x-\tilde x_L\one)$，因为 $\Psi_H$ 的第一列是 $\one_H$。因此，对融合~\equref{eq:fusion} 的任意门控，部分~(c) 的构造都被精确实现。
+
+\subsection{定理\ref{thm:amplitude}的证明}
+
+用未来周期 $k'$ 与相位 $p$ 为预测建立索引。投影 $M_c$ 将每个元素替换为其所在未来周期的均值，$J_c=I-M_c$。由于 $\one_H$ 在周期内为常数，$J_c\one_H=0$。由于 $U=J_c\operatorname{span}\{\psi_2,\psi_3\}\subseteq\operatorname{range}(J_c)$，算子 $\Pi=J_c-P_U$ 是到 $\operatorname{range}(J_c)\cap U^\perp$ 上的正交投影，且 $\Pi J_c=\Pi$。
+
+\begin{proof}
+(a) 由定理\ref{thm:level_envelope} 完整陈述中的部分~(a)，相位 $p$ 的相位预测为 $F_p=o_\varphi+A\varsigma_p$，其中 $\varsigma_p\perp\one_d$ 且 $\|\varsigma_p\|^2<d$。公共项 $o_\varphi$ 在周期内偏差中相消，故作为 $K'\times P$ 数组，$J_cF=A\,[\varsigma_1-\bar\varsigma,\dots,\varsigma_P-\bar\varsigma]=AJ_d\,\Sigma_c$，其中 $\bar\varsigma=\tfrac1P\sum_p\varsigma_p$，$\Sigma_c$ 为中心化后的列。于是 $\|\Sigma_c\|_F^2=\sum_p\|\varsigma_p\|^2-P\|\bar\varsigma\|^2<Pd$，故 $\|J_cF\|^2\le\|AJ_d\|_2^2\|\Sigma_c\|_F^2<Pd\|AJ_d\|_2^2$，且 $\tfrac1{\sqrt H}\|J_cF\|<\sqrt{d/K'}\,\|AJ_d\|_2=B_\varphi$，这就是预测为 $\hat{\tilde y}=F$ 的模型所满足的断言。水平通路输出~\equref{eq:branch} 为 $F_{\mathrm b}=\tilde x_L\one_H+\Psi_H(\Gamma t+c_\Gamma)$；其周期内部分落在 $J_c\operatorname{span}\{\one_H,\psi_2,\psi_3\}=U$ 中，故 $\Pi F_{\mathrm b}=0$。由~\equref{eq:fusion}，$\Pi\hat{\tilde y}=\Pi J_c\hat{\tilde y}=(1-g_s)\Pi F+g_s\Pi F_{\mathrm b}=(1-g_s)\Pi F$，且 $\|\Pi F\|\le\|J_cF\|$。对于误差，由于 $\Pi$ 是消去 $\mu\one_H$ 的投影，$\tfrac1H\|\hat y-y\|^2\ge\tfrac{\sigma^2}{H}\|\Pi(\hat{\tilde y}-\tilde y)\|^2$，而逆三角不等式给出 $\|\Pi(\hat{\tilde y}-\tilde y)\|/\sqrt H\ge\Omega-(1-g_s)B_\varphi$。
+
+(b) 以原始单位计，窗口为 $X_{kp}=\ell_k+(1+\alpha\ell_k)s_p$，其中 $\sum_ps_p=0$，故周期均值为 $\ell_k$，窗口均值为 $\mu=\tfrac1K\sum_k\ell_k$。窗口的平均周期内形状以归一化单位表示为 $\tfrac1K\sum_k(X_{kp}-\ell_k)/\sigma=(1+\alpha\mu)s_p/\sigma$；将其在预测时域上平铺，记为 $\bar s$。取持续的未来水平 $\ell_f$，未来为 $y_{k'p}=\ell_f+(1+\alpha\ell_f)s_p$，故 $\Lambda=(\ell_f-\mu)/\sigma$，且
+\begin{equation*}
+	J_c\tilde y=\frac{(1+\alpha\ell_f)\,s}{\sigma}
+	=\frac{1+\alpha\mu+\alpha\sigma\Lambda}{1+\alpha\mu}\,\bar s
+	=(1+\alpha_w\Lambda)\,\bar s ,
+\end{equation*}
+其中 $\alpha_w=\alpha\sigma/(1+\alpha\mu)$，假设 $1+\alpha\mu>0$。应用 $\Pi=\Pi J_c$ 得 $\Omega=|1+\alpha_w\Lambda|\,\|\Pi\bar s\|/\sqrt H$。 \qed
+\end{proof}
+
+
+
+\subsection{命题\ref{prop:modulation}的证明}
+
+\fakeparagraph{完整陈述} 设最终相位潜在表示按~\equref{eq:la_modulation} 被调制，即 $h'_p=h_p+(h_p-\bar h)\odot q$，其中 $q\in\mathbb R^d$ 任意且可依赖于窗口。
+(a) 相位预测从而融合预测的每个未来周期均值都保持不变，故定理\ref{thm:level_envelope} 与定理\ref{thm:complement} 对调制后的相位通路成立，且水平通路设定的水平不受影响。
+(b) 向量 $q=q_1\one_d$ 将振幅包络乘以 $|1+q_1|$。若相位通路承载窗口的平均形状，$\Pi F=\Pi\bar s/(1-g_s)$，且水平通路的状态线性地读取水平预测 $\hat\Lambda$，即对某个 $\xi\in\mathbb R^3$ 有 $\xi^\top t=\hat\Lambda$，则 $q=\alpha_w\one_d\,\xi^\top t$ 给出周期内预测 $(1+\alpha_w\hat\Lambda)\,\Pi\bar s$，即定理\ref{thm:amplitude}(b) 中将 $\Lambda$ 换成其预测后的目标。该 $q$ 具有~\equref{eq:la_modulation} 中 $V_2V_1t$ 的形式，其中 $k_q=1$、$V_1=\xi^\top$、$V_2=\alpha_w\one_d$，故宽度为一的调制即已足够。
+
+\begin{proof}
+(a) $\sum_p(h_p-\bar h)\odot q=\big(\sum_ph_p-P\bar h\big)\odot q=0$。预测器是仿射且共享的，故对每个未来周期 $\tfrac1P\sum_p(\Phi h'_p+c_\Phi)=\tfrac1P\sum_p(\Phi h_p+c_\Phi)$。融合~\equref{eq:fusion} 仅通过其水平部分中的 $M_cF$ 使用相位预测，故融合预测的水平同样不变。水平包络仍然适用，因为调制后的预测与由相同潜在表示算出的未调制预测有相同的水平，而后者落在 $\mathcal I_\varphi$ 中；定理\ref{thm:complement} 仅通过水平与形状误差依赖相位通路。
+
+(b) 取 $h_p=\gamma_2\odot\varsigma_p+\beta_2$，调制后的偏差为 $(h_p-\bar h)\odot(\one+q)=\operatorname{diag}(\gamma_2\odot(\one+q))J_d(\varsigma_p-\bar\varsigma)$，定理\ref{thm:amplitude}(a) 的论证给出包络 $B_\varphi(q)=\sqrt{d/K'}\,\|\Phi\operatorname{diag}(\gamma_2\odot(\one+q))J_d\|_2$；当 $q=q_1\one_d$ 时对角因子是标量 $1+q_1$，故 $B_\varphi(q)=|1+q_1|B_\varphi$。若 $q=\alpha_w\one_d\,\xi^\top t=\alpha_w\hat\Lambda\one_d$，则调制后的相位预测 $F^{q}$ 满足 $J_cF^{q}=(1+\alpha_w\hat\Lambda)J_cF$，且由 $\Pi F=\Pi\bar s/(1-g_s)$ 得 $\Pi\hat{\tilde y}=(1-g_s)\Pi F^{q}=(1+\alpha_w\hat\Lambda)\Pi\bar s$。调制~\equref{eq:la_modulation} 以 $w=k_q=1$（从而以任意 $k_q\ge1$）、$V_1=\xi^\top$ 与 $V_2=\alpha_w\one_d$ 实现该 $q$。 \qed
+\end{proof}
+
+因此，该调制沿恰好需要的方向缩放振幅包络，而不触动水平。
+
+\section{\sysplus 的扩展结果}
+\label{app:ext_results}
+
+表\ref{tab:la_full} 报告了 \sysplus 在全部 28 个设置上的逐时域测试结果，并与按第\ref{sec:ext_setup}节协议配置训练的仅相位变体对照。在相位通路之上，水平通路以 \equref{eq:branch} 的固定轮廓贡献 105 个参数（在四个选择学习解码器的设置上为 477 与 657 个参数；附录\ref{app:la_config}），振幅通路 $k_q(3+d)$（其中 $k_q=\min(w,3,d)$，第\ref{sec:ext_modulation}节）贡献 14 到 262 个参数，融合门控每通道两个、共享时总共两个；在各设置上，水平与振幅通路合计增加 119 到 679 个参数，门控再多 2 到 $2C$ 个（第\ref{sec:complexity}节与附录\ref{app:la_config}）。
+
+
+}
+
+\blue{
+\section{\sysplus 的逐设置配置}
+\label{app:la_config}
+
+表\ref{tab:main_results} 中的 \sysplus 对每个设置通过小规模网格搜索选择其水平与振幅通路的超参数，搜索范围包括门控初始化 $g_0$、这些通路的学习率倍率、振幅宽度 $w$、水平通路的轮廓基（\equref{eq:branch} 的固定轮廓，或第\ref{sec:ext_setup}节中在 30 和 90 个池化周期值上的学习解码器）、逐通道与共享门控、相位通路的学习率倍率，以及振幅通路在推理时是否启用。表\ref{tab:la_config} 列出了每个设置的选择配置。
+
+在 28 个设置中的 24 个上，水平通路保持固定轮廓（105 个参数）；ETTm1-720 选择 30 个池化值上的学习解码器（477 个参数），ETTm2-96、ETTm2-192 和 ETTm2-720 选择 90 个池化值上的学习解码器（657 个参数）。在五个设置上，振幅通路在推理时被关闭，只留下相位与水平通路处于活动状态。因此，不含融合门控，水平与振幅通路的参数预算在各设置上介于 119 到 679 之间。
+
+
+
+\fakeparagraph{配置索引} \tabref{tab:la_config} 所列的逐设置配置由表\ref{tab:main_results} 和表\ref{tab:la_full} 的 \sysplus 列使用。第\ref{sec:ext_setup}节的协议配置由标记消融以及第\ref{sec:exp_ladder}节和第\ref{sec:exp_theory}节的分析使用（表\ref{tab:ladder} 与表\ref{tab:envelope}）；表\ref{tab:la_full} 的仅相位列在该配置下训练。
+}

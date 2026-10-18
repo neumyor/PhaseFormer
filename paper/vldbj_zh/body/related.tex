@@ -1,0 +1,18 @@
+\section{\blue{相关工作}}
+\label{sec:related}
+
+\blue{
+周期序列的形状、水平与振幅此前都曾被建模，但分散在不同的工作脉络中，没有任何一条脉络覆盖全部三者。一条脉络若把两类信息留在一起，其网络就必须变大去分离它们；若遗漏一类，其预测就会损失精度。\sysplus 用其标记覆盖全部三类信息，正是这种覆盖让它得以很小。下面依次回顾分解、标记与跨周期模型，最后落到传感器网络规模的预测——那里最需要小模型。
+
+\fakeparagraph{分解}
+将序列分解为可解释的部分是一个悠久的传统：从 STL~\citep{cleveland1990stl} 的趋势、季节与余项成分，到 Holt--Winters 预测~\citep{holt2004forecasting,winters1960forecasting,hyndman2021fpp3}，其乘性形式用水平缩放季节分量。深度预测模型将这种拆分内置到架构之中，其中两个工作定义了这条脉络。Autoformer~\citep{wu2021autoformer} 在每一层内部把滑动平均趋势与季节部分分开，并用自相关建模季节部分；FEDformer~\citep{zhou2022fedformer} 沿袭这一做法，改用多个滑动平均的混合与频域注意力。TimeMixer~\citep{timemixer24} 把这一思路推得最远：它将序列下采样到多个尺度，把每个尺度分解为季节与趋势部分，季节部分由细到粗、趋势部分由粗到细地混合，并对每个尺度一个预测器给出的预测求和。DLinear~\citep{zeng2023dlinear} 对每个部分各施加一个线性映射，N-BEATS~\citep{oreshkin2020nbeats} 在多项式趋势基与傅里叶季节基上展开预测，CycleNet~\citep{lin2024cyclenet} 为每个通道学习一个循环周期并预测残差。它们都与本文共享同一个前提：序列的各个部分不应在一个不加区分的表示中学习。
+
+\fakeparagraph{分解的不足}
+然而，分解沿时间切分序列，再把各部分相加。用第\ref{sec:mot_tokens}节的形式 $X\approx\ell\,\one^\top+a\,s^\top$ 来看，其季节部分承载形状，趋势替代水平，但趋势是一条随时间变化的平滑曲线，而不是每周期一个数；振幅则根本没有自己的成分：没有任何机制把季节性摆动与趋势绑定，一个摆动更宽的更繁忙的日子，到达季节性模型时已是一个新的季节性模式。拆分后残留的混合落到每个部分的网络上，网络必须变大才能把它解开，如 Autoformer、FEDformer 和 TimeMixer；若这个网络只是一个线性映射，如 DLinear，它就解不开，预测只能以精度为代价。因此，部分覆盖迫使模型在容量与精度之间二选一。\sysplus 覆盖全部三类信息——每周期一个水平、一个由水平驱动的振幅、承载形状的相位标记——仅凭数千参数，就在每个数据集的两项指标上都比 FEDformer 和 TimeMixer 更准确（第\ref{sec:exp_results}节）。
+
+\fakeparagraph{标记与跨周期模型}
+标记决定了预测模型必须解开什么。Autoformer 和 FEDformer 将每个时间步嵌入为一个标记，iTransformer~\citep{liu2023itransformer} 则以一个变量的整条序列为标记。PatchTST~\citep{nie2023patchtst}、Crossformer~\citep{zhang2023crossformer} 和 PatchMLP~\citep{tang2025patchmlp} 取连续值构成的分块，分块混合了一个周期的形状、水平与振幅，因此必须由深层注意力或 MLP 堆叠来分离它们；\sysplus 的路由器沿袭了 Crossformer 的路由标记与 Perceiver~\citep{jaegle2021perceiver} 的潜在数组。TimesNet~\citep{wu2023timesnet} 按其主导周期折叠序列，与 \sysplus 按单一周期折叠相似，但它把折叠结果交给深层二维卷积，由后者自行从形状中分离出水平与振幅。跨周期模型利用折叠保持小规模：SparseTSF~\citep{lin2024sparsetsf} 用一个共享线性映射预测每个相位，TimeBase~\citep{huang2025timebase} 预测周期长度片段的少数几个基成分。二者都没有为水平或振幅提供标记，而且由于是线性的，都无法让在窗口上平均的形状按由近期周期预测出的水平缩放——这一乘积正是 \sysplus 的振幅通路所构成的（命题\ref{prop:modulation}）。这些工作都没有把标记应表示的内容区分为形状、水平与振幅；\sysplus 做到了，并证明了跨周期分组得到的标记何时保持在固定子空间中（定理\ref{thm:stability}）。
+
+\fakeparagraph{传感器网络规模的预测}
+Graph WaveNet~\citep{wu2019graphwavenet}、MTGNN~\citep{wu2020mtgnn}、AGCRN~\citep{bai2020agcrn} 和 D2STGNN~\citep{shao2022decoupled} 等时空图模型在传感器之间传递消息，BigST~\citep{han2024bigst}、LightCTS~\citep{lai2023lightcts} 和 STID~\citep{shao2022stid} 则降低其开销；\sysplus 与这一脉络互补，因为它缩小的是服务每个传感器的通道独立模型，空间模型可以构建在它之上。另一条路线通过限制模型来保持逐序列模型的小规模：DLinear 与 FITS~\citep{fits2024} 限于线性映射，FilterNet~\citep{filternet2024} 限于频域滤波器，SSCNN~\citep{deng2024parsimony} 限于简约的分解。\sysplus 则靠覆盖变小，而它所覆盖的结构在传感器网络上最强：振幅在 Traffic 的 862 个道路传感器与 Electricity 的 321 个电表上最紧密地跟随水平（第\ref{sec:mot_changes}节），\sysplus 也正是在这两个数据集上领先 SparseTSF 与 TimeBase 约 5\% 到 6\%（第\ref{sec:exp_results}节）。一个模型服务的传感器越多，完整的标记回报越大。
+}

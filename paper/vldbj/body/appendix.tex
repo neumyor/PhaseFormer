@@ -100,7 +100,7 @@ These findings underscore that \sysname is not only accurate but also efficient,
 
 \subsubsection{The Detailed Results of PCA visualization}
 
-We present PCA visualization results on the ETTh1, ETTh2, ETTm1, ETTm2, Electricity, and Weather datasets in \figref{fig:phase_token_comparison_detailed}, in addition to the Traffic PCA visualization in the main paper.
+We present PCA visualization results on the ETTh1, ETTh2, ETTm1, ETTm2, Electricity, and Weather datasets in \figref{fig:phase_token_comparison_detailed}, complementing Fig.~3(b) of the main manuscript.
 The findings are consistent with those observed on the Traffic dataset: phase tokenization yields a significantly more compact space compared to patch tokenization.
 
 
@@ -114,7 +114,7 @@ Since routers serve as the foundation for aggregation and distribution in the ph
 \revised{
 In practice, we recommend selecting the router number through a light-weight grid search, as the optimal value is typically small and stable across datasets. 
 Consistent with our empirical findings, we observe that using routers within the range of 2–8 is generally sufficient to achieve strong and robust performance.
-This aligns with our analysis in \figref{fig:phase_token_comparison_detailed} and in the Traffic PCA visualization of the main paper, where the phase representations exhibit a clear low-rank structure—fewer than eight principal components already explain over 90\% of the total variance. Consequently, increasing the number of routers beyond this range yields only marginal improvements, and we do not observe any consistent trade-off patterns across datasets. 
+This aligns with our analysis in \figref{fig:phase_token_comparison_detailed} and in Fig.~3(b) of the main manuscript, where the phase representations exhibit a clear low-rank structure, with two principal components already capturing most of their variance. Consequently, increasing the number of routers beyond this range yields only marginal improvements, and we do not observe any consistent trade-off patterns across datasets. 
 Overall, these results suggest that the model does not require a large number of routers, and a modest choice of M can already provide a reliable and efficient configuration in most scenarios.
 }
 

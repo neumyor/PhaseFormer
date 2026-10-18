@@ -1,0 +1,141 @@
+% PhaseFormer+ 论文的中文翻译版，供内部阅读。
+% 源自 paper/vldbj/main.tex（英文投稿版）；正文逐节翻译，图表文件复用英文版。
+\RequirePackage{fix-cm}
+% 参考文献按方括号编号引用。
+\PassOptionsToPackage{numbers,sort&compress}{natbib}
+\documentclass[twocolumn,natbib]{svjour3}
+\bibpunct{[}{]}{,}{n}{}{,}
+\renewcommand{\citeyearpar}{\unskip~\citep}
+\smartqed
+
+% 中文排版：XeLaTeX + xeCJK。英文与数学用 Times（newtx），中文用宋体/苹方。
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{xspace}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{subcaption}
+\usepackage{url}
+\usepackage{xeCJK}
+\setCJKmainfont[BoldFont={Heiti SC}]{STSong}
+\setCJKsansfont{Heiti SC}
+\setCJKmonofont[BoldFont={Heiti SC},ItalicFont={STSong}]{STSong}
+\usepackage{newtxtext}
+\usepackage{newtxmath}
+\usepackage[protrusion=true]{microtype}
+\usepackage[hidelinks]{hyperref}
+\urlstyle{rm}
+\usepackage{xurl}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\let\laplace\relax
+\input{math_commands.tex}
+
+% 中文翻译版不带修改标记。
+\newcommand{\blue}[1]{#1}
+
+% Macros inherited from the conference version.
+\newcommand{\eg}{\textit{e.g.}\xspace}
+\newcommand{\ie}{\textit{i.e.}\xspace}
+\newcommand{\etc}{etc.\xspace}
+\newcommand{\aka}{\textit{a.k.a.}\xspace}
+\newcommand{\versus}{\emph{vs.}\xspace}
+
+% 交叉引用的中文格式。
+\newcommand\tabref[1]{表\ref{#1}}
+\renewcommand\secref[1]{第\ref{#1}节}
+\renewcommand\figref[1]{图\ref{#1}}
+\newcommand\appref[1]{附录\ref{#1}}
+\newcommand\equref[1]{式(\ref{#1})}
+\newcommand\thmref[1]{定理\ref{#1}}
+\newcommand\lemmaref[1]{引理\ref{#1}}
+
+\newcommand{\fakeparagraph}[1]{\vspace{1mm}\noindent\textbf{#1。}}
+\newcommand{\sysname}{PhaseFormer\xspace}
+\newcommand{\sysL}{PhaseFormer-L\xspace}
+\newcommand{\sysLA}{PhaseFormer-LA\xspace}
+\newcommand{\sysplus}{PhaseFormer+\xspace}
+\newcommand{\codeurl}{https://github.com/neumyor/PhaseFormer_TSL}
+
+% 表中最优/次优标记。
+\definecolor{secondcolor}{RGB}{0,90,160}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\best}[1]{\red{\textbf{#1}}}
+\newcommand{\second}[1]{\textcolor{secondcolor}{\underline{#1}}}
+\newcommand{\revised}[1]{#1}
+\newcommand{\TODO}[1]{\textbf{\color{red}{[TODO: #1]}}}
+\newcommand{\tbd}[1]{{\color{red}[#1]}}
+
+% Notation for the extension (Sections 3, 5 and 6).
+\newcommand{\Lp}{L_{\text{phase}}}
+\newcommand{\Pin}{P_{\text{in}}}
+\newcommand{\Pout}{P_{\text{out}}}
+\newcommand{\lev}{\operatorname{lev}}
+\newcommand{\LN}{\operatorname{LN}}
+\newcommand{\one}{\mathbf 1}
+
+% svjour3 定理环境的中文标题（类文件把标题存放在 \xxxname 中，可整体改写）。
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\keywordname}{{\bfseries 关键词}}
+\renewcommand{\refname}{参考文献}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\renewcommand{\theoremname}{定理}
+\renewcommand{\lemmaname}{引理}
+\renewcommand{\corollaryname}{推论}
+\renewcommand{\propositionname}{命题}
+\renewcommand{\definitionname}{定义}
+\renewcommand{\remarkname}{注}
+\renewcommand{\proofname}{证明}
+\spnewtheorem{assumption}{假设}{\bfseries}{\itshape}
+
+\journalname{The VLDB Journal}
+
+% 窄双栏排版：允许额外的词间伸展，避免溢出。
+\setlength{\emergencystretch}{1.5em}
+
+\begin{document}
+
+\title{PhaseFormer+：面向高效时空预测的相位、水平与振幅标记%
+\thanks{本文是 ICLR 2026 会议论文 ``PhaseFormer: From Patches to Phases for Efficient and Effective Time Series Forecasting''~\citep{niu2026phaseformer} 的期刊扩展版本。新增内容在第\ref{sec:intro}节末尾总结。}}
+
+\author{Yiming Niu（牛一鸣） \and Jinliang Deng（邓锦亮） \and Yongxin Tong（童咏昕）}
+
+\authorrunning{Y. Niu, J. Deng, Y. Tong}
+
+\institute{Yiming Niu 与 Jinliang Deng 为共同第一作者，Yongxin Tong 为通讯作者。\at
+Yiming Niu, Yongxin Tong \at
+复杂关键软件环境全国重点实验室，北京航空航天大学，北京，中国 \\
+\email{\{yimingniu, yxtong\}@buaa.edu.cn}
+\and
+Jinliang Deng \at
+复杂关键软件环境全国重点实验室，北京航空航天大学，北京，中国；南方科技大学可信自主系统研究院，深圳，中国 \\
+\email{jinliangdeng9588@gmail.com}}
+
+\date{}
+
+\maketitle
+
+\begin{abstract}
+传感器网络预测必须在每次更新时服务于每一个传感器，因此效率与精度同等重要。然而，近期的预测模型将序列分解为趋势与季节项、建模多个周期，并在分块之上堆叠深层注意力。这种复杂性是必要的吗？我们表明并非如此：它所弥补的，是标记混杂了预测所需信息这一缺陷。周期性序列的一个窗口携带三类信息：周期的形状、会漂移的水平，以及随水平移动的振幅。三者共同构成一个低维结构——一个水平项加一个按振幅缩放的形状——在七个基准数据集上捕获了归一化窗口能量的 78\% 至 93\%。\sysplus 为每一类信息分配一个标记与一条小通路。相位标记（同一相位跨周期的取值）承载形状，并且可证明：当每个周期被同样地重塑时，它保持在固定子空间中，分块标记则不然。水平标记（周期均值）被映射到三条固定的预测时域轮廓上；由水平状态计算出的振幅标记在保持每个周期均值不变的同时缩放形状。统一的低维视角说明了三者缺一不可：在固定权重下，相位通路把预测的水平与振幅限制在两个包络之中，任何附加的深度都无法消除这两个包络；包络之外的部分只是少量轮廓系数与一个由水平驱动的因子。\sysplus 在七个基准中的六个上取得相对八个基线的最优平均 MSE；在 Traffic 上它只需数千参数量，并将 PatchTST 的 FLOPs 降低约 99.99\%。
+\keywords{时间序列预测 \and 时空数据 \and 周期性 \and 相位标记化 \and 低维表示 \and 高效模型}
+\end{abstract}
+
+\input{body/introduction}
+\input{body/related}
+\input{body/motivations}
+\input{body/method}
+\input{body/theory}
+\input{body/experiments}
+\input{body/conclusion}
+\input{body/statements}
+
+\bibliographystyle{spmpsci}
+\bibliography{references}
+
+\appendix
+\input{body/appendix_theory}
+
+\end{document}

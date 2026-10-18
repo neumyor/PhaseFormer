@@ -1,0 +1,168 @@
+\blue{
+\section{三个标记的统一低维视角}
+\label{sec:theory}
+
+第\ref{sec:motivations}节已经表明，一个窗口是一个低维结构，$X=\ell\,\one^\top+a\,s^\top+N$（\equref{eq:three_parts}），其三个部分——形状 $s$、水平 $\ell$ 和振幅 $a$——由 \sysplus 用三个标记表示，每个标记配有一条小型通路（第\ref{sec:method}节）。本节表明，这一对应关系源自窗口本身的结构以及相位通路的结构。论证对每个标记都是相同的，分三步进行：
+\begin{enumerate}[label=(\roman*),leftmargin=2em,itemsep=0.1em,topsep=0.2em]
+\item \emph{必要性：任何标记都无法替代另一个。}相位标记包含水平轨迹与振幅轨迹，而相位通路具有足够的表达能力来追踪水平漂移（第\ref{sec:theory_setup}节）。然而，对任意固定权重，其预测水平被限制在一个固定区间内，其周期内振幅被限制在一个固定上界之下，即水平包络与振幅包络，二者均可由权重计算得到。窗口的未来所需要的水平或振幅称为该窗口的\emph{需求}；当需求落在包络之外时，我们说包络\emph{约束生效}，窗口随之产生一个随超出量增长的误差下界。任何附加的深度、路由器或头都无法消除这一下界，而且无论权重如何，一个足够临近的大幅持续阶跃都会把水平需求推到包络之外（第\ref{sec:theory_level}节与第\ref{sec:theory_amplitude}节）：附加的容量无法替代缺失的标记。其他两条通路之间同样无法相互替代，也无法替代相位通路：水平通路的周期内输出始终落在其倾斜与曲率轮廓的张成空间中，而振幅通路只是对相位通路产生的形状进行缩放，同时不改变任何周期均值（第\ref{sec:theory_amplitude}节）。
+\item \emph{形式：每个标记必须携带的内容是低维的。}当每个周期以相同方式被重塑时，相位标记张成同一子空间，并以坐标形式持有形状（定理\ref{thm:stability}）。在第\ref{sec:mot_changes}节的季节模型下，包络之外的水平是每个窗口的少数几个数，每个数乘以一条固定的预测时域轮廓，而振幅是周期形状被一个由水平驱动的因子缩放的结果（第\ref{sec:theory_level}节与第\ref{sec:theory_amplitude}节）。
+\item \emph{充分性：具有这些形式的小型通路就足够了。}在相位通路提供形状的前提下，秩一的水平通路即可在加性模型下达到贝叶斯风险，而由水平通路的水平预测驱动的宽度一的振幅通路，能够在预测水平上产生乘性模型所要求的水平缩放形状（第\ref{sec:theory_design}节）。
+\end{enumerate}
+三个标记由此共享同一个解释：每个标记携带窗口的一个低维部分，其通路按照该部分的形式构建，三者共同为预测提供所需的一切。更少的标记会留下一个任何容量都无法消除的误差下界。
+
+\fakeparagraph{范围与记号}
+与讨论输入标记的定理\ref{thm:stability}不同，包络关注的是预测，存在于相位通路末端的 LayerNorm 与预测器之中：它们对每个参数取值、每个窗口（无论是否周期）都成立，季节模型仅在某个结果明确提到它时才被引入。自此处起，我们沿用第\ref{subsec:preprocessing}节与第\ref{sec:ext_init}节的记号：$P$ 个相位，$K$ 个输入周期与 $K'$ 个输出周期，以及 $H=K'P$ 的预测时域。与实验一致，所有结果均取整周期长度的预测时域。下标 $\varphi$ 标记相位通路的常数；证明见附录\ref{app:proofs}。
+
+\subsection{相位标记：富有表达力的输入，受限的预测}
+\label{sec:theory_setup}
+
+相位标记稳定地携带形状（定理\ref{thm:stability}），读取它们的相位通路用一个共享预测器预测每个相位。本小节讨论的是同一条通路能携带多少水平。设 $\tilde y=(y-\mu\one)/\sigma$ 为窗口坐标系下的未来。窗口的\emph{水平需求}
+\begin{equation}
+\Lambda=\lev(\tilde y)=(\mu_y-\mu)/\sigma,
+\label{eq:level_demand}
+\end{equation}
+是未来均值 $\mu_y$ 相对窗口均值的距离，以窗口标准差为单位。分析采用乘性季节模型~\equref{eq:mult_model}，使用序列的原始单位；当 $\alpha=0$ 时，它退化为加性季节随机游走模型。
+
+\fakeparagraph{相位标记包含水平轨迹}
+在加性模型下，每个相位的贝叶斯预测是它在窗口上的平均，其中周期均值的简单平均被替换为近期加权平均 $b^\top\bar r$（引理\ref{lem:bayes}，附录\ref{app:proofs}）。对满足 $\one^\top b=1$ 的一般权重 $b$，我们把这种 Holt--Winters 型预测器称为\emph{水平自适应季节预测器} $G_b$。一条水平轨迹以共同平移的形式进入每个相位标记，路由注意力会把共同平移传递下去（引理\ref{lem:shift}），只有各 LayerNorm 会对它产生畸变。
+
+\begin{proposition}[结构的水平能力]
+\label{prop:capability}
+对每个满足 $\one^\top b=1$ 且 $\|b\|\le1$ 的 $b$，存在一组参数，使带有一个路由层且 $d\ge4$ 的相位通路在所有归一化窗口上一致逼近 $G_b$ 至任意精度，从而在加性模型下逼近贝叶斯预测。
+\end{proposition}
+
+嵌入中一个大的偏移使各 LayerNorm 近似线性，误差随偏移的平方反比衰减。相位标记包含窗口的水平轨迹与振幅轨迹（第\ref{sec:mot_changes}节），在合适的权重下，相位通路能把水平读出。水平已经存在于输入之中；问题在于预测能携带多少。命题\ref{prop:capability}的权重携带 $G_b$ 的水平，而后者在窗口坐标系下本身也是有界的，界为 $\sqrt{K\|b\|^2-1}$。对任意固定权重，预测能携带的水平是一个固定区间，接下来的结果将其精确刻画。
+
+\fakeparagraph{固定权重把每个相位预测限制在一个椭球上}
+每个路由层以 LayerNorm $\LN_2$ 结尾，无论输入如何，其输出为 $\gamma_2\odot\varsigma+\beta_2$，其中 $\varsigma$ 中心化且范数小于 $\sqrt d$。\equref{eq:predictor}的预测器是仿射的，因此对固定权重，每个相位预测都落在一个固定的椭球中：该球在 $A=\Phi\operatorname{diag}(\gamma_2)$ 下的像，平移 $o_\varphi=\Phi\beta_2+c_\Phi$。路由、注意力与深度决定产生椭球中的哪一个点，却从不改变椭球本身。椭球沿水平方向的延伸给出\emph{水平包络}。一个窗口的预测由 $P$ 个这样的点组成，每个相位一个。由于它们都落在同一个椭球中，彼此不可能相距太远，它们围绕每个未来周期均值的散布——即周期内振幅——通过椭球的最大半轴受到限制，这给出\emph{振幅包络}。
+
+\subsection{水平标记：包络之外不可或缺，形式上低秩}
+\label{sec:theory_level}
+
+水平包络从最后一个路由层读出。取该层的 $A$ 与 $o_\varphi$，定义
+\begin{equation}
+\begin{gathered}
+c_0=\tfrac{1}{K'}\one^\top o_\varphi,\qquad
+C_1=\tfrac{\sqrt d}{K'}\big\|J_dA^\top\one_{K'}\big\|,\\
+\mathcal I_\varphi=(c_0-C_1,\,c_0+C_1),
+\end{gathered}
+\label{eq:envelope_constants}
+\end{equation}
+即椭球中心的水平及其沿水平方向的半宽。
+
+\begin{theorem}[水平包络]
+\label{thm:level_envelope}
+对相位通路的每个参数取值（任意深度、路由器、头、位置嵌入与 MLP 权重）以及每个窗口，相位预测的水平都落在包络内，$\lev(F)\in\mathcal I_\varphi$。因此，以相位预测作为预测的模型，$\hat{\tilde y}=F$，对水平需求为 $\Lambda$ 的窗口有误差下界
+\begin{equation}
+\tfrac1H\|\hat y-y\|^2\ \ge\ \sigma^2\operatorname{dist}(\Lambda,\mathcal I_\varphi)^2 .
+\label{eq:level_floor}
+\end{equation}
+\end{theorem}
+
+换句话说，无论窗口如何，每个相位预测都是同一个固定椭球中的一个点，水平包络 $\mathcal I_\varphi$ 是该椭球在水平轴上的投影，因此一个水平落在包络之外的未来，在 MSE 中至少付出到该区间距离的平方乘以 $\sigma^2$ 的代价。一个仅通过相位通路进行预测的模型，无论相位标记如何携带水平，其预测水平都被限制在 $\mathcal I_\varphi$ 之内，而且该界对每个深度、每个路由器数与头数、$\LN_2$ 之前的每个权重都成立：\emph{附加的容量无法替代缺失的标记}。能解除这一下界的是一条不经过 $\LN_2$ 的通往预测的路径，而这正是水平标记及其通路所提供的。
+
+\fakeparagraph{包络需要多宽}
+一致地追踪水平漂移要求很宽的包络：如果相位通路在预测水平上以 $\epsilon_0$ 以内的误差逼近 $G_b$，则 $C_1\ge\sqrt{K\|b\|^2-1}-\epsilon_0$（推论\ref{cor:capability_cost}，附录\ref{app:proofs}）。追踪最后一个周期的水平因此在 $K=30$ 时要求 $C_1\ge\sqrt{K-1}=5.39$；反过来，半宽为 $C_1$ 的包络要一致地跟随某个加权 $b$，仅当 $b$ 至少对约 $K/(1+C_1^2)$ 个周期取平均时才能做到，因此窄包络只能跟随缓慢自适应的水平。相位通路也无法把整个包络都花在水平上：一个相位的水平与形状争夺 $\LN_2$ 的同一有界输出，当一个相位的水平逼近 $\mathcal I_\varphi$ 的边界时，其预测中依赖输入的部分被迫收缩到单一轮廓上（完整陈述的部分(d)见附录\ref{app:proofs}）。一个独自携带水平的相位通路会把形状所需的空间花在水平上。
+
+普通的变化就会超出窄包络。一个持续的线性趋势在 $L=720$ 时要求 $\Lambda=1.96$ 至 $3.46$，而且无论权重如何，一个足够临近的大幅持续阶跃都要求一个落在 $\mathcal I_\varphi$ 之外的水平（推论\ref{cor:steps}）。训练后的模型证实了这一点（第\ref{sec:exp_envelopes}节）：在任何基准上，它们的权重都达不到 $5.39$ 的半宽，而在 ETTh2、ETTm2 和 Weather 上，水平包络在 12\% 到 21\% 的测试窗口上约束生效。
+
+\fakeparagraph{水平标记必须携带什么}
+水平通路必须提供落在 $\mathcal I_\varphi$ 之外的部分。水平需求中落在 $\mathcal I_\varphi$ 之外的部分是窗口的一个阈值化非线性函数，但在季节模型下，它沿固定的预测时域轮廓进入预测，即
+\begin{equation}
+\mathbb E[\tilde y\mid\tilde x]=S(\tilde x)+\textstyle\sum_{j=1}^m \psi_j\lambda_j(\tilde x),
+\label{eq:profile_model}
+\end{equation}
+其中 $S$ 是由相位通路携带的以预测时域为中心的形状，$\psi_1=\one_H$ 是偏移轮廓，$\psi_2,\dots,\psi_m$ 是固定的以预测时域为中心的轮廓，例如倾斜与曲率，$\lambda_j$ 是标量状态预测；在 \sysplus 中，$\psi_2$ 与 $\psi_3$ 是~\equref{eq:branch}的倾斜与曲率轮廓。我们把\equref{eq:profile_model}称为\emph{轮廓模型}。加性模型对应 $m=1$ 且 $\lambda_1$ 为线性；局部线性趋势则增加一条倾斜轮廓。
+
+\begin{theorem}[水平的低秩结构]
+\label{thm:complement}
+设相位预测 $F$ 的水平位于 $\mathcal I_\varphi$ 中，并设一条水平通路读取窗口的任意特征。残差 $\tilde y-F$ 的最小二乘线性预测器是轮廓 $\psi_1,\dots,\psi_m$ 上秩至多为 $m$ 的矩阵，加上仅由相位通路的形状误差驱动的一项；新息噪声不产生任何贡献。
+\end{theorem}
+
+当相位通路正确得到形状时，形状误差项消失。在轮廓模型下，相位通路留给水平标记的东西对窗口是非线性的，但对预测时域是低秩的：每个窗口的少数几个标量乘以固定轮廓。水平与形状一样是低维的，一个到固定轮廓上的低秩映射就是它的通路；\sysplus 提供三条轮廓——偏移、倾斜与曲率——而加性模型只需要一条。附录\ref{app:proof_complement}证明了该定理的另外两个部分。由部分(b)，在高斯特征与一个把水平截断到 $\mathcal I_\varphi$ 的相位通路之下，最优的水平通路以包络约束生效的概率对贝叶斯读出进行缩放来读取水平：它恰好在相位通路无能为力之处接管水平，这一分工在第\ref{sec:exp_envelopes}节中于训练后的模型上得到证实。由部分(c)，当只有一条轮廓（$m=1$）时，锚定的秩一水平通路对任意门控达到~\equref{eq:profile_model}的贝叶斯风险，形状由联合训练的相位通路按门控的尺度提供。
+
+\begin{table*}[t]
+\centering
+\caption{三个标记的统一解释：各自为何必需、其携带内容为何低维，以及在此之上构建的通路形式。本表补全表\ref{tab:three_tokens}。}
+\label{tab:unified_view}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{0.1\textwidth}p{0.26\textwidth}p{0.27\textwidth}p{0.31\textwidth}@{}}
+\toprule
+标记 & (i) 必需的原因 & (ii) 低维的原因 & (iii) 充分的通路 \\
+\midrule
+相位（$s$） & 共同的形状变化会移动分块标记（定理\ref{thm:stability}）；其他通路无法自行产生形状 & 相位标记张成 $\ell$ 与 $a$ 所在的平面——该平面在共同的形状变化下保持不变——并以坐标形式持有形状（定理\ref{thm:stability}） & 小型潜空间、少量路由器与一个共享预测器；在包络之内追踪水平漂移（命题\ref{prop:capability}） \\
+\addlinespace
+水平（$\ell$） & 相位预测的水平始终位于 $\mathcal I_\varphi$（定理\ref{thm:level_envelope}），而一个临近的大幅阶跃会离开它（推论\ref{cor:steps}） & 在轮廓模型下，在固定预测时域轮廓上秩至多为 $m$（定理\ref{thm:complement}(a)） & 周期均值写入偏移、倾斜与曲率轮廓，绕过 $\LN_2$；秩一达到加性贝叶斯风险（定理\ref{thm:complement}(c)） \\
+\addlinespace
+振幅（$a$） & 在水平轮廓之外，周期内散布低于 $(1-g_s)B_\varphi$（定理\ref{thm:amplitude}(a)） & 单一因子 $1+\alpha_w\Lambda$，由水平设定（定理\ref{thm:amplitude}(b)） & 由水平预测驱动的中心化调制；宽度一即已足够（命题\ref{prop:modulation}） \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{振幅标记：包络之外不可或缺，形式上由水平驱动}
+\label{sec:theory_amplitude}
+
+振幅包络以同样的方式限制相位预测的周期内部分。\emph{振幅需求}是相位通路必须自行产生的未来周期内形状的大小：没有水平通路时，是整个周期内形状；有水平通路时，是水平通路无法提供的部分，
+\begin{equation}
+\Omega=\tfrac{1}{\sqrt H}\|\Pi\tilde y\|,\qquad \Pi=J_c-P_U,
+\label{eq:amplitude_demand}
+\end{equation}
+其中 $P_U$ 投影到 $J_c\psi_2$ 与 $J_c\psi_3$ 的张成空间 $U$ 上，即水平通路~\equref{eq:branch}的倾斜与曲率轮廓的周期内部分；没有水平通路时，$U=\{0\}$ 且 $\Pi=J_c$。取最后一个路由层的 $A$，相位预测的周期内散布通过
+\begin{equation}
+B_\varphi=\sqrt{d/K'}\;\|AJ_d\|_2 .
+\label{eq:amplitude_constant}
+\end{equation}
+受到限制。对模型~\equref{eq:mult_model}，我们记 $\alpha_w=\alpha\sigma/(1+\alpha\mu)$ 为窗口坐标系下的耦合强度。
+
+\begin{theorem}[振幅包络]
+\label{thm:amplitude}
+(a) 对相位通路的每个参数取值和每个窗口，$\tfrac1{\sqrt H}\|J_cF\|<B_\varphi$。以相位预测作为预测的模型，$\hat{\tilde y}=F$，或如~\equref{eq:fusion}那样只与水平通路融合的模型，满足 $\tfrac1{\sqrt H}\|\Pi\hat{\tilde y}\|<(1-g_s)B_\varphi$，其中第一种情形取 $g_s=0$ 且 $\Pi=J_c$，因此有误差下界
+\begin{equation}
+\tfrac1H\|\hat y-y\|^2\ \ge\ \sigma^2\big(\Omega-(1-g_s)B_\varphi\big)_+^2 .
+\label{eq:amplitude_floor}
+\end{equation}
+(b) 在模型~\equref{eq:mult_model}（$1+\alpha\mu>0$）、无噪声且水平在预测时域上持续的前提下，未来的周期内形状为 $(1+\alpha_w\Lambda)\bar s$，其中 $\bar s$ 是窗口的平均周期内形状在预测时域上的平铺。因此 $\Omega=|1+\alpha_w\Lambda|\,\Omega_0$，其中 $\Omega_0=\|\Pi\bar s\|/\sqrt H$。
+\end{theorem}
+
+部分(a)表明，水平通路不会展宽振幅包络。它只接管其倾斜与曲率轮廓的周期内部分，这些部分被 $\Pi$ 从需求中扣除；融合预测中其余的周期内部分仍来自相位通路，被缩放 $1-g_s$ 倍，因而仍低于 $(1-g_s)B_\varphi$。部分(b)把\equref{eq:three_parts}推广到预测时域。在水平持续的前提下，每个未来周期都有归一化水平 $\Lambda$，因此无噪声的未来为
+\begin{equation}
+\tilde y=\underbrace{\Lambda\,\one_H}_{\text{水平}}+\underbrace{(1+\alpha_w\Lambda)}_{\text{振幅因子}}\,\underbrace{\bar s}_{\text{形状}} ,
+\label{eq:future_three_parts}
+\end{equation}
+其中 $\bar s=\bar a\,s$ 在预测时域上平铺，是\equref{eq:three_parts}的形状 $s$ 在窗口平均振幅 $\bar a=(1+\alpha\mu)/\sigma$ 下的版本。这就是\equref{eq:three_parts}在预测时域上的形态：一个水平 $\Lambda$、一个振幅 $(1+\alpha_w\Lambda)\,\bar a$，以及窗口自身的形状。振幅同样是低维的：相对窗口而言，未来振幅是一个由水平需求设定的数，因此在给定水平之后，它不再增加自己的维度。
+
+\fakeparagraph{耦合决定形式，包络决定下界}
+由定理\ref{thm:amplitude}，乘性序列的振幅需求随 $|1+\alpha_w\Lambda|$ 缩放，而包络是训练权重的常数。定理的两个部分因此扮演不同的角色。部分(b)确定振幅标记必须携带的内容——一个由水平驱动的因子——凡是耦合符号稳定之处皆然。部分(a)确定缺少它的模型在哪里付出下界：凡是需求超过 $(1-g_s)B_\varphi$ 之处，无论超出量来自耦合还是来自窗口自身的形状 $\Omega_0$，下界都随超出量增长。ETTh1 单独展示了第二种角色：其振幅包络约束生效，而水平包络几乎不生效，振幅标记在那里带来了 \sysplus 的增益（第\ref{sec:exp_ladder}节）。两个传感网数据集是耦合最强的基准（图\ref{fig:coupling}），它们展示了第一种角色：其相位通路发展出了最宽的包络，几乎没有任何窗口能超出，而振幅通路仍然在那里跟随水平——在 Electricity 的每个显著通道上符号一致，在 Traffic 上增益随水平需求增长（第\ref{sec:exp_mechanism}节与第\ref{sec:exp_ladder}节）。
+
+\fakeparagraph{振幅标记必须携带什么}
+水平标记无法替代振幅标记：水平通路的周期内输出始终位于 $U$ 中，因此在振幅包络之外它无能为力。一条提供该因子的通路必须在不移动任何周期均值的前提下用水平预测缩放周期形状，从而使定理\ref{thm:level_envelope}与定理\ref{thm:complement}仍然成立。对最终相位潜在表示在相位上做中心化调制可以同时做到这两点：
+
+\begin{proposition}[中心化调制]
+\label{prop:modulation}
+设最终相位潜在表示如~\equref{eq:la_modulation}那样被调制，$h'_p=h_p+(h_p-\bar h)\odot q$，其中 $q\in\mathbb R^d$ 为任意值，且可以依赖窗口。
+(a) 相位预测的每个未来周期均值（从而融合预测的每个未来周期均值）都保持不变，因此定理\ref{thm:level_envelope}与定理\ref{thm:complement}对调制后的相位通路仍然成立，振幅通路从不移动由水平通路设定的水平。
+(b) 均匀的 $q=q_1\one_d$ 把振幅包络乘以 $|1+q_1|$，而如果相位通路携带窗口的平均形状，则线性读取水平通路预测 $\hat\Lambda$ 的宽度一调制 $q=\alpha_w\hat\Lambda\,\one_d$ 产生周期内预测 $(1+\alpha_w\hat\Lambda)\,\Pi\bar s$，即把定理\ref{thm:amplitude}(b)的目标中的 $\Lambda$ 替换为其预测（附录\ref{app:proofs}）。
+\end{proposition}
+
+部分(b)的构造只需要其他两条通路已经提供的内容：来自相位通路的窗口平均形状，以及来自水平通路的水平的线性读出，外加一个学习到的耦合强度 $\alpha_w$。均匀的 $q_1$ 与水平无关地以 $|1+q_1|$ 缩放包络，因此 $q$ 的任何静态部分都会对所有窗口展宽包络，包括应对来自窗口自身形状 $\Omega_0$ 而非耦合的超出量。第\ref{sec:exp_mechanism}节在合成序列与训练后的模型上证实了这两个部分。
+
+\subsection{为什么三个低维标记就足够}
+\label{sec:theory_design}
+
+这些结果汇总成同一个解释（表\ref{tab:unified_view}）。窗口遵循一个低维形式\equref{eq:three_parts}，其水平项与振幅缩放的形状在基准上携带其能量的 78\% 到 93\%（图\ref{fig:token_energy}），而在乘性模型下，其未来遵循同一形式\equref{eq:future_three_parts}。该形式的每个因子由一个标记携带。这就是表\ref{tab:three_tokens}的三行内容，如今每一行背后都有了对应的结果。
+
+\emph{形状。}相位标记张成一个在共同形状变化下保持不变的子空间，并以坐标形式持有形状（定理\ref{thm:stability}）；前两个主成分解释了其大部分方差（第\ref{sec:mot_stability}节）。相位通路在一个小型潜空间中用少量路由器与一个共享预测器预测形状。
+
+\emph{水平。}它只能在水平包络之内通过相位通路到达预测（定理\ref{thm:level_envelope}），而在轮廓模型下，包络之外的部分是固定预测时域轮廓的少数几个系数（定理\ref{thm:complement}）：\equref{eq:future_three_parts}的偏移，再加上倾斜与曲率的扩展。在加性模型下，贝叶斯水平是周期均值的近期加权平均（引理\ref{lem:bayes}）。因此，水平通路读取周期均值，写入偏移、倾斜与曲率轮廓，并绕过 $\LN_2$，从而其水平不受 $\mathcal I_\varphi$ 约束。
+
+\emph{振幅。}它只能在振幅包络之内通过相位通路到达预测（定理\ref{thm:amplitude}(a)），而它必须满足的需求是窗口的形状被\equref{eq:future_three_parts}的单一因子缩放的结果，由水平驱动（定理\ref{thm:amplitude}(b)）。因此振幅通路是中心化的，从而不触及任何周期均值、进而水平，又由水平预测驱动，从而提供该因子（命题\ref{prop:modulation}）。
+
+
+
+\fakeparagraph{三条通路彼此成全}
+三个标记并非彼此独立的装置：每条通路只有在其他通路提供的内容之下才是充分的。秩一的水平通路之所以达到贝叶斯风险，是因为相位通路携带形状（定理\ref{thm:complement}(c)）。振幅通路之所以产生水平缩放的形状，是因为相位通路携带形状且水平通路预测水平（命题\ref{prop:modulation}(b)），而其中心化使水平通路设定的水平保持原样（命题\ref{prop:modulation}(a)）。反过来，相位通路被解除了水平负担，否则它会把形状所需的空间花在水平上（第\ref{sec:theory_level}节）。包络标出了这一分工生效的位置：在包络之外，仅通过相位通路预测的模型会失利，水平标记与振幅标记随即接管。在训练后的模型上，相位通路恰好在水平包络约束生效的数据集上把水平让渡给水平通路，而这些也正是水平标记增益最大的数据集（第\ref{sec:exp_envelopes}节与第\ref{sec:exp_ladder}节）。
+
+\fakeparagraph{极小的容量}
+由于每条通路携带的内容是低维的，每条通路只需要很少的容量。在加性模型下，采用固定轮廓的水平通路对任意门控、以最后一个值为锚点，精确实现定理\ref{thm:complement}(c)的秩一构造（附录\ref{app:proof_complement}），而宽度一的振幅通路实现命题\ref{prop:modulation}(b)。相应地，采用固定轮廓时，水平通路只有 105 个参数（第\ref{sec:complexity}节），相位通路在最大的基准 Traffic 上约 1.2K 个参数。\sysplus 的其余元素在不离开这一形式的前提下对其加以精化：锚点使水平通路对平移等变，并将其初始化为末值预测（第\ref{sec:ext_level}节与第\ref{sec:ext_init}节），而分开的水平与形状门控让融合预测能够以不同比例从两条通路取得其水平与形状。曲率轮廓扩展了季节模型的偏移与倾斜，第\ref{sec:exp_capacity}节证实这三条固定轮廓相对学习的解码器几乎没有损失。默认为二的振幅宽度则包含了宽度一的构造。在季节模型下，一个稳定子空间中的形状、少数几个轮廓系数与一个由水平驱动的因子就是预测所需的全部，而三条小型通路交付了它们。这就是理论对第\ref{sec:intro}节问题的回答：预测周期序列不需要大型网络，只需要覆盖窗口三个部分的标记。
+}
