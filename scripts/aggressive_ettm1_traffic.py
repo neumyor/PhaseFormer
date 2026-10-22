@@ -18,11 +18,17 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from scripts.vldbj_m1 import protocol
-from scripts.vldbj_m1.proto import run_job
-from scripts.vldbj_m1.run import E14_ROOT, commit, e14_sources, provenance, write_immutable
+# Import after adding ROOT to path
+vldbj_m1_path = ROOT / 'scripts' / 'vldbj_m1'
+if str(vldbj_m1_path.parent) not in sys.path:
+    sys.path.insert(0, str(vldbj_m1_path.parent))
+
+from vldbj_m1 import protocol
+from vldbj_m1.proto import run_job
+from vldbj_m1.run import E14_ROOT, commit, e14_sources, provenance, write_immutable
 
 # Target datasets and horizons
 DATASETS = ('ETTm1', 'Traffic')
