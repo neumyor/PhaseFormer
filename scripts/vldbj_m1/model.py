@@ -173,7 +173,7 @@ def construct(config, workers=0):
             or hp['lowrank_fusion_mode'] != 'components_static' or hp['weak_period_residual_rank'] != RANK):
         raise ValueError('Unregistered model protocol')
     model, args = legacy_construct(config, workers=workers)
-    if not model.use_revin or model.period_len != 24 or args.training_args.loss_func != 'huber':
+    if not model.use_revin or model.period_len not in (24, 32, 48, 64, 72, 96, 120) or args.training_args.loss_func != 'huber':
         raise AssertionError('Effective protocol changed')
     if not model.use_lowrank_interaction or model.lowrank_interaction_branch is None:
         raise AssertionError('The low-rank interaction branch was disabled by the config')
