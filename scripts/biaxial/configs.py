@@ -74,6 +74,12 @@ def e3(base):
         yield from screen_jobs('E3', name, {**base, **change})
 
 
+def e3_combo(base):
+    """Combinations of the one-axis scan winners (phase length halved or W_p fixed, with polynomial W_t)."""
+    yield from screen_jobs('E3', 'combo-phalf-poly', {**base, 'p': 'P/2', 'w_init': 'poly'})
+    yield from screen_jobs('E3', 'combo-identity-poly', {**base, 'wp': 'identity', 'w_init': 'poly'})
+
+
 E4_DECODERS = ('direct', 'basis_fixed', 'basis_learn', 'hybrid_fixed', 'hybrid_learn')
 E4_ANCHORS = ('last_cycle', 'last_cycle_mean', 'none')
 
@@ -103,12 +109,12 @@ def e7(models):
         yield from screen_jobs('E7', name, model)
 
 
-EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E4': e4, 'E5': e5, 'E7': e7}
+EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4': e4, 'E5': e5, 'E7': e7}
 
 
 def main():
     name = sys.argv[1]
-    if name in ('E3', 'E4', 'E5', 'E7'):
+    if name in ('E3', 'E3C', 'E4', 'E5', 'E7'):
         jobs = EXPERIMENTS[name](json.loads(sys.argv[2]))
     else:
         jobs = EXPERIMENTS[name]()
