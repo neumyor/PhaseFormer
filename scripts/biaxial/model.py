@@ -19,9 +19,6 @@ from torch import nn
 from torch.nn import functional as F
 
 
-CHUNK = 32768
-
-
 @dataclass
 class Cfg:
     seq_len: int = 720
@@ -58,27 +55,41 @@ def legendre_profiles(horizon: int, count: int = 3) -> torch.Tensor:
 
 
 class RouterAttn(nn.Module):
-    """Gather-distribute routing over T tokens, with position embedding, residual and LayerNorm."""
+    """Gather-distribute routing over T tokens, with position embedding, residual and LayerNorm.
+
+    Two multi-head attentions written with einsum: the routers query the tokens (gather), then
+    the tokens query the routers' summaries (distribute). The router queries do not depend on the
+    batch, so the gather stage never materializes per-sample queries.
+    """
 
     def __init__(self, d, tokens, routers, heads, dropout):
         super().__init__()
+        if d % heads:
+            raise ValueError('d must be divisible by the number of heads')
+        self.h, self.dropout = heads, dropout
         self.router = nn.Parameter(torch.empty(routers, d))
         nn.init.trunc_normal_(self.router, std=0.02)
         self.pos = nn.Parameter(torch.empty(tokens, d))
         nn.init.trunc_normal_(self.pos, std=0.02)
-        self.send = nn.MultiheadAttention(d, heads, dropout=dropout, batch_first=True)
-        self.recv = nn.MultiheadAttention(d, heads, dropout=dropout, batch_first=True)
+        self.q1, self.kv1, self.o1 = nn.Linear(d, d), nn.Linear(d, 2 * d), nn.Linear(d, d)
+        self.q2, self.kv2, self.o2 = nn.Linear(d, d), nn.Linear(d, 2 * d), nn.Linear(d, d)
         self.norm = nn.LayerNorm(d)
         self.drop = nn.Dropout(dropout)
 
+    def _attend(self, q, kv):
+        """q (N or 1, Tq, d), kv (N, Tk, 2d) -> (N, Tq, d)."""
+        k, v = kv.chunk(2, -1)
+        h = self.h
+        split = lambda t: t.reshape(t.shape[0], t.shape[1], h, -1)
+        q, k, v = split(q), split(k), split(v)
+        scores = torch.einsum('nqhe,nkhe->nhqk', q.expand(k.shape[0], -1, -1, -1), k) / math.sqrt(q.shape[-1])
+        weights = F.dropout(scores.softmax(-1), self.dropout, self.training)
+        return torch.einsum('nhqk,nkhe->nqhe', weights, v).reshape(k.shape[0], q.shape[1], -1)
+
     def forward(self, x):  # (N, T, d)
-        # The fused attention kernels fail beyond 65535 sequences, so large batches go in chunks.
-        if x.shape[0] > CHUNK:
-            return torch.cat([self.forward(part) for part in x.split(CHUNK)])
         x = x + self.pos
-        r = self.router.unsqueeze(0).expand(x.shape[0], -1, -1)
-        buf, _ = self.send(r, x, x, need_weights=False)
-        out, _ = self.recv(x, buf, buf, need_weights=False)
+        buf = self.o1(self._attend(self.q1(self.router).unsqueeze(0), self.kv1(x)))
+        out = self.o2(self._attend(self.q2(x), self.kv2(buf)))
         return self.norm(x + self.drop(out))
 
 

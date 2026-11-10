@@ -62,6 +62,9 @@ def main():
             append_jsonl(str(Path(args.results).with_suffix('.errors.jsonl')),
                          {'id': job['id'], 'error': traceback.format_exc()})
             continue
+        ckpt_dir = Path(args.results).parent / 'ckpt'
+        ckpt_dir.mkdir(exist_ok=True)
+        torch.save({k: v.cpu() for k, v in row.pop('state').items()}, ckpt_dir / (job['id'].replace('/', '__') + '.pt'))
         append_jsonl(args.results, row)
         print(job['id'], round(row['val_mse'], 5), round(row['test_mse'], 5), flush=True)
 

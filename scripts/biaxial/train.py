@@ -26,6 +26,7 @@ LOOKBACK = 720
 MAX_EPOCHS = 30
 PATIENCE = 8
 LR = 1e-3
+COMPILE_SAMPLES = 150_000   # training rows x channels above which the model is compiled
 CFG_FIELDS = {f.name for f in fields(Cfg)}
 
 
@@ -95,6 +96,8 @@ def run_job(job, splits, batch, device):
     horizon = job['horizon']
     cfg = build_cfg(job, train.shape[1])
     model = PhaseFormerPlus(cfg).to(device)
+    # Compiling pays off only when an epoch is long; short jobs finish before the compile time is repaid.
+    run = torch.compile(model) if train.shape[0] * train.shape[1] > COMPILE_SAMPLES and device.type == 'cuda' else model
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     n_train = train.shape[0] - LOOKBACK - horizon + 1
     best, best_state, bad, epochs = float('inf'), None, 0, 0
@@ -106,12 +109,12 @@ def run_job(job, splits, batch, device):
         order = torch.randperm(n_train, device=device, generator=generator)
         for start in range(0, n_train - batch + 1, batch):
             x, y = windows(train, order[start:start + batch], horizon)
-            loss = F.huber_loss(model(x), y)
+            loss = F.huber_loss(run(x), y)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
         epochs = epoch + 1
-        score = evaluate(model, val, horizon, batch)['huber']
+        score = evaluate(run, val, horizon, batch)['huber']
         if score < best:
             best, bad = score, 0
             best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
@@ -137,4 +140,5 @@ def run_job(job, splits, batch, device):
         'params': count_parameters(model), 'flops_per_channel': flops_per_channel(cfg),
         'epochs': epochs, 'train_seconds': train_seconds,
         'infer_seconds': time.monotonic() - t0,
+        'state': best_state,
     }
