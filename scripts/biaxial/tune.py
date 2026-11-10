@@ -225,6 +225,7 @@ class Tuner:
         deadline = datetime.strptime(self.args.deadline, '%Y-%m-%d %H:%M').timestamp()
         self.load()
         while time.time() < deadline:
+            self.load()
             self.collect()
             filled = True
             while filled and self.free_gpu() is not None:
