@@ -1,9 +1,9 @@
 {
  "ETTh1-96": {
   "ref": 0.346013,
-  "best": 0.35334564389005996,
-  "val": 0.6928457028745352,
-  "gap_pct": 2.119,
+  "best": 0.3528762216006241,
+  "val": 0.6978642161935886,
+  "gap_pct": 1.984,
   "config": {
    "period": 24,
    "k": 6,
@@ -12,11 +12,11 @@
    "routers": 8,
    "heads": 4,
    "dropout": 0.2,
-   "lr": 0.001,
+   "lr": 0.0002,
    "huber_delta": 1.0,
    "anchor": "last_cycle",
    "decoder": "direct",
-   "gate_init": 0.2,
+   "gate_init": 0.5,
    "arch": "interleaved",
    "phase_axis": "identity",
    "q": 1,
@@ -25,14 +25,14 @@
    "batch_scale": 0.5,
    "max_epochs": 50
   },
-  "id": "T/ETTh1-96/50c61ac26f",
-  "trials": 31
+  "id": "T/ETTh1-96/ded2d61244",
+  "trials": 59
  },
  "ETTh1-192": {
   "ref": 0.373951,
-  "best": 0.3852325570777772,
-  "val": 1.0102449545567866,
-  "gap_pct": 3.017,
+  "best": 0.3849335757125868,
+  "val": 0.9871102664943929,
+  "gap_pct": 2.937,
   "config": {
    "period": 24,
    "k": 6,
@@ -41,8 +41,8 @@
    "routers": 8,
    "heads": 2,
    "dropout": 0.1,
-   "lr": 0.001,
-   "huber_delta": 1.0,
+   "lr": 0.0005,
+   "huber_delta": 0.1,
    "anchor": "last_cycle",
    "decoder": "d0",
    "gate_init": 0.9,
@@ -54,24 +54,24 @@
    "batch_scale": 2.0,
    "max_epochs": 50
   },
-  "id": "T/ETTh1-192/9f34b4af7b",
-  "trials": 52
+  "id": "T/ETTh1-192/6ca8d9f295",
+  "trials": 82
  },
  "ETTh1-336": {
   "ref": 0.410565,
-  "best": 0.42288374261173034,
-  "val": 1.2507293828017454,
-  "gap_pct": 3.0,
+  "best": 0.4178614316244671,
+  "val": 1.2176444481893935,
+  "gap_pct": 1.777,
   "config": {
    "period": 8,
    "k": 6,
    "d": 16,
-   "layers": 1,
+   "layers": 2,
    "routers": 8,
-   "heads": 1,
+   "heads": 2,
    "dropout": 0.1,
    "lr": 0.002,
-   "huber_delta": 1.0,
+   "huber_delta": 3.0,
    "anchor": "last_cycle",
    "decoder": "direct",
    "gate_init": 0.9,
@@ -81,16 +81,16 @@
    "w_init": "poly",
    "mean_token": false,
    "batch_scale": 1.0,
-   "max_epochs": 30
+   "max_epochs": 80
   },
-  "id": "T/ETTh1-336/1b64e81ad8",
-  "trials": 37
+  "id": "T/ETTh1-336/219a1ea30a",
+  "trials": 150
  },
  "ETTh1-720": {
   "ref": 0.416434,
-  "best": 0.4204800010948965,
-  "val": 1.4923688235899017,
-  "gap_pct": 0.972,
+  "best": 0.41280628124012986,
+  "val": 1.5000700980540682,
+  "gap_pct": -0.871,
   "config": {
    "period": 24,
    "k": 8,
@@ -100,7 +100,7 @@
    "heads": 2,
    "dropout": 0.2,
    "lr": 0.001,
-   "huber_delta": 1.0,
+   "huber_delta": 0.1,
    "anchor": "none",
    "decoder": "direct",
    "gate_init": 0.5,
@@ -112,22 +112,22 @@
    "batch_scale": 0.5,
    "max_epochs": 80
   },
-  "id": "T/ETTh1-720/43076ea1c5",
-  "trials": 34
+  "id": "T/ETTh1-720/f21c32cb31",
+  "trials": 40
  },
  "ETTh2-96": {
   "ref": 0.269106,
-  "best": 0.27184502353033896,
-  "val": 0.2058811925767558,
-  "gap_pct": 1.018,
+  "best": 0.2690102950868479,
+  "val": 0.2069082310518322,
+  "gap_pct": -0.036,
   "config": {
    "period": 24,
    "k": 4,
    "d": 16,
    "layers": 1,
-   "routers": 8,
+   "routers": 16,
    "heads": 2,
-   "dropout": 0.1,
+   "dropout": 0.3,
    "lr": 0.001,
    "huber_delta": 0.1,
    "anchor": "last_cycle",
@@ -135,43 +135,43 @@
    "gate_init": 0.2,
    "arch": "interleaved",
    "phase_axis": "identity",
-   "q": 1,
+   "q": 2,
    "w_init": "random",
    "mean_token": false,
    "batch_scale": 1.0,
    "max_epochs": 30
   },
-  "id": "T/ETTh2-96/76ce0ebd70",
-  "trials": 34
+  "id": "T/ETTh2-96/eb111b9393",
+  "trials": 49
  },
  "ETTh2-192": {
   "ref": 0.332327,
-  "best": 0.3368484208311463,
-  "val": 0.27387663447864713,
-  "gap_pct": 1.361,
+  "best": 0.33478966962411066,
+  "val": 0.2772322872602114,
+  "gap_pct": 0.741,
   "config": {
-   "period": 24,
+   "period": 8,
    "k": 8,
    "d": 16,
-   "layers": 1,
+   "layers": 3,
    "routers": 4,
    "heads": 1,
    "dropout": 0.05,
    "lr": 0.0002,
-   "huber_delta": 0.3,
+   "huber_delta": 1.0,
    "anchor": "x_last",
    "decoder": "d0",
-   "gate_init": 0.2,
-   "arch": "dual",
+   "gate_init": 0.05,
+   "arch": "temporal",
    "phase_axis": "identity",
-   "q": 1,
+   "q": 2,
    "w_init": "poly",
    "mean_token": true,
-   "batch_scale": 0.5,
-   "max_epochs": 80
+   "batch_scale": 2.0,
+   "max_epochs": 30
   },
-  "id": "T/ETTh2-192/49f650234a",
-  "trials": 33
+  "id": "T/ETTh2-192/f9035dc77d",
+  "trials": 79
  },
  "ETTh2-336": {
   "ref": 0.358179,
@@ -204,18 +204,18 @@
  },
  "ETTh2-720": {
   "ref": 0.38175,
-  "best": 0.3910826501133,
-  "val": 0.6074249135100592,
-  "gap_pct": 2.445,
+  "best": 0.3874599456086615,
+  "val": 0.6196991872172091,
+  "gap_pct": 1.496,
   "config": {
    "period": 48,
    "k": 6,
    "d": 16,
    "layers": 1,
-   "routers": 8,
+   "routers": 2,
    "heads": 1,
    "dropout": 0.1,
-   "lr": 0.002,
+   "lr": 0.004,
    "huber_delta": 0.1,
    "anchor": "last_cycle",
    "decoder": "direct",
@@ -228,8 +228,8 @@
    "batch_scale": 1.0,
    "max_epochs": 30
   },
-  "id": "T/ETTh2-720/d16a0a44fc",
-  "trials": 38
+  "id": "T/ETTh2-720/3848c057aa",
+  "trials": 94
  },
  "ETTm1-96": {
   "ref": 0.289234,
@@ -262,21 +262,21 @@
  },
  "ETTm1-192": {
   "ref": 0.320457,
-  "best": 0.32713560982703405,
-  "val": 0.4880789793449288,
-  "gap_pct": 2.084,
+  "best": 0.32662690938248384,
+  "val": 0.48746380249319493,
+  "gap_pct": 1.925,
   "config": {
    "period": 48,
    "k": 8,
    "d": 16,
-   "layers": 1,
+   "layers": 3,
    "routers": 2,
    "heads": 1,
    "dropout": 0.05,
    "lr": 0.001,
    "huber_delta": 1.0,
    "anchor": "none",
-   "decoder": "d0",
+   "decoder": "direct",
    "gate_init": 0.2,
    "arch": "dual",
    "phase_axis": "identity",
@@ -286,17 +286,17 @@
    "batch_scale": 1.0,
    "max_epochs": 80
   },
-  "id": "T/ETTm1-192/a6b274af4c",
-  "trials": 24
+  "id": "T/ETTm1-192/024320f818",
+  "trials": 43
  },
  "ETTm1-336": {
   "ref": 0.359901,
-  "best": 0.3611790042486597,
-  "val": 0.6339527862965425,
-  "gap_pct": 0.355,
+  "best": 0.3607133636136339,
+  "val": 0.6334142180424919,
+  "gap_pct": 0.226,
   "config": {
    "period": 24,
-   "k": 8,
+   "k": 12,
    "d": 16,
    "layers": 1,
    "routers": 8,
@@ -315,13 +315,13 @@
    "batch_scale": 1.0,
    "max_epochs": 80
   },
-  "id": "T/ETTm1-336/858064c1fc",
-  "trials": 5
+  "id": "T/ETTm1-336/2738acdd09",
+  "trials": 8
  },
  "ETTm1-720": {
   "ref": 0.403651,
-  "best": 0.41153339768749364,
-  "val": 0.9295321350247001,
+  "best": 0.41153339309503234,
+  "val": 0.9295321403347335,
   "gap_pct": 1.953,
   "config": {
    "period": 48,
@@ -342,45 +342,45 @@
    "w_init": "random",
    "mean_token": false,
    "batch_scale": 1.0,
-   "max_epochs": 30
+   "max_epochs": 80
   },
-  "id": "T/ETTm1-720/3cfd8daeec",
-  "trials": 19
+  "id": "T/ETTm1-720/4af02660b9",
+  "trials": 27
  },
  "ETTm2-96": {
   "ref": 0.159714,
-  "best": 0.16145215470827878,
-  "val": 0.1146896706052754,
-  "gap_pct": 1.088,
+  "best": 0.16048401966434822,
+  "val": 0.11497129153519654,
+  "gap_pct": 0.482,
   "config": {
    "period": 48,
    "k": 12,
    "d": 16,
    "layers": 1,
-   "routers": 8,
-   "heads": 2,
+   "routers": 16,
+   "heads": 1,
    "dropout": 0.1,
    "lr": 0.001,
-   "huber_delta": 1.0,
+   "huber_delta": 0.3,
    "anchor": "last_cycle",
    "decoder": "direct",
-   "gate_init": 0.5,
+   "gate_init": 0.2,
    "arch": "interleaved",
    "phase_axis": "identity",
-   "q": 1,
+   "q": 2,
    "w_init": "random",
    "mean_token": false,
    "batch_scale": 1.0,
-   "max_epochs": 30
+   "max_epochs": 50
   },
-  "id": "T/ETTm2-96/85fd2be390",
-  "trials": 23
+  "id": "T/ETTm2-96/43b27ff2be",
+  "trials": 41
  },
  "ETTm2-192": {
   "ref": 0.214604,
-  "best": 0.21758381884642686,
-  "val": 0.1531741115082835,
-  "gap_pct": 1.389,
+  "best": 0.21653820219494047,
+  "val": 0.1528426272090576,
+  "gap_pct": 0.901,
   "config": {
    "period": 48,
    "k": 8,
@@ -389,7 +389,7 @@
    "routers": 8,
    "heads": 1,
    "dropout": 0.1,
-   "lr": 0.001,
+   "lr": 0.0002,
    "huber_delta": 1.0,
    "anchor": "none",
    "decoder": "direct",
@@ -402,27 +402,27 @@
    "batch_scale": 1.0,
    "max_epochs": 30
   },
-  "id": "T/ETTm2-192/4407910ebf",
-  "trials": 22
+  "id": "T/ETTm2-192/7242ef9ba4",
+  "trials": 50
  },
  "ETTm2-336": {
   "ref": 0.264652,
-  "best": 0.27103597464031365,
-  "val": 0.19461695004943053,
-  "gap_pct": 2.412,
+  "best": 0.27062250652698777,
+  "val": 0.19432819512122573,
+  "gap_pct": 2.256,
   "config": {
    "period": 48,
    "k": 8,
    "d": 16,
    "layers": 1,
    "routers": 8,
-   "heads": 1,
+   "heads": 2,
    "dropout": 0.05,
    "lr": 0.002,
    "huber_delta": 1.0,
    "anchor": "none",
    "decoder": "direct",
-   "gate_init": 0.9,
+   "gate_init": 0.2,
    "arch": "interleaved",
    "phase_axis": "identity",
    "q": 1,
@@ -431,14 +431,14 @@
    "batch_scale": 0.5,
    "max_epochs": 80
   },
-  "id": "T/ETTm2-336/ed6b55439d",
-  "trials": 35
+  "id": "T/ETTm2-336/b59968fba5",
+  "trials": 73
  },
  "ETTm2-720": {
   "ref": 0.344699,
-  "best": 0.34685977405331464,
-  "val": 0.2650492319315121,
-  "gap_pct": 0.627,
+  "best": 0.3468575923471638,
+  "val": 0.26469398732519717,
+  "gap_pct": 0.626,
   "config": {
    "period": 48,
    "k": 16,
@@ -446,10 +446,10 @@
    "layers": 1,
    "routers": 2,
    "heads": 1,
-   "dropout": 0.1,
+   "dropout": 0.2,
    "lr": 0.001,
    "huber_delta": 1.0,
-   "anchor": "none",
+   "anchor": "x_last",
    "decoder": "d0",
    "gate_init": 0.2,
    "arch": "interleaved",
@@ -460,8 +460,37 @@
    "batch_scale": 0.5,
    "max_epochs": 30
   },
-  "id": "T/ETTm2-720/8848e0aa68",
-  "trials": 22
+  "id": "T/ETTm2-720/486eb01e9c",
+  "trials": 47
+ },
+ "Electricity-96": {
+  "ref": 0.128706,
+  "best": 0.12852667549247276,
+  "val": 0.10912717565239383,
+  "gap_pct": -0.139,
+  "config": {
+   "period": 24,
+   "k": 8,
+   "d": 16,
+   "layers": 1,
+   "routers": 8,
+   "heads": 1,
+   "dropout": 0.1,
+   "lr": 0.001,
+   "huber_delta": 1.0,
+   "anchor": "last_cycle",
+   "decoder": "direct",
+   "gate_init": 0.2,
+   "arch": "interleaved",
+   "phase_axis": "identity",
+   "q": 1,
+   "w_init": "random",
+   "mean_token": false,
+   "batch_scale": 1.0,
+   "max_epochs": 30
+  },
+  "id": "I0/Electricity-96-s2021",
+  "trials": 1
  },
  "Electricity-192": {
   "ref": 0.143702,
@@ -490,6 +519,35 @@
    "max_epochs": 30
   },
   "id": "I0/Electricity-192-s2021",
+  "trials": 3
+ },
+ "Electricity-336": {
+  "ref": 0.16285,
+  "best": 0.1609533287344679,
+  "val": 0.1372158506048968,
+  "gap_pct": -1.165,
+  "config": {
+   "period": 24,
+   "k": 8,
+   "d": 16,
+   "layers": 1,
+   "routers": 8,
+   "heads": 1,
+   "dropout": 0.1,
+   "lr": 0.001,
+   "huber_delta": 1.0,
+   "anchor": "last_cycle",
+   "decoder": "direct",
+   "gate_init": 0.2,
+   "arch": "interleaved",
+   "phase_axis": "identity",
+   "q": 1,
+   "w_init": "random",
+   "mean_token": false,
+   "batch_scale": 1.0,
+   "max_epochs": 30
+  },
+  "id": "I0/Electricity-336-s2021",
   "trials": 1
  },
  "Electricity-720": {
@@ -519,7 +577,7 @@
    "max_epochs": 30
   },
   "id": "I0/Electricity-720-s2021",
-  "trials": 1
+  "trials": 3
  },
  "Traffic-192": {
   "ref": 0.368099,
@@ -549,6 +607,35 @@
   },
   "id": "I0/Traffic-192-s2021",
   "trials": 2
+ },
+ "Traffic-336": {
+  "ref": 0.377956,
+  "best": 0.4095283336826034,
+  "val": 0.3465581682728739,
+  "gap_pct": 8.353,
+  "config": {
+   "period": 12,
+   "k": 8,
+   "d": 16,
+   "layers": 1,
+   "routers": 8,
+   "heads": 1,
+   "dropout": 0.1,
+   "lr": 0.001,
+   "huber_delta": 1.0,
+   "anchor": "last_cycle",
+   "decoder": "direct",
+   "gate_init": 0.2,
+   "arch": "interleaved",
+   "phase_axis": "identity",
+   "q": 1,
+   "w_init": "random",
+   "mean_token": false,
+   "batch_scale": 1.0,
+   "max_epochs": 30
+  },
+  "id": "I0/Traffic-336-s2021",
+  "trials": 1
  },
  "Traffic-720": {
   "ref": 0.422953,
@@ -635,7 +722,7 @@
    "max_epochs": 30
   },
   "id": "T/Weather-192/061156c6a4",
-  "trials": 6
+  "trials": 5
  },
  "Weather-336": {
   "ref": 0.235616,
@@ -664,7 +751,7 @@
    "max_epochs": 80
   },
   "id": "T/Weather-336/4458238d3d",
-  "trials": 6
+  "trials": 7
  },
  "Weather-720": {
   "ref": 0.310738,
