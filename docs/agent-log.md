@@ -7644,3 +7644,10 @@ throughout; two of its commits swept in earlier parts of this batch.
 - 命令：`python -m scripts.biaxial.configs E0 E1 > runs/e0e1.jsonl`；`python -m scripts.biaxial.launch runs/e0e1.jsonl runs/e0e1_results.jsonl --gpus 4,5 --per-gpu 6`（服务器目录 `~/niuyiming/PhaseFormer_biaxial_20261110`，conda 环境 `time`）。
 - 可比性：本阶段所有数值来自同一重新实现的训练协议，选择依据为验证集 MSE，不使用测试集选择；与论文主表数值不直接比较。
 - 已知问题：注意力内核在序列数超过 65535 时报错，已在 `RouterAttn` 中分块处理。
+
+## 2026-11-10 双轴阶段 E0 到 E7 完成（ETTh1、ETTm1，预测长度 96、336，单种子）
+
+- 结果与结论：`docs/PhaseFormer_biaxial_stage_results.md`；原始数据 `research_runs/biaxial_stage_20261110/`。
+- 修改：筛选集收窄；新增 `scripts/biaxial/diagnostics.py`；worker 在编译前绑定 GPU（否则在被占满的 GPU 0 上建立上下文导致显存不足）。
+- 最终模型：交替双轴 1 层，d=16，k=8，W_p 恒等，直接解码，最后周期参考；测试比金标准平均高 1.3%。
+- 可比性：所有数值为同一重新实现的协议，选择只用验证集，不使用测试集选择。

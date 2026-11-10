@@ -38,7 +38,7 @@ def load_model(row, channels, ckpt_dir, device):
 
 
 @torch.inference_mode()
-def predict(model, data, horizon, batch=256):
+def predict(model, data, horizon, batch=64):
     xs, ys, ps = [], [], []
     n = data.shape[0] - LOOKBACK - horizon + 1
     for start in range(0, n, batch):
