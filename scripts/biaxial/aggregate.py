@@ -1,72 +1,71 @@
-"""Summarize a results file and apply the screening rule.
+"""Summarize a results file against the original PhaseFormer (golden) results.
 
-    python -m scripts.biaxial.aggregate results.jsonl --baseline E0/M0 [--groups E1/B0 E1/B2]
+    python -m scripts.biaxial.aggregate results.jsonl [--groups G ...] [--golden docs/PhaseFormer_gold_standard.md]
 
-Per group: validation MSE per (dataset, horizon), the mean relative change against
-the baseline, the number of datasets where the group is not worse than the baseline
-(dataset value = mean over its horizons), parameters, FLOPs per channel and training
-time. A group beats the baseline when its mean relative change is at most -1% and it
-is not worse on at least 3 of the 4 datasets. Test MSE is printed for reference only.
+Per group, over the cells present in the golden table: mean validation MSE (the selection
+criterion between candidates), mean test MSE, the mean relative gap of the test MSE to the
+golden test MSE, parameters, FLOPs per channel and training time. Groups are sorted by
+validation MSE. Only cells of the screening set (ETTh1 and ETTm1, horizons 96 and 336,
+seed 2021) are used.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 
-THRESHOLD = -0.01
-MIN_DATASETS = 3
+CELLS = {(d, h) for d in ('ETTh1', 'ETTm1') for h in (96, 336)}
+DEFAULT_GOLDEN = Path(__file__).resolve().parents[2] / 'docs/PhaseFormer_gold_standard.md'
 
 
-def load(path):
-    rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
-    table = defaultdict(dict)
-    for r in rows:
-        table[r['group']][(r['dataset'], r['horizon'], r['seed'])] = r
+def golden(path):
+    table = {}
+    for line in Path(path).read_text().splitlines():
+        m = re.match(r'\|\s*(\w+)\s*\|\s*(\d+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|', line)
+        if m:
+            table[(m.group(1), int(m.group(2)))] = float(m.group(3))
     return table
 
 
-def summarize(table, group, baseline):
-    cells = table[group]
-    base = table[baseline]
-    shared = sorted(set(cells) & set(base))
-    rel = {k: cells[k]['val_mse'] / base[k]['val_mse'] - 1 for k in shared}
-    by_dataset = defaultdict(list)
-    for (dataset, _, _), value in rel.items():
-        by_dataset[dataset].append(value)
-    dataset_mean = {d: sum(v) / len(v) for d, v in by_dataset.items()}
-    mean_rel = sum(rel.values()) / len(rel) if rel else float('nan')
-    not_worse = sum(v <= 0 for v in dataset_mean.values())
-    any_row = next(iter(cells.values()))
+def load(paths):
+    table = defaultdict(dict)
+    for path in paths:
+        for line in Path(path).read_text().splitlines():
+            if line.strip():
+                r = json.loads(line)
+                if (r['dataset'], r['horizon']) in CELLS and r['seed'] == 2021:
+                    table[r['group']][(r['dataset'], r['horizon'])] = r
+    return table
+
+
+def summarize(cells, gold):
+    rows = list(cells.values())
+    gap = [r['test_mse'] / gold[(r['dataset'], r['horizon'])] - 1 for r in rows]
     return {
-        'group': group, 'cells': len(cells), 'mean_rel': mean_rel, 'not_worse': not_worse,
-        'datasets': len(dataset_mean), 'beats': mean_rel <= THRESHOLD and not_worse >= MIN_DATASETS,
-        'params': any_row['params'], 'flops': any_row['flops_per_channel'],
-        'train_s': sum(r['train_seconds'] for r in cells.values()) / len(cells),
-        'val': sum(r['val_mse'] for r in cells.values()) / len(cells),
-        'test': sum(r['test_mse'] for r in cells.values()) / len(cells),
-        'rel': rel,
+        'cells': len(rows), 'val': sum(r['val_mse'] for r in rows) / len(rows),
+        'test': sum(r['test_mse'] for r in rows) / len(rows), 'gap': sum(gap) / len(gap),
+        'params': rows[0]['params'], 'flops': rows[0]['flops_per_channel'],
+        'seconds': sum(r['train_seconds'] for r in rows) / len(rows),
     }
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('results')
-    parser.add_argument('--baseline', required=True)
+    parser.add_argument('results', nargs='+')
     parser.add_argument('--groups', nargs='*')
+    parser.add_argument('--golden', default=str(DEFAULT_GOLDEN))
     args = parser.parse_args()
+    gold = golden(args.golden)
     table = load(args.results)
-    groups = args.groups or sorted(g for g in table if g != args.baseline)
-    print('| group | runs | mean val MSE | rel. val vs baseline | datasets not worse | beats | params | MFLOPs/ch | s/run | mean test MSE |')
-    print('|---|---:|---:|---:|---:|:---:|---:|---:|---:|---:|')
-    for group in [args.baseline] + groups:
-        if group not in table:
-            continue
-        s = summarize(table, group, args.baseline)
-        print(f"| {group} | {s['cells']} | {s['val']:.4f} | {s['mean_rel'] * 100:+.2f}% | "
-              f"{s['not_worse']}/{s['datasets']} | {'yes' if s['beats'] else 'no'} | {s['params']} | "
-              f"{s['flops'] / 1e6:.2f} | {s['train_s']:.0f} | {s['test']:.4f} |")
+    groups = args.groups or sorted(table)
+    stats = {g: summarize(table[g], gold) for g in groups if g in table}
+    print('| group | cells | mean val MSE | mean test MSE | test gap to golden | params | MFLOPs/ch | s/run |')
+    print('|---|---:|---:|---:|---:|---:|---:|---:|')
+    for g, s in sorted(stats.items(), key=lambda kv: kv[1]['val']):
+        print(f"| {g} | {s['cells']} | {s['val']:.4f} | {s['test']:.4f} | {s['gap'] * 100:+.2f}% | "
+              f"{s['params']} | {s['flops'] / 1e6:.2f} | {s['seconds']:.0f} |")
 
 
 if __name__ == '__main__':
