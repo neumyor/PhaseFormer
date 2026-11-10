@@ -46,6 +46,7 @@ def main():
     import torch
     from scripts.biaxial.train import load_splits, run_job
     device = torch.device(f'cuda:{args.gpu}')
+    torch.cuda.set_device(device)   # compiled kernels otherwise create a context on GPU 0
     torch.set_num_threads(1)
     jobs = read_jsonl(args.jobs)[args.shard::args.shards]
     cache = {}
