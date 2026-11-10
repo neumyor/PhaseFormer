@@ -41,6 +41,9 @@ class Cfg:
     wp: str = 'learn'           # learn | identity
     gate_init: float = 0.2
     use_trend: bool = True
+    w_init: str = 'random'      # random | poly: first rows of W_t are polynomials over the cycle index
+    decoder: str = 'd0'         # d0 phase+trend+gates | direct | basis_fixed | basis_learn | hybrid_fixed | hybrid_learn
+    anchor: str = 'x_last'      # x_last | last_cycle | last_cycle_mean | none (reference of the direct decoders)
 
 
 def legendre_profiles(horizon: int, count: int = 3) -> torch.Tensor:
@@ -135,7 +138,11 @@ class BiAxialInput(nn.Module):
     def __init__(self, c: Cfg, K: int, P: int):
         super().__init__()
         self.k, self.p, self.q = c.k, (c.p or P), c.q
-        self.Wt = nn.Parameter(torch.randn(self.q, self.k, K) / math.sqrt(K))
+        wt = torch.randn(self.q, self.k, K) / math.sqrt(K)
+        if c.w_init == 'poly':
+            basis = legendre_profiles(K, min(self.k, 4)).T / math.sqrt(K)   # (<=4, K), unit RMS rows
+            wt[:, :basis.shape[0]] = basis
+        self.Wt = nn.Parameter(wt)
         if c.wp == 'identity':
             if self.p != P:
                 raise ValueError('identity W_p requires p = P')
@@ -200,6 +207,13 @@ class PhaseNetBiAxial(nn.Module):
             self.fuse = nn.Parameter(torch.zeros(c.d))
         elif c.arch == 'interleaved':
             self.stack = nn.ModuleList(InterleavedBlock(c, k, p) for _ in range(c.layers))
+        elif c.arch == 'hybrid':
+            # first half: independent branches; second half: interleaved blocks
+            half = c.layers // 2
+            self.stack = nn.ModuleList(AxialBlock(c, 'temporal', k, p) for _ in range(half))
+            self.stack2 = nn.ModuleList(AxialBlock(c, 'phase', k, p) for _ in range(half))
+            self.fuse = nn.Parameter(torch.zeros(c.d))
+            self.tail = nn.ModuleList(InterleavedBlock(c, k, p) for _ in range(c.layers - half))
         else:
             raise ValueError(c.arch)
         self.expand = nn.Linear(p, P) if p != P else None
@@ -208,12 +222,15 @@ class PhaseNetBiAxial(nn.Module):
     def forward(self, X):
         h0 = self.inp(X)
         h = h0
-        if self.arch == 'dual':
+        if self.arch in ('dual', 'hybrid'):
             t, s = h0, h0
             for bt, bp in zip(self.stack, self.stack2):
                 t, s = bt(t), bp(s)
             g = torch.sigmoid(self.fuse)
             h = g * t + (1 - g) * s
+            if self.arch == 'hybrid':
+                for block in self.tail:
+                    h = block(h)
         else:
             for block in self.stack:
                 h = block(h)
@@ -221,6 +238,7 @@ class PhaseNetBiAxial(nn.Module):
             h = self.expand(h.transpose(2, 3)).transpose(2, 3)   # (N, k, P, d)
         N, k, P, d = h.shape
         z = h.permute(0, 2, 1, 3).reshape(N, P, k * d)
+        self.pooled = z.mean(1)                                   # (N, k*d), read by the basis decoders
         return self.predictor(z), h0.mean((1, 2))
 
 
@@ -252,7 +270,19 @@ class PhaseFormerPlus(nn.Module):
         self.c, self.K, self.P, self.Kp = c, c.seq_len // P, P, c.pred_len // P
         self.phase = (PhaseNetM0(c, self.K, P, self.Kp) if c.arch == 'm0'
                       else PhaseNetBiAxial(c, self.K, P, self.Kp))
-        if c.use_trend:
+        if c.decoder != 'd0':
+            if c.arch == 'm0':
+                raise ValueError('direct and basis decoders need a bi-axial phase network')
+            if c.decoder != 'direct':
+                self.coef = nn.Linear(c.k * c.d, 3)
+                nn.init.zeros_(self.coef.weight)
+                nn.init.zeros_(self.coef.bias)
+                profiles = legendre_profiles(c.pred_len)
+                if c.decoder.endswith('learn'):
+                    self.profiles = nn.Parameter(profiles)
+                else:
+                    self.register_buffer('profiles', profiles, persistent=False)
+        elif c.use_trend:
             self.trend = TrendPathway(c.seq_len, c.pred_len, P, c.d)
             logit = math.log(c.gate_init / (1 - c.gate_init))
             self.omega = nn.Parameter(torch.full((c.channels,), logit))
@@ -266,7 +296,9 @@ class PhaseFormerPlus(nn.Module):
         X = xn.view(B * C, self.K, self.P)
         F_p, zbar = self.phase(X)                                   # (N, P, K')
         phase = F_p.transpose(1, 2).reshape(B * C, -1)              # (N, H), cycle-major
-        if self.c.use_trend:
+        if self.c.decoder != 'd0':
+            out = self._decode(phase, X, xn)
+        elif self.c.use_trend:
             trend = self.trend(xn, zbar)
             gl = torch.sigmoid(self.omega).repeat(B).unsqueeze(-1)
             gs = torch.sigmoid(self.omega + self.omega_delta).repeat(B).unsqueeze(-1)
@@ -275,6 +307,30 @@ class PhaseFormerPlus(nn.Module):
             out = phase
         out = out.view(B, C, -1).permute(0, 2, 1)
         return out * sd + mu
+
+    def _anchor(self, X, xn):
+        N = X.shape[0]
+        mode = self.c.anchor
+        if mode == 'x_last':
+            return xn[:, -1:].expand(N, self.c.pred_len)
+        if mode == 'last_cycle':
+            return X[:, -1, :].repeat(1, self.Kp)
+        if mode == 'last_cycle_mean':
+            return X[:, -1, :].mean(-1, keepdim=True).expand(N, self.c.pred_len)
+        if mode == 'none':
+            return torch.zeros(N, self.c.pred_len, device=X.device)
+        raise ValueError(mode)
+
+    def _decode(self, phase, X, xn):
+        ref = self._anchor(X, xn)
+        kind = self.c.decoder
+        if kind == 'direct':
+            return ref + phase
+        trend = self.coef(self.phase.pooled) @ self.profiles.T
+        if kind.startswith('basis'):                              # periodic part only
+            cyc = phase.view(phase.shape[0], self.Kp, self.P)
+            phase = (cyc - cyc.mean(-1, keepdim=True)).reshape_as(phase)
+        return ref + trend + phase
 
     def _fuse(self, phase, trend, gl, gs):
         def split(v):
