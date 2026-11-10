@@ -30,7 +30,8 @@ MAX_IN_FLIGHT_PER_SETTING = 3
 HEAVY = {'Traffic': 64, 'Electricity': 32, 'Weather': 8}
 DEFAULT_BATCH = {'Traffic': 8, 'Electricity': 16}
 # Batch scale from which a heavy dataset's trial finishes in reasonable time; their search keeps it fixed.
-FAST_SCALE = {'Traffic': 16.0, 'Electricity': 16.0, 'Weather': 4.0}
+FAST_SCALE = {'Traffic': 1.0, 'Electricity': 2.0, 'Weather': 2.0}
+FAST_EPOCHS = {'Traffic': 8, 'Electricity': 10}   # fewer epochs keep a heavy trial under about 1.5 hours
 
 SPACE = {
     'period': [8, 12, 16, 24, 30, 36, 48],
@@ -255,11 +256,12 @@ class Tuner:
         if setting[0] in FAST_SCALE:
             if setting in self.best_fast:
                 return self.best_fast[setting]['config']
-            return {**self.best[setting]['config'], 'batch_scale': FAST_SCALE[setting[0]], 'lr': 2e-3}
+            return {**self.best[setting]['config'], 'batch_scale': FAST_SCALE[setting[0]], 'lr': 2e-3,
+                    'max_epochs': FAST_EPOCHS.get(setting[0], 30)}
         return self.best[setting]['config']
 
     def frozen(self, setting):
-        return ('batch_scale',) if setting[0] in FAST_SCALE else ()
+        return ('batch_scale', 'max_epochs') if setting[0] in FAST_SCALE else ()
 
     def launch(self, setting):
         tried = self.tried.setdefault(setting, set())
