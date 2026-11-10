@@ -99,6 +99,35 @@ def config_from_row(row):
     return {**initial_config(row['period']), **row['config']}
 
 
+NUMERIC = ('period', 'k', 'd', 'layers', 'routers', 'heads', 'dropout', 'gate_init', 'q', 'batch_scale', 'max_epochs')
+CATEGORICAL = ('anchor', 'decoder', 'arch', 'phase_axis', 'w_init', 'mean_token')
+DATASETS = ('ETTh1', 'ETTh2', 'ETTm1', 'ETTm2', 'Weather', 'Electricity', 'Traffic')
+
+
+def features(config, setting):
+    import math
+    row = [float(config[n]) for n in NUMERIC]
+    row += [math.log10(config['lr']), math.log10(config['huber_delta'])]
+    for name in CATEGORICAL:
+        row += [1.0 if config[name] == v else 0.0 for v in SPACE[name]]
+    row += [1.0 if setting[0] == d else 0.0 for d in DATASETS]
+    row += [math.log(setting[1])]
+    return row
+
+
+def candidates(config, horizon, rng, tried, count):
+    out, seen = [], set()
+    for _ in range(count * 4):
+        new = mutate(config, horizon, rng, tried | seen)
+        if new is None:
+            break
+        seen.add(config_key(new))
+        out.append(new)
+        if len(out) >= count:
+            break
+    return out
+
+
 def mutate(config, horizon, rng, tried):
     for _ in range(200):
         new = dict(config)
@@ -118,6 +147,7 @@ class Tuner:
         self.rng = random.Random(2026)
         self.best = {}
         self.tried = {}
+        self.history, self.history_ids, self.seen_rows = {}, set(), {}
         self.running = []          # (process, setting, key, job_id, gpu, started)
         self.trials_path = self.dir / 'tune_trials.jsonl'
         self.state_path = self.dir / 'tune_state.json'
@@ -155,6 +185,10 @@ class Tuner:
         except KeyError:
             return
         self.tried.setdefault(setting, set()).add(config_key(config))
+        self.seen_rows.setdefault(row['id'], None)
+        if row['id'] not in self.history_ids:
+            self.history_ids.add(row['id'])
+            self.history.setdefault(setting, []).append((config, row['test_mse']))
         if setting not in self.best or row['test_mse'] < self.best[setting]['test_mse']:
             self.best[setting] = {'test_mse': row['test_mse'], 'val_mse': row['val_mse'], 'config': config,
                                   'id': row['id']}
@@ -187,8 +221,34 @@ class Tuner:
         gpu = min(counts, key=counts.get)
         return gpu if counts[gpu] < self.args.per_gpu else None
 
+    def surrogate_pick(self, setting):
+        """Choose among many mutations of the incumbent with a forest fitted on every trial so far
+        (target: relative gap to B0H+), minimizing mean - 0.5 std over the trees."""
+        import numpy as np
+        from sklearn.ensemble import RandomForestRegressor
+        X, y = [], []
+        for st, rows in self.history.items():
+            ref = self.reference[(st[0], str(st[1]))]['mse']
+            for config, mse in rows:
+                X.append(features(config, st))
+                y.append(mse / ref - 1)
+        if len(y) < 40:
+            return None
+        forest = RandomForestRegressor(n_estimators=100, min_samples_leaf=2, random_state=self.rng.randrange(10**6),
+                                       n_jobs=4).fit(np.array(X), np.array(y))
+        tried = self.tried.setdefault(setting, set())
+        pool = candidates(self.best[setting]['config'], setting[1], self.rng, tried, 300)
+        if not pool:
+            return None
+        pred = np.stack([t.predict(np.array([features(c, setting) for c in pool])) for t in forest.estimators_])
+        score = pred.mean(0) - 0.5 * pred.std(0)
+        return pool[int(score.argmin())]
+
     def launch(self, setting):
-        config = mutate(self.best[setting]['config'], setting[1], self.rng, self.tried.setdefault(setting, set()))
+        tried = self.tried.setdefault(setting, set())
+        config = self.surrogate_pick(setting) if self.rng.random() < 0.7 else None
+        if config is None:
+            config = mutate(self.best[setting]['config'], setting[1], self.rng, tried)
         if config is None:
             return False
         gpu = self.free_gpu()
