@@ -1,11 +1,12 @@
 """Efficiency figures as PowerPoint slides: Fig. 1(b) and the FLOPs/parameter bars.
 
-Data: the parameter and FLOPs table of the electronic supplement
+Data: the parameter and FLOPs table of the electronic supplement for the baselines
 (Table params_flops_details; FLOPs per forecast in MFLOPs, input 720, horizon 96)
 and the Traffic MAE averaged over the four horizons (Table main_results).
-PhaseFormer+ is drawn with the 1.156K parameters of its phase pathway plus at
-most about 2.1K for the level and amplitude pathways; the latter add less than
-0.25% of the FLOPs, so its FLOPs are those of the phase pathway.
+PhaseFormer+ is measured on the selected Traffic-96 and Electricity-96 runs with
+scripts/vldbj_m1/efficiency.py (docs/PhaseFormer_VLDBJ_b0hp_best_settings.csv): it is drawn
+with the parameters of its phase pathway (37,154 and 3,666) plus those of its trend pathway
+and gates; the trend pathway adds 0.07% to 0.8% of the FLOPs, so its FLOPs are the total.
 
     python3 make_efficiency.py        # writes efficiency_plot.pptx, efficiency_bars.pptx
     sh export.sh efficiency_plot 243; sh export.sh efficiency_bars 495
@@ -33,9 +34,9 @@ LIGHT = {PHASE: RGBColor(0xBF, 0xE3, 0xF4), PATCH: RGBColor(0xC9, 0xE6, 0xC1),
          OTHER: RGBColor(0xDD, 0xDD, 0xDD)}
 INK = RGBColor(0x22, 0x22, 0x22)
 GRID = RGBColor(0xE2, 0xE2, 0xE2)
-# at most about 2.1K (Traffic) and 1.0K (Electricity) parameters for the level and
-# amplitude pathways: 105 (fixed profiles) + at most 262 (amplitude) + 2C per-channel gates
-EXTRA = {'Traffic': 2100, 'Electricity': 1000}
+# parameters of the trend pathway and the 2C per-channel gates:
+# 573 + 1724 (Traffic), 681 + 642 (Electricity)
+EXTRA = {'Traffic': 2297, 'Electricity': 1323}
 TICK = 13.5
 
 
@@ -48,7 +49,7 @@ def text(x, y, w, h, lines, size=SMALL, align=PP_ALIGN.CENTER, color=None, spaci
 
 # name: (category, params Traffic, MFLOPs Traffic, params Electricity, MFLOPs Electricity, Traffic MAE)
 MODELS = {
-    'PhaseFormer+': ('phase', 1156, 13.9, 1156, 5.18, 0.252),
+    'PhaseFormer+': ('phase', 37154, 1164.2, 3666, 46.15, 0.249),
     'PatchTST': ('patch', 7.589e6, 498577.49, 1.373e6, 16122.93, 0.266),
     'iTransformer': ('other', 6.731e6, 11652.34, 5.153e6, 3347.97, 0.290),
     'Crossformer': ('patch', 22.954e6, 259209.90, 13.537e6, 96564.63, 0.282),
@@ -242,7 +243,7 @@ def bars():
     LY = 3.40
     items = [('Phase-based', PHASE, None, 1.1), ('Patch-based', PATCH, None, 1.1),
              ('Phase and patch', PHASE, PATCH, 1.45), ('Others', OTHER, None, 0.75),
-             ('PhaseFormer+ level and amplitude pathways (≤2.1K / ≤1.0K)', LIGHT[PHASE], RED, 5.1)]
+             ('PhaseFormer+ trend pathway and gates (2.3K / 1.3K)', LIGHT[PHASE], RED, 4.6)]
     total = sum(w for *_, w in items) + 0.3 * (len(items) - 1)
     x = (12.2 - total) / 2
     for name, col, edge, w in items:

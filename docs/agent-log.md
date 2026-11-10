@@ -7526,3 +7526,113 @@ throughout; two of its commits swept in earlier parts of this batch.
   checkpoints existed, no retraining; `~/niuyiming/vldbj_pf_envelope.log`, results
   `research_runs/vldbj_pf_envelope/`. B: `~/niuyiming/vldbj_staticq.log`, results
   `research_runs/vldbj_staticq/` (GPUs 0,1 x 4 slots; the other GPUs are used by another user).
+
+## 2026-10-28 — level（趋势）分支说明文档
+
+- `docs/PhaseFormer_VLDBJ_level_branch.md`：面向新人的独立文档，含记号表、张量形状、
+  前向公式（RevIN → 锚点中心化 → 自适应平均池化 → rank-3 编码 → 多项式/线性解码 → 门控混合）、
+  参数与超参表、相位与 level 两条通路的边界、代码行号对应、最小示例（B=1, L=16, C=2, P=4, H=4）
+  与复现命令、六条常见误解。
+- 文中所有形状与参数量都按实际类实例化核对过：`ProfileLevelHead` 的
+  encoder (3,30)、mix (3,3)、profiles (96,3)；ETTh1-96 的 m1 分支总参数 119 = level 105 + 调制 14。
+
+## 2026-10-29 — B0H+ 最优配置落盘
+
+- `docs/PhaseFormer_VLDBJ_b0hp_best_settings.md`：7 数据集 × 4 horizon 共 28 个 setting 上
+  B0H+ 当前最好结果的完整参数（周期、gate_init、扩展与 backbone 学习率倍数、head、门控共享、
+  level 输入类型、token 取 LayerNorm 前/后、是否零初始化、门控/读出分组学习率），以及由来
+  来源、与 b0 和 LA 的差、与 Golden 的差、可信度分级。
+- `docs/PhaseFormer_VLDBJ_b0hp_best_settings.csv`：同内容机器可读版本，含每行 config_hash 与 run 目录。
+- 28 行中 25 行来自 182 个 B0H+ 调参任务，3 行来自后续三 seed 小实验（ETTh1-96、ETTh2-720、
+  Weather-720），文件第 4 节逐条标注了这三行的三 seed 配对差与可信度。
+- 整体：七数据集平均 B0H+ 0.2979、b0 0.2979、LA 0.2981；相对 Golden −1.51%。两者口径相同
+  （均为逐 setting 取最优），应表述为打平。
+
+## 2026-10-30 — Traffic B0H+ 联合 MSE/MAE 搜索与配置更新
+
+- 新增 `scripts/traffic_b0hp_search.py`：Traffic 四个 horizon 的专项搜索，目标 J = (MSE/LA_MSE +
+  MAE/LA_MAE)/2，seed 2021，测试集选优。搜索空间除周期、gate_init、门控/读出/backbone 三组学习率、
+  head、门控共享外，加入小实验引入的 raw token、token 零初始化、level 路径 detach 三个开关，
+  以及新 head `H<n>L/G`（池化因子 6/8/12/48，线性或 Legendre 解码）。
+- 阶段：A 单因素 + 门控×读出网格（245）、B 改进因素组合与局部细化（94）、C 随机搜索（143）、
+  D 坐标精修。A、B 全部完成，C 完成 2 个后按用户要求暂停（`STOP`），D 未开始。
+- 结果（各 horizon 按 J 选，seed 2021，test）：96 0.35509/0.23283（J 0.9948）、192 0.36810/0.24247
+  （J 0.9881）、336 0.37796/0.24910（J 0.9912）、720 0.42295/0.27177（J 0.9979）。
+- `docs/PhaseFormer_VLDBJ_b0hp_best_settings.{md,csv}`：Traffic 四行替换为上述配置（含 gate_mult、
+  readout_mult、run 目录、config_hash）。七数据集平均 MSE 0.2979→0.2974，MAE 0.3211→0.3205；
+  相对 Golden MSE −1.67%、MAE −0.35%；相对 LA MSE −0.24%、MAE +0.16%。
+- 注意：192 的 gate 初值 0.0001、336 用 raw token、720 用 H8G；96 与 336 另有 MSE 或 MAE 更低的 cell，
+  本轮取的是 J 最优的一格。
+
+## 2026-10-30 — level 分支低维性的 PCA 证据
+
+- 目的：为 VLDBJ 的 level 分支补一组与 ICLR phase-token PCA（`*_pca_cycle_phase.png`）同风格的证据。
+- 数据侧（测试段、H=720、24 步池化、30 维、seed 2021 窗口）：level token 前 3 个主成分解释 81%–97%，
+  达 90% 需 1–8 个；同维逐点 value token 只有 69%–89%，四个数据集在 12 维内到不了 90%。
+  未来 level 需求（未来周期均值 − 最后观测值）PC1 解释 59%–93%，前 3 个 75%–97%。
+- 模型侧（各数据集 S2 头最好 b0 格）：三个固定 Legendre 方向解释需求方差 66%–96%，最优三维 80%–97%，
+  最优六维 85%–98%；S2 的输出方向恒等于这三个固定 profile，与训练无关。
+- 试过但弃用的设想：把"可由历史线性预测的部分"做主成分分析——3 维解释 87%–99%，但 ETTh2 / ETTm2 上
+  线性预测 R² 中位数为负，"可预测部分"几乎是噪声，结论不成立。
+- 秩扫描（训练侧）：r ∈ {1,2,3,4,6}，固定各 setting 最好 b0 配置。Weather-720 已完成：r3 最好，
+  r1 +0.57%、r2 +0.76%、r4 +1.04%、r6 +1.66%。ETTh1-720 r1 +0.57%；其余因两卡被占 OOM，已在 GPU 2/7 续跑。
+- 产物：`docs/PhaseFormer_VLDBJ_level_pca_report.md`；图写入 `PhaseFormer-overleaf/figures/`
+  （`{dataset}_pca_level_token.png`、`level_pca_token_grid.png`、`level_pca_summary.png`）。
+- 脚本：`scripts/level_pca_extract.py`、`level_pca_curves.py`、`level_pca_model.py`、
+  `plot_level_pca.py`、`plot_level_pca_summary.py`、`level_rank_sweep.py`（均在 `scripts/vldbj_m1` 之外，
+  冻结协议哈希不变）。
+
+## 2026-10-30 — 秩扫描暂停
+
+- level 秩扫描 19/20 完成，Traffic-720 r6 按用户要求暂停（控制器与在跑任务已终止，残缺目录已删）。
+  结果与读法见 `docs/PhaseFormer_VLDBJ_level_pca_report.md` 第 6 节：ETTh2、Weather 秩 3 最低且两侧变差
+  0.6%–1.7%，Traffic 四档持平（±0.2%），ETTh1 r6 低 0.91% 但次序非单调、在单 seed 噪声内。
+
+## 2026-10-30 — B0H+ 趋势成分评估 + 三种趋势分支实验
+
+- 新增 `scripts/component_mse/b0hp.py`：把 B0H+ 的全量测试预测写入既有的成分分解 dump
+  （`~/niuyiming/component_mse_20261023`）。12 个 setting（6 数据集 × 96/192）× 3 seed；
+  seed 2021 按 run 目录匹配原 job 复用产生记录数字的那次训练，seed 2022/2023 在同一配置上重训。
+  每次导出都断言导出 MSE 与 result.json 记录值一致。`--export --skip-existing` 可续跑。
+- `docs/PhaseFormer_VLDBJ_trend_b0hp.md`：趋势（cycle-level）12 setting 平均 PhaseFormer 0.1500、
+  LA 0.1465、B0H+ 0.1465；B0H+ 相对 PhaseFormer −2.35%，相对最好的基线 FITS（0.1510）−3.00%，
+  逐 setting 取最好基线（0.1502）则 −2.48%；相对 LA 持平。B0H+ 在 10/12 个 setting 的趋势误差低于 PhaseFormer，
+  例外 ETTh1-192 与 ETTm1-96；Weather 的趋势误差 FITS 更低，但总 MSE 仍是 B0H+ 更好。
+- 新增 `scripts/trend_branch/branches.py` 与 `run.py`：在原版 PhaseFormer 旁加零初始化趋势分支，
+  分别仿造 N-BEATS 可解释趋势栈（二次多项式基 + backcast 双重残差）、ETSFormer（可学习 α/β 的 Holt level+growth +
+  阻尼 γ）、BasisFormer（可学习平滑基 + 交叉注意力系数）。12 setting × {pf, nb, ets, basis}，seed 2021，E14 协议。
+  设计梳理见 `docs/PhaseFormer_VLDBJ_trend_models_design.md`，结果见 `docs/PhaseFormer_VLDBJ_trend_branches.md`。
+- 分支结果（总 MSE / 趋势 MSE，12 setting 平均）：PF 0.2931/0.1503；PF+NB 0.3079/0.1579（+5.06%/+5.07%）；
+  PF+ETS 0.2926/0.1503（−0.16%/+0.02%）；PF+Basis 0.2921/0.1498（−0.35%/−0.35%）；
+  B0H+ 0.2821/0.1442（−3.75%/−4.06%）。NB 在多 setting 上不稳定（ETTh1-192 +17%），
+  诊断显示其验证集平均 |delta| 达 0.32，多项式趋势外推过强；Basis 是唯一稳定正收益的分支。
+- 过程中两处失败已处理：B0H+ Traffic-96 seed 2022 首次训练在 fit 后无输出退出，换新目录重训；
+  Weather-96 ETS 因共用 GPU 显存不足（CUBLAS_STATUS_ALLOC_FAILED）失败，换卡重跑。
+
+## 2026-10-30（续）— 趋势分支调参，以及实验一按新口径重出
+
+- `docs/PhaseFormer_VLDBJ_trend_b0hp.md` 按用户要求重出：只保留 PhaseFormer、B0H+ 与四个基线，
+  去掉 PhaseFormer-LA；`scripts/component_mse/b0hp.py --report --models` 支持选择模型子集。
+  12 setting 平均趋势 MSE：PhaseFormer 0.1500、B0H+ 0.1465、FITS 0.1510、SparseTSF 0.1562、DLinear 0.1672、CycleNet 0.1585。
+- 新增 `scripts/trend_branch/tune.py`：分支独立学习率倍率（`branch_lr_mult`）与架构选项（NB 的 degree），
+  候选 cells 为默认配置加 `ets_lr03`、`basis_lr03`、`nb_d2_lr01`、`nb_d1_lr03`，第二轮针对 NB 增加
+  `nb_d2_lr003`、`nb_d1_lr01`；共 72 个 run（12 setting × 6 cell），全部完成。
+- 选优口径：每个 setting 的分支配置在候选 cells 中按**验证集趋势 MSE**选出，测试集只报告选中结果；
+  选中配置的测试预测导出为 `T-NB`/`T-ETS`/`T-Basis`（`~/niuyiming/component_mse_20261023`）。
+- 结果（12 setting 平均）：趋势 MSE PF 0.1503、T-ETS 0.1499（−0.26%）、T-NB 0.1497（−0.41%）、
+  T-Basis 0.1494（−0.57%）、B0H+ 0.1442（−4.05%）；总 MSE 0.2931 / 0.2923 / 0.2909 / 0.2915 / 0.2821。
+  三个分支都优于原版 PhaseFormer、都明显不如 B0H+。
+- N-BEATS 分支对学习率敏感：默认 lr 时 ETTh1-192 退化 17%；branch lr×0.03（二次）或×0.1（一次）后聚合从 +5.07% 变为 −0.41%。
+- 文档：`docs/PhaseFormer_VLDBJ_trend_branches_tuned.md`（最终版），`docs/PhaseFormer_VLDBJ_trend_branches.md`（未调参的第一轮）。
+
+## 2026-11-02 — PhaseFormer+ 四个组件消融
+
+- 在 28 个记录的 PhaseFormer+ 配置上训练三个消融臂（仅 trend、单标量门控、linear 替换 trend 分支），
+  84 个 run；另外补了 28 个"仅 trend、读出速率 1.0"对照和 4 个基线复跑。`scripts/b0hp_ablation.py`。
+- 基线复跑：ETTh1-192 / ETTh2-720 / Weather-720 / Traffic-720 在当前代码下重训，四个结果与记录值逐位相同，
+  确认 10-29 旧修订与当前修订在这些配置上行为一致（差异只是未启用的 token 零初始化 / level_zero 开关）。
+- 结果（28 setting 平均 MSE / MAE）：PhaseFormer 0.3025/0.3217；PhaseFormer+ 0.2974/0.3205；
+  仅 trend 0.5893/0.4805（lr=1 对照 0.5720/0.4743）；简单门控 0.3016/0.3226；linear 0.3049/0.3239。
+- 结论：去掉 phase 通路模型崩溃（trend 是补充而非替代）；双分量门控相对单标量门控在七个数据集上一致更好
+  （+0.7%–3.0%）；rank-3 池化分支优于参数量上千倍的线性层（+2.5%）。
+- 文档：`docs/PhaseFormer_VLDBJ_b0hp_ablation.md`（含 28 行 MSE/MAE 明细与限制）。

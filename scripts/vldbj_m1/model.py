@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import math
+import types
 
 import torch
 from torch import nn
@@ -101,10 +102,67 @@ class ProfileLevelHead(nn.Module):
         return self.decode_latent(*self.encode_latent(x))
 
 
+LEVEL_INPUTS = ('history', 'phase_token', 'history+token')
+
+
+def _history_encode(head, x):
+    """The b0 path: pooled cycle means of the centered history."""
+    last = x[:, -1:, :]
+    centered = (x - last).permute(0, 2, 1).contiguous()
+    return head.encoder(F.adaptive_avg_pool1d(centered, head.pooled_len)), last
+
+
+def _phase_token_encode(head, x):
+    """Level latent from the slot-mean of the embedded phase tokens (B0H)."""
+    return head.encoder(head.phase_tokens.mean(2)), x[:, -1:, :]
+
+
+def _history_plus_token_encode(head, x):
+    """Level latent from the pooled cycle means concatenated with the slot-mean
+    phase token (B0H+). The decoder, anchor and fusion are shared."""
+    last = x[:, -1:, :]
+    centered = (x - last).permute(0, 2, 1).contiguous()
+    pooled = F.adaptive_avg_pool1d(centered, head.pooled_len)
+    tokens = head.phase_tokens.mean(2)
+    return head.encoder(torch.cat([pooled, tokens], -1)), last
+
+
+_ENCODERS = {'history': _history_encode, 'phase_token': _phase_token_encode,
+             'history+token': _history_plus_token_encode}
+
+
+def _attach_level_input(model, head, level_input, token_source='norm'):
+    """Rewire the level encoder's input, keeping the decoder and anchor unchanged.
+
+    ``model.embedding`` maps each phase slot's values across cycles to a D-dim
+    token, (B, C, slots, D); its output is captured by a forward hook and kept in
+    the graph, so the level path also trains the shared embedding.
+    ``history+token`` concatenates the pooled cycle means with the slot-mean token.
+
+    ``token_source='norm'`` reads the embedding output, which is LayerNorm'd over
+    the D axis (so every token has zero mean and unit scale); ``'raw'`` reads the
+    linear projection before that normalization, which keeps the token amplitude.
+    """
+    if level_input == 'history':
+        return
+    width = head.pooled_len + model.latent_dim if level_input == 'history+token' else model.latent_dim
+    head.encoder = nn.Linear(width, head.rank)
+    head.encode_latent = types.MethodType(_ENCODERS[level_input], head)
+    source = model.embedding if token_source == 'norm' else model.embedding.projection
+    source.register_forward_hook(
+        lambda module, inputs, output: setattr(head, 'phase_tokens', output))
+
+
 TUNE_FIELDS = ('communication_width', 'extension_lr_mult', 'gate_init')
+# Periods the protocol accepts. 24 is the registered default; the rest are the
+# cycle lengths explored by the ETTm1, Traffic and ETT period searches. The
+# branch fusion still requires the horizon to be a whole number of cycles.
+PERIOD_WHITELIST = (8, 12, 16, 20, 24, 28, 30, 32, 36, 40, 45, 48, 56, 60, 64,
+                    72, 80, 84, 90, 96, 112, 120, 144, 168, 180, 240, 336, 360, 720)
 
 
-def prepare_config(source, arm, head, shared_gate, variant=None, static_q=False):
+def prepare_config(source, arm, head, shared_gate, variant=None, static_q=False, level_zero=False,
+                   level_input='history', token_source='norm', token_zero_init=False):
     """Derive one registered config from an E14 phase-only source config.
 
     ``variant`` tunes only the extension (width, gate init, extension learning
@@ -112,10 +170,14 @@ def prepare_config(source, arm, head, shared_gate, variant=None, static_q=False)
     variant is recovered exactly with ``variant=None``. ``static_q`` (m1 only)
     replaces the state-driven modulation vector by a learned per-channel
     constant; the default adds nothing to the config, so registered hashes and
-    the default path are unchanged.
+    the default path are unchanged. ``level_zero`` keeps the cycle-mean encoder
+    and its modulation but zeroes the level readout, i.e. the level pathway of
+    the ablation study. ``level_input`` selects the encoder's input: ``history``
+    (pooled cycle means, the b0 path), ``phase_token`` (slot-mean embedded token,
+    B0H), or ``history+token`` (both concatenated, B0H+).
     """
-    if arm not in ARMS or head not in HEADS:
-        raise ValueError((arm, head))
+    if arm not in ARMS or head not in HEADS or level_input not in _ENCODERS:
+        raise ValueError((arm, head, level_input))
     if static_q and arm != 'm1':
         raise ValueError('static_q applies to the m1 arm only')
     variant = dict(variant or {})
@@ -155,6 +217,14 @@ def prepare_config(source, arm, head, shared_gate, variant=None, static_q=False)
                        'source_config_hash': source.get('config_hash')}
     if static_q:
         cfg['vldbj_m1']['static_q'] = True
+    if level_zero:
+        cfg['vldbj_m1']['level_zero'] = True
+    if level_input != 'history':
+        cfg['vldbj_m1']['level_input'] = level_input
+        if token_source != 'norm':
+            cfg['vldbj_m1']['token_source'] = token_source
+        if token_zero_init:
+            cfg['vldbj_m1']['token_zero_init'] = True
     return cfg
 
 
@@ -173,7 +243,7 @@ def construct(config, workers=0):
             or hp['lowrank_fusion_mode'] != 'components_static' or hp['weak_period_residual_rank'] != RANK):
         raise ValueError('Unregistered model protocol')
     model, args = legacy_construct(config, workers=workers)
-    if not model.use_revin or model.period_len not in (24, 32, 48, 64, 72, 96, 120) or args.training_args.loss_func != 'huber':
+    if not model.use_revin or model.period_len not in PERIOD_WHITELIST or args.training_args.loss_func != 'huber':
         raise AssertionError('Effective protocol changed')
     if not model.use_lowrank_interaction or model.lowrank_interaction_branch is None:
         raise AssertionError('The low-rank interaction branch was disabled by the config')
@@ -185,6 +255,8 @@ def construct(config, workers=0):
     if HEADS[protocol['head']]['decoder'] == 'legendre':
         branch.lowrank_head = ProfileLevelHead(model.seq_len, model.pred_len,
             pool_factor=HEADS[protocol['head']]['pool_factor'], rank=RANK)
+    _attach_level_input(model, branch.lowrank_head, protocol.get('level_input', 'history'),
+                        protocol.get('token_source', 'norm'))
     if protocol['shared_gate']:
         _share_gates(model)
     if protocol['arm'] == 'm1':
@@ -193,31 +265,51 @@ def construct(config, workers=0):
         if protocol.get('static_q'):
             model.lowrank_interaction_branch.communication = StaticCommunication(
                 model.enc_in, model.latent_dim)
+    if protocol.get('level_zero'):
+        model.lowrank_interaction_branch.level_readout = 'zero'
     return model, args
 
 
-def paired_models(source, arm, head, shared_gate, variant=None, static_q=False):
+def paired_models(source, arm, head, shared_gate, variant=None, static_q=False, level_zero=False,
+                  level_input='history', token_source='norm', token_zero_init=False):
     """Build ``arm`` with every b0 parameter copied from a same-seed b0.
 
     A ``gate_init`` variant re-initializes only the two fusion logits after the
     copy; every other parameter stays exactly the b0 parameter of the same seed.
+    With ``level_input='phase_token'`` the level encoder reads D token features
+    instead of the pooled history, so its weight keeps its own initialization.
+    ``history+token`` widens the encoder; ``token_zero_init`` then keeps the b0
+    weight on the pooled columns and starts the token columns at zero, so the
+    model begins exactly where b0 does.
     """
     import pytorch_lightning as pl
     pl.seed_everything(source['seed'], workers=True)
     reference, args = construct(prepare_config(source, 'b0', head, shared_gate))
     common = {k: v.detach().clone() for k, v in reference.state_dict().items()}
-    config = prepare_config(source, arm, head, shared_gate, variant, static_q)
+    config = prepare_config(source, arm, head, shared_gate, variant, static_q, level_zero,
+                            level_input, token_source, token_zero_init)
     pl.seed_everything(source['seed'], workers=True)
     model, _ = construct(config)
     current = model.state_dict()
     if not set(common) <= set(current):
         raise AssertionError('Baseline parameters removed')
+    enc_w = 'lowrank_interaction_branch.lowrank_head.encoder.weight'
+    enc_b = 'lowrank_interaction_branch.lowrank_head.encoder.bias'
+    own_init = set() if level_input == 'history' else {enc_w, enc_b}
     for name, value in common.items():
+        if name in own_init:
+            continue
         if current[name].shape != value.shape:
             raise AssertionError(name)
         current[name].copy_(value)
+    if token_zero_init and level_input == 'history+token':
+        weight = current[enc_w]
+        pooled = common[enc_w].shape[1]
+        weight.zero_()
+        weight[:, :pooled].copy_(common[enc_w])
+        current[enc_b].copy_(common[enc_b])
     gate_init = float(config['vldbj_m1']['gate_init'])
-    if arm == 'm1' and gate_init != 0.2:
+    if gate_init != 0.2:
         logit = float(torch.logit(torch.tensor(gate_init)))
         model.lowrank_interaction_gate.data.fill_(logit)
         model.lowrank_dynamic_fusion.shape_bias_delta.data.zero_()

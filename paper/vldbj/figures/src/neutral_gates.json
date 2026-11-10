@@ -1,0 +1,114 @@
+[
+ {
+  "dataset": "ETTh1",
+  "horizon": 720,
+  "level": 0.44467565417289734,
+  "shape": 0.34542277455329895,
+  "test_mse": 0.43194421203715944,
+  "channels": 1
+ },
+ {
+  "dataset": "ETTh1",
+  "horizon": 96,
+  "level": 0.4360346496105194,
+  "shape": 0.3616424798965454,
+  "test_mse": 0.3627112691989666,
+  "channels": 1
+ },
+ {
+  "dataset": "ETTh2",
+  "horizon": 720,
+  "level": 0.5072847008705139,
+  "shape": 0.5458444952964783,
+  "test_mse": 0.40963584131207625,
+  "channels": 1
+ },
+ {
+  "dataset": "ETTh2",
+  "horizon": 96,
+  "level": 0.495606005191803,
+  "shape": 0.5376781821250916,
+  "test_mse": 0.2817273458497304,
+  "channels": 1
+ },
+ {
+  "dataset": "ETTm1",
+  "horizon": 720,
+  "level": 0.3441947400569916,
+  "shape": 0.35567566752433777,
+  "test_mse": 0.4466719250922717,
+  "channels": 1
+ },
+ {
+  "dataset": "ETTm1",
+  "horizon": 96,
+  "level": 0.5177285671234131,
+  "shape": 0.49694445729255676,
+  "test_mse": 0.3316531734261846,
+  "channels": 1
+ },
+ {
+  "dataset": "ETTm2",
+  "horizon": 720,
+  "level": 0.5225045680999756,
+  "shape": 0.5644157528877258,
+  "test_mse": 0.3687604817188811,
+  "channels": 1
+ },
+ {
+  "dataset": "ETTm2",
+  "horizon": 96,
+  "level": 0.5268924236297607,
+  "shape": 0.461990088224411,
+  "test_mse": 0.1710122765567609,
+  "channels": 1
+ },
+ {
+  "dataset": "Electricity",
+  "horizon": 720,
+  "level": 0.3860227167606354,
+  "shape": 0.25282520055770874,
+  "test_mse": 0.25413349518318884,
+  "channels": 1
+ },
+ {
+  "dataset": "Electricity",
+  "horizon": 96,
+  "level": 0.424553781747818,
+  "shape": 0.31653279066085815,
+  "test_mse": 0.15536478296938314,
+  "channels": 1
+ },
+ {
+  "dataset": "Traffic",
+  "horizon": 720,
+  "level": 0.38135915994644165,
+  "shape": 0.23431682586669922,
+  "test_mse": 0.5804103394444218,
+  "channels": 1
+ },
+ {
+  "dataset": "Traffic",
+  "horizon": 96,
+  "level": 0.4134388566017151,
+  "shape": 0.2829475402832031,
+  "test_mse": 0.4305466785106262,
+  "channels": 1
+ },
+ {
+  "dataset": "Weather",
+  "horizon": 720,
+  "level": 0.4252348244190216,
+  "shape": 0.6529706120491028,
+  "test_mse": 0.32563072473841315,
+  "channels": 1
+ },
+ {
+  "dataset": "Weather",
+  "horizon": 96,
+  "level": 0.5603486895561218,
+  "shape": 0.5079877376556396,
+  "test_mse": 0.16156010692303516,
+  "channels": 1
+ }
+]

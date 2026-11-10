@@ -96,7 +96,10 @@ class IsolatedBranch(nn.Module):
                 'original_norm': original_norm.detach(),
                 'relative_update_norm': (update_norm / original_norm.clamp_min(1e-8)).detach(),
             }
-        return self.lowrank_head.decode_latent(updated_trend, last), {
+        readout = self.lowrank_head.decode_latent(updated_trend, last)
+        if getattr(self, 'level_readout', 'native') == 'zero':
+            readout = torch.zeros_like(readout)
+        return readout, {
             'updated_phase_latent': updated_phase,
             'rank_latent': updated_trend,
             'phase_attention': None,

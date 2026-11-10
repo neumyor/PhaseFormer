@@ -123,7 +123,10 @@ def build_model(job):
     if job['init'] == 'warm':
         variant = dict(variant or {}, gate_init=WARM_GATE_INIT)
     model, reference, args, cfg, common_hash = paired_models(
-        src, job['arm'], job['head'], job['shared_gate'], variant, bool(job.get('static_q', False)))
+        src, job['arm'], job['head'], job['shared_gate'], variant,
+        bool(job.get('static_q', False)), bool(job.get('level_zero', False)),
+        job.get('level_input', 'history'), job.get('token_source', 'norm'),
+        bool(job.get('token_zero_init', False)))
     del reference
     return model, args, cfg, common_hash
 
