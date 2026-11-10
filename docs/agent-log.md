@@ -7636,3 +7636,11 @@ throughout; two of its commits swept in earlier parts of this batch.
 - 结论：去掉 phase 通路模型崩溃（trend 是补充而非替代）；双分量门控相对单标量门控在七个数据集上一致更好
   （+0.7%–3.0%）；rank-3 池化分支优于参数量上千倍的线性层（+2.5%）。
 - 文档：`docs/PhaseFormer_VLDBJ_b0hp_ablation.md`（含 28 行 MSE/MAE 明细与限制）。
+
+## 2026-11-10 双轴 PhaseFormer 阶段启动
+
+- 任务：按 `docs/PhaseFormer_biaxial_stage_plan.md` 实现双轴模型并在远程 GPU 运行 E0、E1。
+- 修改：新增 `scripts/biaxial/`（model、train、worker、launch、configs、aggregate）。
+- 命令：`python -m scripts.biaxial.configs E0 E1 > runs/e0e1.jsonl`；`python -m scripts.biaxial.launch runs/e0e1.jsonl runs/e0e1_results.jsonl --gpus 4,5 --per-gpu 6`（服务器目录 `~/niuyiming/PhaseFormer_biaxial_20261110`，conda 环境 `time`）。
+- 可比性：本阶段所有数值来自同一重新实现的训练协议，选择依据为验证集 MSE，不使用测试集选择；与论文主表数值不直接比较。
+- 已知问题：注意力内核在序列数超过 65535 时报错，已在 `RouterAttn` 中分块处理。

@@ -1,0 +1,290 @@
+"""PhaseFormer+ (M0) and the bi-axial variants, one channel-independent model.
+
+Shapes (N = batch x channels, K input cycles, P phases, K' output cycles):
+  window x (N, L), folded X (N, K, P), forecast (N, H), H = K' * P.
+
+Both families share the normalization, the trend pathway, and the two-gate
+fusion. They differ in how the phase forecast F is produced:
+  M0       embed each phase token (K -> d), stacked cross-phase routing, predictor.
+  Bi-axial X -> W_t X W_p (k x p x q) -> embed -> (k, p, d) tokens -> routers along
+           the cycle axis and/or the phase axis -> readout over (k, d) per phase.
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+
+CHUNK = 32768
+
+
+@dataclass
+class Cfg:
+    seq_len: int = 720
+    pred_len: int = 96
+    channels: int = 7
+    period: int = 24
+    arch: str = 'm0'            # m0 | phase | temporal | dual | interleaved
+    layers: int = 3
+    d: int = 4
+    routers: int = 8
+    heads: int = 1
+    dropout: float = 0.1
+    # bi-axial input representation
+    k: int = 8
+    p: int = 24                 # 0 means p = period
+    q: int = 1
+    wp: str = 'learn'           # learn | identity
+    gate_init: float = 0.2
+    use_trend: bool = True
+
+
+def legendre_profiles(horizon: int, count: int = 3) -> torch.Tensor:
+    tau = torch.linspace(-1.0, 1.0, horizon, dtype=torch.float64)
+    columns = []
+    for power in range(count):
+        v = tau ** power
+        for u in columns:
+            v = v - (v @ u) / (u @ u) * u
+        columns.append(v / v.square().mean().sqrt())
+    return torch.stack(columns, -1).float()
+
+
+class RouterAttn(nn.Module):
+    """Gather-distribute routing over T tokens, with position embedding, residual and LayerNorm."""
+
+    def __init__(self, d, tokens, routers, heads, dropout):
+        super().__init__()
+        self.router = nn.Parameter(torch.empty(routers, d))
+        nn.init.trunc_normal_(self.router, std=0.02)
+        self.pos = nn.Parameter(torch.empty(tokens, d))
+        nn.init.trunc_normal_(self.pos, std=0.02)
+        self.send = nn.MultiheadAttention(d, heads, dropout=dropout, batch_first=True)
+        self.recv = nn.MultiheadAttention(d, heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(d)
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x):  # (N, T, d)
+        # The fused attention kernels fail beyond 65535 sequences, so large batches go in chunks.
+        if x.shape[0] > CHUNK:
+            return torch.cat([self.forward(part) for part in x.split(CHUNK)])
+        x = x + self.pos
+        r = self.router.unsqueeze(0).expand(x.shape[0], -1, -1)
+        buf, _ = self.send(r, x, x, need_weights=False)
+        out, _ = self.recv(x, buf, buf, need_weights=False)
+        return self.norm(x + self.drop(out))
+
+
+class FFN(nn.Module):
+    def __init__(self, d, dropout):
+        super().__init__()
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+        self.norm = nn.LayerNorm(d)
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x):
+        return self.norm(x + self.drop(self.mlp(x)))
+
+
+class RouterLayer(nn.Module):
+    """One routing layer of the original PhaseFormer: routing, then the FFN."""
+
+    def __init__(self, d, tokens, routers, heads, dropout):
+        super().__init__()
+        self.attn = RouterAttn(d, tokens, routers, heads, dropout)
+        self.ffn = FFN(d, dropout)
+
+    def forward(self, x):
+        return self.ffn(self.attn(x))
+
+
+class PhaseNetM0(nn.Module):
+    """Original phase pathway: per-phase embedding, chained routing layers, shared predictor."""
+
+    def __init__(self, c: Cfg, K: int, P: int, Kp: int):
+        super().__init__()
+        self.embed = nn.Linear(K, c.d)
+        self.embed_norm = nn.LayerNorm(c.d)
+        self.layers = nn.ModuleList(RouterLayer(c.d, P, c.routers, c.heads, c.dropout)
+                                    for _ in range(c.layers))
+        self.in_proj = nn.ModuleList(nn.Sequential(nn.Linear(K, c.d), nn.LayerNorm(c.d))
+                                     for _ in range(c.layers - 1))
+        self.out_proj = nn.ModuleList(nn.Linear(c.d, K) for _ in range(c.layers - 1))
+        self.predictor = nn.Linear(c.d, Kp)
+
+    def forward(self, X):  # X (N, K, P)
+        phase = X.transpose(1, 2)                        # (N, P, K) phase tokens
+        emb = self.embed_norm(self.embed(phase))
+        z, cur = emb, phase
+        for i, layer in enumerate(self.layers):
+            if i > 0:
+                z = z + self.in_proj[i - 1](cur)
+            z = layer(z)
+            if i < len(self.layers) - 1:
+                cur = self.out_proj[i](z)
+        return self.predictor(z), emb.mean(1)            # (N, P, K'), (N, d)
+
+
+class BiAxialInput(nn.Module):
+    """Z^(h) = W_t^(h) X W_p^(h) + B^(h), embedded to (N, k, p, d)."""
+
+    def __init__(self, c: Cfg, K: int, P: int):
+        super().__init__()
+        self.k, self.p, self.q = c.k, (c.p or P), c.q
+        self.Wt = nn.Parameter(torch.randn(self.q, self.k, K) / math.sqrt(K))
+        if c.wp == 'identity':
+            if self.p != P:
+                raise ValueError('identity W_p requires p = P')
+            self.register_buffer('Wp', torch.eye(P).expand(self.q, P, P).clone(), persistent=False)
+        else:
+            self.Wp = nn.Parameter(torch.randn(self.q, P, self.p) / math.sqrt(P))
+        self.bias = nn.Parameter(torch.zeros(self.q, self.k, self.p))
+        self.embed = nn.Sequential(nn.Linear(self.q, c.d), nn.GELU(), nn.Linear(c.d, c.d), nn.LayerNorm(c.d))
+
+    def forward(self, X):  # (N, K, P)
+        Z = torch.einsum('qkc,ncP,qPp->nkpq', self.Wt, X, self.Wp) + self.bias.permute(1, 2, 0)
+        return self.embed(Z)                              # (N, k, p, d)
+
+
+class AxialBlock(nn.Module):
+    """Routing along one axis of (N, k, p, d), then the FFN. axis: 'temporal' (over k) or 'phase' (over p)."""
+
+    def __init__(self, c: Cfg, axis: str, k: int, p: int):
+        super().__init__()
+        self.axis = axis
+        self.attn = RouterAttn(c.d, k if axis == 'temporal' else p, c.routers, c.heads, c.dropout)
+        self.ffn = FFN(c.d, c.dropout)
+
+    def forward(self, h):
+        return self.ffn(_along(self.attn, h, self.axis))
+
+
+def _along(fn, h, axis):
+    N, k, p, d = h.shape
+    if axis == 'phase':
+        return fn(h.reshape(N * k, p, d)).reshape(N, k, p, d)
+    t = fn(h.transpose(1, 2).reshape(N * p, k, d))
+    return t.reshape(N, p, k, d).transpose(1, 2)
+
+
+class InterleavedBlock(nn.Module):
+    """Temporal routing, phase routing, then one FFN."""
+
+    def __init__(self, c: Cfg, k: int, p: int):
+        super().__init__()
+        self.temporal = RouterAttn(c.d, k, c.routers, c.heads, c.dropout)
+        self.phase = RouterAttn(c.d, p, c.routers, c.heads, c.dropout)
+        self.ffn = FFN(c.d, c.dropout)
+
+    def forward(self, h):
+        h = _along(self.temporal, h, 'temporal')
+        h = _along(self.phase, h, 'phase')
+        return self.ffn(h)
+
+
+class PhaseNetBiAxial(nn.Module):
+    def __init__(self, c: Cfg, K: int, P: int, Kp: int):
+        super().__init__()
+        self.inp = BiAxialInput(c, K, P)
+        k, p = self.inp.k, self.inp.p
+        self.arch = c.arch
+        if c.arch in ('phase', 'temporal'):
+            self.stack = nn.ModuleList(AxialBlock(c, c.arch, k, p) for _ in range(c.layers))
+        elif c.arch == 'dual':
+            self.stack = nn.ModuleList(AxialBlock(c, 'temporal', k, p) for _ in range(c.layers))
+            self.stack2 = nn.ModuleList(AxialBlock(c, 'phase', k, p) for _ in range(c.layers))
+            self.fuse = nn.Parameter(torch.zeros(c.d))
+        elif c.arch == 'interleaved':
+            self.stack = nn.ModuleList(InterleavedBlock(c, k, p) for _ in range(c.layers))
+        else:
+            raise ValueError(c.arch)
+        self.expand = nn.Linear(p, P) if p != P else None
+        self.predictor = nn.Linear(k * c.d, Kp)
+
+    def forward(self, X):
+        h0 = self.inp(X)
+        h = h0
+        if self.arch == 'dual':
+            t, s = h0, h0
+            for bt, bp in zip(self.stack, self.stack2):
+                t, s = bt(t), bp(s)
+            g = torch.sigmoid(self.fuse)
+            h = g * t + (1 - g) * s
+        else:
+            for block in self.stack:
+                h = block(h)
+        if self.expand is not None:
+            h = self.expand(h.transpose(2, 3)).transpose(2, 3)   # (N, k, P, d)
+        N, k, P, d = h.shape
+        z = h.permute(0, 2, 1, 3).reshape(N, P, k * d)
+        return self.predictor(z), h0.mean((1, 2))
+
+
+class TrendPathway(nn.Module):
+    """Level token [pooled window ; mean phase token] -> 3-d state -> polynomial profiles."""
+
+    def __init__(self, seq_len, pred_len, period, d):
+        super().__init__()
+        self.f = period
+        self.encoder = nn.Linear(math.ceil(seq_len / period) + d, 3)
+        self.mix = nn.Linear(3, 3)
+        nn.init.zeros_(self.mix.weight)
+        nn.init.zeros_(self.mix.bias)
+        self.register_buffer('profiles', legendre_profiles(pred_len), persistent=False)
+
+    def forward(self, x, zbar):  # x (N, L) normalized
+        last = x[:, -1:]
+        pooled = F.adaptive_avg_pool1d((x - last).unsqueeze(1), math.ceil(x.shape[1] / self.f)).squeeze(1)
+        t = self.encoder(torch.cat([pooled, zbar], -1))
+        return last + self.mix(t) @ self.profiles.T
+
+
+class PhaseFormerPlus(nn.Module):
+    def __init__(self, c: Cfg):
+        super().__init__()
+        P = c.period
+        if c.seq_len % P or c.pred_len % P:
+            raise ValueError('window and horizon must be whole cycles')
+        self.c, self.K, self.P, self.Kp = c, c.seq_len // P, P, c.pred_len // P
+        self.phase = (PhaseNetM0(c, self.K, P, self.Kp) if c.arch == 'm0'
+                      else PhaseNetBiAxial(c, self.K, P, self.Kp))
+        if c.use_trend:
+            self.trend = TrendPathway(c.seq_len, c.pred_len, P, c.d)
+            logit = math.log(c.gate_init / (1 - c.gate_init))
+            self.omega = nn.Parameter(torch.full((c.channels,), logit))
+            self.omega_delta = nn.Parameter(torch.zeros(c.channels))
+
+    def forward(self, x):  # x (B, L, C) -> (B, H, C)
+        B, L, C = x.shape
+        mu = x.mean(1, keepdim=True)
+        sd = (x.var(1, keepdim=True, unbiased=False) + 1e-5).sqrt()
+        xn = ((x - mu) / sd).permute(0, 2, 1).reshape(B * C, L)
+        X = xn.view(B * C, self.K, self.P)
+        F_p, zbar = self.phase(X)                                   # (N, P, K')
+        phase = F_p.transpose(1, 2).reshape(B * C, -1)              # (N, H), cycle-major
+        if self.c.use_trend:
+            trend = self.trend(xn, zbar)
+            gl = torch.sigmoid(self.omega).repeat(B).unsqueeze(-1)
+            gs = torch.sigmoid(self.omega + self.omega_delta).repeat(B).unsqueeze(-1)
+            out = self._fuse(phase, trend, gl, gs)
+        else:
+            out = phase
+        out = out.view(B, C, -1).permute(0, 2, 1)
+        return out * sd + mu
+
+    def _fuse(self, phase, trend, gl, gs):
+        def split(v):
+            cyc = v.view(v.shape[0], self.Kp, self.P)
+            level = cyc.mean(-1, keepdim=True)
+            return level.expand_as(cyc).reshape_as(v), v - level.expand_as(cyc).reshape_as(v)
+        pm, pj = split(phase)
+        tm, tj = split(trend)
+        return (1 - gl) * pm + gl * tm + (1 - gs) * pj + gs * tj
+
+
+def count_parameters(model: nn.Module) -> int:
+    return sum(p.numel() for p in model.parameters())
