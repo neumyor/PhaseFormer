@@ -108,7 +108,16 @@ def e7(models):
                                horizons=(96, 192, 336, 720))
 
 
-EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E4': e4, 'E5': e5, 'E7': e7}
+def e01_seeds():
+    """Seeds 2022 and 2023 of every E0 and E1 group, under the same group names."""
+    groups = [('E0', 'M0', M0), ('E0', 'M0W-P', M0W_P), ('E0', 'M0W-F', M0W_F)]
+    groups += [('E1', n, {**BIAXIAL, 'arch': a}) for n, a in
+               (('B0', 'phase'), ('B1', 'temporal'), ('B2', 'dual'), ('B3', 'interleaved'))]
+    for group, name, model in groups:
+        yield from screen_jobs(group, name, model, seeds=(2022, 2023))
+
+
+EXPERIMENTS = {'E01S': e01_seeds, 'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E4': e4, 'E5': e5, 'E7': e7}
 
 
 def main():
