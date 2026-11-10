@@ -112,7 +112,34 @@ def e7(models):
         yield from screen_jobs('E7', name, model)
 
 
-EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4D': e4_decoders, 'E4A': e4_anchors, 'E5': e5, 'E7': e7}
+# PhaseFormer-I: interleaved bi-axial block, direct decoding from the last observed cycle.
+PHASEFORMER_I = {'arch': 'interleaved', 'layers': 1, 'd': 16, 'k': 8, 'p': 0, 'q': 1, 'wp': 'identity',
+                 'decoder': 'direct', 'anchor': 'last_cycle'}
+MAIN_DATASETS = ('ETTh1', 'ETTh2', 'ETTm1', 'ETTm2', 'Weather', 'Electricity', 'Traffic')
+MAIN_HORIZONS = (96, 192, 336, 720)
+B0HP_CSV = 'docs/PhaseFormer_VLDBJ_b0hp_best_settings.csv'
+
+
+def b0hp_reference():
+    """Per setting: the best B0H+ test MSE and its cycle length (read from the B0H+ record)."""
+    import csv
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[2] / B0HP_CSV
+    return {(r['dataset'], int(r['horizon'])): {'mse': float(r['test_mse']), 'period': int(r['period'])}
+            for r in csv.DictReader(open(path))}
+
+
+def i0():
+    """PhaseFormer-I on every main-table setting with the cycle length of the best B0H+ configuration."""
+    ref = b0hp_reference()
+    for dataset in MAIN_DATASETS:
+        for horizon in MAIN_HORIZONS:
+            period = ref[(dataset, horizon)]['period']
+            yield {'id': f'I0/{dataset}-{horizon}-s{SEED}', 'group': 'I0', 'dataset': dataset, 'horizon': horizon,
+                   'seed': SEED, 'period': period, 'model': PHASEFORMER_I}
+
+
+EXPERIMENTS = {'I0': i0, 'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4D': e4_decoders, 'E4A': e4_anchors, 'E5': e5, 'E7': e7}
 
 
 def main():

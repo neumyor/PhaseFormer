@@ -88,6 +88,7 @@ def flops_per_channel(cfg):
 
 
 def run_job(job, splits, batch, device):
+    batch = job.get('batch', batch)
     torch.manual_seed(job['seed'])
     torch.cuda.manual_seed_all(job['seed'])
     train = splits['train'].to(device)
@@ -98,7 +99,7 @@ def run_job(job, splits, batch, device):
     model = PhaseFormerPlus(cfg).to(device)
     # Compiling pays off only when an epoch is long; short jobs finish before the compile time is repaid.
     run = torch.compile(model) if train.shape[0] * train.shape[1] > COMPILE_SAMPLES and device.type == 'cuda' else model
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    optimizer = torch.optim.Adam(model.parameters(), lr=job.get('lr', LR))
     n_train = train.shape[0] - LOOKBACK - horizon + 1
     best, best_state, bad, epochs = float('inf'), None, 0, 0
     started = time.monotonic()
