@@ -29,6 +29,8 @@ TARGET_GAP = 0.003          # a setting counts as matched when test MSE <= B0H+ 
 MAX_IN_FLIGHT_PER_SETTING = 3
 HEAVY = {'Traffic': 64, 'Electricity': 32, 'Weather': 8}
 DEFAULT_BATCH = {'Traffic': 8, 'Electricity': 16}
+# Batch scale from which a heavy dataset's trial finishes in reasonable time; their search keeps it fixed.
+FAST_SCALE = {'Traffic': 16.0, 'Electricity': 16.0, 'Weather': 4.0}
 
 SPACE = {
     'period': [8, 12, 16, 24, 30, 36, 48],
@@ -115,10 +117,10 @@ def features(config, setting):
     return row
 
 
-def candidates(config, horizon, rng, tried, count):
+def candidates(config, horizon, rng, tried, count, frozen=()):
     out, seen = [], set()
     for _ in range(count * 4):
-        new = mutate(config, horizon, rng, tried | seen)
+        new = mutate(config, horizon, rng, tried | seen, frozen)
         if new is None:
             break
         seen.add(config_key(new))
@@ -128,10 +130,11 @@ def candidates(config, horizon, rng, tried, count):
     return out
 
 
-def mutate(config, horizon, rng, tried):
+def mutate(config, horizon, rng, tried, frozen=()):
+    names = [n for n in SPACE if n not in frozen]
     for _ in range(200):
         new = dict(config)
-        for name in rng.sample(list(SPACE), rng.choice((1, 1, 1, 2, 2, 3))):
+        for name in rng.sample(names, rng.choice((1, 1, 1, 2, 2, 3))):
             choices = [v for v in SPACE[name] if v != config[name]]
             new[name] = rng.choice(choices)
         if valid(new, horizon) and config_key(new) not in tried:
@@ -145,7 +148,7 @@ class Tuner:
         self.dir = Path(args.results_dir)
         self.reference = {tuple(k.split('|')): v for k, v in json.loads(Path(args.reference).read_text()).items()}
         self.rng = random.Random(2026)
-        self.best = {}
+        self.best, self.best_fast = {}, {}
         self.tried = {}
         self.history, self.history_ids, self.seen_rows = {}, set(), {}
         self.running = []          # (process, setting, key, job_id, gpu, started)
@@ -189,6 +192,9 @@ class Tuner:
         if row['id'] not in self.history_ids:
             self.history_ids.add(row['id'])
             self.history.setdefault(setting, []).append((config, row['test_mse']))
+        if setting[0] in FAST_SCALE and config['batch_scale'] >= FAST_SCALE[setting[0]] and (
+                setting not in self.best_fast or row['test_mse'] < self.best_fast[setting]['test_mse']):
+            self.best_fast[setting] = {'test_mse': row['test_mse'], 'config': config}
         if setting not in self.best or row['test_mse'] < self.best[setting]['test_mse']:
             self.best[setting] = {'test_mse': row['test_mse'], 'val_mse': row['val_mse'], 'config': config,
                                   'id': row['id']}
@@ -237,18 +243,33 @@ class Tuner:
         forest = RandomForestRegressor(n_estimators=100, min_samples_leaf=2, random_state=self.rng.randrange(10**6),
                                        n_jobs=4).fit(np.array(X), np.array(y))
         tried = self.tried.setdefault(setting, set())
-        pool = candidates(self.best[setting]['config'], setting[1], self.rng, tried, 300)
+        pool = candidates(self.base(setting), setting[1], self.rng, tried, 300, self.frozen(setting))
         if not pool:
             return None
         pred = np.stack([t.predict(np.array([features(c, setting) for c in pool])) for t in forest.estimators_])
         score = pred.mean(0) - 0.5 * pred.std(0)
         return pool[int(score.argmin())]
 
+    def base(self, setting):
+        """Incumbent to mutate; heavy datasets start from their fast-batch incumbent."""
+        if setting[0] in FAST_SCALE:
+            if setting in self.best_fast:
+                return self.best_fast[setting]['config']
+            return {**self.best[setting]['config'], 'batch_scale': FAST_SCALE[setting[0]], 'lr': 2e-3}
+        return self.best[setting]['config']
+
+    def frozen(self, setting):
+        return ('batch_scale',) if setting[0] in FAST_SCALE else ()
+
     def launch(self, setting):
         tried = self.tried.setdefault(setting, set())
-        config = self.surrogate_pick(setting) if self.rng.random() < 0.7 else None
+        config = None
+        if setting[0] in FAST_SCALE and setting not in self.best_fast and config_key(self.base(setting)) not in tried:
+            config = self.base(setting)
+        if config is None and self.rng.random() < 0.7:
+            config = self.surrogate_pick(setting)
         if config is None:
-            config = mutate(self.best[setting]['config'], setting[1], self.rng, tried)
+            config = mutate(self.base(setting), setting[1], self.rng, tried, self.frozen(setting))
         if config is None:
             return False
         gpu = self.free_gpu()
