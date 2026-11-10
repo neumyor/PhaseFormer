@@ -48,7 +48,7 @@ SPACE = {
     'q': [1, 2],
     'w_init': ['random', 'poly'],
     'mean_token': [False, True],
-    'batch_scale': [0.5, 1.0, 2.0, 4.0],
+    'batch_scale': [0.5, 1.0, 2.0, 4.0, 8.0, 16.0],
     'max_epochs': [30, 50, 80],
 }
 
