@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-COST = {'Weather': 20, 'ETTm1': 6, 'ETTm2': 6, 'ETTh1': 1, 'ETTh2': 1}
+COST = {'Traffic': 200, 'Electricity': 60, 'Weather': 20, 'ETTm1': 6, 'ETTm2': 6, 'ETTh1': 1, 'ETTh2': 1}
 
 
 def main():

@@ -41,6 +41,7 @@ class Cfg:
     w_init: str = 'random'      # random | poly: first rows of W_t are polynomials over the cycle index
     decoder: str = 'd0'         # d0 phase+trend+gates | direct | basis_fixed | basis_learn | hybrid_fixed | hybrid_learn
     anchor: str = 'x_last'      # x_last | last_cycle | last_cycle_mean | none (reference of the direct decoders)
+    mean_token: bool = False    # inject the original mean phase token into every latent cell (E5 ablation)
 
 
 def legendre_profiles(horizon: int, count: int = 3) -> torch.Tensor:
@@ -75,6 +76,7 @@ class RouterAttn(nn.Module):
         self.q2, self.kv2, self.o2 = nn.Linear(d, d), nn.Linear(d, 2 * d), nn.Linear(d, d)
         self.norm = nn.LayerNorm(d)
         self.drop = nn.Dropout(dropout)
+        self.keep_attn = False
 
     def _attend(self, q, kv):
         """q (N or 1, Tq, d), kv (N, Tk, 2d) -> (N, Tq, d)."""
@@ -84,10 +86,13 @@ class RouterAttn(nn.Module):
         q, k, v = split(q), split(k), split(v)
         scores = torch.einsum('nqhe,nkhe->nhqk', q.expand(k.shape[0], -1, -1, -1), k) / math.sqrt(q.shape[-1])
         weights = F.dropout(scores.softmax(-1), self.dropout, self.training)
+        if self.keep_attn:
+            self.last_weights.append(weights.detach())
         return torch.einsum('nhqk,nkhe->nqhe', weights, v).reshape(k.shape[0], q.shape[1], -1)
 
     def forward(self, x):  # (N, T, d)
         x = x + self.pos
+        self.last_weights = []
         buf = self.o1(self._attend(self.q1(self.router).unsqueeze(0), self.kv1(x)))
         out = self.o2(self._attend(self.q2(x), self.kv2(buf)))
         return self.norm(x + self.drop(out))
@@ -227,11 +232,18 @@ class PhaseNetBiAxial(nn.Module):
             self.tail = nn.ModuleList(InterleavedBlock(c, k, p) for _ in range(c.layers - half))
         else:
             raise ValueError(c.arch)
+        if c.mean_token:
+            self.token_embed = nn.Sequential(nn.Linear(K, c.d), nn.LayerNorm(c.d))
+            self.token_write = nn.Linear(c.d, c.d)
+        self.mean_token = c.mean_token
         self.expand = nn.Linear(p, P) if p != P else None
         self.predictor = nn.Linear(k * c.d, Kp)
 
     def forward(self, X):
         h0 = self.inp(X)
+        if self.mean_token:
+            token = self.token_embed(X.transpose(1, 2)).mean(1)       # (N, d): mean phase token
+            h0 = h0 + self.token_write(token)[:, None, None, :]
         h = h0
         if self.arch in ('dual', 'hybrid'):
             t, s = h0, h0
@@ -299,12 +311,17 @@ class PhaseFormerPlus(nn.Module):
             self.omega = nn.Parameter(torch.full((c.channels,), logit))
             self.omega_delta = nn.Parameter(torch.zeros(c.channels))
 
-    def forward(self, x):  # x (B, L, C) -> (B, H, C)
+    def fold(self, x):
+        """Normalized windows (N, L) and their fold (N, K, P) with the statistics (B, 1, C)."""
         B, L, C = x.shape
         mu = x.mean(1, keepdim=True)
         sd = (x.var(1, keepdim=True, unbiased=False) + 1e-5).sqrt()
         xn = ((x - mu) / sd).permute(0, 2, 1).reshape(B * C, L)
-        X = xn.view(B * C, self.K, self.P)
+        return xn, xn.view(B * C, self.K, self.P), mu, sd
+
+    def forward(self, x):  # x (B, L, C) -> (B, H, C)
+        B, L, C = x.shape
+        xn, X, mu, sd = self.fold(x)
         F_p, zbar = self.phase(X)                                   # (N, P, K')
         phase = F_p.transpose(1, 2).reshape(B * C, -1)              # (N, H), cycle-major
         if self.c.decoder != 'd0':

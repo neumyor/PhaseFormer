@@ -90,12 +90,30 @@ def e4(base):
             yield from screen_jobs('E4', f'{decoder}+{anchor}', {**base, 'decoder': decoder, 'anchor': anchor})
 
 
-EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E4': e4}
+def e5(base):
+    """Mean-phase-token diagnostics: checkpoints of M0 and of the backbone, and the injected-token ablation."""
+    yield from screen_jobs('E5', 'm0', M0)
+    yield from screen_jobs('E5', 'backbone', base)
+    yield from screen_jobs('E5', 'mean-token', {**base, 'mean_token': True})
+
+
+ALL_DATASETS = (('ETTh1', 24), ('ETTh2', 24), ('ETTm1', 48), ('ETTm2', 24), ('Weather', 24),
+                ('Electricity', 24), ('Traffic', 24))
+
+
+def e7(models):
+    """Final evaluation: ``models`` maps a name to its model dict; 7 datasets x 4 horizons x 3 seeds."""
+    for name, model in models.items():
+        yield from screen_jobs('E7', name, model, seeds=(2021, 2022, 2023), datasets=ALL_DATASETS,
+                               horizons=(96, 192, 336, 720))
+
+
+EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E4': e4, 'E5': e5, 'E7': e7}
 
 
 def main():
     name = sys.argv[1]
-    if name in ('E3', 'E4'):
+    if name in ('E3', 'E4', 'E5', 'E7'):
         jobs = EXPERIMENTS[name](json.loads(sys.argv[2]))
     else:
         jobs = EXPERIMENTS[name]()
