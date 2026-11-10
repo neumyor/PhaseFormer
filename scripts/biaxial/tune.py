@@ -41,7 +41,8 @@ SPACE = {
     'lr': [2e-4, 5e-4, 1e-3, 2e-3, 4e-3],
     'huber_delta': [0.1, 0.3, 1.0, 3.0],
     'anchor': ['last_cycle', 'last_cycle_mean', 'none', 'x_last'],
-    'decoder': ['direct', 'basis_learn'],
+    'decoder': ['direct', 'basis_learn', 'd0'],
+    'gate_init': [0.05, 0.2, 0.5, 0.9, 0.99],
     'arch': ['interleaved', 'dual', 'phase', 'temporal', 'hybrid'],
     'phase_axis': ['identity', 'learn', 'learn_half'],
     'q': [1, 2],
@@ -55,7 +56,7 @@ SPACE = {
 def initial_config(period):
     base = dict(PHASEFORMER_I)
     return {'period': period, 'k': base['k'], 'd': base['d'], 'layers': base['layers'], 'routers': 8, 'heads': 1,
-            'dropout': 0.1, 'lr': 1e-3, 'huber_delta': 1.0, 'anchor': base['anchor'], 'decoder': base['decoder'],
+            'dropout': 0.1, 'lr': 1e-3, 'huber_delta': 1.0, 'anchor': base['anchor'], 'decoder': base['decoder'], 'gate_init': 0.2,
             'arch': base['arch'], 'phase_axis': 'identity', 'q': 1, 'w_init': 'random', 'mean_token': False,
             'batch_scale': 1.0, 'max_epochs': 30}
 
@@ -73,7 +74,7 @@ def to_job(config, dataset, horizon, job_id):
     model = {'arch': config['arch'], 'layers': config['layers'], 'd': config['d'], 'k': config['k'], 'q': config['q'],
              'routers': config['routers'], 'heads': config['heads'], 'dropout': config['dropout'],
              'decoder': config['decoder'], 'anchor': config['anchor'], 'w_init': config['w_init'],
-             'mean_token': config['mean_token']}
+             'mean_token': config['mean_token'], 'gate_init': config['gate_init']}
     if config['phase_axis'] == 'identity':
         model.update(wp='identity', p=0)
     else:
@@ -95,8 +96,7 @@ def config_from_row(row):
     """Recover the tuner config of a finished trial from its result row (I0 rows use the initial config)."""
     if row['group'] == 'I0':
         return initial_config(row['period'])
-    cfg = row['config']
-    return cfg
+    return {**initial_config(row['period']), **row['config']}
 
 
 def mutate(config, horizon, rng, tried):
@@ -125,7 +125,20 @@ class Tuner:
     def settings(self):
         return [(d, int(h)) for d, h in self.reference]
 
+    def raw_rows(self):
+        """Finished trials whose worker outlived a previous driver: result file plus the job file's config."""
+        for path in (self.dir / 'tune_raw').glob('*.jsonl'):
+            job_path = self.dir / 'tune_jobs' / path.name
+            if not job_path.exists():
+                continue
+            config = json.loads(job_path.read_text().splitlines()[0]).get('config')
+            for line in path.read_text().splitlines():
+                if line.strip() and config:
+                    yield {**json.loads(line), 'config': config}
+
     def load(self):
+        for row in self.raw_rows():
+            self.record(row)
         for path in list(self.dir.glob('*results.jsonl')) + [self.trials_path]:
             if not path.exists():
                 continue
