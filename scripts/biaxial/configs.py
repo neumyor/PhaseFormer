@@ -84,13 +84,16 @@ E4_DECODERS = ('direct', 'basis_fixed', 'basis_learn', 'hybrid_fixed', 'hybrid_l
 E4_ANCHORS = ('last_cycle', 'last_cycle_mean', 'none')
 
 
-def e4(base):
-    """Decoders on the E3 backbone ``base`` with the x_L anchor, then the other anchors on the direct
-    decoder and on the decoder given as ``base['best_decoder']`` (removed before building the model)."""
-    base = dict(base)
-    best = base.pop('best_decoder', 'hybrid_learn')
+def e4_decoders(base):
+    """The five direct and basis decoders on the backbone ``base`` with the x_L anchor."""
     for decoder in E4_DECODERS:
         yield from screen_jobs('E4', decoder, {**base, 'decoder': decoder, 'anchor': 'x_last'})
+
+
+def e4_anchors(base):
+    """The other anchors on the direct decoder and on ``base['best_decoder']`` (removed before building the model)."""
+    base = dict(base)
+    best = base.pop('best_decoder')
     for decoder in sorted({'direct', best}):
         for anchor in E4_ANCHORS:
             yield from screen_jobs('E4', f'{decoder}+{anchor}', {**base, 'decoder': decoder, 'anchor': anchor})
@@ -109,12 +112,12 @@ def e7(models):
         yield from screen_jobs('E7', name, model)
 
 
-EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4': e4, 'E5': e5, 'E7': e7}
+EXPERIMENTS = {'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4D': e4_decoders, 'E4A': e4_anchors, 'E5': e5, 'E7': e7}
 
 
 def main():
     name = sys.argv[1]
-    if name in ('E3', 'E3C', 'E4', 'E5', 'E7'):
+    if name in ('E3', 'E3C', 'E4D', 'E4A', 'E5', 'E7'):
         jobs = EXPERIMENTS[name](json.loads(sys.argv[2]))
     else:
         jobs = EXPERIMENTS[name]()
