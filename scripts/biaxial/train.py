@@ -52,7 +52,7 @@ def windows(data, index, horizon):
 
 
 @torch.inference_mode()
-def evaluate(model, data, horizon, batch):
+def evaluate(model, data, horizon, batch, delta=1.0):
     model.eval()
     n = data.shape[0] - LOOKBACK - horizon + 1
     sq = ab = hub = 0.0
@@ -63,7 +63,7 @@ def evaluate(model, data, horizon, batch):
         err = model(x) - y
         sq += err.square().sum().item()
         ab += err.abs().sum().item()
-        hub += F.huber_loss(err, torch.zeros_like(err), reduction='sum').item()
+        hub += F.huber_loss(err, torch.zeros_like(err), reduction='sum', delta=delta).item()
         count += err.numel()
     return {'mse': sq / count, 'mae': ab / count, 'huber': hub / count}
 
@@ -105,23 +105,25 @@ def run_job(job, splits, batch, device):
     started = time.monotonic()
     generator = torch.Generator(device=device)
     generator.manual_seed(job['seed'])
-    for epoch in range(MAX_EPOCHS):
+    delta = job.get('huber_delta', 1.0)
+    patience = job.get('patience', PATIENCE)
+    for epoch in range(job.get('max_epochs', MAX_EPOCHS)):
         model.train()
         order = torch.randperm(n_train, device=device, generator=generator)
         for start in range(0, n_train - batch + 1, batch):
             x, y = windows(train, order[start:start + batch], horizon)
-            loss = F.huber_loss(run(x), y)
+            loss = F.huber_loss(run(x), y, delta=delta)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
         epochs = epoch + 1
-        score = evaluate(run, val, horizon, batch)['huber']
+        score = evaluate(run, val, horizon, batch, delta)['huber']
         if score < best:
             best, bad = score, 0
             best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
         else:
             bad += 1
-            if bad >= PATIENCE:
+            if bad >= patience:
                 break
     train_seconds = time.monotonic() - started
     model.load_state_dict(best_state)
@@ -136,6 +138,7 @@ def run_job(job, splits, batch, device):
     return {
         'id': job['id'], 'group': job['group'], 'dataset': job['dataset'], 'horizon': horizon,
         'seed': job['seed'], 'period': job['period'], 'model': job.get('model', {}),
+        'train_options': {k: job[k] for k in ('lr', 'batch', 'huber_delta', 'max_epochs', 'patience') if k in job},
         'val_mse': val_metrics['mse'], 'val_mae': val_metrics['mae'],
         'test_mse': test_metrics['mse'], 'test_mae': test_metrics['mae'],
         'params': count_parameters(model), 'flops_per_channel': flops_per_channel(cfg),
