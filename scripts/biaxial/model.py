@@ -322,6 +322,15 @@ class TrendPathway(nn.Module):
         return last + self.mix(t) @ self.profiles.T
 
 
+def fold_window(x, K, P):
+    """Windows (B, L, C) -> normalized windows (B*C, L), their fold (B*C, K, P) and the statistics (B, 1, C)."""
+    B, L, C = x.shape
+    mu = x.mean(1, keepdim=True)
+    sd = (x.var(1, keepdim=True, unbiased=False) + 1e-5).sqrt()
+    xn = ((x - mu) / sd).permute(0, 2, 1).reshape(B * C, L)
+    return xn, xn.view(B * C, K, P), mu, sd
+
+
 class PhaseFormerPlus(nn.Module):
     def __init__(self, c: Cfg):
         super().__init__()
@@ -353,11 +362,7 @@ class PhaseFormerPlus(nn.Module):
 
     def fold(self, x):
         """Normalized windows (N, L) and their fold (N, K, P) with the statistics (B, 1, C)."""
-        B, L, C = x.shape
-        mu = x.mean(1, keepdim=True)
-        sd = (x.var(1, keepdim=True, unbiased=False) + 1e-5).sqrt()
-        xn = ((x - mu) / sd).permute(0, 2, 1).reshape(B * C, L)
-        return xn, xn.view(B * C, self.K, self.P), mu, sd
+        return fold_window(x, self.K, self.P)
 
     def forward(self, x):  # x (B, L, C) -> (B, H, C)
         B, L, C = x.shape
@@ -408,6 +413,107 @@ class PhaseFormerPlus(nn.Module):
         pm, pj = split(phase)
         tm, tj = split(trend)
         return (1 - gl) * pm + gl * tm + (1 - gs) * pj + gs * tj
+
+
+@dataclass
+class DCfg:
+    """PhaseFormer-D: a cycle (temporal) branch and a phase branch, each with its own normalization and compression."""
+    seq_len: int = 720
+    pred_len: int = 96
+    channels: int = 7
+    period: int = 24
+    d: int = 16
+    routers: int = 8
+    heads: int = 1
+    dropout: float = 0.1
+    # cycle branch: routing over the cycle axis of every phase column; compression K -> k_t cycles, P -> p_t phases
+    k_t: int = 8
+    p_t: int = 0                # 0 means P
+    layers_t: int = 1
+    norm_t: str = 'post'
+    embed_t: str = 'mlp_ln'
+    # phase branch: routing over the phase axis of every cycle row; compression K -> k_s cycles, P -> p_s phases
+    k_s: int = 4
+    p_s: int = 0                # 0 means P
+    layers_s: int = 1
+    norm_s: str = 'post'
+    embed_s: str = 'mlp_ln'
+    fusion: str = 'gate'        # sum | gate (window-adaptive branch gates, initialized to the plain sum)
+    t_eps: float = 1e-2         # variance floor of the cycle-branch scale
+    s_eps: float = 1e-2         # variance floor of the per-cycle scale of the phase branch
+    phase_id: str = 'none'
+    harmonics: int = 8
+
+
+class PhaseFormerD(nn.Module):
+    """Two forecasters of the window's last-cycle residual, fused in common units.
+
+    The window is instance-normalized and folded to X (K cycles x P phases). Both branches predict a correction
+    to the last observed cycle (the anchor), in the units of their own normalization, and de-normalize it with
+    the statistics they normalized by, so zero outputs reproduce the anchor exactly.
+
+    Cycle branch: how every phase evolves from cycle to cycle (level, drift, slow seasonality). Input: X with the
+    seasonal profile (per-phase mean over cycles) removed and one scalar scale per window. The scale is shared by all
+    phases, so the relative size of the phases' dynamics is kept; no per-phase scale, which would amplify noise in
+    phases that hardly move.
+
+    Phase branch: the shape of a cycle. Input: every cycle normalized by its own mean and standard deviation over
+    the phases, so level and amplitude cannot reach it. Its output is made zero-mean over the phases of each
+    forecast cycle and scaled by the last cycle's standard deviation: it can reshape a cycle but not move it, so
+    level changes belong to the cycle branch alone.
+    """
+
+    def __init__(self, c: DCfg):
+        super().__init__()
+        P = c.period
+        if c.seq_len % P:
+            raise ValueError('window must be whole cycles')
+        self.c, self.K, self.P, self.Kp = c, c.seq_len // P, P, -(-c.pred_len // P)
+        self.Hc = self.Kp * P
+
+        def branch(arch, k, p, layers, norm, embed):
+            cfg = Cfg(seq_len=c.seq_len, pred_len=c.pred_len, channels=c.channels, period=P, arch=arch, layers=layers,
+                      d=c.d, routers=c.routers, heads=c.heads, dropout=c.dropout, k=k, p=p, q=1,
+                      wp='identity' if p in (0, P) else 'learn', decoder='direct', anchor='last_cycle',
+                      norm=norm, embed=embed, phase_id=c.phase_id, harmonics=c.harmonics)
+            return PhaseNetBiAxial(cfg, self.K, P, self.Kp)
+
+        self.cycle = branch('temporal', c.k_t, c.p_t, c.layers_t, c.norm_t, c.embed_t)
+        self.phase = branch('phase', c.k_s, c.p_s, c.layers_s, c.norm_s, c.embed_s)
+        if c.fusion == 'gate':
+            self.gate = nn.Linear(2 + (c.k_t + c.k_s) * c.d, 2)
+            nn.init.zeros_(self.gate.weight)
+            nn.init.zeros_(self.gate.bias)
+        elif c.fusion != 'sum':
+            raise ValueError(c.fusion)
+
+    def forward(self, x):  # x (B, L, C) -> (B, H, C)
+        B, L, C = x.shape
+        c = self.c
+        xn, X, mu, sd = fold_window(x, self.K, self.P)
+        anchor = X[:, -1, :].repeat(1, self.Kp)                                   # (N, Hc)
+        # cycle branch input: seasonal profile removed, one scale per window
+        resid = X - X.mean(1, keepdim=True)
+        scale_t = (resid.square().mean((1, 2), keepdim=True) + c.t_eps).sqrt()    # (N, 1, 1)
+        f_t, _ = self.cycle(resid / scale_t)                                      # (N, P, Kp)
+        delta_t = f_t.transpose(1, 2).reshape(X.shape[0], -1) * scale_t.flatten(1)
+        # phase branch input: every cycle normalized over its phases
+        row = X.mean(2, keepdim=True)
+        scale_s = (X.var(2, keepdim=True, unbiased=False) + c.s_eps).sqrt()       # (N, K, 1)
+        f_s, _ = self.phase((X - row) / scale_s)
+        shape = f_s.transpose(1, 2)                                               # (N, Kp, P)
+        shape = shape - shape.mean(-1, keepdim=True)
+        delta_s = shape.reshape(X.shape[0], -1) * scale_s[:, -1]
+        if c.fusion == 'gate':
+            u = torch.cat([scale_t.flatten(1).log(), scale_s[:, -1].log(), self.cycle.pooled, self.phase.pooled], -1)
+            g = 2 * torch.sigmoid(self.gate(u))                                   # (N, 2), equal to 1 at initialization
+            delta_t, delta_s = g[:, :1] * delta_t, g[:, 1:] * delta_s
+        out = (anchor + delta_t + delta_s).view(B, C, -1)[..., :c.pred_len].permute(0, 2, 1)
+        return out * sd + mu
+
+
+def make_model(cfg) -> nn.Module:
+    return PhaseFormerD(cfg) if isinstance(cfg, DCfg) else PhaseFormerPlus(cfg)
 
 
 def count_parameters(model: nn.Module) -> int:

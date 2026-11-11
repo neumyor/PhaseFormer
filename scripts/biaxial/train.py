@@ -21,14 +21,13 @@ from torch.nn import functional as F
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.biaxial.model import Cfg, PhaseFormerPlus, count_parameters  # noqa: E402
+from scripts.biaxial.model import Cfg, DCfg, count_parameters, make_model  # noqa: E402
 
 LOOKBACK = 720
 MAX_EPOCHS = 30
 PATIENCE = 8
 LR = 1e-3
 COMPILE_SAMPLES = 150_000   # training rows x channels above which the model is compiled
-CFG_FIELDS = {f.name for f in fields(Cfg)}
 
 
 def load_splits(dataset, horizon, data_root=None):
@@ -71,10 +70,11 @@ def evaluate(model, data, horizon, batch, delta=1.0):
 
 def build_cfg(job, channels):
     overrides = {k: v for k, v in job.get('model', {}).items()}
-    unknown = set(overrides) - CFG_FIELDS
+    cls = DCfg if job.get('family') == 'D' else Cfg      # PhaseFormer-D jobs carry "family": "D"
+    unknown = set(overrides) - {f.name for f in fields(cls)}
     if unknown:
         raise ValueError(f'unknown model fields {unknown}')
-    return Cfg(seq_len=LOOKBACK, pred_len=job['horizon'], channels=channels,
+    return cls(seq_len=LOOKBACK, pred_len=job['horizon'], channels=channels,
                period=job['period'], **overrides)
 
 
@@ -82,7 +82,7 @@ def flops_per_channel(cfg):
     from torch.utils.flop_counter import FlopCounterMode
     single = copy.deepcopy(cfg)
     single.channels = 1
-    model = PhaseFormerPlus(single).eval()
+    model = make_model(single).eval()
     with FlopCounterMode(display=False) as counter:
         model(torch.zeros(1, cfg.seq_len, 1))
     return counter.get_total_flops()
@@ -134,7 +134,7 @@ def run_job(job, splits, batch, device):
     test = splits['test'].to(device)
     horizon = job['horizon']
     cfg = build_cfg(job, train.shape[1])
-    model = PhaseFormerPlus(cfg).to(device)
+    model = make_model(cfg).to(device)
     # Compiling pays off only when an epoch is long; short jobs finish before the compile time is repaid.
     run = torch.compile(model) if train.shape[0] * train.shape[1] > COMPILE_SAMPLES and device.type == 'cuda' else model
     optimizer, scheduler = build_optimizer(model, job)

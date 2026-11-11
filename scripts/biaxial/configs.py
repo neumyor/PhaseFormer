@@ -139,6 +139,21 @@ def i0():
                    'seed': SEED, 'period': period, 'model': PHASEFORMER_I}
 
 
+# PhaseFormer-D: cycle branch (8 cycle slots, phases compressed to P/4) and phase branch (4 cycle slots, all phases).
+PHASEFORMER_D = {'d': 16, 'k_t': 8, 'p_t': 'P/4', 'layers_t': 1, 'k_s': 4, 'p_s': 0, 'layers_s': 1, 'fusion': 'gate'}
+
+
+def d1():
+    """PhaseFormer-D on the F1 grid (ETTh1 and ETTm1, four horizons, three seeds) for the comparison with PhaseFormer-I."""
+    ref = b0hp_reference()
+    for dataset in ('ETTh1', 'ETTm1'):
+        for horizon in MAIN_HORIZONS:
+            period = ref[(dataset, horizon)]['period']
+            for seed in (2021, 2022, 2023):
+                yield {'id': f'D1/D/{dataset}-{horizon}-s{seed}', 'group': 'D1/D', 'family': 'D', 'dataset': dataset,
+                       'horizon': horizon, 'seed': seed, 'period': period, 'model': resolve(PHASEFORMER_D, period)}
+
+
 F1_VARIANTS = {
     'base': {},
     'preln': {'norm': 'pre', 'embed': 'lin_mlp'},
@@ -160,7 +175,7 @@ def f1():
                            'model': {**PHASEFORMER_I, **change}}
 
 
-EXPERIMENTS = {'F1': f1, 'I0': i0, 'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4D': e4_decoders, 'E4A': e4_anchors, 'E5': e5, 'E7': e7}
+EXPERIMENTS = {'D1': d1, 'F1': f1, 'I0': i0, 'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4D': e4_decoders, 'E4A': e4_anchors, 'E5': e5, 'E7': e7}
 
 
 def main():

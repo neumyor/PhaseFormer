@@ -7658,3 +7658,9 @@ throughout; two of its commits swept in earlier parts of this batch.
 - 代码：`scripts/biaxial/tune.py`（调参驱动）、`report.py`（汇总表）；服务器目录 `~/niuyiming/PhaseFormer_biaxial_20261110`，驱动脚本 `start_tune.sh`。
 - test-set selection：每个 setting 的最优配置按测试 MSE 选出，已保存全部试验，不得描述为盲测。
 - 已知问题：重数据集（Traffic、Electricity）单试验需数小时，初期使用的大批量导致显存不足，已改为批大小 8 到 32 且限制 epoch；这两个数据集调参不充分。
+
+## 2026-11-11 F1 token 设计测试与 PhaseFormer-D
+
+- F1：新增 pre-LN 残差流 + 线性嵌入、傅里叶相位身份两个选项（`Cfg.norm/embed/phase_id`，默认关闭，旧检查点逐位复现）；`configs F1` 共 96 个任务（4 变体 × ETTh1/ETTm1 × 4 预测长度 × 3 种子），服务器 GPU 4–7 运行，结果 `runs/f1_results.jsonl`，汇总脚本 `scripts/biaxial/f1_report.py`。
+- PhaseFormer-D：新增 `PhaseFormerD`/`DCfg`（周期分支与相位分支各自的归一化与压缩比，窗口自适应门融合），设计见 `docs/PhaseFormer_D_design.md`；`train.py` 通过 `family: D` 构建；单元测试 31 个通过；3 轮冒烟训练通过，尚未做完整实验。
+- 可比性：与前述阶段相同的重新实现协议，选择按验证集；D1 的 3 种子网格与 F1 一致，未启动。
