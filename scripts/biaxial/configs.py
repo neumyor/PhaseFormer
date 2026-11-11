@@ -139,7 +139,28 @@ def i0():
                    'seed': SEED, 'period': period, 'model': PHASEFORMER_I}
 
 
-EXPERIMENTS = {'I0': i0, 'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4D': e4_decoders, 'E4A': e4_anchors, 'E5': e5, 'E7': e7}
+F1_VARIANTS = {
+    'base': {},
+    'preln': {'norm': 'pre', 'embed': 'lin_mlp'},
+    'fourier': {'phase_id': 'fourier'},
+    'both': {'norm': 'pre', 'embed': 'lin_mlp', 'phase_id': 'fourier'},
+}
+
+
+def f1():
+    """Token-design test: PhaseFormer-I with a pre-LN residual stream and a linear+MLP embedding, and with Fourier phase
+    identity, alone and together. ETTh1 and ETTm1 at all four horizons, three seeds, the cycle length of the best B0H+ run."""
+    ref = b0hp_reference()
+    for name, change in F1_VARIANTS.items():
+        for dataset in ('ETTh1', 'ETTm1'):
+            for horizon in MAIN_HORIZONS:
+                for seed in (2021, 2022, 2023):
+                    yield {'id': f'F1/{name}/{dataset}-{horizon}-s{seed}', 'group': f'F1/{name}', 'dataset': dataset,
+                           'horizon': horizon, 'seed': seed, 'period': ref[(dataset, horizon)]['period'],
+                           'model': {**PHASEFORMER_I, **change}}
+
+
+EXPERIMENTS = {'F1': f1, 'I0': i0, 'E0': e0, 'E1': e1, 'E2': e2, 'E3': e3, 'E3C': e3_combo, 'E4D': e4_decoders, 'E4A': e4_anchors, 'E5': e5, 'E7': e7}
 
 
 def main():

@@ -42,6 +42,10 @@ class Cfg:
     decoder: str = 'd0'         # d0 phase+trend+gates | direct | basis_fixed | basis_learn | hybrid_fixed | hybrid_learn
     anchor: str = 'x_last'      # x_last | last_cycle | last_cycle_mean | none (reference of the direct decoders)
     mean_token: bool = False    # inject the original mean phase token into every latent cell (E5 ablation)
+    norm: str = 'post'          # post: residual then LayerNorm | pre: LayerNorm before each sublayer, un-normalized residual stream
+    embed: str = 'mlp_ln'       # mlp_ln: Linear-GELU-Linear-LayerNorm | lin_mlp: Linear + Linear-GELU-Linear, no LayerNorm
+    phase_id: str = 'none'      # none | fourier: sin/cos harmonics of the phase plus a cycle-slot embedding added at the input
+    harmonics: int = 8          # Fourier harmonics of the phase (capped at p // 2)
 
 
 def legendre_profiles(horizon: int, count: int = 3) -> torch.Tensor:
@@ -63,11 +67,11 @@ class RouterAttn(nn.Module):
     batch, so the gather stage never materializes per-sample queries.
     """
 
-    def __init__(self, d, tokens, routers, heads, dropout):
+    def __init__(self, d, tokens, routers, heads, dropout, pre=False):
         super().__init__()
         if d % heads:
             raise ValueError('d must be divisible by the number of heads')
-        self.h, self.dropout = heads, dropout
+        self.h, self.dropout, self.pre = heads, dropout, pre
         self.router = nn.Parameter(torch.empty(routers, d))
         nn.init.trunc_normal_(self.router, std=0.02)
         self.pos = nn.Parameter(torch.empty(tokens, d))
@@ -91,21 +95,28 @@ class RouterAttn(nn.Module):
         return torch.einsum('nhqk,nkhe->nqhe', weights, v).reshape(k.shape[0], q.shape[1], -1)
 
     def forward(self, x):  # (N, T, d)
-        x = x + self.pos
         self.last_weights = []
+        if self.pre:   # the position and the LayerNorm act on the sublayer input only; the residual stream keeps its scale
+            y = self.norm(x) + self.pos
+            buf = self.o1(self._attend(self.q1(self.router).unsqueeze(0), self.kv1(y)))
+            return x + self.drop(self.o2(self._attend(self.q2(y), self.kv2(buf))))
+        x = x + self.pos
         buf = self.o1(self._attend(self.q1(self.router).unsqueeze(0), self.kv1(x)))
         out = self.o2(self._attend(self.q2(x), self.kv2(buf)))
         return self.norm(x + self.drop(out))
 
 
 class FFN(nn.Module):
-    def __init__(self, d, dropout):
+    def __init__(self, d, dropout, pre=False):
         super().__init__()
+        self.pre = pre
         self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
         self.norm = nn.LayerNorm(d)
         self.drop = nn.Dropout(dropout)
 
     def forward(self, x):
+        if self.pre:
+            return x + self.drop(self.mlp(self.norm(x)))
         return self.norm(x + self.drop(self.mlp(x)))
 
 
@@ -166,11 +177,33 @@ class BiAxialInput(nn.Module):
         else:
             self.Wp = nn.Parameter(torch.randn(self.q, P, self.p) / math.sqrt(P))
         self.bias = nn.Parameter(torch.zeros(self.q, self.k, self.p))
-        self.embed = nn.Sequential(nn.Linear(self.q, c.d), nn.GELU(), nn.Linear(c.d, c.d), nn.LayerNorm(c.d))
+        if c.embed == 'mlp_ln':
+            self.embed = nn.Sequential(nn.Linear(self.q, c.d), nn.GELU(), nn.Linear(c.d, c.d), nn.LayerNorm(c.d))
+        elif c.embed == 'lin_mlp':   # the linear path keeps the amplitude of the cell value exactly
+            self.lin = nn.Linear(self.q, c.d)
+            self.embed = nn.Sequential(nn.Linear(self.q, c.d), nn.GELU(), nn.Linear(c.d, c.d))
+        else:
+            raise ValueError(c.embed)
+        self.linear_embed = c.embed == 'lin_mlp'
+        if c.phase_id == 'fourier':
+            m = max(1, min(c.harmonics, self.p // 2))
+            angle = 2 * math.pi * torch.arange(self.p)[:, None] * torch.arange(1, m + 1)[None] / self.p
+            self.register_buffer('phase_feat', torch.cat([angle.sin(), angle.cos()], -1), persistent=False)
+            self.phase_proj = nn.Linear(2 * m, c.d)
+            self.slot = nn.Parameter(torch.empty(self.k, c.d))
+            nn.init.trunc_normal_(self.slot, std=0.02)
+        elif c.phase_id != 'none':
+            raise ValueError(c.phase_id)
+        self.phase_id = c.phase_id
 
     def forward(self, X):  # (N, K, P)
         Z = torch.einsum('qkc,ncP,qPp->nkpq', self.Wt, X, self.Wp) + self.bias.permute(1, 2, 0)
-        return self.embed(Z)                              # (N, k, p, d)
+        h = self.embed(Z)
+        if self.linear_embed:
+            h = h + self.lin(Z)
+        if self.phase_id == 'fourier':                    # the identity is part of the token, so both axes see it
+            h = h + self.phase_proj(self.phase_feat)[None, None] + self.slot[None, :, None]
+        return h                                          # (N, k, p, d)
 
 
 class AxialBlock(nn.Module):
@@ -179,8 +212,9 @@ class AxialBlock(nn.Module):
     def __init__(self, c: Cfg, axis: str, k: int, p: int):
         super().__init__()
         self.axis = axis
-        self.attn = RouterAttn(c.d, k if axis == 'temporal' else p, c.routers, c.heads, c.dropout)
-        self.ffn = FFN(c.d, c.dropout)
+        pre = c.norm == 'pre'
+        self.attn = RouterAttn(c.d, k if axis == 'temporal' else p, c.routers, c.heads, c.dropout, pre)
+        self.ffn = FFN(c.d, c.dropout, pre)
 
     def forward(self, h):
         return self.ffn(_along(self.attn, h, self.axis))
@@ -199,9 +233,10 @@ class InterleavedBlock(nn.Module):
 
     def __init__(self, c: Cfg, k: int, p: int):
         super().__init__()
-        self.temporal = RouterAttn(c.d, k, c.routers, c.heads, c.dropout)
-        self.phase = RouterAttn(c.d, p, c.routers, c.heads, c.dropout)
-        self.ffn = FFN(c.d, c.dropout)
+        pre = c.norm == 'pre'
+        self.temporal = RouterAttn(c.d, k, c.routers, c.heads, c.dropout, pre)
+        self.phase = RouterAttn(c.d, p, c.routers, c.heads, c.dropout, pre)
+        self.ffn = FFN(c.d, c.dropout, pre)
 
     def forward(self, h):
         h = _along(self.temporal, h, 'temporal')
@@ -237,6 +272,7 @@ class PhaseNetBiAxial(nn.Module):
             self.token_write = nn.Linear(c.d, c.d)
         self.mean_token = c.mean_token
         self.expand = nn.Linear(p, P) if p != P else None
+        self.final_norm = nn.LayerNorm(c.d) if c.norm == 'pre' else None
         self.predictor = nn.Linear(k * c.d, Kp)
 
     def forward(self, X):
@@ -257,6 +293,8 @@ class PhaseNetBiAxial(nn.Module):
         else:
             for block in self.stack:
                 h = block(h)
+        if self.final_norm is not None:
+            h = self.final_norm(h)
         if self.expand is not None:
             h = self.expand(h.transpose(2, 3)).transpose(2, 3)   # (N, k, P, d)
         N, k, P, d = h.shape
