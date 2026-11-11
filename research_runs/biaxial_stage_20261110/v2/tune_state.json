@@ -1,14 +1,14 @@
 {
  "ETTh1-96": {
   "ref": 0.346013,
-  "trials": 35,
-  "in_flight": 2,
-  "v2_trials": 26,
+  "trials": 51,
+  "in_flight": 1,
+  "v2_trials": 42,
   "test_selected": {
-   "test_mse": 0.35110267677643037,
-   "test_mae": 0.38181016988363736,
-   "val_mse": 0.7253103280521982,
-   "gap_pct": 1.471,
+   "test_mse": 0.3506256320063371,
+   "test_mae": 0.38100932518253877,
+   "val_mse": 0.7275854068484441,
+   "gap_pct": 1.333,
    "config": {
     "period": 24,
     "k": 6,
@@ -16,17 +16,17 @@
     "layers": 3,
     "routers": 8,
     "heads": 1,
-    "dropout": 0.2,
-    "lr": 0.001,
+    "dropout": 0.3,
+    "lr": 0.0005,
     "huber_delta": 1.0,
     "anchor": "none",
     "batch_scale": 0.5,
     "max_epochs": 50,
     "optimizer": "adam",
     "weight_decay": 0.0,
-    "schedule": "cosine"
+    "schedule": "step"
    },
-   "id": "T2/ETTh1-96/f4aedb90fb",
+   "id": "T2/ETTh1-96/2ad42a4de6",
    "source": "v2"
   },
   "val_selected": {
@@ -57,14 +57,39 @@
  },
  "ETTh1-192": {
   "ref": 0.373951,
-  "trials": 41,
-  "in_flight": 2,
-  "v2_trials": 40,
+  "trials": 67,
+  "in_flight": 1,
+  "v2_trials": 66,
   "test_selected": {
-   "test_mse": 0.38858722194367706,
-   "test_mae": 0.40582353969240864,
-   "val_mse": 0.990541559021529,
-   "gap_pct": 3.914,
+   "test_mse": 0.38519570403119413,
+   "test_mae": 0.40581917085106983,
+   "val_mse": 0.98456604979924,
+   "gap_pct": 3.007,
+   "config": {
+    "period": 24,
+    "k": 8,
+    "d": 16,
+    "layers": 3,
+    "routers": 8,
+    "heads": 2,
+    "dropout": 0.05,
+    "lr": 0.001,
+    "huber_delta": 3.0,
+    "anchor": "none",
+    "batch_scale": 1.0,
+    "max_epochs": 30,
+    "optimizer": "adamw",
+    "weight_decay": 0.05,
+    "schedule": "const"
+   },
+   "id": "T2/ETTh1-192/f5749700ef",
+   "source": "v2"
+  },
+  "val_selected": {
+   "test_mse": 0.4019288008651594,
+   "test_mae": 0.4098835400493523,
+   "val_mse": 0.944891104608419,
+   "gap_pct": 7.482,
    "config": {
     "period": 24,
     "k": 8,
@@ -73,54 +98,29 @@
     "routers": 8,
     "heads": 2,
     "dropout": 0.1,
-    "lr": 0.001,
-    "huber_delta": 1.0,
-    "anchor": "none",
-    "batch_scale": 1.0,
-    "max_epochs": 50,
-    "optimizer": "adamw",
-    "weight_decay": 0.01,
-    "schedule": "const"
-   },
-   "id": "T2/ETTh1-192/34c37a6e96",
-   "source": "v2"
-  },
-  "val_selected": {
-   "test_mse": 0.40485511391620843,
-   "test_mae": 0.40954115345643183,
-   "val_mse": 0.9545483105740262,
-   "gap_pct": 8.264,
-   "config": {
-    "period": 24,
-    "k": 8,
-    "d": 16,
-    "layers": 1,
-    "routers": 8,
-    "heads": 1,
-    "dropout": 0.1,
-    "lr": 0.001,
-    "huber_delta": 1.0,
+    "lr": 0.0002,
+    "huber_delta": 3.0,
     "anchor": "last_cycle",
     "batch_scale": 1.0,
-    "max_epochs": 30,
+    "max_epochs": 80,
     "optimizer": "adamw",
-    "weight_decay": 0.05,
-    "schedule": "warmup_cosine"
+    "weight_decay": 0.001,
+    "schedule": "const"
    },
-   "id": "T2/ETTh1-192/f31a200315",
+   "id": "T2/ETTh1-192/62e818f909",
    "source": "v2"
   }
  },
  "ETTh1-336": {
   "ref": 0.410565,
-  "trials": 87,
-  "in_flight": 0,
-  "v2_trials": 55,
+  "trials": 125,
+  "in_flight": 1,
+  "v2_trials": 93,
   "test_selected": {
-   "test_mse": 0.4176026777361239,
-   "test_mae": 0.42516191336554265,
-   "val_mse": 1.2474318036399235,
-   "gap_pct": 1.714,
+   "test_mse": 0.41717994832387767,
+   "test_mae": 0.4250178102613835,
+   "val_mse": 1.2471328533255148,
+   "gap_pct": 1.611,
    "config": {
     "period": 12,
     "k": 8,
@@ -133,12 +133,12 @@
     "huber_delta": 0.1,
     "anchor": "last_cycle_mean",
     "batch_scale": 1.0,
-    "max_epochs": 30,
+    "max_epochs": 80,
     "optimizer": "adamw",
-    "weight_decay": 0.01,
+    "weight_decay": 0.05,
     "schedule": "cosine"
    },
-   "id": "T2/ETTh1-336/0592e95922",
+   "id": "T2/ETTh1-336/baab586b69",
    "source": "v2"
   },
   "val_selected": {
@@ -169,14 +169,14 @@
  },
  "ETTh1-720": {
   "ref": 0.416434,
-  "trials": 53,
-  "in_flight": 2,
-  "v2_trials": 32,
+  "trials": 76,
+  "in_flight": 1,
+  "v2_trials": 55,
   "test_selected": {
-   "test_mse": 0.4265381589234298,
-   "test_mae": 0.44515694205724865,
-   "val_mse": 1.4701005617714462,
-   "gap_pct": 2.426,
+   "test_mse": 0.42652890853964215,
+   "test_mae": 0.4451501620768236,
+   "val_mse": 1.4699348697233792,
+   "gap_pct": 2.424,
    "config": {
     "period": 48,
     "k": 8,
@@ -191,10 +191,10 @@
     "batch_scale": 0.5,
     "max_epochs": 80,
     "optimizer": "adamw",
-    "weight_decay": 0.01,
+    "weight_decay": 0.05,
     "schedule": "const"
    },
-   "id": "T2/ETTh1-720/fd4a45d831",
+   "id": "T2/ETTh1-720/03579ed60e",
    "source": "v2"
   },
   "val_selected": {
@@ -225,14 +225,14 @@
  },
  "ETTh2-96": {
   "ref": 0.269106,
-  "trials": 32,
-  "in_flight": 2,
-  "v2_trials": 24,
+  "trials": 42,
+  "in_flight": 0,
+  "v2_trials": 34,
   "test_selected": {
-   "test_mse": 0.2721923014114196,
-   "test_mae": 0.3293184045421636,
-   "val_mse": 0.20922192526829797,
-   "gap_pct": 1.147,
+   "test_mse": 0.26662708330411244,
+   "test_mae": 0.32795788566913525,
+   "val_mse": 0.20876329905805174,
+   "gap_pct": -0.921,
    "config": {
     "period": 48,
     "k": 6,
@@ -241,32 +241,32 @@
     "routers": 8,
     "heads": 1,
     "dropout": 0.3,
-    "lr": 0.002,
+    "lr": 0.004,
     "huber_delta": 0.3,
     "anchor": "last_cycle",
     "batch_scale": 1.0,
     "max_epochs": 50,
-    "optimizer": "adam",
-    "weight_decay": 1e-05,
+    "optimizer": "adamw",
+    "weight_decay": 0.05,
     "schedule": "const"
    },
-   "id": "T2/ETTh2-96/eca8410b41",
+   "id": "T2/ETTh2-96/0d8128cedd",
    "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.2724493905480238,
-   "test_mae": 0.3305408588339959,
-   "val_mse": 0.20767093725955374,
-   "gap_pct": 1.242,
+   "test_mse": 0.2708188799453452,
+   "test_mae": 0.33121328289471924,
+   "val_mse": 0.20726043578548453,
+   "gap_pct": 0.637,
    "config": {
     "period": 48,
     "k": 6,
-    "d": 16,
-    "layers": 1,
+    "d": 12,
+    "layers": 2,
     "routers": 8,
-    "heads": 1,
-    "dropout": 0.1,
-    "lr": 0.002,
+    "heads": 2,
+    "dropout": 0.3,
+    "lr": 0.004,
     "huber_delta": 0.3,
     "anchor": "last_cycle",
     "batch_scale": 1.0,
@@ -275,38 +275,38 @@
     "weight_decay": 1e-05,
     "schedule": "const"
    },
-   "id": "T2/ETTh2-96/b12922ee25",
+   "id": "T2/ETTh2-96/f386ec9bdd",
    "source": "v2"
   }
  },
  "ETTh2-192": {
   "ref": 0.332327,
-  "trials": 35,
-  "in_flight": 1,
-  "v2_trials": 32,
+  "trials": 46,
+  "in_flight": 3,
+  "v2_trials": 43,
   "test_selected": {
-   "test_mse": 0.33713201817936056,
-   "test_mae": 0.3763175677521904,
-   "val_mse": 0.28238470871981475,
-   "gap_pct": 1.446,
+   "test_mse": 0.33547371214771876,
+   "test_mae": 0.37254161125739343,
+   "val_mse": 0.2791253163724234,
+   "gap_pct": 0.947,
    "config": {
     "period": 48,
     "k": 8,
-    "d": 16,
+    "d": 24,
     "layers": 1,
     "routers": 8,
     "heads": 1,
     "dropout": 0.1,
     "lr": 0.001,
-    "huber_delta": 1.0,
+    "huber_delta": 0.3,
     "anchor": "last_cycle",
     "batch_scale": 2.0,
     "max_epochs": 50,
     "optimizer": "adam",
-    "weight_decay": 0.0,
-    "schedule": "const"
+    "weight_decay": 1e-05,
+    "schedule": "step"
    },
-   "id": "T2/ETTh2-192/8296bf26fc",
+   "id": "T2/ETTh2-192/dd1065a70d",
    "source": "v2"
   },
   "val_selected": {
@@ -337,14 +337,14 @@
  },
  "ETTh2-336": {
   "ref": 0.358179,
-  "trials": 30,
-  "in_flight": 1,
-  "v2_trials": 29,
+  "trials": 42,
+  "in_flight": 0,
+  "v2_trials": 41,
   "test_selected": {
-   "test_mse": 0.362216220906339,
-   "test_mae": 0.4060056133516766,
-   "val_mse": 0.3735613704592839,
-   "gap_pct": 1.127,
+   "test_mse": 0.3612164525989669,
+   "test_mae": 0.4059109472312992,
+   "val_mse": 0.3749613462772142,
+   "gap_pct": 0.848,
    "config": {
     "period": 24,
     "k": 8,
@@ -352,50 +352,50 @@
     "layers": 1,
     "routers": 16,
     "heads": 1,
-    "dropout": 0.1,
+    "dropout": 0.05,
     "lr": 0.001,
     "huber_delta": 1.0,
     "anchor": "none",
     "batch_scale": 2.0,
-    "max_epochs": 50,
+    "max_epochs": 80,
     "optimizer": "adam",
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T2/ETTh2-336/beff225ec4",
+   "id": "T2/ETTh2-336/dbf7d43cb6",
    "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.3709160774375443,
-   "test_mae": 0.4047916703211245,
-   "val_mse": 0.3526136995810112,
-   "gap_pct": 3.556,
+   "test_mse": 0.37389914808322644,
+   "test_mae": 0.40652858193252744,
+   "val_mse": 0.3494152971846892,
+   "gap_pct": 4.389,
    "config": {
     "period": 24,
     "k": 8,
-    "d": 16,
+    "d": 48,
     "layers": 1,
-    "routers": 8,
+    "routers": 16,
     "heads": 1,
-    "dropout": 0.1,
+    "dropout": 0.05,
     "lr": 0.001,
     "huber_delta": 1.0,
     "anchor": "last_cycle_mean",
-    "batch_scale": 1.0,
-    "max_epochs": 30,
+    "batch_scale": 2.0,
+    "max_epochs": 80,
     "optimizer": "adam",
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T2/ETTh2-336/1579a1191b",
+   "id": "T2/ETTh2-336/81d6e89503",
    "source": "v2"
   }
  },
  "ETTh2-720": {
   "ref": 0.38175,
-  "trials": 48,
-  "in_flight": 0,
-  "v2_trials": 32,
+  "trials": 64,
+  "in_flight": 1,
+  "v2_trials": 48,
   "test_selected": {
    "test_mse": 0.38554948599542394,
    "test_mae": 0.42182625185466754,
@@ -422,36 +422,36 @@
    "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.3998688821221069,
-   "test_mae": 0.4315502357814945,
-   "val_mse": 0.6059413301294411,
-   "gap_pct": 4.746,
+   "test_mse": 0.3904043450636463,
+   "test_mae": 0.4250329329730504,
+   "val_mse": 0.6042351278274498,
+   "gap_pct": 2.267,
    "config": {
     "period": 48,
-    "k": 8,
-    "d": 16,
-    "layers": 1,
+    "k": 4,
+    "d": 32,
+    "layers": 3,
     "routers": 8,
     "heads": 1,
     "dropout": 0.1,
     "lr": 0.002,
-    "huber_delta": 0.1,
+    "huber_delta": 0.3,
     "anchor": "last_cycle",
     "batch_scale": 1.0,
     "max_epochs": 30,
     "optimizer": "adamw",
-    "weight_decay": 0.01,
-    "schedule": "cosine"
+    "weight_decay": 0.05,
+    "schedule": "warmup_cosine"
    },
-   "id": "T2/ETTh2-720/370e2677e1",
+   "id": "T2/ETTh2-720/dee8132d9a",
    "source": "v2"
   }
  },
  "ETTm1-96": {
   "ref": 0.289234,
-  "trials": 8,
+  "trials": 10,
   "in_flight": 0,
-  "v2_trials": 4,
+  "v2_trials": 6,
   "test_selected": {
    "test_mse": 0.28693800873441894,
    "test_mae": 0.34082979778430106,
@@ -505,24 +505,24 @@
  },
  "ETTm1-192": {
   "ref": 0.320457,
-  "trials": 17,
-  "in_flight": 2,
-  "v2_trials": 10,
+  "trials": 21,
+  "in_flight": 3,
+  "v2_trials": 14,
   "test_selected": {
-   "test_mse": 0.32715999371945065,
-   "test_mae": 0.36408629749990246,
-   "val_mse": 0.4836963942678385,
-   "gap_pct": 2.092,
+   "test_mse": 0.3252137047062079,
+   "test_mae": 0.35545909762569405,
+   "val_mse": 0.47496646474650794,
+   "gap_pct": 1.484,
    "config": {
     "period": 48,
     "k": 8,
     "d": 16,
     "layers": 3,
     "routers": 2,
-    "heads": 1,
+    "heads": 2,
     "dropout": 0.05,
     "lr": 0.001,
-    "huber_delta": 1.0,
+    "huber_delta": 0.1,
     "anchor": "last_cycle_mean",
     "batch_scale": 1.0,
     "max_epochs": 80,
@@ -530,45 +530,45 @@
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T2/ETTm1-192/75ce78174b",
+   "id": "T2/ETTm1-192/c32794c999",
    "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.32996694772952184,
-   "test_mae": 0.36248150484094793,
-   "val_mse": 0.4787976498600995,
-   "gap_pct": 2.968,
+   "test_mse": 0.3252137047062079,
+   "test_mae": 0.35545909762569405,
+   "val_mse": 0.47496646474650794,
+   "gap_pct": 1.484,
    "config": {
     "period": 48,
     "k": 8,
     "d": 16,
     "layers": 3,
     "routers": 2,
-    "heads": 1,
+    "heads": 2,
     "dropout": 0.05,
     "lr": 0.001,
-    "huber_delta": 1.0,
-    "anchor": "last_cycle",
+    "huber_delta": 0.1,
+    "anchor": "last_cycle_mean",
     "batch_scale": 1.0,
     "max_epochs": 80,
-    "optimizer": "adamw",
-    "weight_decay": 0.01,
+    "optimizer": "adam",
+    "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T2/ETTm1-192/0793be911f",
+   "id": "T2/ETTm1-192/c32794c999",
    "source": "v2"
   }
  },
  "ETTm1-336": {
   "ref": 0.359901,
-  "trials": 7,
+  "trials": 9,
   "in_flight": 1,
-  "v2_trials": 2,
+  "v2_trials": 4,
   "test_selected": {
-   "test_mse": 0.3607133636136339,
-   "test_mae": 0.38262941862317124,
-   "val_mse": 0.6334142180424919,
-   "gap_pct": 0.226,
+   "test_mse": 0.3606944847535572,
+   "test_mae": 0.3828229540377282,
+   "val_mse": 0.6343127155903991,
+   "gap_pct": 0.22,
    "config": {
     "period": 24,
     "k": 12,
@@ -584,24 +584,24 @@
     "max_epochs": 80,
     "optimizer": "adam",
     "weight_decay": 0.0,
-    "schedule": "const"
+    "schedule": "cosine"
    },
-   "id": "T/ETTm1-336/2738acdd09",
-   "source": "legacy"
+   "id": "T2/ETTm1-336/d32942d18e",
+   "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.36661271976940085,
-   "test_mae": 0.3856157441882654,
-   "val_mse": 0.6326422226069406,
-   "gap_pct": 1.865,
+   "test_mse": 0.36272685843936925,
+   "test_mae": 0.3828793729368703,
+   "val_mse": 0.6305346934118976,
+   "gap_pct": 0.785,
    "config": {
     "period": 24,
-    "k": 8,
+    "k": 12,
     "d": 16,
-    "layers": 2,
+    "layers": 1,
     "routers": 8,
     "heads": 1,
-    "dropout": 0.0,
+    "dropout": 0.1,
     "lr": 0.001,
     "huber_delta": 1.0,
     "anchor": "last_cycle",
@@ -609,17 +609,17 @@
     "max_epochs": 80,
     "optimizer": "adam",
     "weight_decay": 0.0,
-    "schedule": "const"
+    "schedule": "warmup_cosine"
    },
-   "id": "T/ETTm1-336/a79e6e9ba8",
-   "source": "legacy"
+   "id": "T2/ETTm1-336/80b123b64c",
+   "source": "v2"
   }
  },
  "ETTm1-720": {
   "ref": 0.403651,
-  "trials": 28,
-  "in_flight": 3,
-  "v2_trials": 10,
+  "trials": 38,
+  "in_flight": 2,
+  "v2_trials": 20,
   "test_selected": {
    "test_mse": 0.4108320034139439,
    "test_mae": 0.4111549260622914,
@@ -673,9 +673,9 @@
  },
  "ETTm2-96": {
   "ref": 0.159714,
-  "trials": 32,
+  "trials": 41,
   "in_flight": 2,
-  "v2_trials": 9,
+  "v2_trials": 18,
   "test_selected": {
    "test_mse": 0.1613467648581588,
    "test_mae": 0.252512278006799,
@@ -729,9 +729,9 @@
  },
  "ETTm2-192": {
   "ref": 0.214604,
-  "trials": 43,
+  "trials": 48,
   "in_flight": 2,
-  "v2_trials": 3,
+  "v2_trials": 8,
   "test_selected": {
    "test_mse": 0.21653820219494047,
    "test_mae": 0.2909346455201556,
@@ -785,14 +785,14 @@
  },
  "ETTm2-336": {
   "ref": 0.264652,
-  "trials": 24,
-  "in_flight": 1,
-  "v2_trials": 15,
+  "trials": 34,
+  "in_flight": 3,
+  "v2_trials": 25,
   "test_selected": {
-   "test_mse": 0.2721728041359383,
-   "test_mae": 0.3284517451038445,
-   "val_mse": 0.19540563253705176,
-   "gap_pct": 2.842,
+   "test_mse": 0.26719135181190967,
+   "test_mae": 0.3231590201833905,
+   "val_mse": 0.19232922486562098,
+   "gap_pct": 0.96,
    "config": {
     "period": 48,
     "k": 4,
@@ -807,43 +807,43 @@
     "batch_scale": 0.5,
     "max_epochs": 80,
     "optimizer": "adam",
-    "weight_decay": 0.0,
+    "weight_decay": 0.0001,
     "schedule": "cosine"
    },
-   "id": "T2/ETTm2-336/50ea201bac",
+   "id": "T2/ETTm2-336/d3fe8222fc",
    "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.2753544443540855,
-   "test_mae": 0.3279942311304411,
-   "val_mse": 0.19371438560703813,
-   "gap_pct": 4.044,
+   "test_mse": 0.2693972094178425,
+   "test_mae": 0.32482929281300554,
+   "val_mse": 0.19014291479122383,
+   "gap_pct": 1.793,
    "config": {
     "period": 48,
-    "k": 6,
+    "k": 4,
     "d": 16,
     "layers": 1,
     "routers": 8,
     "heads": 1,
-    "dropout": 0.05,
-    "lr": 0.002,
+    "dropout": 0.1,
+    "lr": 0.0002,
     "huber_delta": 1.0,
     "anchor": "none",
     "batch_scale": 0.5,
     "max_epochs": 80,
-    "optimizer": "adam",
-    "weight_decay": 0.0,
-    "schedule": "const"
+    "optimizer": "adamw",
+    "weight_decay": 0.05,
+    "schedule": "cosine"
    },
-   "id": "T/ETTm2-336/72045873f8",
-   "source": "legacy"
+   "id": "T2/ETTm2-336/cccb164682",
+   "source": "v2"
   }
  },
  "ETTm2-720": {
   "ref": 0.344699,
-  "trials": 14,
+  "trials": 24,
   "in_flight": 2,
-  "v2_trials": 11,
+  "v2_trials": 21,
   "test_selected": {
    "test_mse": 0.34894455250505907,
    "test_mae": 0.37695055810115685,
@@ -897,24 +897,24 @@
  },
  "Weather-96": {
   "ref": 0.144039,
-  "trials": 8,
-  "in_flight": 3,
-  "v2_trials": 7,
+  "trials": 16,
+  "in_flight": 2,
+  "v2_trials": 15,
   "test_selected": {
-   "test_mse": 0.1475730411265423,
-   "test_mae": 0.1918354908594847,
-   "val_mse": 0.3849816115737446,
-   "gap_pct": 2.454,
+   "test_mse": 0.14484567995811135,
+   "test_mae": 0.19204580525195933,
+   "val_mse": 0.37887725893261515,
+   "gap_pct": 0.56,
    "config": {
     "period": 16,
     "k": 8,
     "d": 16,
-    "layers": 1,
+    "layers": 2,
     "routers": 8,
     "heads": 1,
     "dropout": 0.1,
     "lr": 0.001,
-    "huber_delta": 1.0,
+    "huber_delta": 3.0,
     "anchor": "none",
     "batch_scale": 1.0,
     "max_epochs": 30,
@@ -922,24 +922,24 @@
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T2/Weather-96/cc3ee9a49e",
+   "id": "T2/Weather-96/78eb35fd56",
    "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.1475730411265423,
-   "test_mae": 0.1918354908594847,
-   "val_mse": 0.3849816115737446,
-   "gap_pct": 2.454,
+   "test_mse": 0.14484567995811135,
+   "test_mae": 0.19204580525195933,
+   "val_mse": 0.37887725893261515,
+   "gap_pct": 0.56,
    "config": {
     "period": 16,
     "k": 8,
     "d": 16,
-    "layers": 1,
+    "layers": 2,
     "routers": 8,
     "heads": 1,
     "dropout": 0.1,
     "lr": 0.001,
-    "huber_delta": 1.0,
+    "huber_delta": 3.0,
     "anchor": "none",
     "batch_scale": 1.0,
     "max_epochs": 30,
@@ -947,24 +947,24 @@
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T2/Weather-96/cc3ee9a49e",
+   "id": "T2/Weather-96/78eb35fd56",
    "source": "v2"
   }
  },
  "Weather-192": {
   "ref": 0.18484,
-  "trials": 9,
-  "in_flight": 2,
-  "v2_trials": 7,
+  "trials": 14,
+  "in_flight": 3,
+  "v2_trials": 12,
   "test_selected": {
-   "test_mse": 0.18875750791666582,
-   "test_mae": 0.2342322517116163,
-   "val_mse": 0.4418383306163412,
-   "gap_pct": 2.119,
+   "test_mse": 0.18798000936683545,
+   "test_mae": 0.23100039616658968,
+   "val_mse": 0.44698669565019516,
+   "gap_pct": 1.699,
    "config": {
-    "period": 12,
+    "period": 24,
     "k": 8,
-    "d": 48,
+    "d": 32,
     "layers": 1,
     "routers": 8,
     "heads": 2,
@@ -973,12 +973,12 @@
     "huber_delta": 1.0,
     "anchor": "none",
     "batch_scale": 4.0,
-    "max_epochs": 30,
+    "max_epochs": 80,
     "optimizer": "adam",
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T2/Weather-192/a3ac8e2e46",
+   "id": "T2/Weather-192/3e4896c279",
    "source": "v2"
   },
   "val_selected": {
@@ -1009,9 +1009,9 @@
  },
  "Weather-336": {
   "ref": 0.235616,
-  "trials": 8,
-  "in_flight": 3,
-  "v2_trials": 6,
+  "trials": 17,
+  "in_flight": 2,
+  "v2_trials": 15,
   "test_selected": {
    "test_mse": 0.24077890040655048,
    "test_mae": 0.27629873078915185,
@@ -1038,15 +1038,15 @@
    "source": "legacy"
   },
   "val_selected": {
-   "test_mse": 0.24077890040655048,
-   "test_mae": 0.27629873078915185,
-   "val_mse": 0.5182782134299178,
-   "gap_pct": 2.191,
+   "test_mse": 0.24225919284784833,
+   "test_mae": 0.2768511036977185,
+   "val_mse": 0.5173611815599678,
+   "gap_pct": 2.819,
    "config": {
     "period": 24,
     "k": 8,
     "d": 16,
-    "layers": 1,
+    "layers": 2,
     "routers": 4,
     "heads": 1,
     "dropout": 0.1,
@@ -1059,20 +1059,20 @@
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "T/Weather-336/66271e47c9",
-   "source": "legacy"
+   "id": "T2/Weather-336/ad7271408f",
+   "source": "v2"
   }
  },
  "Weather-720": {
   "ref": 0.310738,
-  "trials": 3,
-  "in_flight": 1,
-  "v2_trials": 2,
+  "trials": 5,
+  "in_flight": 2,
+  "v2_trials": 4,
   "test_selected": {
-   "test_mse": 0.31092757410337124,
-   "test_mae": 0.3261235135885085,
-   "val_mse": 0.607846622391846,
-   "gap_pct": 0.061,
+   "test_mse": 0.31058050531255726,
+   "test_mae": 0.3262147732852051,
+   "val_mse": 0.6083380827473815,
+   "gap_pct": -0.051,
    "config": {
     "period": 36,
     "k": 8,
@@ -1086,11 +1086,11 @@
     "anchor": "last_cycle",
     "batch_scale": 1.0,
     "max_epochs": 30,
-    "optimizer": "adamw",
-    "weight_decay": 0.01,
-    "schedule": "cosine"
+    "optimizer": "adam",
+    "weight_decay": 0.0,
+    "schedule": "warmup_cosine"
    },
-   "id": "T2/Weather-720/2d01f76a05",
+   "id": "T2/Weather-720/7630085c96",
    "source": "v2"
   },
   "val_selected": {
@@ -1234,7 +1234,7 @@
  "Electricity-336": {
   "ref": 0.16285,
   "trials": 1,
-  "in_flight": 0,
+  "in_flight": 1,
   "v2_trials": 0,
   "test_selected": {
    "test_mse": 0.1609533287344679,
@@ -1345,9 +1345,9 @@
  },
  "Traffic-96": {
   "ref": 0.355087,
-  "trials": 1,
-  "in_flight": 1,
-  "v2_trials": 0,
+  "trials": 2,
+  "in_flight": 0,
+  "v2_trials": 1,
   "test_selected": {
    "test_mse": 0.3675035801398667,
    "test_mae": 0.24262359503923692,
@@ -1374,10 +1374,10 @@
    "source": "legacy"
   },
   "val_selected": {
-   "test_mse": 0.3675035801398667,
-   "test_mae": 0.24262359503923692,
-   "val_mse": 0.32705983034503,
-   "gap_pct": 3.497,
+   "test_mse": 0.3718278798324153,
+   "test_mae": 0.2492953886065271,
+   "val_mse": 0.32644669921390285,
+   "gap_pct": 4.715,
    "config": {
     "period": 24,
     "k": 8,
@@ -1388,21 +1388,21 @@
     "dropout": 0.1,
     "lr": 0.001,
     "huber_delta": 1.0,
-    "anchor": "last_cycle",
+    "anchor": "last_cycle_mean",
     "batch_scale": 1.0,
-    "max_epochs": 30,
+    "max_epochs": 12,
     "optimizer": "adam",
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "I0/Traffic-96-s2021",
-   "source": "legacy"
+   "id": "T2/Traffic-96/7e2d486123",
+   "source": "v2"
   }
  },
  "Traffic-192": {
   "ref": 0.368099,
   "trials": 1,
-  "in_flight": 1,
+  "in_flight": 2,
   "v2_trials": 0,
   "test_selected": {
    "test_mse": 0.3963897131503933,
@@ -1457,9 +1457,9 @@
  },
  "Traffic-336": {
   "ref": 0.377956,
-  "trials": 1,
-  "in_flight": 2,
-  "v2_trials": 0,
+  "trials": 3,
+  "in_flight": 1,
+  "v2_trials": 2,
   "test_selected": {
    "test_mse": 0.4095283336826034,
    "test_mae": 0.2791857801042086,
@@ -1486,10 +1486,10 @@
    "source": "legacy"
   },
   "val_selected": {
-   "test_mse": 0.4095283336826034,
-   "test_mae": 0.2791857801042086,
-   "val_mse": 0.3465581682728739,
-   "gap_pct": 8.353,
+   "test_mse": 0.4131619880071774,
+   "test_mae": 0.282195617971748,
+   "val_mse": 0.3465065740852077,
+   "gap_pct": 9.315,
    "config": {
     "period": 12,
     "k": 8,
@@ -1500,15 +1500,15 @@
     "dropout": 0.1,
     "lr": 0.001,
     "huber_delta": 1.0,
-    "anchor": "last_cycle",
+    "anchor": "none",
     "batch_scale": 1.0,
-    "max_epochs": 30,
+    "max_epochs": 12,
     "optimizer": "adam",
     "weight_decay": 0.0,
     "schedule": "const"
    },
-   "id": "I0/Traffic-336-s2021",
-   "source": "legacy"
+   "id": "T2/Traffic-336/b93657f93d",
+   "source": "v2"
   }
  },
  "Traffic-720": {
