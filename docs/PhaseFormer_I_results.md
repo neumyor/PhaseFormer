@@ -4,7 +4,7 @@
 
 方法：在主表的 7 个数据集、4 个预测长度共 28 个 setting 上用单种子 2021 运行，首轮的周期长度取自 B0H+ 在该 setting 的最优配置；随后由 `scripts/biaxial/tune.py` 围绕与 B0H+ 差距大的 setting 持续调参（随机变异加随机森林代理模型，21:12 至次日 10:00，共 1323 个试验）。**选择依据是测试集（项目声明的 test-set selection），所有试验保存在 `research_runs/biaxial_stage_20261110/tune_trials.jsonl`，结果不是盲测或无偏泛化估计。** B0H+ 的数值来自 `PhaseFormer_VLDBJ_b0hp_best_settings.csv`（同样是单种子、测试集选优）。“持平”定义为测试 MSE 不高于 B0H+ 的 0.3%。
 
-首轮平均比 B0H+ 高 4.4%，持平的 setting 7 个；调参后平均高 1.45%，持平的 setting 12 个（见表末统计）。Electricity 与 Traffic 单次试验需要数小时，且大批量会显存不足，这两个数据集的试验很少（Traffic 与 B0H+ 的差距仍为 3.5% 到 8.4%），Weather 试验也较少。ETTh1-96、ETTh1-192、ETTh1-336、ETTm1-720、ETTm2-192、ETTm2-336 的差距在 0.9% 到 2.9%，未达持平。
+首轮平均比 B0H+ 高 4.0%，持平的 setting 3 个；调参后平均高 1.45%，持平的 setting 12 个（见表末统计）。Electricity 与 Traffic 单次试验需要数小时，且大批量会显存不足，这两个数据集的试验很少（Traffic 与 B0H+ 的差距仍为 3.5% 到 8.4%），Weather 试验也较少。ETTh1-96、ETTh1-192、ETTh1-336、ETTm1-720、ETTm2-192、ETTm2-336 的差距在 0.9% 到 2.9%，未达持平。
 
 | setting | B0H+ test MSE | PhaseFormer-I first run | PhaseFormer-I best | gap to B0H+ | trials | matched | changed settings |
 |---|---:|---:|---:|---:|---:|:---:|---|
