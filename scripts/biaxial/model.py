@@ -288,9 +288,11 @@ class PhaseFormerPlus(nn.Module):
     def __init__(self, c: Cfg):
         super().__init__()
         P = c.period
-        if c.seq_len % P or c.pred_len % P:
-            raise ValueError('window and horizon must be whole cycles')
-        self.c, self.K, self.P, self.Kp = c, c.seq_len // P, P, c.pred_len // P
+        if c.seq_len % P:
+            raise ValueError('window must be whole cycles')
+        # The horizon need not be whole cycles: the model forecasts ceil(H / P) cycles and keeps the first H values.
+        self.c, self.K, self.P, self.Kp = c, c.seq_len // P, P, -(-c.pred_len // P)
+        self.Hc = self.Kp * P
         self.phase = (PhaseNetM0(c, self.K, P, self.Kp) if c.arch == 'm0'
                       else PhaseNetBiAxial(c, self.K, P, self.Kp))
         if c.decoder != 'd0':
@@ -300,13 +302,13 @@ class PhaseFormerPlus(nn.Module):
                 self.coef = nn.Linear(c.k * c.d, 3)
                 nn.init.zeros_(self.coef.weight)
                 nn.init.zeros_(self.coef.bias)
-                profiles = legendre_profiles(c.pred_len)
+                profiles = legendre_profiles(self.Hc)
                 if c.decoder.endswith('learn'):
                     self.profiles = nn.Parameter(profiles)
                 else:
                     self.register_buffer('profiles', profiles, persistent=False)
         elif c.use_trend:
-            self.trend = TrendPathway(c.seq_len, c.pred_len, P, c.d)
+            self.trend = TrendPathway(c.seq_len, self.Hc, P, c.d)
             logit = math.log(c.gate_init / (1 - c.gate_init))
             self.omega = nn.Parameter(torch.full((c.channels,), logit))
             self.omega_delta = nn.Parameter(torch.zeros(c.channels))
@@ -333,20 +335,20 @@ class PhaseFormerPlus(nn.Module):
             out = self._fuse(phase, trend, gl, gs)
         else:
             out = phase
-        out = out.view(B, C, -1).permute(0, 2, 1)
+        out = out.view(B, C, -1)[..., :self.c.pred_len].permute(0, 2, 1)
         return out * sd + mu
 
     def _anchor(self, X, xn):
         N = X.shape[0]
         mode = self.c.anchor
         if mode == 'x_last':
-            return xn[:, -1:].expand(N, self.c.pred_len)
+            return xn[:, -1:].expand(N, self.Hc)
         if mode == 'last_cycle':
             return X[:, -1, :].repeat(1, self.Kp)
         if mode == 'last_cycle_mean':
-            return X[:, -1, :].mean(-1, keepdim=True).expand(N, self.c.pred_len)
+            return X[:, -1, :].mean(-1, keepdim=True).expand(N, self.Hc)
         if mode == 'none':
-            return torch.zeros(N, self.c.pred_len, device=X.device)
+            return torch.zeros(N, self.Hc, device=X.device)
         raise ValueError(mode)
 
     def _decode(self, phase, X, xn):
