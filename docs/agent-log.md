@@ -7651,3 +7651,10 @@ throughout; two of its commits swept in earlier parts of this batch.
 - 修改：筛选集收窄；新增 `scripts/biaxial/diagnostics.py`；worker 在编译前绑定 GPU（否则在被占满的 GPU 0 上建立上下文导致显存不足）。
 - 最终模型：交替双轴 1 层，d=16，k=8，W_p 恒等，直接解码，最后周期参考；测试比金标准平均高 1.3%。
 - 可比性：所有数值为同一重新实现的协议，选择只用验证集，不使用测试集选择。
+
+## 2026-11-11 PhaseFormer-I 全 setting 评测与调参
+
+- 结果：`docs/PhaseFormer_I_results.md`；数据 `research_runs/biaxial_stage_20261110/`（`tune_trials.jsonl`、`tune_state.json`、`i0_results.jsonl`）。
+- 代码：`scripts/biaxial/tune.py`（调参驱动）、`report.py`（汇总表）；服务器目录 `~/niuyiming/PhaseFormer_biaxial_20261110`，驱动脚本 `start_tune.sh`。
+- test-set selection：每个 setting 的最优配置按测试 MSE 选出，已保存全部试验，不得描述为盲测。
+- 已知问题：重数据集（Traffic、Electricity）单试验需数小时，初期使用的大批量导致显存不足，已改为批大小 8 到 32 且限制 epoch；这两个数据集调参不充分。
