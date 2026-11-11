@@ -9,6 +9,7 @@ state is evaluated on validation and test; selection uses validation only.
 from __future__ import annotations
 
 import copy
+import math
 import json
 import sys
 import time
@@ -87,6 +88,43 @@ def flops_per_channel(cfg):
     return counter.get_total_flops()
 
 
+SGD_LR_SCALE = 50.0   # SGD with momentum is run at lr x 50, so one learning-rate grid serves all optimizers
+WARMUP_EPOCHS = 2
+FINAL_LR_FRACTION = 0.01
+
+
+def build_optimizer(model, job):
+    """Optimizer type, weight decay and learning-rate schedule of a job (defaults reproduce Adam, no decay, constant)."""
+    lr, decay = job.get('lr', LR), job.get('weight_decay', 0.0)
+    kind = job.get('optimizer', 'adam')
+    if kind == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
+    elif kind == 'adamw':
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=decay)
+    elif kind == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr * SGD_LR_SCALE, momentum=0.9, weight_decay=decay)
+    else:
+        raise ValueError(kind)
+    epochs = job.get('max_epochs', MAX_EPOCHS)
+    schedule = job.get('schedule', 'const')
+    if schedule == 'const':
+        return optimizer, None
+    if schedule == 'cosine':
+        factor = lambda e: FINAL_LR_FRACTION + (1 - FINAL_LR_FRACTION) * 0.5 * (1 + math.cos(math.pi * e / epochs))
+    elif schedule == 'step':
+        step = max(1, epochs // 3)
+        factor = lambda e: 0.3 ** (e // step)
+    elif schedule == 'warmup_cosine':
+        def factor(e):
+            if e < WARMUP_EPOCHS:
+                return (e + 1) / (WARMUP_EPOCHS + 1)
+            t = (e - WARMUP_EPOCHS) / max(1, epochs - WARMUP_EPOCHS)
+            return FINAL_LR_FRACTION + (1 - FINAL_LR_FRACTION) * 0.5 * (1 + math.cos(math.pi * t))
+    else:
+        raise ValueError(schedule)
+    return optimizer, torch.optim.lr_scheduler.LambdaLR(optimizer, factor)
+
+
 def run_job(job, splits, batch, device):
     batch = job.get('batch', batch)
     torch.manual_seed(job['seed'])
@@ -99,7 +137,7 @@ def run_job(job, splits, batch, device):
     model = PhaseFormerPlus(cfg).to(device)
     # Compiling pays off only when an epoch is long; short jobs finish before the compile time is repaid.
     run = torch.compile(model) if train.shape[0] * train.shape[1] > COMPILE_SAMPLES and device.type == 'cuda' else model
-    optimizer = torch.optim.Adam(model.parameters(), lr=job.get('lr', LR))
+    optimizer, scheduler = build_optimizer(model, job)
     n_train = train.shape[0] - LOOKBACK - horizon + 1
     best, best_state, bad, epochs = float('inf'), None, 0, 0
     started = time.monotonic()
@@ -116,6 +154,8 @@ def run_job(job, splits, batch, device):
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
         epochs = epoch + 1
         score = evaluate(run, val, horizon, batch, delta)['huber']
         if score < best:
@@ -138,7 +178,7 @@ def run_job(job, splits, batch, device):
     return {
         'id': job['id'], 'group': job['group'], 'dataset': job['dataset'], 'horizon': horizon,
         'seed': job['seed'], 'period': job['period'], 'model': job.get('model', {}),
-        'train_options': {k: job[k] for k in ('lr', 'batch', 'huber_delta', 'max_epochs', 'patience') if k in job},
+        'train_options': {k: job[k] for k in ('lr', 'batch', 'huber_delta', 'max_epochs', 'patience', 'optimizer', 'weight_decay', 'schedule') if k in job},
         'val_mse': val_metrics['mse'], 'val_mae': val_metrics['mae'],
         'test_mse': test_metrics['mse'], 'test_mae': test_metrics['mae'],
         'params': count_parameters(model), 'flops_per_channel': flops_per_channel(cfg),
