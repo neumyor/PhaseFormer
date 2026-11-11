@@ -1,9 +1,9 @@
 {
  "ETTh1-96": {
   "ref": 0.346013,
-  "trials": 51,
-  "in_flight": 1,
-  "v2_trials": 42,
+  "trials": 58,
+  "in_flight": 3,
+  "v2_trials": 49,
   "test_selected": {
    "test_mse": 0.3506256320063371,
    "test_mae": 0.38100932518253877,
@@ -57,21 +57,21 @@
  },
  "ETTh1-192": {
   "ref": 0.373951,
-  "trials": 67,
-  "in_flight": 1,
-  "v2_trials": 66,
+  "trials": 82,
+  "in_flight": 2,
+  "v2_trials": 81,
   "test_selected": {
-   "test_mse": 0.38519570403119413,
-   "test_mae": 0.40581917085106983,
-   "val_mse": 0.98456604979924,
-   "gap_pct": 3.007,
+   "test_mse": 0.38513000712019535,
+   "test_mae": 0.4057294939514656,
+   "val_mse": 0.9835418159119937,
+   "gap_pct": 2.989,
    "config": {
     "period": 24,
     "k": 8,
     "d": 16,
     "layers": 3,
     "routers": 8,
-    "heads": 2,
+    "heads": 1,
     "dropout": 0.05,
     "lr": 0.001,
     "huber_delta": 3.0,
@@ -82,7 +82,7 @@
     "weight_decay": 0.05,
     "schedule": "const"
    },
-   "id": "T2/ETTh1-192/f5749700ef",
+   "id": "T2/ETTh1-192/aa2bc00a9e",
    "source": "v2"
   },
   "val_selected": {
@@ -113,9 +113,9 @@
  },
  "ETTh1-336": {
   "ref": 0.410565,
-  "trials": 125,
+  "trials": 138,
   "in_flight": 1,
-  "v2_trials": 93,
+  "v2_trials": 106,
   "test_selected": {
    "test_mse": 0.41717994832387767,
    "test_mae": 0.4250178102613835,
@@ -169,9 +169,9 @@
  },
  "ETTh1-720": {
   "ref": 0.416434,
-  "trials": 76,
+  "trials": 89,
   "in_flight": 1,
-  "v2_trials": 55,
+  "v2_trials": 68,
   "test_selected": {
    "test_mse": 0.42652890853964215,
    "test_mae": 0.4451501620768236,
@@ -281,9 +281,9 @@
  },
  "ETTh2-192": {
   "ref": 0.332327,
-  "trials": 46,
-  "in_flight": 3,
-  "v2_trials": 43,
+  "trials": 55,
+  "in_flight": 2,
+  "v2_trials": 52,
   "test_selected": {
    "test_mse": 0.33547371214771876,
    "test_mae": 0.37254161125739343,
@@ -337,9 +337,9 @@
  },
  "ETTh2-336": {
   "ref": 0.358179,
-  "trials": 42,
-  "in_flight": 0,
-  "v2_trials": 41,
+  "trials": 52,
+  "in_flight": 1,
+  "v2_trials": 51,
   "test_selected": {
    "test_mse": 0.3612164525989669,
    "test_mae": 0.4059109472312992,
@@ -393,9 +393,9 @@
  },
  "ETTh2-720": {
   "ref": 0.38175,
-  "trials": 64,
-  "in_flight": 1,
-  "v2_trials": 48,
+  "trials": 78,
+  "in_flight": 0,
+  "v2_trials": 62,
   "test_selected": {
    "test_mse": 0.38554948599542394,
    "test_mae": 0.42182625185466754,
@@ -450,7 +450,7 @@
  "ETTm1-96": {
   "ref": 0.289234,
   "trials": 10,
-  "in_flight": 0,
+  "in_flight": 1,
   "v2_trials": 6,
   "test_selected": {
    "test_mse": 0.28693800873441894,
@@ -505,18 +505,18 @@
  },
  "ETTm1-192": {
   "ref": 0.320457,
-  "trials": 21,
-  "in_flight": 3,
-  "v2_trials": 14,
+  "trials": 24,
+  "in_flight": 2,
+  "v2_trials": 17,
   "test_selected": {
-   "test_mse": 0.3252137047062079,
-   "test_mae": 0.35545909762569405,
-   "val_mse": 0.47496646474650794,
-   "gap_pct": 1.484,
+   "test_mse": 0.3205486517100551,
+   "test_mae": 0.35446422911972447,
+   "val_mse": 0.48265524316069247,
+   "gap_pct": 0.029,
    "config": {
     "period": 48,
     "k": 8,
-    "d": 16,
+    "d": 8,
     "layers": 3,
     "routers": 2,
     "heads": 2,
@@ -528,16 +528,16 @@
     "max_epochs": 80,
     "optimizer": "adam",
     "weight_decay": 0.0,
-    "schedule": "const"
+    "schedule": "cosine"
    },
-   "id": "T2/ETTm1-192/c32794c999",
+   "id": "T2/ETTm1-192/9cc40f49f9",
    "source": "v2"
   },
   "val_selected": {
-   "test_mse": 0.3252137047062079,
-   "test_mae": 0.35545909762569405,
-   "val_mse": 0.47496646474650794,
-   "gap_pct": 1.484,
+   "test_mse": 0.3295027107019517,
+   "test_mae": 0.3575955248670119,
+   "val_mse": 0.4734915746922438,
+   "gap_pct": 2.823,
    "config": {
     "period": 48,
     "k": 8,
@@ -553,17 +553,17 @@
     "max_epochs": 80,
     "optimizer": "adam",
     "weight_decay": 0.0,
-    "schedule": "const"
+    "schedule": "warmup_cosine"
    },
-   "id": "T2/ETTm1-192/c32794c999",
+   "id": "T2/ETTm1-192/a242bc2e71",
    "source": "v2"
   }
  },
  "ETTm1-336": {
   "ref": 0.359901,
-  "trials": 9,
-  "in_flight": 1,
-  "v2_trials": 4,
+  "trials": 11,
+  "in_flight": 0,
+  "v2_trials": 6,
   "test_selected": {
    "test_mse": 0.3606944847535572,
    "test_mae": 0.3828229540377282,
@@ -617,9 +617,9 @@
  },
  "ETTm1-720": {
   "ref": 0.403651,
-  "trials": 38,
+  "trials": 40,
   "in_flight": 2,
-  "v2_trials": 20,
+  "v2_trials": 22,
   "test_selected": {
    "test_mse": 0.4108320034139439,
    "test_mae": 0.4111549260622914,
@@ -673,19 +673,19 @@
  },
  "ETTm2-96": {
   "ref": 0.159714,
-  "trials": 41,
-  "in_flight": 2,
-  "v2_trials": 18,
+  "trials": 46,
+  "in_flight": 1,
+  "v2_trials": 23,
   "test_selected": {
-   "test_mse": 0.1613467648581588,
-   "test_mae": 0.252512278006799,
-   "val_mse": 0.11387693709826313,
-   "gap_pct": 1.022,
+   "test_mse": 0.1608505952737102,
+   "test_mae": 0.25237040907762515,
+   "val_mse": 0.11397529369122512,
+   "gap_pct": 0.712,
    "config": {
     "period": 48,
-    "k": 12,
+    "k": 6,
     "d": 16,
-    "layers": 1,
+    "layers": 2,
     "routers": 8,
     "heads": 1,
     "dropout": 0.1,
@@ -693,12 +693,12 @@
     "huber_delta": 1.0,
     "anchor": "last_cycle",
     "batch_scale": 1.0,
-    "max_epochs": 50,
+    "max_epochs": 30,
     "optimizer": "adamw",
     "weight_decay": 0.05,
     "schedule": "warmup_cosine"
    },
-   "id": "T2/ETTm2-96/e0f7530372",
+   "id": "T2/ETTm2-96/bea12c4912",
    "source": "v2"
   },
   "val_selected": {
@@ -729,9 +729,9 @@
  },
  "ETTm2-192": {
   "ref": 0.214604,
-  "trials": 48,
+  "trials": 52,
   "in_flight": 2,
-  "v2_trials": 8,
+  "v2_trials": 12,
   "test_selected": {
    "test_mse": 0.21653820219494047,
    "test_mae": 0.2909346455201556,
@@ -785,9 +785,9 @@
  },
  "ETTm2-336": {
   "ref": 0.264652,
-  "trials": 34,
+  "trials": 39,
   "in_flight": 3,
-  "v2_trials": 25,
+  "v2_trials": 30,
   "test_selected": {
    "test_mse": 0.26719135181190967,
    "test_mae": 0.3231590201833905,
@@ -841,9 +841,9 @@
  },
  "ETTm2-720": {
   "ref": 0.344699,
-  "trials": 24,
-  "in_flight": 2,
-  "v2_trials": 21,
+  "trials": 31,
+  "in_flight": 1,
+  "v2_trials": 28,
   "test_selected": {
    "test_mse": 0.34894455250505907,
    "test_mae": 0.37695055810115685,
@@ -897,9 +897,9 @@
  },
  "Weather-96": {
   "ref": 0.144039,
-  "trials": 16,
-  "in_flight": 2,
-  "v2_trials": 15,
+  "trials": 18,
+  "in_flight": 3,
+  "v2_trials": 17,
   "test_selected": {
    "test_mse": 0.14484567995811135,
    "test_mae": 0.19204580525195933,
@@ -953,9 +953,9 @@
  },
  "Weather-192": {
   "ref": 0.18484,
-  "trials": 14,
-  "in_flight": 3,
-  "v2_trials": 12,
+  "trials": 16,
+  "in_flight": 2,
+  "v2_trials": 14,
   "test_selected": {
    "test_mse": 0.18798000936683545,
    "test_mae": 0.23100039616658968,
@@ -1009,9 +1009,9 @@
  },
  "Weather-336": {
   "ref": 0.235616,
-  "trials": 17,
-  "in_flight": 2,
-  "v2_trials": 15,
+  "trials": 19,
+  "in_flight": 3,
+  "v2_trials": 17,
   "test_selected": {
    "test_mse": 0.24077890040655048,
    "test_mae": 0.27629873078915185,
@@ -1065,9 +1065,9 @@
  },
  "Weather-720": {
   "ref": 0.310738,
-  "trials": 5,
+  "trials": 7,
   "in_flight": 2,
-  "v2_trials": 4,
+  "v2_trials": 6,
   "test_selected": {
    "test_mse": 0.31058050531255726,
    "test_mae": 0.3262147732852051,
@@ -1233,9 +1233,9 @@
  },
  "Electricity-336": {
   "ref": 0.16285,
-  "trials": 1,
-  "in_flight": 1,
-  "v2_trials": 0,
+  "trials": 2,
+  "in_flight": 0,
+  "v2_trials": 1,
   "test_selected": {
    "test_mse": 0.1609533287344679,
    "test_mae": 0.25220523632939423,
@@ -1290,7 +1290,7 @@
  "Electricity-720": {
   "ref": 0.194655,
   "trials": 3,
-  "in_flight": 0,
+  "in_flight": 1,
   "v2_trials": 2,
   "test_selected": {
    "test_mse": 0.20098809006155904,
@@ -1402,7 +1402,7 @@
  "Traffic-192": {
   "ref": 0.368099,
   "trials": 1,
-  "in_flight": 2,
+  "in_flight": 3,
   "v2_trials": 0,
   "test_selected": {
    "test_mse": 0.3963897131503933,
@@ -1457,9 +1457,9 @@
  },
  "Traffic-336": {
   "ref": 0.377956,
-  "trials": 3,
-  "in_flight": 1,
-  "v2_trials": 2,
+  "trials": 4,
+  "in_flight": 0,
+  "v2_trials": 3,
   "test_selected": {
    "test_mse": 0.4095283336826034,
    "test_mae": 0.2791857801042086,
