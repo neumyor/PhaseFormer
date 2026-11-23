@@ -21,9 +21,11 @@ import math
 import sys
 from pathlib import Path
 
+from lxml import etree
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
 
 sys.path.insert(0, str(Path(__file__).parent))
 import pptfig  # noqa: E402
@@ -62,8 +64,15 @@ PANEL_D = lerp(WHITE, PEACH, 0.45)
 
 # --------------------------------------------------------------------------- helpers
 def band(x, y, w, h, title, fill):
-    box(x, y, w, h, fill=fill, line=BAND_LINE, lw=1.0, dash='dash', radius=0.1)
+    shape = box(x, y, w, h, fill=fill, line=BAND_LINE, lw=1.0, dash='dash', radius=0.1)
     label(x + 0.08, y + 0.02, w - 0.16, 0.28, [f'**{title}**'], size=TITLE, align=PP_ALIGN.LEFT)
+    return shape
+
+
+def translucent(shape, alpha):
+    """Give the solid fill of a shape an opacity in [0, 1]."""
+    clr = shape._element.spPr.find(qn('a:solidFill')).find(qn('a:srgbClr'))
+    etree.SubElement(clr, qn('a:alpha')).set('val', str(round(alpha * 100000)))
 
 
 def module(x, y, w, h, lines=(), size=TEXT, fill=WHITE, lw=1.25):
@@ -168,7 +177,7 @@ Y_P, Y_T = 1.09, 3.30                 # rows of the phase token and the level to
 TOP, BOT = 0.04, 3.96
 
 F0, F1 = 9.6, 12.16
-band(F0, TOP, F1 - F0, BOT - TOP, '(d) Gated Fusion', PANEL_D)
+translucent(band(F0, TOP, F1 - F0, BOT - TOP, '(d) Gated Fusion', rgb('D9D9D9')), 0.23)
 
 # (a) phase-aligned tokens and the shared embedding -----------------------------------------
 A0, A1 = 0.04, 2.9
@@ -181,7 +190,7 @@ series(gx, 0.39, gw, 0.2, K, BLACK, drift=0.35)
 for k in range(1, K):
     path([(gx + k * cw, 0.37), (gx + k * cw, 0.61)], color=SERIES_GRAY, lw=0.75, arrow=False, dash='sysDash')
 arrow([(gx + 0.08, 0.64), (gx + 0.08, gy - 0.03)])
-label(gx + 0.16, 0.63, 1.4, 0.2, ['normalize, fold'], size=SMALL, align=PP_ALIGN.LEFT)
+label(gx + 0.16, 0.625, 0.4, 0.21, ['fold'], size=SMALL, align=PP_ALIGN.LEFT)
 label(gx + gw + 0.06, 0.38, 0.9, 0.22, ['window $x$'], size=SMALL, align=PP_ALIGN.LEFT)
 
 lo = rgb('F4F9FD')
@@ -227,11 +236,11 @@ label(TX - 0.12, YB + 0.04, K * S + 0.3, 0.42, ['level token', '$r̅$'], size=SM
       color=GREEN_LINE, anchor=MSO_ANCHOR.TOP)
 MX = gx + 0.08
 arrow([(MX, gy + P * ch + 0.03), (MX, Y_T), (TX - 0.03, Y_T)])
-label(MX + 0.08, 2.22, 1.0, 0.42, ['mean over', 'phases'], size=SMALL, align=PP_ALIGN.LEFT, spacing=0.9)
+label(MX + 0.08, 2.29, 0.6, 0.57, ['mean', 'over', 'phases'], size=SMALL, align=PP_ALIGN.LEFT, spacing=0.9)
 
 E0, E1 = 1.74, 2.84                    # shared embedding column
 EX = (E0 + E1) / 2
-module(E0, 0.42, E1 - E0, 3.48, fill=YELLOW)
+translucent(module(E0, 0.42, E1 - E0, 3.48, fill=YELLOW, lw=0.5), 0.38)
 label(E0 - 0.1, 0.45, E1 - E0 + 0.2, 0.42, ['**Shared**', '**Embedding**'], size=TEXT, spacing=0.85)
 for yc, line in ((Y_P, BLUE_LINE), (Y_T, GREEN_LINE)):
     arrow([(TX + K * S + D + 0.02, yc), (EX - 0.25, yc)], color=line)
@@ -247,9 +256,10 @@ B0, B1 = 2.96, 9.52
 band(B0, TOP, B1 - B0, 2.5 - TOP, '(b) Phase Pathway', LANE_B)
 
 R0, R1, RT, RB = 3.42, 8.22, 0.38, 2.42  # routing layer
+module(R0 + 0.047, RT - 0.044, R1 - R0, RB - RT, lw=1.0)   # one layer behind: N_r stacked layers
 module(R0, RT, R1 - R0, RB - RT, lw=1.0)
 label(R0 + 0.08, RT + 0.02, 3.0, 0.24, ['**Cross-Phase Routing Layer**'], size=TEXT, align=PP_ALIGN.LEFT)
-label(R1 + 0.02, RB - 0.26, 0.42, 0.26, ['$×N_r$'], align=PP_ALIGN.LEFT)
+label(R1 + 0.103, RB - 0.26, 0.42, 0.26, ['$×N_r$'], align=PP_ALIGN.LEFT)
 
 SUB_T, SUB_B = 0.66, 2.34
 Y_W, Y_M, Y_O = 1.32, 1.74, 2.18      # W boxes, attention, outputs
@@ -280,26 +290,24 @@ chip(qx, Y_P - 0.04)
 label(G1 - 0.94, 0.7, 0.88, 0.22, ['routers $\\b{R}$'], size=SMALL, align=PP_ALIGN.RIGHT)
 arrow([(qx, Y_P + 0.13), (qx, Y_W)])
 attention(G0, G1, kx, vx, qx, 'agg')
-RX = (G0 + G1) / 2 + 0.22               # routers R' shifted right to leave room for their label
+RX = (G0 + G1) / 2 + 0.024
+RTOK = dict(w=0.172, h=0.12, gap=0.047)  # router tokens R', wider than the phase tokens
 arrow([(RX, Y_M + 0.28), (RX, Y_O - 0.06)])
-ra, rb = token_row(RX, Y_O, 3, ROUTER, ROUTER_LINE)
-label(ra - 0.9, Y_O - 0.11, 0.86, 0.22, ['routers $\\b{R}′$'], size=SMALL, align=PP_ALIGN.RIGHT)
+ra, rb = token_row(RX, Y_O, 3, ROUTER, ROUTER_LINE, **RTOK)
 
 # distribution: Z~ are the queries, R' the keys and values
 D0, D1 = 5.42, 7.22
 step_panel(D0, D1, 'Distribution')
 kx, vx, qx = 5.75, 6.23, 6.85
-da, db = token_row((kx + vx) / 2, Y_P, 3, ROUTER, ROUTER_LINE)
+da, db = token_row((kx + vx) / 2, Y_P, 3, ROUTER, ROUTER_LINE, **RTOK)
 for cx in (kx, vx):
     arrow([(cx, Y_P + 0.06), (cx, Y_W)])
-label(kx + 0.03, Y_P + 0.05, vx - kx - 0.06, 0.2, ['$\\b{R}′$'], size=SMALL)
 token_row(qx, Y_P, 4, TOKEN_BLUE, BLUE_LINE)
 arrow([(qx, Y_P + 0.06), (qx, Y_W)])
 label(qx + 0.07, Y_P + 0.05, 0.3, 0.2, ['$\\b{Z}$'], size=SMALL, align=PP_ALIGN.LEFT)
 attention(D0, D1, kx, vx, qx, 'dist')
-XG, RR = (G1 + D0) / 2, 0.06            # hand-over of R' through the gap between the two steps
-arrow([(rb + 0.01, Y_O)] + bezier((XG - RR, Y_O), (XG, Y_O), (XG, Y_O), (XG, Y_O - RR), n=8)
-      + bezier((XG, Y_P + RR), (XG, Y_P), (XG, Y_P), (XG + RR, Y_P), n=8) + [(da - 0.01, Y_P)])
+XG = (G1 + D0) / 2                      # hand-over of R' through the gap between the two steps
+arrow([(rb, Y_O), (XG, Y_O), (XG, Y_P), (da, Y_P)], color=BLUE_LINE)
 xc = (D0 + D1) / 2
 arrow([(xc, Y_M + 0.28), (xc, Y_O - 0.06)])
 za, zb = token_row(xc, Y_O, 4, TOKEN_BLUE, BLUE_LINE)
@@ -314,9 +322,8 @@ arrow([((C0 + C1) / 2, 1.58), ((C0 + C1) / 2, 1.40)])
 
 # shared predictor, then unfold to the phase forecast F
 Y_F = 1.26
-module(8.36, 0.88, 1.0, 0.76, ['Shared', 'Predictor $Φ$'], size=TEXT)
+module(8.36, 0.88, 1.0, 0.76, ['Shared', 'Predictor $Φ$'], size=14)
 arrow([(C1, Y_F), (8.36, Y_F)])
-label(8.1, 1.68, 1.5, 0.24, ['phase forecast $F$'], size=SMALL)
 arrow([(9.36, Y_F), (9.72, Y_F)])
 
 # (c) trend pathway ---------------------------------------------------------------------------
@@ -325,7 +332,7 @@ arrow([(EX + 0.25, Y_T), (3.2, Y_T)], color=GREEN_LINE)
 module(3.2, 2.98, 1.3, 0.64, ['Linear', 'Encoder $E$'], size=TEXT)
 arrow([(4.5, Y_T), (4.71, Y_T)])
 token_col(4.79, Y_T, 3, TOKEN_GREEN, GREEN_LINE)
-label(4.29, 3.64, 1.0, 0.24, ['state $t∈ℝ^r$'], size=SMALL)
+label(4.49, 3.49, 0.6, 0.42, ['state', '$t∈ℝ^r$'], size=SMALL)
 HB0, HB1 = 5.3, 7.25
 arrow([(4.87, Y_T), (HB0, Y_T)])
 module(HB0, 2.92, HB1 - HB0, 0.98)
@@ -368,12 +375,11 @@ for cx, gate in ((c1, '\\ell'), (c2, 's')):
     label(cx + 0.04, 1.8, 0.5, 0.24, [f'$1−g_{gate}$'], size=SMALL, align=PP_ALIGN.LEFT)
     label(cx + 0.04, 2.58, 0.5, 0.24, [f'$g_{gate}$'], size=SMALL, align=PP_ALIGN.LEFT)
 arrow([(c1 + 0.12, Y_G), (c2 - 0.12, Y_G)])
-label(X0, 3.66, F1 - X0, 0.24, ['$g_ℓ$: level gate,   $g_s$: shape gate'], size=SMALL, align=PP_ALIGN.LEFT)
+label(X0 + 0.12, 3.675, 2.2, 0.21, ['$g_ℓ$: level gate       $g_s$: shape gate'], size=SMALL, align=PP_ALIGN.LEFT)
 O0, O1 = 11.3, 12.08
 arrow([(c2 + 0.12, Y_G), (O0, Y_G)])
-module(O0, 1.62, O1 - O0, 1.32, lw=1.25)
-label(O0, 1.66, O1 - O0, 0.26, ['forecast $ŷ$'], size=SMALL)
-series(O0 + 0.1, 2.04, O1 - O0 - 0.2, 0.36, 2, RED, lw=1.25, levels=[0.0, 0.35])
-label(O0, 2.5, O1 - O0, 0.4, ['de-', 'normalize'], size=SMALL, spacing=0.9)
+module(O0, 1.742, O1 - O0, 1.02, lw=1.25)
+label(O0, 1.782, O1 - O0, 0.26, ['forecast $ŷ$'], size=SMALL)
+series(O0 + 0.1, 2.162, O1 - O0 - 0.2, 0.36, 2, RED, lw=1.25, levels=[0.0, 0.35])
 
 save(OUT)
