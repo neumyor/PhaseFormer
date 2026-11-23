@@ -4,13 +4,14 @@ Drawn in the style of the conference figure (make_overview.py): Times, white mod
 black outlines, dashed sub-panels, small token rectangles, W boxes and Multi-Head Attention boxes.
   (a) phase-aligned tokens  x -> normalize, fold -> P x K matrix; one row is a phase token x_p,
                             the column means form the level token r; shared embedding W_e
-  (b) phase pathway         Z (+) E_pos -> aggregation MHA(R, Z~, Z~) -> R' -> distribution
-                            MHA(Z~, R', R') -> Z_attn -> Add & LN, MLP, Add & LN (x N_r)
-                            -> shared predictor Phi -> unfold -> F
-  (c) trend pathway         z -> linear encoder E -> t -> Gamma -> horizon basis Psi_H
-                            (+) anchor r_K 1 -> F_b
-  (d) gated fusion          levels (M_c) and shape (J_c) of F and F_b mixed by g_l and g_s,
-                            summed, de-normalized -> y
+  (b) phase pathway         Z -> aggregation MHA(R, Z, Z) -> R' -> distribution MHA(Z, R', R')
+                            -> Add & LN, MLP, Add & LN (x N_r) -> shared predictor Phi -> F
+                            (the positional embedding of Sec. 3.3 is left to the text)
+  (c) trend pathway         z -> linear encoder E -> state t -> horizon basis Psi_H
+                            (+) anchor r_K -> F_b
+  (d) gated fusion          levels and shape of F and F_b mixed by the level gate g_l and the
+                            shape gate g_s, summed, de-normalized -> y
+Only key variables carry symbols, and each symbol sits next to words that name it.
 Colors follow Fig. 3: phase token blue, level token green; routers indigo.
 Symbols follow body/method.tex.
 
@@ -157,7 +158,7 @@ def bezier(p0, p1, p2, p3, n=24):
 
 
 def wbox(cx, y, sub, sup, w=0.46, h=0.32):
-    box(cx - w / 2, y, w, h, [f'$\\b{{W}}_{sub}^{{\\r{{{sup}}}}}$'], fill=WHITE, line=BLACK, lw=1.0,
+    box(cx - w / 2, y, w, h, [f'$\\b{{W}}_{sub}$'], fill=WHITE, line=BLACK, lw=1.0,
         size=SMALL, radius=0.05, margin=0.0)
 
 
@@ -173,15 +174,15 @@ band(F0, TOP, F1 - F0, BOT - TOP, '(d) Gated Fusion', PANEL_D)
 A0, A1 = 0.04, 2.9
 band(A0, TOP, A1 - A0, BOT - TOP, '(a) Phase-Aligned Tokens', PANEL_A)
 P, K = 6, 5
-gx, cw, ch = 0.3, 0.2, 0.15
+gx, cw, ch = 0.32, 0.1, 0.16
 gy = Y_P - 1.5 * ch                    # row 1 is the highlighted phase token
 gw = K * cw
-label(0.06, 0.38, 0.24, 0.22, ['$x$'])
 series(gx, 0.39, gw, 0.2, K, BLACK, drift=0.35)
 for k in range(1, K):
     path([(gx + k * cw, 0.37), (gx + k * cw, 0.61)], color=SERIES_GRAY, lw=0.75, arrow=False, dash='sysDash')
-arrow([(gx + 0.15, 0.64), (gx + 0.15, gy - 0.03)])
-label(gx + 0.23, 0.63, 1.7, 0.2, ['normalize, fold'], size=SMALL, align=PP_ALIGN.LEFT)
+arrow([(gx + 0.08, 0.64), (gx + 0.08, gy - 0.03)])
+label(gx + 0.16, 0.63, 1.4, 0.2, ['normalize, fold'], size=SMALL, align=PP_ALIGN.LEFT)
+label(gx + gw + 0.06, 0.38, 0.9, 0.22, ['window $x$'], size=SMALL, align=PP_ALIGN.LEFT)
 
 lo = rgb('F4F9FD')
 levels = [0.0] * K
@@ -192,27 +193,48 @@ for p in range(P):
         levels[k] += v / P
         rect(gx + k * cw, gy + p * ch, cw, ch, lerp(lo, BLUE_SOFT, v), line=GRID_LINE, lw=0.6)
 rect(gx - 0.025, gy + ch - 0.02, gw + 0.05, ch + 0.04, None, line=TOKEN_BLUE, lw=2.0)
-label(0.06, gy, 0.24, P * ch, ['$P$'])
-label(gx + 0.34, gy + P * ch + 0.01, gw - 0.3, 0.2, ['$K$ cycles'], size=SMALL, align=PP_ALIGN.RIGHT)
+label(0.19 - P * ch / 2, gy + P * ch / 2 - 0.12, P * ch, 0.24, ['$P$ phases'], size=SMALL).rotation = 270
+label(gx + 0.15, gy + P * ch + 0.02, 0.8, 0.2, ['$K$ cycles'], size=SMALL, align=PP_ALIGN.LEFT)
 
-ly = Y_T - ch / 2
+# both tokens drawn as rows of cubes, as in Fig. 1: K cells, one per cycle
+TX, S, D = 0.95, 0.12, 0.045             # left edge, cube size, depth offset
+TOK_EDGE = rgb('5A6E7E')
+
+
+def cuboid(x, y_bottom, w, h, fill, right=True):
+    top = y_bottom - h
+    path([(x, top), (x + D, top - D), (x + w + D, top - D), (x + w, top), (x, top)], color=TOK_EDGE,
+         lw=0.5, arrow=False, fill=lerp(fill, WHITE, 0.4), closed=True)
+    if right:
+        path([(x + w, top), (x + w + D, top - D), (x + w + D, y_bottom - D), (x + w, y_bottom), (x + w, top)],
+             color=TOK_EDGE, lw=0.5, arrow=False, fill=lerp(fill, BLACK, 0.25), closed=True)
+    box(x, top, w, h, fill=fill, line=TOK_EDGE, lw=0.5, shape=MSO_SHAPE.RECTANGLE)
+
+
+row = [min(1.0, 0.1 + 0.65 * daily(1.5 / P) + 0.07 * k) for k in range(K)]
+for k, v in enumerate(row):            # the phase token x_p: row 1 of the grid
+    cuboid(TX + k * S, Y_P + S / 2, S, S, lerp(rgb('D4EAF6'), rgb('2E9AD6'), k / (K - 1)), right=k == K - 1)
+path([(gx + gw + 0.025, Y_P), (TX - 0.01, Y_P)], color=TOKEN_BLUE, lw=1.0, arrow=False, dash='sysDot')
+label(TX - 0.12, Y_P + S / 2 + 0.04, K * S + 0.3, 0.42, ['phase token', '$x̃_p$'], size=SMALL, spacing=0.9,
+      color=BLUE_LINE, anchor=MSO_ANCHOR.TOP)
+
+YB = Y_T + 0.05                        # baseline of the level token, the cycle levels as bars
 lmin, lmax = min(levels), max(levels)
 for k, v in enumerate(levels):
-    rect(gx + k * cw, ly, cw, ch, lerp(TOKEN_LIGHT, TOKEN_GREEN, (v - lmin) / (lmax - lmin)), line=GREEN_LINE,
-         lw=1.0)
-arrow([(gx + 0.3, gy + P * ch + 0.03), (gx + 0.3, ly - 0.03)])
-label(gx + 0.38, 2.3, 1.2, 0.42, ['mean over', 'phases'], size=SMALL, align=PP_ALIGN.LEFT, spacing=0.9)
+    u = (v - lmin) / (lmax - lmin)
+    cuboid(TX + k * S, YB, S, 0.1 + 0.26 * u, lerp(TOKEN_LIGHT, TOKEN_GREEN, u))
+label(TX - 0.12, YB + 0.04, K * S + 0.3, 0.42, ['level token', '$r̅$'], size=SMALL, spacing=0.9,
+      color=GREEN_LINE, anchor=MSO_ANCHOR.TOP)
+MX = gx + 0.08
+arrow([(MX, gy + P * ch + 0.03), (MX, Y_T), (TX - 0.03, Y_T)])
+label(MX + 0.08, 2.22, 1.0, 0.42, ['mean over', 'phases'], size=SMALL, align=PP_ALIGN.LEFT, spacing=0.9)
 
 E0, E1 = 1.74, 2.84                    # shared embedding column
 EX = (E0 + E1) / 2
 module(E0, 0.42, E1 - E0, 3.48, fill=YELLOW)
 label(E0 - 0.1, 0.45, E1 - E0 + 0.2, 0.42, ['**Shared**', '**Embedding**'], size=TEXT, spacing=0.85)
-for yc, fill, line, sym, name in ((Y_P, TOKEN_BLUE, BLUE_LINE, '$x̃_p$', ['phase', 'token']),
-                                  (Y_T, TOKEN_GREEN, GREEN_LINE, '$r̅$', ['level', 'token'])):
-    arrow([(gx + gw + 0.02, yc), (EX - 0.25, yc)], color=line)
-    label(gx + gw - 0.06, yc - 0.25, E0 - gx - gw + 0.12, 0.22, [sym], size=TEXT)
-    label(gx + gw - 0.06, yc + 0.03, E0 - gx - gw + 0.12, 0.4, name, size=SMALL, spacing=0.9,
-          anchor=MSO_ANCHOR.TOP)
+for yc, line in ((Y_P, BLUE_LINE), (Y_T, GREEN_LINE)):
+    arrow([(TX + K * S + D + 0.02, yc), (EX - 0.25, yc)], color=line)
     box(EX - 0.25, yc - 0.16, 0.5, 0.32, ['$W_e$'], fill=WHITE, line=BLACK, lw=1.0, radius=0.05)
 path([(EX, Y_P + 0.16), (EX, 1.85)], color=BLACK, lw=1.0, arrow=False, dash='dash')
 path([(EX, 2.55), (EX, Y_T - 0.16)], color=BLACK, lw=1.0, arrow=False, dash='dash')
@@ -223,11 +245,6 @@ label(EX + 0.25, Y_T + 0.03, E1 - EX - 0.25, 0.22, ['$z̄$'], size=TEXT)
 # (b) phase pathway ---------------------------------------------------------------------------
 B0, B1 = 2.96, 9.52
 band(B0, TOP, B1 - B0, 2.5 - TOP, '(b) Phase Pathway', LANE_B)
-OX = 3.24
-arrow([(EX + 0.25, Y_P), (OX - 0.12, Y_P)], color=BLUE_LINE)
-operator(OX, Y_P)
-label(OX - 0.22, 1.45, 0.44, 0.24, ['$E_{\\r{pos}}$'])
-arrow([(OX, 1.46), (OX, Y_P + 0.12)])
 
 R0, R1, RT, RB = 3.42, 8.22, 0.38, 2.42  # routing layer
 module(R0, RT, R1 - R0, RB - RT, lw=1.0)
@@ -240,7 +257,7 @@ Y_W, Y_M, Y_O = 1.32, 1.74, 2.18      # W boxes, attention, outputs
 
 def step_panel(x0, x1, title):
     box(x0, SUB_T, x1 - x0, SUB_B - SUB_T, fill=BLUE_PANEL, line=BLACK, lw=1.0, dash='dash', radius=0.05)
-    label(x0 + 0.06, SUB_T + 0.02, x1 - x0 - 0.1, 0.22, [f'**{title}**'], size=TEXT, align=PP_ALIGN.LEFT)
+    label(x0 + 0.06, SUB_T + 0.03, x1 - x0 - 0.1, 0.22, [f'**{title}**'], size=SMALL, align=PP_ALIGN.LEFT)
 
 
 def attention(x0, x1, kx, vx, qx, stage):
@@ -255,17 +272,18 @@ G0, G1 = 3.5, 5.3
 step_panel(G0, G1, 'Aggregation')
 kx, vx, qx = 3.95, 4.43, 5.0
 token_row((kx + vx) / 2, Y_P, 4, TOKEN_BLUE, BLUE_LINE)
-arrow([(OX + 0.12, Y_P), ((kx + vx) / 2 - 0.29, Y_P)], color=BLUE_LINE)
+arrow([(EX + 0.25, Y_P), ((kx + vx) / 2 - 0.29, Y_P)], color=BLUE_LINE)
 for cx in (kx, vx):
     arrow([(cx, Y_P + 0.06), (cx, Y_W)])
-label(kx + 0.03, Y_P + 0.05, vx - kx - 0.06, 0.2, ['$\\b{Z̃}$'], size=SMALL)
+label(kx + 0.03, Y_P + 0.05, vx - kx - 0.06, 0.2, ['$\\b{Z}$'], size=SMALL)
 chip(qx, Y_P - 0.04)
-label(qx - 0.2, 0.72, 0.4, 0.22, ['$\\b{R}$'], size=TEXT)
+label(G1 - 0.94, 0.7, 0.88, 0.22, ['routers $\\b{R}$'], size=SMALL, align=PP_ALIGN.RIGHT)
 arrow([(qx, Y_P + 0.13), (qx, Y_W)])
 attention(G0, G1, kx, vx, qx, 'agg')
-arrow([((G0 + G1) / 2, Y_M + 0.28), ((G0 + G1) / 2, Y_O - 0.06)])
-ra, rb = token_row((G0 + G1) / 2, Y_O, 3, ROUTER, ROUTER_LINE)
-label(ra - 0.36, Y_O - 0.11, 0.32, 0.22, ['$\\b{R}′$'], size=SMALL, align=PP_ALIGN.RIGHT)
+RX = (G0 + G1) / 2 + 0.22               # routers R' shifted right to leave room for their label
+arrow([(RX, Y_M + 0.28), (RX, Y_O - 0.06)])
+ra, rb = token_row(RX, Y_O, 3, ROUTER, ROUTER_LINE)
+label(ra - 0.9, Y_O - 0.11, 0.86, 0.22, ['routers $\\b{R}′$'], size=SMALL, align=PP_ALIGN.RIGHT)
 
 # distribution: Z~ are the queries, R' the keys and values
 D0, D1 = 5.42, 7.22
@@ -277,13 +295,14 @@ for cx in (kx, vx):
 label(kx + 0.03, Y_P + 0.05, vx - kx - 0.06, 0.2, ['$\\b{R}′$'], size=SMALL)
 token_row(qx, Y_P, 4, TOKEN_BLUE, BLUE_LINE)
 arrow([(qx, Y_P + 0.06), (qx, Y_W)])
-label(qx + 0.07, Y_P + 0.05, 0.3, 0.2, ['$\\b{Z̃}$'], size=SMALL, align=PP_ALIGN.LEFT)
+label(qx + 0.07, Y_P + 0.05, 0.3, 0.2, ['$\\b{Z}$'], size=SMALL, align=PP_ALIGN.LEFT)
 attention(D0, D1, kx, vx, qx, 'dist')
-arrow(bezier((rb + 0.01, Y_O), (G1 + 0.08, Y_O), (G1 + 0.02, Y_P), (da - 0.01, Y_P)))
+XG, RR = (G1 + D0) / 2, 0.06            # hand-over of R' through the gap between the two steps
+arrow([(rb + 0.01, Y_O)] + bezier((XG - RR, Y_O), (XG, Y_O), (XG, Y_O), (XG, Y_O - RR), n=8)
+      + bezier((XG, Y_P + RR), (XG, Y_P), (XG, Y_P), (XG + RR, Y_P), n=8) + [(da - 0.01, Y_P)])
 xc = (D0 + D1) / 2
 arrow([(xc, Y_M + 0.28), (xc, Y_O - 0.06)])
 za, zb = token_row(xc, Y_O, 4, TOKEN_BLUE, BLUE_LINE)
-label(za - 0.5, Y_O - 0.12, 0.46, 0.24, ['$\\b{Z}_{\\r{attn}}$'], size=SMALL, align=PP_ALIGN.RIGHT)
 
 # residual block: Add & LN, MLP, Add & LN, bottom to top
 C0, C1 = 7.28, 8.14
@@ -297,43 +316,37 @@ arrow([((C0 + C1) / 2, 1.58), ((C0 + C1) / 2, 1.40)])
 Y_F = 1.26
 module(8.36, 0.88, 1.0, 0.76, ['Shared', 'Predictor $Φ$'], size=TEXT)
 arrow([(C1, Y_F), (8.36, Y_F)])
-label(8.1, 1.68, 1.6, 0.44, ['$F_p∈ℝ^{K′}$ per phase,', 'unfold to $F$'], size=SMALL, spacing=0.9)
+label(8.1, 1.68, 1.5, 0.24, ['phase forecast $F$'], size=SMALL)
 arrow([(9.36, Y_F), (9.72, Y_F)])
-label(9.36, Y_F - 0.27, 0.16, 0.24, ['$F$'], size=TEXT)
 
 # (c) trend pathway ---------------------------------------------------------------------------
 band(B0, 2.58, B1 - B0, BOT - 2.58, '(c) Trend Pathway', LANE_C)
 arrow([(EX + 0.25, Y_T), (3.2, Y_T)], color=GREEN_LINE)
 module(3.2, 2.98, 1.3, 0.64, ['Linear', 'Encoder $E$'], size=TEXT)
-label(3.0, 3.66, 1.7, 0.24, ['$t=Ez̄+c_E$'], size=SMALL)
 arrow([(4.5, Y_T), (4.71, Y_T)])
 token_col(4.79, Y_T, 3, TOKEN_GREEN, GREEN_LINE)
-label(4.49, 3.5, 0.6, 0.24, ['$t∈ℝ^r$'], size=SMALL)
-arrow([(4.87, Y_T), (5.06, Y_T)])
-module(5.06, Y_T - 0.18, 0.38, 0.36, ['$Γ$'], size=TEXT, lw=1.0)
-arrow([(5.44, Y_T), (5.63, Y_T)])
-token_col(5.71, Y_T, 3, TOKEN_LIGHT, GREEN_LINE)
-label(5.38, 3.5, 0.66, 0.24, ['$Γt+c_Γ$'], size=SMALL)
-arrow([(5.79, Y_T), (6.0, Y_T)])
-module(6.0, 2.92, 1.95, 0.98)
-label(6.0, 2.94, 1.95, 0.24, ['Horizon Basis $Ψ_H$'], size=TEXT)
-for x, kind in ((6.18, 'offset'), (6.75, 'tilt'), (7.32, 'curve')):
+label(4.29, 3.64, 1.0, 0.24, ['state $t∈ℝ^r$'], size=SMALL)
+HB0, HB1 = 5.3, 7.25
+arrow([(4.87, Y_T), (HB0, Y_T)])
+module(HB0, 2.92, HB1 - HB0, 0.98)
+label(HB0, 2.94, HB1 - HB0, 0.24, ['Horizon Basis $Ψ_H$'], size=TEXT)
+for x, kind in ((HB0 + 0.18, 'offset'), (HB0 + 0.75, 'tilt'), (HB0 + 1.32, 'curve')):
     profile(x, 3.24, 0.45, 0.2, kind, GREEN_LINE)
     label(x - 0.1, 3.46, 0.65, 0.2, [kind], size=SMALL)
-label(6.0, 3.66, 1.95, 0.2, ['fixed or learned'], size=SMALL)
-OX2 = 8.5
-arrow([(7.95, Y_T), (OX2 - 0.12, Y_T)])
+label(HB0, 3.66, HB1 - HB0, 0.2, ['fixed or learned'], size=SMALL)
+OX2 = 7.75
+arrow([(HB1, Y_T), (OX2 - 0.12, Y_T)])
 operator(OX2, Y_T)
-arrow([(OX2, 3.66), (OX2, Y_T + 0.12)])
-label(OX2 - 0.5, 3.66, 1.0, 0.24, ['anchor $r̅_K𝟏$'], size=SMALL)
+arrow([(OX2, 3.86), (OX2, Y_T + 0.12)])
+label(OX2 + 0.07, 3.62, 1.7, 0.24, ['anchor $r̅_K$ (last cycle)'], size=SMALL, align=PP_ALIGN.LEFT)
 arrow([(OX2 + 0.12, Y_T), (9.72, Y_T)])
-label(9.0, Y_T - 0.27, 0.4, 0.24, ['$F_{\\r{b}}$'], size=TEXT)
+label(OX2 + 0.15, Y_T - 0.27, 1.6, 0.24, ['trend forecast $F_{\\r{b}}$'], size=SMALL)
 
 # (d) gated fusion ----------------------------------------------------------------------------
 X0, X1 = 9.72, 11.12
 c1, c2 = X0 + (X1 - X0) / 4, X0 + 3 * (X1 - X0) / 4
-label(c1 - 0.4, 0.64, 0.8, 0.24, ['levels $M_c$'], size=SMALL)
-label(c2 - 0.4, 0.64, 0.8, 0.24, ['shape $J_c$'], size=SMALL)
+label(c1 - 0.4, 0.64, 0.8, 0.24, ['levels'], size=SMALL)
+label(c2 - 0.4, 0.64, 0.8, 0.24, ['shape'], size=SMALL)
 for yc, color, lv, centered in ((Y_F, TOKEN_BLUE, [0.3, 0.55], True), (Y_T, TOKEN_GREEN, [0.35, 0.8], False)):
     module(X0, yc - 0.32, X1 - X0, 0.64, lw=1.0)
     path([((X0 + X1) / 2, yc - 0.28), ((X0 + X1) / 2, yc + 0.28)], color=GRID_LINE, lw=1.0, arrow=False,
@@ -355,10 +368,11 @@ for cx, gate in ((c1, '\\ell'), (c2, 's')):
     label(cx + 0.04, 1.8, 0.5, 0.24, [f'$1−g_{gate}$'], size=SMALL, align=PP_ALIGN.LEFT)
     label(cx + 0.04, 2.58, 0.5, 0.24, [f'$g_{gate}$'], size=SMALL, align=PP_ALIGN.LEFT)
 arrow([(c1 + 0.12, Y_G), (c2 - 0.12, Y_G)])
+label(X0, 3.66, F1 - X0, 0.24, ['$g_ℓ$: level gate,   $g_s$: shape gate'], size=SMALL, align=PP_ALIGN.LEFT)
 O0, O1 = 11.3, 12.08
 arrow([(c2 + 0.12, Y_G), (O0, Y_G)])
 module(O0, 1.62, O1 - O0, 1.32, lw=1.25)
-label(O0, 1.66, O1 - O0, 0.26, ['$ŷ$'], size=TEXT)
+label(O0, 1.66, O1 - O0, 0.26, ['forecast $ŷ$'], size=SMALL)
 series(O0 + 0.1, 2.04, O1 - O0 - 0.2, 0.36, 2, RED, lw=1.25, levels=[0.0, 0.35])
 label(O0, 2.5, O1 - O0, 0.4, ['de-', 'normalize'], size=SMALL, spacing=0.9)
 
