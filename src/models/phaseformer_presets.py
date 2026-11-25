@@ -373,7 +373,7 @@ ICPT_HORIZON_FIXED_HYPERPARAMS = {
 def get_frequency(dataset_name):
     if dataset_name == "Exchange":
         return "d"
-    if dataset_name in ["ETTh1", "ETTh2"]:
+    if dataset_name in ["ETTh1", "ETTh2", "LoopSeattle", "MDense"]:
         return "h"
     return "t"
 

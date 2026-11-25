@@ -7664,3 +7664,11 @@ throughout; two of its commits swept in earlier parts of this batch.
 - F1：新增 pre-LN 残差流 + 线性嵌入、傅里叶相位身份两个选项（`Cfg.norm/embed/phase_id`，默认关闭，旧检查点逐位复现）；`configs F1` 共 96 个任务（4 变体 × ETTh1/ETTm1 × 4 预测长度 × 3 种子），服务器 GPU 4–7 运行，结果 `runs/f1_results.jsonl`，汇总脚本 `scripts/biaxial/f1_report.py`。
 - PhaseFormer-D：新增 `PhaseFormerD`/`DCfg`（周期分支与相位分支各自的归一化与压缩比，窗口自适应门融合），设计见 `docs/PhaseFormer_D_design.md`；`train.py` 通过 `family: D` 构建；单元测试 31 个通过；3 轮冒烟训练通过，尚未做完整实验。
 - 可比性：与前述阶段相同的重新实现协议，选择按验证集；D1 的 3 种子网格与 F1 一致，未启动。
+
+## 2026-11-25 新增 Loop Seattle 与 M_DENSE（GIFT-Eval 小时频）数据
+
+- 任务：把 GIFT-Eval 的 LOOP_SEATTLE/H（323 通道 × 8,760 步）和 M_DENSE/H（30 通道 × 17,520 步）转成主表 csv 格式，并登记为 `LoopSeattle`、`MDense`。
+- 修改：新增 `scripts/prepare_gift_eval_data.py`；`src/dataset/data_info.py` 新增两项（`custom` 加载器，7:1:2 划分，batch size 16 与 64 为初值，未调）；`get_frequency` 对两者返回 `h`。
+- 命令：`python -I scripts/prepare_gift_eval_data.py ~/Code/gift_eval_data resources/all_datasets`；原始 arrow 来自 hf-mirror.com 的 `Salesforce/GiftEval`，本地存放在 `~/Code/gift_eval_data/`，不入库。
+- 验证：csv 形状、时间戳、无 NaN、训练段无零方差通道已检查；本机无 torch，未跑加载器和训练。
+- 已知风险：没有这两个数据集在 L=720 的公开基线，8 个基线需全部重跑；M_DENSE 原始数据含 7 个协变量，已忽略；两个数据集尚无专用超参预设。

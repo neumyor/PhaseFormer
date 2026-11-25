@@ -69,4 +69,18 @@ DATASET_INFO = {
         "root_path": "./resources/all_datasets/pems",
         "num_variants": 170,
     },
+    "LoopSeattle": {
+        "data": "custom",
+        "data_path": "loop_seattle.csv",
+        "batch_size": 16,
+        "root_path": "./resources/all_datasets/loop_seattle",
+        "num_variants": 323,
+    },
+    "MDense": {
+        "data": "custom",
+        "data_path": "m_dense.csv",
+        "batch_size": 64,
+        "root_path": "./resources/all_datasets/m_dense",
+        "num_variants": 30,
+    },
 }
